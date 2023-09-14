@@ -59,6 +59,7 @@ impl GeometryCollection for MultiPolygonCollection {
 }
 
 impl MultiPolygonCollection {
+    #[allow(clippy::missing_panics_doc)]
     pub fn polygon_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table
@@ -72,6 +73,7 @@ impl MultiPolygonCollection {
         polygons.offsets()
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub fn ring_offsets(&self) -> &[i32] {
         let geometries_ref = self
             .table

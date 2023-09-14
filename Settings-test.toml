@@ -2,7 +2,7 @@
 host = "localhost"
 port = 5432
 database = "geoengine"
-schema = "pg_temp" # we need the right to create new schemata for tests
+schema = "pg_temp"     # we need the right to create new schemata for tests
 user = "geoengine"
 password = "geoengine"
 
@@ -10,16 +10,13 @@ password = "geoengine"
 raster_data_root_path = "../test_data/raster" # relative to sub crate directory for tests
 
 [raster.tiling_specification]
-    origin_coordinate_x = 0.0
-    origin_coordinate_y = 0.0
-    tile_shape_pixels_x = 512
-    tile_shape_pixels_y = 512
+origin_coordinate_x = 0.0
+origin_coordinate_y = 0.0
+tile_shape_pixels_x = 512
+tile_shape_pixels_y = 512
 
 [upload]
 path = "test_upload"
-
-[session]
-admin_session_token = "70c3f586-f01b-49cf-9b41-473531b0fb00"
 
 [oidc]
 enabled = true
@@ -27,7 +24,7 @@ issuer = ""
 client_id = ""
 client_secret = ""
 redirect_uri = ""
-scopes = [ ]
+scopes = []
 
 [user]
 admin_email = "admin@localhost"
@@ -36,7 +33,7 @@ admin_password = "admin"
 [quota]
 mode = "check"
 default_available_quota = 9999
-increment_quota_buffer_size = 0 # number of quota updates to buffer before sending them to the database
+increment_quota_buffer_size = 0             # number of quota updates to buffer before sending them to the database
 increment_quota_buffer_timeout_seconds = 60 # number of seconds after which the quota updates are sent to the database
 
 [cache]
@@ -45,4 +42,3 @@ enabled = false
 cache_size_in_mb = 1_000 # 1 GB
 # storage limit for collecting query results before insertion into the cache in 
 landing_zone_ratio = 0.1 # 10% of total cache size
-

@@ -81,12 +81,21 @@ impl TransformSchemasWithTag {
     ) -> Option<Schema> {
         match schema {
             Schema::AllOf(ao) => {
-                let Some(reference) = Self::get_base_type_name(schema) else { return None; };
-                let Some(RefOr::T(Schema::Object(referenced_object))) = all_schemas.get(reference) else { return None; };
-                let Some(mut obj_with_discrimator_prop) = ao.items.iter().find_map(|item| match item {
-                    RefOr::T(Schema::Object(concrete)) => Some(concrete.clone()),
-                    _ => None,
-                }) else { return None; };
+                let Some(reference) = Self::get_base_type_name(schema) else {
+                    return None;
+                };
+                let Some(RefOr::T(Schema::Object(referenced_object))) = all_schemas.get(reference)
+                else {
+                    return None;
+                };
+                let Some(mut obj_with_discrimator_prop) =
+                    ao.items.iter().find_map(|item| match item {
+                        RefOr::T(Schema::Object(concrete)) => Some(concrete.clone()),
+                        _ => None,
+                    })
+                else {
+                    return None;
+                };
                 let mut final_obj = referenced_object.clone();
                 final_obj
                     .properties
@@ -114,7 +123,11 @@ impl Modify for TransformSchemasWithTag {
             let Schema::OneOf(one_of) = schema else {
                 continue;
             };
-            let Some(Discriminator { property_name: discriminator, .. }) = &one_of.discriminator else {
+            let Some(Discriminator {
+                property_name: discriminator,
+                ..
+            }) = &one_of.discriminator
+            else {
                 continue;
             };
             let mut items: Vec<&Schema> = Vec::new();
@@ -129,7 +142,9 @@ impl Modify for TransformSchemasWithTag {
             let mut one_of_builder = OneOfBuilder::new();
 
             for item in items {
-                let Some(variant_tag) = Self::get_variant_tag(item, discriminator) else { continue 'outer; };
+                let Some(variant_tag) = Self::get_variant_tag(item, discriminator) else {
+                    continue 'outer;
+                };
                 let variant_schema_name = match Self::get_base_type_name(item) {
                     Some(base_type) => format!(
                         "{}With{}",

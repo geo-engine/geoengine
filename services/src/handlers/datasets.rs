@@ -1077,18 +1077,16 @@ mod tests {
     use crate::api::model::datatypes::{DatasetName, NamedData};
     use crate::api::model::responses::datasets::{DatasetIdAndName, DatasetNameResponse};
     use crate::api::model::services::DatasetDefinition;
-    use crate::contexts::{Session, SessionId, SimpleApplicationContext};
+    use crate::contexts::{PostgresContext, Session, SessionId, SimpleApplicationContext};
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::{UploadId, VolumeName};
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
-    use crate::test_data;
-    use crate::util::tests::with_temp_context;
-    use crate::util::tests::with_temp_context_from_spec;
     use crate::util::tests::{
         read_body_json, read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
     };
     use crate::util::IdResponse;
+    use crate::{ge_context, test_data};
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -1099,7 +1097,6 @@ mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
         ExecutionContext, InitializedVectorOperator, QueryProcessor, StaticMetaData,
         VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
@@ -1109,161 +1106,159 @@ mod tests {
     };
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use serde_json::{json, Value};
+    use tokio_postgres::NoTls;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_list_datasets() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_list_datasets(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let descriptor = VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-                time: None,
-                bbox: None,
-            };
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
 
-            let ds = AddDataset {
-                name: Some(DatasetName::new(None, "My Dataset")),
-                display_name: "OgrDataset".to_string(),
-                description: "My Ogr dataset".to_string(),
-                source_operator: "OgrSource".to_string(),
-                symbology: None,
-                provenance: None,
-            };
+        let ds = AddDataset {
+            name: Some(DatasetName::new(None, "My Dataset")),
+            display_name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+        };
 
-            let meta = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
-                loading_info: OgrSourceDataset {
-                    file_name: Default::default(),
-                    layer_name: String::new(),
-                    data_type: None,
-                    time: Default::default(),
-                    default_geometry: None,
-                    columns: None,
-                    force_ogr_time_filter: false,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: None,
-                    attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+        let meta = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        });
+
+        let db = ctx.db();
+        let DatasetIdAndName { id: id1, name: _ } =
+            db.add_dataset(ds, db.wrap_meta_data(meta)).await.unwrap();
+
+        let ds = AddDataset {
+            name: Some(DatasetName::new(None, "My_Dataset2")),
+            display_name: "OgrDataset2".to_string(),
+            description: "My Ogr dataset2".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: Some(Symbology::Point(PointSymbology::default())),
+            provenance: None,
+        };
+
+        let meta = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor,
+            phantom: Default::default(),
+        });
+
+        let DatasetIdAndName { id: id2, name: _ } =
+            db.add_dataset(ds, db.wrap_meta_data(meta)).await.unwrap();
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/datasets?{}",
+                &serde_urlencoded::to_string([
+                    ("order", "NameDesc"),
+                    ("offset", "0"),
+                    ("limit", "2"),
+                ])
+                .unwrap()
+            ))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+
+        assert_eq!(
+            read_body_json(res).await,
+            json!([ {
+                "id": id1,
+                "name": "My Dataset",
+                "displayName": "OgrDataset",
+                "description": "My Ogr dataset",
+                "tags": [],
+                "sourceOperator": "OgrSource",
+                "resultDescriptor": {
+                    "type": "vector",
+                    "dataType": "MultiPoint",
+                    "spatialReference": "",
+                    "columns": {},
+                    "time": null,
+                    "bbox": null
                 },
-                result_descriptor: descriptor.clone(),
-                phantom: Default::default(),
-            });
-
-            let db = ctx.db();
-            let DatasetIdAndName { id: id1, name: _ } =
-                db.add_dataset(ds, db.wrap_meta_data(meta)).await.unwrap();
-
-            let ds = AddDataset {
-                name: Some(DatasetName::new(None, "My_Dataset2")),
-                display_name: "OgrDataset2".to_string(),
-                description: "My Ogr dataset2".to_string(),
-                source_operator: "OgrSource".to_string(),
-                symbology: Some(Symbology::Point(PointSymbology::default())),
-                provenance: None,
-            };
-
-            let meta = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
-                loading_info: OgrSourceDataset {
-                    file_name: Default::default(),
-                    layer_name: String::new(),
-                    data_type: None,
-                    time: Default::default(),
-                    default_geometry: None,
-                    columns: None,
-                    force_ogr_time_filter: false,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: None,
-                    attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+                "symbology": null
+            },{
+                "id": id2,
+                "name": "My_Dataset2",
+                "displayName": "OgrDataset2",
+                "description": "My Ogr dataset2",
+                "tags": [],
+                "sourceOperator": "OgrSource",
+                "resultDescriptor": {
+                    "type": "vector",
+                    "dataType": "MultiPoint",
+                    "spatialReference": "",
+                    "columns": {},
+                    "time": null,
+                    "bbox": null
                 },
-                result_descriptor: descriptor,
-                phantom: Default::default(),
-            });
-
-            let DatasetIdAndName { id: id2, name: _ } =
-                db.add_dataset(ds, db.wrap_meta_data(meta)).await.unwrap();
-
-            let req = actix_web::test::TestRequest::get()
-                .uri(&format!(
-                    "/datasets?{}",
-                    &serde_urlencoded::to_string([
-                        ("order", "NameDesc"),
-                        ("offset", "0"),
-                        ("limit", "2"),
-                    ])
-                    .unwrap()
-                ))
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let res = send_test_request(req, app_ctx).await;
-
-            assert_eq!(res.status(), 200);
-
-            assert_eq!(
-                read_body_json(res).await,
-                json!([ {
-                    "id": id1,
-                    "name": "My Dataset",
-                    "displayName": "OgrDataset",
-                    "description": "My Ogr dataset",
-                    "tags": [],
-                    "sourceOperator": "OgrSource",
-                    "resultDescriptor": {
-                        "type": "vector",
-                        "dataType": "MultiPoint",
-                        "spatialReference": "",
-                        "columns": {},
-                        "time": null,
-                        "bbox": null
+                "symbology": {
+                    "type": "point",
+                    "radius": {
+                        "type": "static",
+                        "value": 10
                     },
-                    "symbology": null
-                },{
-                    "id": id2,
-                    "name": "My_Dataset2",
-                    "displayName": "OgrDataset2",
-                    "description": "My Ogr dataset2",
-                    "tags": [],
-                    "sourceOperator": "OgrSource",
-                    "resultDescriptor": {
-                        "type": "vector",
-                        "dataType": "MultiPoint",
-                        "spatialReference": "",
-                        "columns": {},
-                        "time": null,
-                        "bbox": null
+                    "fillColor": {
+                        "type": "static",
+                        "color": [255, 255, 255, 255]
                     },
-                    "symbology": {
-                        "type": "point",
-                        "radius": {
+                    "stroke": {
+                        "width": {
                             "type": "static",
-                            "value": 10
+                            "value": 1
                         },
-                        "fillColor": {
+                        "color": {
                             "type": "static",
-                            "color": [255, 255, 255, 255]
-                        },
-                        "stroke": {
-                            "width": {
-                                "type": "static",
-                                "value": 1
-                            },
-                            "color": {
-                                "type": "static",
-                                "color": [0, 0, 0, 255]
-                            }
-                        },
-                        "text": null
-                    }
-                }])
-            );
-        })
-        .await;
+                            "color": [0, 0, 0, 255]
+                        }
+                    },
+                    "text": null
+                }
+            }])
+        );
     }
 
     async fn upload_ne_10m_ports_files<C: SimpleApplicationContext>(
@@ -1404,141 +1399,127 @@ mod tests {
         .map_err(Into::into)
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn create_dataset() -> Result<()> {
-        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
-
-        let exe_ctx_tiling_spec = TilingSpecification {
+    fn ctx_tiling_spec_600x600() -> TilingSpecification {
+        TilingSpecification {
             origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
-        };
-
-        // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        with_temp_context_from_spec(
-            exe_ctx_tiling_spec,
-            TestDefault::test_default(),
-            |app_ctx, _| async move {
-                let session_id = app_ctx.default_session_id().await;
-
-                let ctx = app_ctx.default_session_context().await.unwrap();
-
-                let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
-                test_data.uploads.push(upload_id);
-
-                let _dataset_id =
-                    construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
-                let exe_ctx = ctx.execution_context()?;
-
-                let source = make_ogr_source(
-                    &exe_ctx,
-                    NamedData {
-                        namespace: None,
-                        provider: None,
-                        name: "uploaded_ne_10m_ports".to_string(),
-                    },
-                )
-                .await?;
-
-                let query_processor = source.query_processor()?.multi_point().unwrap();
-                let query_ctx = ctx.query_context()?;
-
-                let query = query_processor
-                    .query(
-                        VectorQueryRectangle {
-                            spatial_bounds: BoundingBox2D::new(
-                                (1.85, 50.88).into(),
-                                (4.82, 52.95).into(),
-                            )?,
-                            time_interval: Default::default(),
-                            spatial_resolution: SpatialResolution::new(1., 1.)?,
-                        },
-                        &query_ctx,
-                    )
-                    .await
-                    .unwrap();
-
-                let result: Vec<MultiPointCollection> = query.try_collect().await?;
-
-                let coords = result[0].coordinates();
-                assert_eq!(coords.len(), 10);
-                assert_eq!(
-                    coords,
-                    &[
-                        [2.933_686_69, 51.23].into(),
-                        [3.204_593_64_f64, 51.336_388_89].into(),
-                        [4.651_413_428, 51.805_833_33].into(),
-                        [4.11, 51.95].into(),
-                        [4.386_160_188, 50.886_111_11].into(),
-                        [3.767_373_38, 51.114_444_44].into(),
-                        [4.293_757_362, 51.297_777_78].into(),
-                        [1.850_176_678, 50.965_833_33].into(),
-                        [2.170_906_949, 51.021_666_67].into(),
-                        [4.292_873_969, 51.927_222_22].into(),
-                    ]
-                );
-
-                Ok(())
-            },
-        )
-        .await
+        }
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_creates_system_dataset() -> Result<()> {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test(tiling_spec = "ctx_tiling_spec_600x600")]
+    async fn create_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-            let session_id = ctx.session().id();
+        let session_id = app_ctx.default_session_id().await;
 
-            let volume = VolumeName("test_data".to_string());
+        let ctx = app_ctx.default_session_context().await?;
 
-            let mut meta_data = create_ndvi_meta_data();
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
 
-            // make path relative to volume
-            meta_data.params.file_path =
-                "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+        let _dataset_id =
+            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
+        let exe_ctx = ctx.execution_context()?;
 
-            let create = CreateDataset {
-                data_path: DataPath::Volume(volume.clone()),
-                definition: DatasetDefinition {
-                    properties: AddDataset {
-                        name: None,
-                        display_name: "ndvi".to_string(),
-                        description: "ndvi".to_string(),
-                        source_operator: "GdalSource".to_string(),
-                        symbology: None,
-                        provenance: None,
-                    },
-                    meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+        let source = make_ogr_source(
+            &exe_ctx,
+            NamedData {
+                namespace: None,
+                provider: None,
+                name: "uploaded_ne_10m_ports".to_string(),
+            },
+        )
+        .await?;
+
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+        let query_ctx = ctx.query_context()?;
+
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
                 },
-            };
+                &query_ctx,
+            )
+            .await?;
 
-            // create via admin session
-            let req = actix_web::test::TestRequest::post()
-                .uri("/dataset")
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .append_header((header::CONTENT_TYPE, "application/json"))
-                .set_payload(serde_json::to_string(&create)?);
-            let res = send_test_request(req, app_ctx.clone()).await;
-            assert_eq!(res.status(), 200);
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
 
-            let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let coords = result[0].coordinates();
+        assert_eq!(coords.len(), 10);
+        assert_eq!(
+            coords,
+            &[
+                [2.933_686_69, 51.23].into(),
+                [3.204_593_64_f64, 51.336_388_89].into(),
+                [4.651_413_428, 51.805_833_33].into(),
+                [4.11, 51.95].into(),
+                [4.386_160_188, 50.886_111_11].into(),
+                [3.767_373_38, 51.114_444_44].into(),
+                [4.293_757_362, 51.297_777_78].into(),
+                [1.850_176_678, 50.965_833_33].into(),
+                [2.170_906_949, 51.021_666_67].into(),
+                [4.292_873_969, 51.927_222_22].into(),
+            ]
+        );
 
-            // assert dataset is accessible via regular session
-            let req = actix_web::test::TestRequest::get()
-                .uri(&format!("/dataset/{dataset_name}"))
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .append_header((header::CONTENT_TYPE, "application/json"))
-                .set_payload(serde_json::to_string(&create)?);
+        Ok(())
+    }
 
-            let res = send_test_request(req, app_ctx.clone()).await;
-            assert_eq!(res.status(), 200);
+    #[ge_context::test]
+    async fn it_creates_system_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            Ok(())
-        })
-        .await
+        let session_id = ctx.session().id();
+
+        let volume = VolumeName("test_data".to_string());
+
+        let mut meta_data = create_ndvi_meta_data();
+
+        // make path relative to volume
+        meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "GdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                },
+                meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+            },
+        };
+
+        // create via admin session
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200);
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+
+        // assert dataset is accessible via regular session
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200);
+
+        Ok(())
     }
 
     #[test]
@@ -2027,103 +2008,99 @@ mod tests {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn get_dataset() -> Result<()> {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn get_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = ctx.session().id();
+        let session_id = ctx.session().id();
 
-            let descriptor = VectorResultDescriptor {
-                data_type: VectorDataType::Data,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-                time: None,
-                bbox: None,
-            };
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
 
-            let ds = AddDataset {
-                name: None,
-                display_name: "OgrDataset".to_string(),
-                description: "My Ogr dataset".to_string(),
-                source_operator: "OgrSource".to_string(),
-                symbology: None,
-                provenance: None,
-            };
+        let ds = AddDataset {
+            name: None,
+            display_name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+        };
 
-            let meta = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
-                loading_info: OgrSourceDataset {
-                    file_name: Default::default(),
-                    layer_name: String::new(),
-                    data_type: None,
-                    time: Default::default(),
-                    default_geometry: None,
-                    columns: None,
-                    force_ogr_time_filter: false,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: None,
-                    attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
+        let meta = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor,
+            phantom: Default::default(),
+        });
+
+        let db = ctx.db();
+        let DatasetIdAndName {
+            id,
+            name: dataset_name,
+        } = db.add_dataset(ds, db.wrap_meta_data(meta)).await?;
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{id}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        let res_status = res.status();
+        let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
+        assert_eq!(res_status, 200, "{res_body}");
+
+        assert_eq!(
+            res_body,
+            json!({
+                "name": dataset_name,
+                "id": id,
+                "displayName": "OgrDataset",
+                "description": "My Ogr dataset",
+                "resultDescriptor": {
+                    "type": "vector",
+                    "dataType": "Data",
+                    "spatialReference": "",
+                    "columns": {},
+                    "time": null,
+                    "bbox": null
                 },
-                result_descriptor: descriptor,
-                phantom: Default::default(),
-            });
+                "sourceOperator": "OgrSource",
+                "symbology": null,
+                "provenance": null,
+            })
+        );
 
-            let db = ctx.db();
-            let DatasetIdAndName {
-                id,
-                name: dataset_name,
-            } = db.add_dataset(ds, db.wrap_meta_data(meta)).await?;
-
-            let req = actix_web::test::TestRequest::get()
-                .uri(&format!("/dataset/{id}"))
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let res = send_test_request(req, app_ctx).await;
-
-            let res_status = res.status();
-            let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
-            assert_eq!(res_status, 200, "{res_body}");
-
-            assert_eq!(
-                res_body,
-                json!({
-                    "name": dataset_name,
-                    "id": id,
-                    "displayName": "OgrDataset",
-                    "description": "My Ogr dataset",
-                    "resultDescriptor": {
-                        "type": "vector",
-                        "dataType": "Data",
-                        "spatialReference": "",
-                        "columns": {},
-                        "time": null,
-                        "bbox": null
-                    },
-                    "sourceOperator": "OgrSource",
-                    "symbology": null,
-                    "provenance": null,
-                })
-            );
-
-            Ok(())
-        })
-        .await
+        Ok(())
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_suggests_metadata() -> Result<()> {
+    async fn it_suggests_metadata(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
-            let session_id = ctx.session().id();
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = ctx.session().id();
 
-            let body = vec![(
-                "test.json",
-                r#"{
+        let body = vec![(
+            "test.json",
+            r#"{
                 "type": "FeatureCollection",
                 "features": [
                   {
@@ -2156,195 +2133,186 @@ mod tests {
                   }
                 ]
               }"#,
-            )];
+        )];
 
-            let req = actix_web::test::TestRequest::post()
-                .uri("/upload")
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .set_multipart(body.clone());
+        let req = actix_web::test::TestRequest::post()
+            .uri("/upload")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_multipart(body.clone());
 
-            let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-            assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
-            let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
-            test_data.uploads.push(upload.id);
+        let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
+        test_data.uploads.push(upload.id);
 
-            let upload_content =
-                std::fs::read_to_string(upload.id.root_path().unwrap().join("test.json")).unwrap();
+        let upload_content =
+            std::fs::read_to_string(upload.id.root_path().unwrap().join("test.json")).unwrap();
 
-            assert_eq!(&upload_content, body[0].1);
+        assert_eq!(&upload_content, body[0].1);
 
-            let req = actix_web::test::TestRequest::get()
-                .uri(&format!("/dataset/suggest?upload={}", upload.id))
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let res = send_test_request(req, app_ctx).await;
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/suggest?upload={}", upload.id))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx).await;
 
-            let res_status = res.status();
-            let res_body = read_body_string(res).await;
-            assert_eq!(res_status, 200, "{res_body}");
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{res_body}");
 
-            assert_eq!(
-                serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
-                json!({
-                  "mainFile": "test.json",
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
+            json!({
+              "mainFile": "test.json",
+              "layerName": "test",
+              "metaData": {
+                "type": "OgrMetaData",
+                "loadingInfo": {
+                  "fileName": format!("test_upload/{}/test.json", upload.id),
                   "layerName": "test",
-                  "metaData": {
-                    "type": "OgrMetaData",
-                    "loadingInfo": {
-                      "fileName": format!("test_upload/{}/test.json", upload.id),
-                      "layerName": "test",
-                      "dataType": "MultiPoint",
-                      "time": {
-                        "type": "none"
-                      },
-                      "defaultGeometry": null,
-                      "columns": {
-                        "formatSpecifics": null,
-                        "x": "",
-                        "y": null,
-                        "int": [
-                          "id"
-                        ],
-                        "float": [],
-                        "text": [
-                          "name"
-                        ],
-                        "bool": [],
-                        "datetime": [],
-                        "rename": null
-                      },
-                      "forceOgrTimeFilter": false,
-                      "forceOgrSpatialFilter": false,
-                      "onError": "ignore",
-                      "sqlQuery": null,
-                      "attributeQuery": null,
-                      "cacheTtl": 0,
+                  "dataType": "MultiPoint",
+                  "time": {
+                    "type": "none"
+                  },
+                  "defaultGeometry": null,
+                  "columns": {
+                    "formatSpecifics": null,
+                    "x": "",
+                    "y": null,
+                    "int": [
+                      "id"
+                    ],
+                    "float": [],
+                    "text": [
+                      "name"
+                    ],
+                    "bool": [],
+                    "datetime": [],
+                    "rename": null
+                  },
+                  "forceOgrTimeFilter": false,
+                  "forceOgrSpatialFilter": false,
+                  "onError": "ignore",
+                  "sqlQuery": null,
+                  "attributeQuery": null,
+                  "cacheTtl": 0,
+                },
+                "resultDescriptor": {
+                  "dataType": "MultiPoint",
+                  "spatialReference": "EPSG:4326",
+                  "columns": {
+                    "id": {
+                      "dataType": "int",
+                      "measurement": {
+                        "type": "unitless"
+                      }
                     },
-                    "resultDescriptor": {
-                      "dataType": "MultiPoint",
-                      "spatialReference": "EPSG:4326",
-                      "columns": {
-                        "id": {
-                          "dataType": "int",
-                          "measurement": {
-                            "type": "unitless"
-                          }
-                        },
-                        "name": {
-                          "dataType": "text",
-                          "measurement": {
-                            "type": "unitless"
-                          }
-                        }
-                      },
-                      "time": null,
-                      "bbox": null
+                    "name": {
+                      "dataType": "text",
+                      "measurement": {
+                        "type": "unitless"
+                      }
                     }
-                  }
-                })
-            );
+                  },
+                  "time": null,
+                  "bbox": null
+                }
+              }
+            })
+        );
 
-            Ok(())
-        })
-        .await
+        Ok(())
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_deletes_dataset() -> Result<()> {
+    #[ge_context::test]
+    async fn it_deletes_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
-            test_data.uploads.push(upload_id);
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
 
-            let dataset_name =
-                construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
+        let dataset_name =
+            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
 
-            let db = ctx.db();
-            let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
-            assert!(db.load_dataset(&dataset_id).await.is_ok());
+        let db = ctx.db();
+        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
 
-            let req = actix_web::test::TestRequest::delete()
-                .uri(&format!("/dataset/{dataset_name}"))
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .append_header((header::CONTENT_TYPE, "application/json"));
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_name}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
 
-            let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-            assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
-            assert!(db.load_dataset(&dataset_id).await.is_err());
+        assert!(db.load_dataset(&dataset_id).await.is_err());
 
-            Ok(())
-        })
-        .await
+        Ok(())
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_deletes_system_dataset() -> Result<()> {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn it_deletes_system_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let volume = VolumeName("test_data".to_string());
+        let volume = VolumeName("test_data".to_string());
 
-            let mut meta_data = create_ndvi_meta_data();
+        let mut meta_data = create_ndvi_meta_data();
 
-            // make path relative to volume
-            meta_data.params.file_path =
-                "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+        // make path relative to volume
+        meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
 
-            let create = CreateDataset {
-                data_path: DataPath::Volume(volume.clone()),
-                definition: DatasetDefinition {
-                    properties: AddDataset {
-                        name: None,
-                        display_name: "ndvi".to_string(),
-                        description: "ndvi".to_string(),
-                        source_operator: "GdalSource".to_string(),
-                        symbology: None,
-                        provenance: None,
-                    },
-                    meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "GdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
                 },
-            };
+                meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+            },
+        };
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let req = actix_web::test::TestRequest::post()
-                .uri("/dataset")
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .append_header((header::CONTENT_TYPE, "application/json"))
-                .set_payload(serde_json::to_string(&create)?);
-            let res = send_test_request(req, app_ctx.clone()).await;
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-            let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
 
-            let db = ctx.db();
-            let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
-            assert!(db.load_dataset(&dataset_id).await.is_ok());
+        let db = ctx.db();
+        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
 
-            let req = actix_web::test::TestRequest::delete()
-                .uri(&format!("/dataset/{dataset_name}"))
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .append_header((header::CONTENT_TYPE, "application/json"));
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_name}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
 
-            let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-            assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
-            assert!(db.load_dataset(&dataset_id).await.is_err());
+        assert!(db.load_dataset(&dataset_id).await.is_err());
 
-            Ok(())
-        })
-        .await
+        Ok(())
     }
 }

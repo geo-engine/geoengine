@@ -1,7 +1,4 @@
-use futures::channel::oneshot;
-use std::{collections::HashMap, sync::Arc};
-use tokio::sync::RwLock;
-
+use super::users::UserSession;
 use crate::{
     error,
     tasks::{
@@ -9,19 +6,16 @@ use crate::{
         TaskListOptions, TaskManager, TaskStatus, TaskStatusWithId,
     },
 };
-
-use super::users::UserSession;
+use futures::channel::oneshot;
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::RwLock;
 
 // TODO: implement real permissions on task types
-#[cfg(feature = "ebv")]
 const ADMIN_ONLY_TASKS: [&str; 3] = [
     crate::handlers::ebv::EBV_OVERVIEW_TASK_TYPE,
     crate::handlers::ebv::EBV_MULTI_OVERVIEW_TASK_TYPE,
     crate::handlers::ebv::EBV_REMOVE_OVERVIEW_TASK_TYPE,
 ];
-
-#[cfg(not(feature = "ebv"))]
-const ADMIN_ONLY_TASKS: [&str; 0] = [];
 
 #[derive(Default)]
 pub struct ProTaskManagerBackend {
@@ -154,24 +148,21 @@ impl TaskManager<SimpleTaskManagerContext> for ProTaskManager {
 #[cfg(test)]
 mod tests {
 
-    use crate::pro::util::tests::with_pro_temp_context;
+    use super::*;
     use crate::{
         contexts::{ApplicationContext, SessionContext},
-        pro::users::UserAuth,
-        tasks::{TaskListOptions, TaskManager},
+        pro::{contexts::ProPostgresContext, ge_context, users::UserAuth},
     };
+    use tokio_postgres::NoTls;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_lists() {
-        with_pro_temp_context(|app_ctx, _| async move {
-            let session = app_ctx.create_anonymous_session().await.unwrap();
+    #[ge_context::test]
+    async fn it_lists(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-            let ctx = app_ctx.session_context(session);
+        let ctx = app_ctx.session_context(session);
 
-            let tasks = ctx.tasks();
+        let tasks = ctx.tasks();
 
-            tasks.list_tasks(TaskListOptions::default()).await.unwrap();
-        })
-        .await;
+        tasks.list_tasks(TaskListOptions::default()).await.unwrap();
     }
 }

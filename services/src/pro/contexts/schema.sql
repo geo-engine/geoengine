@@ -1,3 +1,48 @@
+CREATE TYPE "StacBand" AS (
+    "name" text,
+    no_data_value double precision,
+    data_type "RasterDataType"
+);
+
+CREATE TYPE "StacZone" AS (
+    "name" text,
+    epsg oid
+);
+
+CREATE TYPE "StacApiRetries" AS (
+    number_of_retries bigint,
+    initial_delay_ms bigint,
+    exponential_backoff_factor double precision
+);
+
+CREATE TYPE "GdalRetries" AS (
+    number_of_retries bigint
+);
+
+CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
+    "name" text,
+    id uuid,
+    api_url text,
+    bands "StacBand" [],
+    zones "StacZone" [],
+    stac_api_retries "StacApiRetries",
+    gdal_retries "GdalRetries",
+    cache_ttl int
+);
+
+CREATE TYPE "ProDataProviderDefinition" AS (
+    -- one of
+    sentinel_s2_l2_a_cogs_provider_definition
+    "SentinelS2L2ACogsProviderDefinition"
+);
+
+CREATE TABLE pro_layer_providers (
+    id uuid PRIMARY KEY,
+    type_name text NOT NULL,
+    name text NOT NULL,
+    definition "ProDataProviderDefinition" NOT NULL
+);
+
 -- TODO: distinguish between roles that are (correspond to) users 
 --       and roles that are not
 
@@ -5,18 +50,18 @@
 --       + DELETE CASCADE
 
 CREATE TABLE roles (
-    id UUID PRIMARY KEY,
-    name TEXT UNIQUE NOT NULL
+    id uuid PRIMARY KEY,
+    name text UNIQUE NOT NULL
 );
 
 CREATE TABLE users (
-    id UUID PRIMARY KEY REFERENCES roles (id),
-    email CHARACTER VARYING(256) UNIQUE,
-    password_hash CHARACTER VARYING(256),
-    real_name CHARACTER VARYING(256),
-    active BOOLEAN NOT NULL,
-    quota_available BIGINT NOT NULL DEFAULT 0,
-    quota_used BIGINT NOT NULL DEFAULT 0,
+    id uuid PRIMARY KEY REFERENCES roles (id),
+    email character varying(256) UNIQUE,
+    password_hash character varying(256),
+    real_name character varying(256),
+    active boolean NOT NULL,
+    quota_available bigint NOT NULL DEFAULT 0,
+    quota_used bigint NOT NULL DEFAULT 0,
     -- TODO: rename to total_quota_used?
     CONSTRAINT users_anonymous_ck CHECK ((
         email IS NULL
@@ -37,30 +82,30 @@ CREATE TABLE users (
 -- all users have a default role where role_id = user_id
 
 CREATE TABLE user_roles (
-    user_id UUID REFERENCES users (id) ON DELETE CASCADE NOT NULL,
-    role_id UUID REFERENCES roles (id) ON DELETE CASCADE NOT NULL,
+    user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
+    role_id uuid REFERENCES roles (id) ON DELETE CASCADE NOT NULL,
     PRIMARY KEY (user_id, role_id)
 );
 
 CREATE TABLE user_sessions (
-    user_id UUID REFERENCES users (id) ON DELETE CASCADE NOT NULL,
-    session_id UUID REFERENCES sessions (id) ON DELETE CASCADE NOT NULL,
-    created TIMESTAMP WITH TIME ZONE NOT NULL,
-    valid_until TIMESTAMP WITH TIME ZONE NOT NULL,
+    user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
+    session_id uuid REFERENCES sessions (id) ON DELETE CASCADE NOT NULL,
+    created timestamp with time zone NOT NULL,
+    valid_until timestamp with time zone NOT NULL,
     PRIMARY KEY (user_id, session_id)
 );
 
 CREATE TABLE project_version_authors (
-    project_version_id UUID REFERENCES project_versions (
+    project_version_id uuid REFERENCES project_versions (
         id
     ) ON DELETE CASCADE NOT NULL,
-    user_id UUID REFERENCES users (id) ON DELETE CASCADE NOT NULL,
+    user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
     PRIMARY KEY (project_version_id, user_id)
 );
 
 CREATE TABLE user_uploads (
-    user_id UUID REFERENCES users (id) ON DELETE CASCADE NOT NULL,
-    upload_id UUID REFERENCES uploads (id) ON DELETE CASCADE NOT NULL,
+    user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
+    upload_id uuid REFERENCES uploads (id) ON DELETE CASCADE NOT NULL,
     PRIMARY KEY (user_id, upload_id)
 );
 
@@ -71,29 +116,29 @@ CREATE TYPE "Permission" AS ENUM ('Read', 'Owner');
 -- TODO: relationship between uploads and datasets?
 
 CREATE TABLE external_users (
-    id UUID PRIMARY KEY REFERENCES users (id),
-    external_id CHARACTER VARYING(256) UNIQUE,
-    email CHARACTER VARYING(256),
-    real_name CHARACTER VARYING(256),
-    active BOOLEAN NOT NULL
+    id uuid PRIMARY KEY REFERENCES users (id),
+    external_id character varying(256) UNIQUE,
+    email character varying(256),
+    real_name character varying(256),
+    active boolean NOT NULL
 );
 
 CREATE TABLE permissions (
     -- resource_type "ResourceType" NOT NULL,
-    role_id UUID REFERENCES roles (id) ON DELETE CASCADE NOT NULL,
+    role_id uuid REFERENCES roles (id) ON DELETE CASCADE NOT NULL,
     permission "Permission" NOT NULL,
-    dataset_id UUID REFERENCES datasets (id) ON DELETE CASCADE,
-    layer_id UUID REFERENCES layers (id) ON DELETE CASCADE,
-    layer_collection_id UUID REFERENCES layer_collections (
+    dataset_id uuid REFERENCES datasets (id) ON DELETE CASCADE,
+    layer_id uuid REFERENCES layers (id) ON DELETE CASCADE,
+    layer_collection_id uuid REFERENCES layer_collections (
         id
     ) ON DELETE CASCADE,
-    project_id UUID REFERENCES projects (id) ON DELETE CASCADE,
+    project_id uuid REFERENCES projects (id) ON DELETE CASCADE,
     CHECK (
         (
-            (dataset_id IS NOT NULL)::INTEGER
-            + (layer_id IS NOT NULL)::INTEGER
-            + (layer_collection_id IS NOT NULL)::INTEGER
-            + (project_id IS NOT NULL)::INTEGER
+            (dataset_id IS NOT NULL)::integer
+            + (layer_id IS NOT NULL)::integer
+            + (layer_collection_id IS NOT NULL)::integer
+            + (project_id IS NOT NULL)::integer
         ) = 1
     )
 );

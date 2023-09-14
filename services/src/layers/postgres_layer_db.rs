@@ -2,8 +2,10 @@ use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::api::model::HashMapTextTextDbType;
 
 use crate::contexts::PostgresDb;
+use crate::error;
 use crate::layers::layer::Property;
 
+use crate::workflows::workflow::WorkflowId;
 use crate::{
     error::Result,
     layers::{
@@ -30,6 +32,8 @@ use bb8_postgres::tokio_postgres::{
 use snafu::ResultExt;
 use std::str::FromStr;
 use uuid::Uuid;
+
+use super::external::TypedDataProviderDefinition;
 
 /// delete all collections without parent collection
 async fn _remove_collections_without_parent_collection(
@@ -89,55 +93,12 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn add_layer(&self, layer: AddLayer, collection: &LayerCollectionId) -> Result<LayerId> {
-        let collection_id =
-            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: collection.0.clone(),
-            })?;
-
-        let mut conn = self.conn_pool.get().await?;
-
-        let layer = layer;
-
         let layer_id = Uuid::new_v4();
+        let layer_id = LayerId(layer_id.to_string());
 
-        let trans = conn.build_transaction().start().await?;
+        self.add_layer_with_id(&layer_id, layer, collection).await?;
 
-        let stmt = trans
-            .prepare(
-                "
-            INSERT INTO layers (id, name, description, workflow, symbology, properties, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7);",
-            )
-            .await?;
-
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &layer_id,
-                    &layer.name,
-                    &layer.description,
-                    &serde_json::to_value(&layer.workflow).context(crate::error::SerdeJson)?,
-                    &layer.symbology,
-                    &layer.properties,
-                    &HashMapTextTextDbType::from(&layer.metadata),
-                ],
-            )
-            .await?;
-
-        let stmt = trans
-            .prepare(
-                "
-        INSERT INTO collection_layers (collection, layer)
-        VALUES ($1, $2) ON CONFLICT DO NOTHING;",
-            )
-            .await?;
-
-        trans.execute(&stmt, &[&collection_id, &layer_id]).await?;
-
-        trans.commit().await?;
-
-        Ok(LayerId(layer_id.to_string()))
+        Ok(layer_id)
     }
 
     async fn add_layer_with_id(
@@ -160,12 +121,31 @@ where
 
         let layer = layer;
 
+        let workflow_id = WorkflowId::from_hash(&layer.workflow);
+
         let trans = conn.build_transaction().start().await?;
 
         let stmt = trans
             .prepare(
+                "INSERT INTO workflows (id, workflow) VALUES ($1, $2) 
+            ON CONFLICT DO NOTHING;",
+            )
+            .await?;
+
+        trans
+            .execute(
+                &stmt,
+                &[
+                    &workflow_id,
+                    &serde_json::to_value(&layer.workflow).context(error::SerdeJson)?,
+                ],
+            )
+            .await?;
+
+        let stmt = trans
+            .prepare(
                 "
-            INSERT INTO layers (id, name, description, workflow, symbology, properties, metadata)
+            INSERT INTO layers (id, name, description, workflow_id, symbology, properties, metadata)
             VALUES ($1, $2, $3, $4, $5, $6, $7);",
             )
             .await?;
@@ -177,7 +157,7 @@ where
                     &layer_id,
                     &layer.name,
                     &layer.description,
-                    &serde_json::to_value(&layer.workflow).context(crate::error::SerdeJson)?,
+                    &workflow_id,
                     &layer.symbology,
                     &layer.properties,
                     &HashMapTextTextDbType::from(&layer.metadata),
@@ -235,52 +215,13 @@ where
         collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<LayerCollectionId> {
-        let parent =
-            Uuid::from_str(&parent.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: parent.0.clone(),
-            })?;
-
-        let mut conn = self.conn_pool.get().await?;
-
-        let collection = collection;
-
         let collection_id = Uuid::new_v4();
+        let collection_id = LayerCollectionId(collection_id.to_string());
 
-        let trans = conn.build_transaction().start().await?;
-
-        let stmt = trans
-            .prepare(
-                "
-            INSERT INTO layer_collections (id, name, description, properties)
-            VALUES ($1, $2, $3, $4);",
-            )
+        self.add_layer_collection_with_id(&collection_id, collection, parent)
             .await?;
 
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &collection_id,
-                    &collection.name,
-                    &collection.description,
-                    &collection.properties,
-                ],
-            )
-            .await?;
-
-        let stmt = trans
-            .prepare(
-                "
-            INSERT INTO collection_children (parent, child)
-            VALUES ($1, $2) ON CONFLICT DO NOTHING;",
-            )
-            .await?;
-
-        trans.execute(&stmt, &[&parent, &collection_id]).await?;
-
-        trans.commit().await?;
-
-        Ok(LayerCollectionId(collection_id.to_string()))
+        Ok(collection_id)
     }
 
     async fn add_layer_collection_with_id(
@@ -634,14 +575,16 @@ where
             .prepare(
                 "
             SELECT 
-                name,
-                description,
-                workflow,
-                symbology,
-                properties,
-                metadata
-            FROM layers
-            WHERE id = $1;",
+                l.name,
+                l.description,
+                w.workflow,
+                l.symbology,
+                l.properties,
+                l.metadata
+            FROM 
+                layers l JOIN workflows w ON (l.workflow_id = w.id)
+            WHERE 
+                l.id = $1;",
             )
             .await?;
 
@@ -675,7 +618,7 @@ where
 {
     async fn add_layer_provider(
         &self,
-        provider: Box<dyn DataProviderDefinition>,
+        provider: TypedDataProviderDefinition,
     ) -> Result<DataProviderId> {
         let conn = self.conn_pool.get().await?;
 
@@ -695,12 +638,7 @@ where
         let id = provider.id();
         conn.execute(
             &stmt,
-            &[
-                &id,
-                &provider.type_name(),
-                &provider.name(),
-                &serde_json::to_value(provider)?,
-            ],
+            &[&id, &provider.type_name(), &provider.name(), &provider],
         )
         .await?;
         Ok(id)
@@ -763,8 +701,8 @@ where
 
         let row = conn.query_one(&stmt, &[&id]).await?;
 
-        let definition = serde_json::from_value::<Box<dyn DataProviderDefinition>>(row.get(0))?;
+        let definition: TypedDataProviderDefinition = row.get(0);
 
-        definition.initialize().await
+        Box::new(definition).initialize().await
     }
 }

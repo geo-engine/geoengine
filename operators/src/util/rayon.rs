@@ -25,6 +25,7 @@ fn rayon_destroy_global_thread_pool() {
 
 /// Create a rayon thread pool with the given number of threads.
 /// Use `num_threads = 0` for auto number of threads.
+#[allow(clippy::missing_panics_doc)]
 pub fn create_rayon_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
     rayon_destroy_global_thread_pool();
 

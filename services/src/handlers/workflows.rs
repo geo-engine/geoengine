@@ -454,11 +454,13 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
 ) -> Result<web::Json<TaskResponse>> {
     let ctx = Arc::new(app_ctx.session_context(session));
 
-    let workflow = ctx.db().load_workflow(&id.into_inner()).await?;
+    let id = id.into_inner();
+    let workflow = ctx.db().load_workflow(&id).await?;
     let compression_num_threads =
         get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
 
     let task_id = schedule_raster_dataset_from_workflow_task(
+        format!("workflow {id}"),
         workflow,
         ctx,
         info.into_inner(),
@@ -659,14 +661,15 @@ pub enum WorkflowApiError {
 mod tests {
 
     use super::*;
-    use crate::contexts::{Session, SimpleApplicationContext};
+    use crate::api::model::datatypes::DatasetName;
+    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
+    use crate::datasets::storage::DatasetStore;
     use crate::datasets::RasterDatasetFromWorkflowResult;
+    use crate::ge_context;
     use crate::handlers::ErrorResponse;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
-    use crate::util::tests::with_temp_context;
-    use crate::util::tests::with_temp_context_from_spec;
     use crate::util::tests::{
         add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
         read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
@@ -684,7 +687,6 @@ mod tests {
     };
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
         ExecutionContext, MultipleRasterOrSingleVectorSource, PlotOperator, TypedOperator,
     };
@@ -703,159 +705,166 @@ mod tests {
     use serde_json::json;
     use std::io::Read;
     use std::sync::Arc;
+    use tokio_postgres::NoTls;
     use zip::read::ZipFile;
     use zip::ZipArchive;
 
-    async fn register_test_helper(method: Method) -> ServiceResponse {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn register_test_helper(
+        app_ctx: PostgresContext<NoTls>,
+        method: Method,
+    ) -> ServiceResponse {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = ctx.session().id();
+        let session_id = ctx.session().id();
 
-            let workflow = Workflow {
-                operator: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                    },
-                }
-                .boxed()
-                .into(),
-            };
+        let workflow = Workflow {
+            operator: MockPointSource {
+                params: MockPointSourceParams {
+                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                },
+            }
+            .boxed()
+            .into(),
+        };
 
-            // insert workflow
-            let req = test::TestRequest::default()
-                .method(method)
-                .uri("/workflow")
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .set_json(&workflow);
-            send_test_request(req, app_ctx).await
-        })
-        .await
+        // insert workflow
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri("/workflow")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(&workflow);
+        send_test_request(req, app_ctx).await
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn register() {
-        let res = register_test_helper(Method::POST).await;
+    #[ge_context::test]
+    async fn register(app_ctx: PostgresContext<NoTls>) {
+        let res = register_test_helper(app_ctx, Method::POST).await;
 
         assert_eq!(res.status(), 200);
 
         let _id: IdResponse<WorkflowId> = test::read_body_json(res).await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn register_invalid_method() {
-        check_allowed_http_methods(register_test_helper, &[Method::POST]).await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn register_missing_header() {
-        with_temp_context(|app_ctx, _| async move {
-            let workflow = Workflow {
-                operator: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                    },
-                }
-                .boxed()
-                .into(),
-            };
-
-            // insert workflow
-            let req = test::TestRequest::post()
-                .uri("/workflow")
-                .append_header((header::CONTENT_LENGTH, 0))
-                .set_json(&workflow);
-            let res = send_test_request(req, app_ctx).await;
-
-            ErrorResponse::assert(
-                res,
-                401,
-                "Unauthorized",
-                "Authorization error: Header with authorization token not provided.",
-            )
-            .await;
-        })
+    #[ge_context::test]
+    async fn register_invalid_method(app_ctx: PostgresContext<NoTls>) {
+        check_allowed_http_methods(
+            |method| register_test_helper(app_ctx.clone(), method),
+            &[Method::POST],
+        )
         .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn register_invalid_body() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn register_missing_header(app_ctx: PostgresContext<NoTls>) {
+        let workflow = Workflow {
+            operator: MockPointSource {
+                params: MockPointSourceParams {
+                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                },
+            }
+            .boxed()
+            .into(),
+        };
 
-            let session_id = ctx.session().id();
+        // insert workflow
+        let req = test::TestRequest::post()
+            .uri("/workflow")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .set_json(&workflow);
+        let res = send_test_request(req, app_ctx).await;
 
-            // insert workflow
-            let req = test::TestRequest::post()
-                .uri("/workflow")
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .set_payload("no json");
-            let res = send_test_request(req, app_ctx).await;
-
-            ErrorResponse::assert(
-                res,
-                400,
-                "BodyDeserializeError",
-                "expected ident at line 1 column 2",
-            )
-            .await;
-        })
+        ErrorResponse::assert(
+            res,
+            401,
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
+        )
         .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn register_missing_fields() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn register_invalid_body(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = ctx.session().id();
+        let session_id = ctx.session().id();
 
-            let workflow = json!({});
+        // insert workflow
+        let req = test::TestRequest::post()
+            .uri("/workflow")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_payload("no json");
+        let res = send_test_request(req, app_ctx).await;
 
-            // insert workflow
-            let req = test::TestRequest::post()
-                .uri("/workflow")
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .set_json(&workflow);
-            let res = send_test_request(req, app_ctx).await;
-
-            ErrorResponse::assert(
-                res,
-                400,
-                "BodyDeserializeError",
-                "missing field `type` at line 1 column 2",
-            )
-            .await;
-        })
+        ErrorResponse::assert(
+            res,
+            400,
+            "BodyDeserializeError",
+            "expected ident at line 1 column 2",
+        )
         .await;
     }
 
-    async fn load_test_helper(method: Method) -> (Workflow, ServiceResponse) {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn register_missing_fields(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = ctx.session().id();
+        let session_id = ctx.session().id();
 
-            let (workflow, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let workflow = json!({});
 
-            let req = test::TestRequest::default()
-                .method(method)
-                .uri(&format!("/workflow/{id}"))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let res = send_test_request(req, app_ctx).await;
+        // insert workflow
+        let req = test::TestRequest::post()
+            .uri("/workflow")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(&workflow);
+        let res = send_test_request(req, app_ctx).await;
 
-            (workflow, res)
-        })
-        .await
+        ErrorResponse::assert(
+            res,
+            400,
+            "BodyDeserializeError",
+            "missing field `type` at line 1 column 2",
+        )
+        .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn load() {
-        let (workflow, res) = load_test_helper(Method::GET).await;
+    async fn load_test_helper(
+        app_ctx: PostgresContext<NoTls>,
+        method: Method,
+    ) -> (Workflow, ServiceResponse) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = ctx.session().id();
+
+        let (workflow, id) = register_ndvi_workflow_helper(&app_ctx).await;
+
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri(&format!("/workflow/{id}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        // remove NDVI to allow calling this method again
+        ctx.db()
+            .delete_dataset(
+                ctx.db()
+                    .resolve_dataset_name_to_id(&DatasetName::new(None, "NDVI"))
+                    .await
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        (workflow, res)
+    }
+
+    #[ge_context::test]
+    async fn load(app_ctx: PostgresContext<NoTls>) {
+        let (workflow, res) = load_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(
@@ -864,87 +873,86 @@ mod tests {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn load_invalid_method() {
-        check_allowed_http_methods2(load_test_helper, &[Method::GET], |(_, res)| res).await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn load_missing_header() {
-        with_temp_context(|app_ctx, _| async move {
-            let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
-
-            let req = test::TestRequest::get().uri(&format!("/workflow/{id}"));
-            let res = send_test_request(req, app_ctx).await;
-
-            ErrorResponse::assert(
-                res,
-                401,
-                "Unauthorized",
-                "Authorization error: Header with authorization token not provided.",
-            )
-            .await;
-        })
+    #[ge_context::test]
+    async fn load_invalid_method(app_ctx: PostgresContext<NoTls>) {
+        check_allowed_http_methods2(
+            |method| load_test_helper(app_ctx.clone(), method),
+            &[Method::GET],
+            |(_, res)| res,
+        )
         .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn load_not_exist() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn load_missing_header(app_ctx: PostgresContext<NoTls>) {
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
-            let session_id = ctx.session().id();
+        let req = test::TestRequest::get().uri(&format!("/workflow/{id}"));
+        let res = send_test_request(req, app_ctx).await;
 
-            let req = test::TestRequest::get()
-                .uri("/workflow/1")
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let res = send_test_request(req, app_ctx).await;
-
-            ErrorResponse::assert(res, 404, "NotFound", "Not Found").await;
-        })
+        ErrorResponse::assert(
+            res,
+            401,
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
+        )
         .await;
     }
 
-    async fn vector_metadata_test_helper(method: Method) -> ServiceResponse {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn load_not_exist(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = ctx.session().id();
 
-            let workflow = Workflow {
-                operator: MockFeatureCollectionSource::single(
-                    MultiPointCollection::from_data(
-                        MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
-                        vec![TimeInterval::default()],
-                        [
-                            ("foo".to_string(), FeatureData::Float(vec![42.0])),
-                            ("bar".to_string(), FeatureData::Int(vec![23])),
-                        ]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                        CacheHint::default(),
-                    )
-                    .unwrap(),
+        let req = test::TestRequest::get()
+            .uri("/workflow/1")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        ErrorResponse::assert(res, 404, "NotFound", "Not Found").await;
+    }
+
+    async fn vector_metadata_test_helper(
+        app_ctx: PostgresContext<NoTls>,
+        method: Method,
+    ) -> ServiceResponse {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = app_ctx.default_session_id().await;
+
+        let workflow = Workflow {
+            operator: MockFeatureCollectionSource::single(
+                MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
+                    vec![TimeInterval::default()],
+                    [
+                        ("foo".to_string(), FeatureData::Float(vec![42.0])),
+                        ("bar".to_string(), FeatureData::Int(vec![23])),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    CacheHint::default(),
                 )
-                .boxed()
-                .into(),
-            };
+                .unwrap(),
+            )
+            .boxed()
+            .into(),
+        };
 
-            let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
-            let req = test::TestRequest::default()
-                .method(method)
-                .uri(&format!("/workflow/{id}/metadata"))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            send_test_request(req, app_ctx).await
-        })
-        .await
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri(&format!("/workflow/{id}/metadata"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        send_test_request(req, app_ctx).await
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn vector_metadata() {
-        let res = vector_metadata_test_helper(Method::GET).await;
+    #[ge_context::test]
+    async fn vector_metadata(app_ctx: PostgresContext<NoTls>) {
+        let res = vector_metadata_test_helper(app_ctx, Method::GET).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -976,210 +984,201 @@ mod tests {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn raster_metadata() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn raster_metadata(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let workflow = Workflow {
-                operator: MockRasterSource::<u8> {
-                    params: MockRasterSourceParams::<u8> {
-                        data: vec![],
-                        result_descriptor: RasterResultDescriptor {
-                            data_type: RasterDataType::U8,
-                            spatial_reference: SpatialReference::epsg_4326().into(),
-                            measurement: Measurement::Continuous(ContinuousMeasurement {
-                                measurement: "radiation".to_string(),
-                                unit: None,
-                            }),
-                            time: None,
-                            bbox: None,
-                            resolution: None,
-                        },
+        let workflow = Workflow {
+            operator: MockRasterSource::<u8> {
+                params: MockRasterSourceParams::<u8> {
+                    data: vec![],
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        measurement: Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "radiation".to_string(),
+                            unit: None,
+                        }),
+                        time: None,
+                        bbox: None,
+                        resolution: None,
                     },
-                }
-                .boxed()
-                .into(),
-            };
+                },
+            }
+            .boxed()
+            .into(),
+        };
 
-            let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
-            let req = test::TestRequest::get()
-                .uri(&format!("/workflow/{id}/metadata"))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let res = send_test_request(req, app_ctx).await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/workflow/{id}/metadata"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx).await;
 
-            let res_status = res.status();
-            let res_body = read_body_string(res).await;
-            assert_eq!(res_status, 200, "{res_body:?}");
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{res_body:?}");
 
-            assert_eq!(
-                serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
-                serde_json::json!({
-                    "type": "raster",
-                    "dataType": "U8",
-                    "spatialReference": "EPSG:4326",
-                    "measurement": {
-                        "type": "continuous",
-                        "measurement": "radiation",
-                        "unit": null
-                    },
-                    "time": null,
-                    "bbox": null,
-                    "resolution": null
-                })
-            );
-        })
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
+            serde_json::json!({
+                "type": "raster",
+                "dataType": "U8",
+                "spatialReference": "EPSG:4326",
+                "measurement": {
+                    "type": "continuous",
+                    "measurement": "radiation",
+                    "unit": null
+                },
+                "time": null,
+                "bbox": null,
+                "resolution": null
+            })
+        );
+    }
+
+    #[ge_context::test]
+    async fn metadata_invalid_method(app_ctx: PostgresContext<NoTls>) {
+        check_allowed_http_methods(
+            |method| vector_metadata_test_helper(app_ctx.clone(), method),
+            &[Method::GET],
+        )
         .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn metadata_invalid_method() {
-        check_allowed_http_methods(vector_metadata_test_helper, &[Method::GET]).await;
-    }
+    #[ge_context::test]
+    async fn metadata_missing_header(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn metadata_missing_header() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
-
-            let workflow = Workflow {
-                operator: MockFeatureCollectionSource::single(
-                    MultiPointCollection::from_data(
-                        MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
-                        vec![TimeInterval::default()],
-                        [
-                            ("foo".to_string(), FeatureData::Float(vec![42.0])),
-                            ("bar".to_string(), FeatureData::Int(vec![23])),
-                        ]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                        CacheHint::default(),
-                    )
-                    .unwrap(),
+        let workflow = Workflow {
+            operator: MockFeatureCollectionSource::single(
+                MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
+                    vec![TimeInterval::default()],
+                    [
+                        ("foo".to_string(), FeatureData::Float(vec![42.0])),
+                        ("bar".to_string(), FeatureData::Int(vec![23])),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    CacheHint::default(),
                 )
-                .boxed()
-                .into(),
-            };
-
-            let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
-
-            let req = test::TestRequest::get().uri(&format!("/workflow/{id}/metadata"));
-            let res = send_test_request(req, app_ctx).await;
-
-            ErrorResponse::assert(
-                res,
-                401,
-                "Unauthorized",
-                "Authorization error: Header with authorization token not provided.",
+                .unwrap(),
             )
-            .await;
-        })
+            .boxed()
+            .into(),
+        };
+
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+
+        let req = test::TestRequest::get().uri(&format!("/workflow/{id}/metadata"));
+        let res = send_test_request(req, app_ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            401,
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
+        )
         .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn plot_metadata() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn plot_metadata(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let workflow = Workflow {
-                operator: Statistics {
-                    params: StatisticsParams {
-                        column_names: vec![],
-                    },
-                    sources: MultipleRasterOrSingleVectorSource {
-                        source: Raster(vec![]),
+        let workflow = Workflow {
+            operator: Statistics {
+                params: StatisticsParams {
+                    column_names: vec![],
+                },
+                sources: MultipleRasterOrSingleVectorSource {
+                    source: Raster(vec![]),
+                },
+            }
+            .boxed()
+            .into(),
+        };
+
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/workflow/{id}/metadata"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{res_body:?}");
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
+            serde_json::json!({
+                "type": "plot",
+                "spatialReference": "",
+                "time": null,
+                "bbox": null
+            })
+        );
+    }
+
+    #[ge_context::test]
+    async fn provenance(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = app_ctx.default_session_id().await;
+        let (dataset_id, dataset) = add_ndvi_to_datasets(&app_ctx).await;
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: dataset.into(),
                     },
                 }
-                .boxed()
-                .into(),
-            };
+                .boxed(),
+            ),
+        };
 
-            let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
-            let req = test::TestRequest::get()
-                .uri(&format!("/workflow/{id}/metadata"))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let res = send_test_request(req, app_ctx).await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/workflow/{id}/provenance"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx).await;
 
-            let res_status = res.status();
-            let res_body = read_body_string(res).await;
-            assert_eq!(res_status, 200, "{res_body:?}");
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{res_body:?}");
 
-            assert_eq!(
-                serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
-                serde_json::json!({
-                    "type": "plot",
-                    "spatialReference": "",
-                    "time": null,
-                    "bbox": null
-                })
-            );
-        })
-        .await;
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
+            serde_json::json!([
+                {
+                    "provenance": {
+                        "citation": "Sample Citation",
+                        "license": "Sample License",
+                        "uri": "http://example.org/"
+                    },
+                    "data": [
+                        {
+                            "type": "internal",
+                            "datasetId": dataset_id.to_string()
+                        }
+                    ]
+                }
+            ])
+        );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn provenance() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
-
-            let session_id = app_ctx.default_session_id().await;
-            let (dataset_id, dataset) = add_ndvi_to_datasets(&app_ctx).await;
-
-            let workflow = Workflow {
-                operator: TypedOperator::Raster(
-                    GdalSource {
-                        params: GdalSourceParameters {
-                            data: dataset.into(),
-                        },
-                    }
-                    .boxed(),
-                ),
-            };
-
-            let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
-
-            let req = test::TestRequest::get()
-                .uri(&format!("/workflow/{id}/provenance"))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let res = send_test_request(req, app_ctx).await;
-
-            let res_status = res.status();
-            let res_body = read_body_string(res).await;
-            assert_eq!(res_status, 200, "{res_body:?}");
-
-            assert_eq!(
-                serde_json::from_str::<serde_json::Value>(&res_body).unwrap(),
-                serde_json::json!([
-                    {
-                        "provenance": {
-                            "citation": "Sample Citation",
-                            "license": "Sample License",
-                            "uri": "http://example.org/"
-                        },
-                        "data": [
-                            {
-                                "type": "internal",
-                                "datasetId": dataset_id.to_string()
-                            }
-                        ]
-                    }
-                ])
-            );
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_does_not_register_invalid_workflow() {
-        with_temp_context(|app_ctx, _| async move {
+    #[ge_context::test]
+    async fn it_does_not_register_invalid_workflow(app_ctx: PostgresContext<NoTls>) {
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = ctx.session().id();
 
@@ -1215,14 +1214,18 @@ mod tests {
             res_body,
             json!({"error": "Operator", "message": "Operator: Invalid operator type: expected Vector found Raster"}).to_string()
         );
-
-        })
-        .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    fn test_download_all_metadata_zip_tiling_spec() -> TilingSpecification {
+        TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape::new([600, 600]),
+        }
+    }
+
+    #[ge_context::test(tiling_spec = "test_download_all_metadata_zip_tiling_spec")]
     #[allow(clippy::too_many_lines)]
-    async fn test_download_all_metadata_zip() {
+    async fn test_download_all_metadata_zip(app_ctx: PostgresContext<NoTls>) {
         fn zip_file_to_json(mut zip_file: ZipFile) -> serde_json::Value {
             let mut bytes = Vec::new();
             zip_file.read_to_end(&mut bytes).unwrap();
@@ -1230,159 +1233,144 @@ mod tests {
             serde_json::from_slice(&bytes).unwrap()
         }
 
-        let exe_ctx_tiling_spec = TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
-            tile_size_in_pixels: GridShape::new([600, 600]),
+        let session_id = app_ctx.default_session_id().await;
+
+        let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: dataset_name.clone().into(),
+                    },
+                }
+                .boxed(),
+            ),
         };
 
-        // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        with_temp_context_from_spec(
-            exe_ctx_tiling_spec,
-            TestDefault::test_default(),
-            |app_ctx, _| async move {
-                let session_id = app_ctx.default_session_id().await;
+        let workflow_id = app_ctx
+            .default_session_context()
+            .await
+            .unwrap()
+            .db()
+            .register_workflow(workflow)
+            .await
+            .unwrap();
 
-                let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
+        // create dataset from workflow
+        let req = test::TestRequest::get()
+            .uri(&format!("/workflow/{workflow_id}/allMetadata/zip"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-                let workflow = Workflow {
-                    operator: TypedOperator::Raster(
-                        GdalSource {
-                            params: GdalSourceParameters {
-                                data: dataset_name.clone().into(),
-                            },
-                        }
-                        .boxed(),
-                    ),
-                };
+        assert_eq!(res.status(), 200);
 
-                let workflow_id = app_ctx
-                    .default_session_context()
-                    .await
-                    .unwrap()
-                    .db()
-                    .register_workflow(workflow)
-                    .await
-                    .unwrap();
+        let zip_bytes = test::read_body(res).await;
 
-                // create dataset from workflow
-                let req = test::TestRequest::get()
-                    .uri(&format!("/workflow/{workflow_id}/allMetadata/zip"))
-                    .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-                let res = send_test_request(req, app_ctx.clone()).await;
+        let mut zip = ZipArchive::new(Cursor::new(zip_bytes)).unwrap();
 
-                assert_eq!(res.status(), 200);
+        assert_eq!(zip.len(), 3);
 
-                let zip_bytes = test::read_body(res).await;
+        assert_eq!(
+            zip_file_to_json(zip.by_name("workflow.json").unwrap()),
+            serde_json::json!({
+                "type": "Raster",
+                "operator": {
+                    "type": "GdalSource",
+                    "params": {
+                        "data": dataset_name
+                    }
+                }
+            })
+        );
 
-                let mut zip = ZipArchive::new(Cursor::new(zip_bytes)).unwrap();
+        assert_eq!(
+            zip_file_to_json(zip.by_name("metadata.json").unwrap()),
+            serde_json::json!({
+                "type": "raster",
+                "dataType": "U8",
+                "spatialReference": "EPSG:4326",
+                "measurement": {
+                    "type": "unitless"
+                },
+                "time": {
+                    "start": 1_388_534_400_000_i64,
+                    "end": 1_404_172_800_000_i64,
+                },
+                "bbox": {
+                    "upperLeftCoordinate": {
+                        "x": -180.0,
+                        "y": 90.0,
+                    },
+                    "lowerRightCoordinate": {
+                        "x": 180.0,
+                        "y": -90.0
+                    }
+                },
+                "resolution": {
+                    "x": 0.1,
+                    "y": 0.1
+                }
+            })
+        );
 
-                assert_eq!(zip.len(), 3);
-
-                assert_eq!(
-                    zip_file_to_json(zip.by_name("workflow.json").unwrap()),
-                    serde_json::json!({
-                        "type": "Raster",
-                        "operator": {
-                            "type": "GdalSource",
-                            "params": {
-                                "data": dataset_name
-                            }
-                        }
-                    })
-                );
-
-                assert_eq!(
-                    zip_file_to_json(zip.by_name("metadata.json").unwrap()),
-                    serde_json::json!({
-                        "type": "raster",
-                        "dataType": "U8",
-                        "spatialReference": "EPSG:4326",
-                        "measurement": {
-                            "type": "unitless"
-                        },
-                        "time": {
-                            "start": 1_388_534_400_000_i64,
-                            "end": 1_404_172_800_000_i64,
-                        },
-                        "bbox": {
-                            "upperLeftCoordinate": {
-                                "x": -180.0,
-                                "y": 90.0,
-                            },
-                            "lowerRightCoordinate": {
-                                "x": 180.0,
-                                "y": -90.0
-                            }
-                        },
-                        "resolution": {
-                            "x": 0.1,
-                            "y": 0.1
-                        }
-                    })
-                );
-
-                assert_eq!(
-                    zip_file_to_json(zip.by_name("citation.json").unwrap()),
-                    serde_json::json!([
+        assert_eq!(
+            zip_file_to_json(zip.by_name("citation.json").unwrap()),
+            serde_json::json!([
+                {
+                    "provenance": {
+                        "citation": "Sample Citation",
+                        "license": "Sample License",
+                        "uri": "http://example.org/"
+                    },
+                    "data": [
                         {
-                            "provenance": {
-                                "citation": "Sample Citation",
-                                "license": "Sample License",
-                                "uri": "http://example.org/"
-                            },
-                            "data": [
-                                {
-                                    "type": "internal",
-                                    "datasetId": dataset_id
-                                }
-                            ]
+                            "type": "internal",
+                            "datasetId": dataset_id
                         }
-                    ])
-                );
-            },
-        )
-        .await;
+                    ]
+                }
+            ])
+        );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[allow(clippy::too_many_lines)]
-    async fn dataset_from_workflow_task_success() {
-        let exe_ctx_tiling_spec = TilingSpecification {
+    /// override the pixel size since this test was designed for 600 x 600 pixel tiles
+    fn dataset_from_workflow_task_success_tiling_spec() -> TilingSpecification {
+        TilingSpecification {
             origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape::new([600, 600]),
+        }
+    }
+
+    #[ge_context::test(tiling_spec = "dataset_from_workflow_task_success_tiling_spec")]
+    #[allow(clippy::too_many_lines)]
+    async fn dataset_from_workflow_task_success(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = app_ctx.default_session_id().await;
+
+        let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: dataset.into(),
+                    },
+                }
+                .boxed(),
+            ),
         };
 
-        // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        with_temp_context_from_spec(
-            exe_ctx_tiling_spec,
-            TestDefault::test_default(),
-            |app_ctx, _| async move {
-                let ctx = app_ctx.default_session_context().await.unwrap();
+        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
 
-                let session_id = app_ctx.default_session_id().await;
-
-                let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
-
-                let workflow = Workflow {
-                    operator: TypedOperator::Raster(
-                        GdalSource {
-                            params: GdalSourceParameters {
-                                data: dataset.into(),
-                            },
-                        }
-                        .boxed(),
-                    ),
-                };
-
-                let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
-
-                // create dataset from workflow
-                let req = test::TestRequest::post()
-                    .uri(&format!("/datasetFromWorkflow/{workflow_id}"))
-                    .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                    .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
-                    .set_payload(
-                        r#"{
+        // create dataset from workflow
+        let req = test::TestRequest::post()
+            .uri(&format!("/datasetFromWorkflow/{workflow_id}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
+            .set_payload(
+                r#"{
                 "displayName": "foo",
                 "description": null,
                 "query": {
@@ -1406,92 +1394,85 @@ mod tests {
                     }
                 }
             }"#,
-                    );
-                let res = send_test_request(req, app_ctx.clone()).await;
+            );
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-                assert_eq!(res.status(), 200, "{:?}", res.response());
+        assert_eq!(res.status(), 200, "{:?}", res.response());
 
-                let task_response =
-                    serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
 
-                let tasks = Arc::new(ctx.tasks());
+        let tasks = Arc::new(ctx.tasks());
 
-                wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
+        wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
 
-                let status = tasks.get_task_status(task_response.task_id).await.unwrap();
+        let status = tasks.get_task_status(task_response.task_id).await.unwrap();
 
-                let response = if let TaskStatus::Completed { info, .. } = status {
-                    info.as_any_arc()
-                        .downcast::<RasterDatasetFromWorkflowResult>()
-                        .unwrap()
-                        .as_ref()
-                        .clone()
-                } else {
-                    panic!("Task must be completed");
-                };
+        let response = if let TaskStatus::Completed { info, .. } = status {
+            info.as_any_arc()
+                .downcast::<RasterDatasetFromWorkflowResult>()
+                .unwrap()
+                .as_ref()
+                .clone()
+        } else {
+            panic!("Task must be completed");
+        };
 
-                // automatically deletes uploads on drop
-                let _test_uploads = TestDataUploads {
-                    uploads: vec![response.upload],
-                };
+        // automatically deletes uploads on drop
+        let _test_uploads = TestDataUploads {
+            uploads: vec![response.upload],
+        };
 
-                // query the newly created dataset
-                let op = GdalSource {
-                    params: GdalSourceParameters {
-                        data: response.dataset.into(),
-                    },
-                }
-                .boxed();
-
-                let exe_ctx = ctx.execution_context().unwrap();
-
-                let o = op
-                    .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-                    .await
-                    .unwrap();
-
-                let query_ctx = ctx.query_context().unwrap();
-                let query_rect = RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new_unchecked(
-                        1_388_534_400_000,
-                        1_388_534_400_000 + 1000,
-                    ),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                };
-
-                let processor = o.query_processor().unwrap().get_u8().unwrap();
-
-                let result = single_timestep_raster_stream_to_geotiff_bytes(
-                    processor,
-                    query_rect,
-                    query_ctx,
-                    GdalGeoTiffDatasetMetadata {
-                        no_data_value: Some(0.),
-                        spatial_reference: SpatialReference::epsg_4326(),
-                    },
-                    GdalGeoTiffOptions {
-                        compression_num_threads: get_config_element::<crate::util::config::Gdal>()
-                            .unwrap()
-                            .compression_num_threads,
-                        as_cog: false,
-                        force_big_tiff: false,
-                    },
-                    None,
-                    Box::pin(futures::future::pending()),
-                    exe_ctx.tiling_specification(),
-                )
-                .await
-                .unwrap();
-
-                assert_eq!(
-                    include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                        as &[u8],
-                    result.as_slice()
-                );
+        // query the newly created dataset
+        let op = GdalSource {
+            params: GdalSourceParameters {
+                data: response.dataset.into(),
             },
+        }
+        .boxed();
+
+        let exe_ctx = ctx.execution_context().unwrap();
+
+        let o = op
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let query_ctx = ctx.query_context().unwrap();
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
+            time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+        };
+
+        let processor = o.query_processor().unwrap().get_u8().unwrap();
+
+        let result = single_timestep_raster_stream_to_geotiff_bytes(
+            processor,
+            query_rect,
+            query_ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
+                    .unwrap()
+                    .compression_num_threads,
+                as_cog: false,
+                force_big_tiff: false,
+            },
+            None,
+            Box::pin(futures::future::pending()),
+            exe_ctx.tiling_specification(),
         )
-        .await;
+        .await
+        .unwrap();
+
+        assert_eq!(
+            include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
+                as &[u8],
+            result.as_slice()
+        );
     }
 }

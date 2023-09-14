@@ -1,6 +1,6 @@
 # Geo Engine
 
-[![CI](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml/badge.svg)](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml)
+[![CI](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml/badge.svg?event=merge_group)](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml?query=event%3Amerge_group)
 [![Coverage Status](https://coveralls.io/repos/github/geo-engine/geoengine/badge.svg?branch=main)](https://coveralls.io/github/geo-engine/geoengine?branch=main)
 [![Documentation](https://img.shields.io/badge/documentation-docs.geoengine.io-blue)](https://docs.geoengine.io/)
 
@@ -13,7 +13,7 @@ This workspace contains the Geo Engine crates.
 ## Development
 
 - While Geo Engine should build on Linux and Windows environments, we currently only support Ubuntu Linux 22.04 LTS.
-- You need a recent Rust environment with a Rust nightly compiler. We recommend rustup to manage Rust `https://rustup.rs/`.
+- You need a recent Rust environment with a Rust nightly compiler. We recommend `rustup` to manage Rust `https://rustup.rs/`.
 
 ### Dependencies
 
@@ -54,12 +54,12 @@ Please provide tests with all new features and run
 `cargo test`
 before creating a pull request.
 
-Edit `Settings-test.toml` for environment specific test parameters.
+Edit `Settings-test.toml` for environment-specific test parameters.
 
 #### PostgreSQL
 
 For running the PostgreSQL tests, you need to have it installed.
-Furthermore, you need to create a default user `geoengine` with password `geoengine`.
+Furthermore, you need to create a default user `geoengine` with the password `geoengine`.
 
 ```
 sudo -u postgres psql << EOF
@@ -73,6 +73,34 @@ During development, you can use the following command to clean the database and 
 
 ```bash
 sudo -u postgres psql -d geoengine -c "drop schema public cascade; create schema public authorization geoengine; create extension postgis;" && cargo run --features pro
+```
+
+##### NFDI / GFBio
+
+For running the NFDI/GFBio ABCD data providers (`GfbioAbcdDataProviderDefinition` and `GfbioCollectionsDataProviderDefinition`) during development, you need to integrate the test data like this:
+
+```bash
+# delete existing data
+sudo -u postgres psql --dbname=geoengine -c \
+  "DROP SCHEMA IF EXISTS abcd CASCADE;"
+
+# insert data
+cat test_data/gfbio/init_test_data.sql test_data/gfbio/test_data.sql | \
+  sudo -u postgres psql --dbname=geoengine --single-transaction --file -
+```
+
+##### GBIF
+
+For running the GBIF data provider (`GbifDataProviderDefinition`) during development, you need to integrate the test data like this:
+
+```bash
+# delete existing data
+sudo -u postgres psql --dbname=geoengine -c \
+  "DROP SCHEMA IF EXISTS gbif CASCADE;"
+
+# insert data
+cat test_data/gbif/init_test_data.sql test_data/gbif/test_data.sql | \
+  sudo -u postgres psql --dbname=geoengine --single-transaction --file -
 ```
 
 ### Benchmarks

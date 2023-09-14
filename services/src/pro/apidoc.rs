@@ -65,7 +65,7 @@ use utoipa::{Modify, OpenApi};
 
 use super::handlers::permissions::{PermissionRequest, Resource};
 use super::handlers::users::AddRole;
-use super::permissions::{Permission, ResourceId, RoleId};
+use super::permissions::{Permission, ResourceId, RoleDescription, RoleId};
 use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 
 #[derive(OpenApi)]
@@ -115,6 +115,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         pro::handlers::users::remove_role_handler,
         pro::handlers::users::assign_role_handler,
         pro::handlers::users::revoke_role_handler,
+        pro::handlers::users::get_role_descriptions,
         handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
@@ -356,6 +357,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             ResourceId,
             Permission,
             AddRole,
+            RoleDescription,
 
             CacheTtlSeconds
         ),
@@ -410,24 +412,23 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
     use crate::pro::util::tests::send_pro_test_request;
-    use crate::pro::util::tests::with_pro_temp_context;
+    use tokio_postgres::NoTls;
 
     #[test]
     fn can_resolve_api() {
         crate::util::openapi_examples::can_resolve_api(ApiDoc::openapi());
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn can_run_examples() {
-        with_pro_temp_context(|app_ctx, _| async move {
-            crate::pro::util::openapi_examples::can_run_pro_examples(
-                app_ctx,
-                ApiDoc::openapi(),
-                send_pro_test_request,
-            )
-            .await;
-        })
+    #[ge_context::test]
+    async fn can_run_examples(app_ctx: ProPostgresContext<NoTls>) {
+        crate::pro::util::openapi_examples::can_run_pro_examples(
+            app_ctx,
+            ApiDoc::openapi(),
+            send_pro_test_request,
+        )
         .await;
     }
 }

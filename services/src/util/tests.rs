@@ -370,11 +370,20 @@ pub async fn send_test_request<C: SimpleApplicationContext>(
         .map_into_boxed_body()
 }
 
+/// # Panics
+///
+/// Panics if response string is not valid utf8
+///
 pub async fn read_body_string(res: ServiceResponse) -> String {
     let body = test::read_body(res).await;
     String::from_utf8(body.to_vec()).expect("Body is utf 8 string")
 }
 
+/// # Panics
+///
+/// * Panics if response string is not valid utf8.
+/// * Panics if response body is not valid json.
+///
 pub async fn read_body_json(res: ServiceResponse) -> serde_json::Value {
     let body = test::read_body(res).await;
     let s = String::from_utf8(body.to_vec()).expect("Body is utf 8 string");

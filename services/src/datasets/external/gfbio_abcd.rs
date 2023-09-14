@@ -35,22 +35,22 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 pub const GFBIO_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x907f_9f5b_0304_4a0e_a5ef_28de_62d1_c0f9);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GfbioAbcdDataProviderDefinition {
-    name: String,
-    db_config: DatabaseConnectionConfig,
+    pub name: String,
+    pub db_config: DatabaseConnectionConfig,
     #[serde(default)]
-    cache_ttl: CacheTtlSeconds,
+    pub cache_ttl: CacheTtlSeconds,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl DataProviderDefinition for GfbioAbcdDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {

@@ -98,6 +98,11 @@ fn can_resolve_reference(reference: &Ref, components: &Components) {
 
 /// Loops through all registered HTTP handlers and ensures that the referenced schemas
 /// (inside of request bodies, parameters or responses) exist and can be resolved.
+///
+/// # Panics
+///
+/// Panics if a referenced schema cannot be resolved.
+///
 pub fn can_resolve_api(api: OpenApi) {
     let components = api.components.expect("api has at least one component");
 
@@ -394,8 +399,8 @@ mod tests {
     use super::*;
     use crate::contexts::SimpleApplicationContext;
     use crate::datasets::upload::Volume;
+    use crate::ge_context;
     use crate::util::server::{configure_extractors, render_404, render_405};
-    use crate::util::tests::with_temp_context;
     use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
     use serde::Deserialize;
     use serde_json::json;
@@ -662,79 +667,75 @@ mod tests {
             .map_into_boxed_body()
     }
 
-    async fn run_dummy_example(example: serde_json::Value) {
-        with_temp_context(|app_ctx, _| async move {
-            can_run_examples(
-                app_ctx,
-                OpenApiBuilder::new()
-                    .paths(
-                        PathsBuilder::new().path(
-                            "/test/{id}",
-                            PathItemBuilder::new()
-                                .operation(
-                                    PathItemType::Post,
-                                    OperationBuilder::new()
-                                        .parameter(
-                                            ParameterBuilder::new()
-                                                .name("id")
-                                                .parameter_in(ParameterIn::Path)
-                                                .schema(Some(RefOr::T(
-                                                    ObjectBuilder::new()
-                                                        .schema_type(SchemaType::Integer)
-                                                        .format(Some(SchemaFormat::KnownFormat(
-                                                            KnownFormat::Int32,
-                                                        )))
-                                                        .into(),
-                                                ))),
-                                        )
-                                        .parameter(
-                                            ParameterBuilder::new()
-                                                .name("x")
-                                                .parameter_in(ParameterIn::Query)
-                                                .schema(Some(RefOr::T(
-                                                    Object::with_type(SchemaType::String).into(),
-                                                ))),
-                                        )
-                                        .request_body(Some(
-                                            RequestBodyBuilder::new()
-                                                .content(
-                                                    "application/json",
-                                                    ContentBuilder::new()
-                                                        .schema(Volume::schema().1)
-                                                        .example(Some(example))
-                                                        .into(),
-                                                )
-                                                .into(),
-                                        )),
-                                )
-                                .into(),
-                        ),
-                    )
-                    .components(Some(
-                        ComponentsBuilder::new()
-                            .schemas_from_iter([
-                                ("Schema1", Schema::default()),
-                                ("Schema2", Schema::default()),
-                                ("Schema3", Schema::default()),
-                            ])
+    async fn run_dummy_example(app_ctx: PostgresContext<NoTls>, example: serde_json::Value) {
+        can_run_examples(
+            app_ctx,
+            OpenApiBuilder::new()
+                .paths(
+                    PathsBuilder::new().path(
+                        "/test/{id}",
+                        PathItemBuilder::new()
+                            .operation(
+                                PathItemType::Post,
+                                OperationBuilder::new()
+                                    .parameter(
+                                        ParameterBuilder::new()
+                                            .name("id")
+                                            .parameter_in(ParameterIn::Path)
+                                            .schema(Some(RefOr::T(
+                                                ObjectBuilder::new()
+                                                    .schema_type(SchemaType::Integer)
+                                                    .format(Some(SchemaFormat::KnownFormat(
+                                                        KnownFormat::Int32,
+                                                    )))
+                                                    .into(),
+                                            ))),
+                                    )
+                                    .parameter(
+                                        ParameterBuilder::new()
+                                            .name("x")
+                                            .parameter_in(ParameterIn::Query)
+                                            .schema(Some(RefOr::T(
+                                                Object::with_type(SchemaType::String).into(),
+                                            ))),
+                                    )
+                                    .request_body(Some(
+                                        RequestBodyBuilder::new()
+                                            .content(
+                                                "application/json",
+                                                ContentBuilder::new()
+                                                    .schema(Volume::schema().1)
+                                                    .example(Some(example))
+                                                    .into(),
+                                            )
+                                            .into(),
+                                    )),
+                            )
                             .into(),
-                    ))
-                    .into(),
-                dummy_send_test_request,
-            )
-            .await;
-        })
+                    ),
+                )
+                .components(Some(
+                    ComponentsBuilder::new()
+                        .schemas_from_iter([
+                            ("Schema1", Schema::default()),
+                            ("Schema2", Schema::default()),
+                            ("Schema3", Schema::default()),
+                        ])
+                        .into(),
+                ))
+                .into(),
+            dummy_send_test_request,
+        )
         .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[should_panic(expected = "BodyDeserializeError")]
-    async fn detects_bodydeserializeerror() {
-        run_dummy_example(json!({"name": "note-path_field_missing"})).await;
+    #[ge_context::test(expect_panic = "BodyDeserializeError")]
+    async fn detects_bodydeserializeerror(app_ctx: PostgresContext<NoTls>) {
+        run_dummy_example(app_ctx, json!({"name": "note-path_field_missing"})).await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn successfull_example_run() {
-        run_dummy_example(json!({"name": "Files", "path": "/path/to/files"})).await;
+    #[ge_context::test]
+    async fn successfull_example_run(app_ctx: PostgresContext<NoTls>) {
+        run_dummy_example(app_ctx, json!({"name": "Files", "path": "/path/to/files"})).await;
     }
 }

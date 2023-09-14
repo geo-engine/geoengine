@@ -327,21 +327,30 @@ impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
         let number_statistics = vec![NumberStatistics::default(); self.rasters.len()];
 
         select_all(queries)
-            .fold(
-                Ok(number_statistics),
-                |number_statistics: Result<Vec<NumberStatistics>>, enumerated_raster_tile| async move {
-                    let mut number_statistics = number_statistics?;
-                    let (i, raster_tile) = enumerated_raster_tile?;
+            .try_fold(
+                number_statistics,
+                |number_statistics: Vec<NumberStatistics>, enumerated_raster_tile| async move {
+                    let mut number_statistics = number_statistics;
+                    let (i, raster_tile) = enumerated_raster_tile;
                     match raster_tile.grid_array {
-                        GridOrEmpty::Grid(g) => process_raster(&mut number_statistics[i], g.masked_element_deref_iterator()),
-                        GridOrEmpty::Empty(n) => number_statistics[i].add_no_data_batch(n.number_of_elements())
+                        GridOrEmpty::Grid(g) => process_raster(
+                            &mut number_statistics[i],
+                            g.masked_element_deref_iterator(),
+                        ),
+                        GridOrEmpty::Empty(n) => {
+                            number_statistics[i].add_no_data_batch(n.number_of_elements());
+                        }
                     }
 
                     Ok(number_statistics)
                 },
             )
             .map(|number_statistics| {
-                let output: HashMap<String, StatisticsOutput> = number_statistics?.iter().enumerate().map(|(i, stat)| (self.column_names[i].clone(), StatisticsOutput::from(stat))).collect();
+                let output: HashMap<String, StatisticsOutput> = number_statistics?
+                    .iter()
+                    .enumerate()
+                    .map(|(i, stat)| (self.column_names[i].clone(), StatisticsOutput::from(stat)))
+                    .collect();
                 serde_json::to_value(output).map_err(Into::into)
             })
             .await

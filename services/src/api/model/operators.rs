@@ -261,7 +261,7 @@ impl From<VectorResultDescriptor> for TypedResultDescriptor {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema, FromSql, ToSql)]
 pub struct MockDatasetDataSourceLoadingInfo {
     pub points: Vec<Coordinate2D>,
 }
@@ -416,7 +416,7 @@ impl From<OgrMetaData>
     }
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
@@ -564,7 +564,7 @@ impl From<OgrSourceTimeFormat> for geoengine_operators::source::OgrSourceTimeFor
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, ToSql, FromSql)]
 #[serde(rename_all = "camelCase")]
 pub enum UnixTimeStampType {
     EpochSeconds,
@@ -591,7 +591,7 @@ impl From<UnixTimeStampType> for geoengine_operators::source::UnixTimeStampType 
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "lowercase")]
 pub enum OgrSourceErrorSpec {
     Ignore,
@@ -837,7 +837,7 @@ impl From<OgrSourceColumnSpec> for geoengine_operators::source::OgrSourceColumnS
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataRegular {
     pub result_descriptor: RasterResultDescriptor,
@@ -953,7 +953,7 @@ impl From<GdalDatasetParameters> for geoengine_operators::source::GdalDatasetPar
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema, FromSql, ToSql)]
 pub struct GdalSourceTimePlaceholder {
     pub format: DateTimeParseFormat,
     pub reference: TimeReference,
@@ -977,7 +977,7 @@ impl From<GdalSourceTimePlaceholder> for geoengine_operators::source::GdalSource
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalDatasetGeoTransform {
     pub origin_coordinate: Coordinate2D,
@@ -1005,7 +1005,7 @@ impl From<GdalDatasetGeoTransform> for geoengine_operators::source::GdalDatasetG
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, ToSchema, FromSql, ToSql)]
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
@@ -1029,7 +1029,7 @@ impl From<FileNotFoundHandling> for geoengine_operators::source::FileNotFoundHan
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema, FromSql, ToSql)]
 pub struct GdalMetadataMapping {
     pub source_key: RasterPropertiesKey,
     pub target_key: RasterPropertiesKey,
@@ -1056,7 +1056,7 @@ impl From<GdalMetadataMapping> for geoengine_operators::source::GdalMetadataMapp
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub enum TimeReference {
     Start,
@@ -1128,7 +1128,7 @@ impl From<GdalMetadataNetCdfCf> for geoengine_operators::source::GdalMetadataNet
     }
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataList {
     pub result_descriptor: RasterResultDescriptor,
@@ -1154,7 +1154,7 @@ impl From<GdalMetaDataList> for geoengine_operators::source::GdalMetaDataList {
 }
 
 /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
@@ -1187,7 +1187,7 @@ impl From<GdalLoadingInfoTemporalSlice>
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "lowercase")]
 pub enum CsvHeader {
     Yes,

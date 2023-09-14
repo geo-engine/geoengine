@@ -639,6 +639,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
         get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
 
     let task_id = schedule_raster_dataset_from_workflow_task(
+        format!("layer {item}"),
         layer.workflow,
         ctx,
         from_workflow,
@@ -892,12 +893,13 @@ mod tests {
     use super::*;
     use crate::contexts::{SessionId, SimpleApplicationContext, SimpleSession};
     use crate::datasets::RasterDatasetFromWorkflowResult;
+    use crate::ge_context;
     use crate::handlers::ErrorResponse;
     use crate::layers::layer::Layer;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
-    use crate::util::tests::{read_body_string, with_temp_context_from_spec, TestDataUploads};
+    use crate::util::tests::{read_body_string, TestDataUploads};
     use crate::{
         contexts::{PostgresContext, Session},
         util::tests::send_test_request,
@@ -922,8 +924,6 @@ mod tests {
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::processing::{TimeShift, TimeShiftParams};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-
-    use crate::util::tests::with_temp_context;
     use geoengine_operators::util::raster_stream_to_geotiff::{
         raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
     };
@@ -934,365 +934,344 @@ mod tests {
     use std::sync::Arc;
     use tokio_postgres::NoTls;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_add_layer_to_collection() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn test_add_layer_to_collection(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+        let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
-            let req = test::TestRequest::post()
-                .uri(&format!("/layerDb/collections/{collection_id}/layers"))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .set_json(serde_json::json!({
-                    "name": "Foo",
-                    "description": "Bar",
-                    "workflow": {
-                      "type": "Vector",
-                      "operator": {
-                        "type": "MockPointSource",
-                        "params": {
-                          "points": [
-                            { "x": 0.0, "y": 0.1 },
-                            { "x": 1.0, "y": 1.1 }
-                          ]
-                        }
-                      }
-                    },
-                    "symbology": null,
-                }));
-            let response = send_test_request(req, app_ctx.clone()).await;
-
-            assert!(response.status().is_success(), "{response:?}");
-
-            let result: IdResponse<LayerId> = test::read_body_json(response).await;
-
-            ctx.db().load_layer(&result.id).await.unwrap();
-
-            let collection = ctx
-                .db()
-                .load_layer_collection(&collection_id, LayerCollectionListOptions::default())
-                .await
-                .unwrap();
-
-            assert!(collection.items.iter().any(|item| match item {
-                CollectionItem::Layer(layer) => layer.id.layer_id == result.id,
-                CollectionItem::Collection(_) => false,
+        let req = test::TestRequest::post()
+            .uri(&format!("/layerDb/collections/{collection_id}/layers"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(serde_json::json!({
+                "name": "Foo",
+                "description": "Bar",
+                "workflow": {
+                  "type": "Vector",
+                  "operator": {
+                    "type": "MockPointSource",
+                    "params": {
+                      "points": [
+                        { "x": 0.0, "y": 0.1 },
+                        { "x": 1.0, "y": 1.1 }
+                      ]
+                    }
+                  }
+                },
+                "symbology": null,
             }));
-        })
-        .await;
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        let result: IdResponse<LayerId> = test::read_body_json(response).await;
+
+        ctx.db().load_layer(&result.id).await.unwrap();
+
+        let collection = ctx
+            .db()
+            .load_layer_collection(&collection_id, LayerCollectionListOptions::default())
+            .await
+            .unwrap();
+
+        assert!(collection.items.iter().any(|item| match item {
+            CollectionItem::Layer(layer) => layer.id.layer_id == result.id,
+            CollectionItem::Collection(_) => false,
+        }));
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_add_existing_layer_to_collection() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn test_add_existing_layer_to_collection(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+        let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
-            let layer_id = ctx
-                .db()
-                .add_layer(
-                    AddLayer {
-                        name: "Layer Name".to_string(),
-                        description: "Layer Description".to_string(),
-                        workflow: Workflow {
-                            operator: MockPointSource {
-                                params: MockPointSourceParams {
-                                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                                },
-                            }
-                            .boxed()
-                            .into(),
-                        },
-                        symbology: None,
-                        metadata: Default::default(),
-                        properties: Default::default(),
+        let layer_id = ctx
+            .db()
+            .add_layer(
+                AddLayer {
+                    name: "Layer Name".to_string(),
+                    description: "Layer Description".to_string(),
+                    workflow: Workflow {
+                        operator: MockPointSource {
+                            params: MockPointSourceParams {
+                                points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                            },
+                        }
+                        .boxed()
+                        .into(),
                     },
-                    &root_collection_id,
-                )
-                .await
-                .unwrap();
+                    symbology: None,
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
 
-            let collection_id = ctx
-                .db()
-                .add_layer_collection(
-                    AddLayerCollection {
-                        name: "Foo".to_string(),
-                        description: "Bar".to_string(),
-                        properties: Default::default(),
-                    },
-                    &root_collection_id,
-                )
-                .await
-                .unwrap();
+        let collection_id = ctx
+            .db()
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Bar".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
 
-            let req = test::TestRequest::post()
-                .uri(&format!(
-                    "/layerDb/collections/{collection_id}/layers/{layer_id}"
-                ))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let response = send_test_request(req, app_ctx.clone()).await;
+        let req = test::TestRequest::post()
+            .uri(&format!(
+                "/layerDb/collections/{collection_id}/layers/{layer_id}"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
 
-            assert!(response.status().is_success(), "{response:?}");
+        assert!(response.status().is_success(), "{response:?}");
 
-            let collection = ctx
-                .db()
-                .load_layer_collection(&collection_id, LayerCollectionListOptions::default())
-                .await
-                .unwrap();
-            assert_eq!(collection.items.len(), 1);
-        })
-        .await;
+        let collection = ctx
+            .db()
+            .load_layer_collection(&collection_id, LayerCollectionListOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(collection.items.len(), 1);
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_add_layer_collection() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn test_add_layer_collection(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+        let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
-            let req = test::TestRequest::post()
-                .uri(&format!("/layerDb/collections/{collection_id}/collections"))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .set_json(serde_json::json!({
-                    "name": "Foo",
-                    "description": "Bar",
-                }));
-            let response = send_test_request(req, app_ctx.clone()).await;
+        let req = test::TestRequest::post()
+            .uri(&format!("/layerDb/collections/{collection_id}/collections"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(serde_json::json!({
+                "name": "Foo",
+                "description": "Bar",
+            }));
+        let response = send_test_request(req, app_ctx.clone()).await;
 
-            assert!(response.status().is_success(), "{response:?}");
+        assert!(response.status().is_success(), "{response:?}");
 
-            let result: IdResponse<LayerCollectionId> = test::read_body_json(response).await;
+        let result: IdResponse<LayerCollectionId> = test::read_body_json(response).await;
 
-            ctx.db()
-                .load_layer_collection(&result.id, LayerCollectionListOptions::default())
-                .await
-                .unwrap();
-        })
-        .await;
+        ctx.db()
+            .load_layer_collection(&result.id, LayerCollectionListOptions::default())
+            .await
+            .unwrap();
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_add_existing_collection_to_collection() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn test_add_existing_collection_to_collection(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+        let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
-            let collection_a_id = ctx
-                .db()
-                .add_layer_collection(
-                    AddLayerCollection {
-                        name: "Foo".to_string(),
-                        description: "Foo".to_string(),
-                        properties: Default::default(),
-                    },
-                    &root_collection_id,
-                )
-                .await
-                .unwrap();
+        let collection_a_id = ctx
+            .db()
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Foo".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
 
-            let collection_b_id = ctx
-                .db()
-                .add_layer_collection(
-                    AddLayerCollection {
-                        name: "Bar".to_string(),
-                        description: "Bar".to_string(),
-                        properties: Default::default(),
-                    },
-                    &root_collection_id,
-                )
-                .await
-                .unwrap();
+        let collection_b_id = ctx
+            .db()
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Bar".to_string(),
+                    description: "Bar".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
 
-            let req = test::TestRequest::post()
-                .uri(&format!(
-                    "/layerDb/collections/{collection_a_id}/collections/{collection_b_id}"
-                ))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let response = send_test_request(req, app_ctx.clone()).await;
+        let req = test::TestRequest::post()
+            .uri(&format!(
+                "/layerDb/collections/{collection_a_id}/collections/{collection_b_id}"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
 
-            assert!(response.status().is_success(), "{response:?}");
+        assert!(response.status().is_success(), "{response:?}");
 
-            let collection_a = ctx
-                .db()
-                .load_layer_collection(&collection_a_id, LayerCollectionListOptions::default())
-                .await
-                .unwrap();
+        let collection_a = ctx
+            .db()
+            .load_layer_collection(&collection_a_id, LayerCollectionListOptions::default())
+            .await
+            .unwrap();
 
-            assert_eq!(collection_a.items.len(), 1);
-        })
-        .await;
+        assert_eq!(collection_a.items.len(), 1);
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_remove_layer_from_collection() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn test_remove_layer_from_collection(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+        let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
-            let collection_id = ctx
-                .db()
-                .add_layer_collection(
-                    AddLayerCollection {
-                        name: "Foo".to_string(),
-                        description: "Bar".to_string(),
-                        properties: Default::default(),
+        let collection_id = ctx
+            .db()
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Bar".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let layer_id = ctx
+            .db()
+            .add_layer(
+                AddLayer {
+                    name: "Layer Name".to_string(),
+                    description: "Layer Description".to_string(),
+                    workflow: Workflow {
+                        operator: MockPointSource {
+                            params: MockPointSourceParams {
+                                points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
+                            },
+                        }
+                        .boxed()
+                        .into(),
                     },
-                    &root_collection_id,
-                )
-                .await
-                .unwrap();
+                    symbology: None,
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection_id,
+            )
+            .await
+            .unwrap();
 
-            let layer_id = ctx
-                .db()
-                .add_layer(
-                    AddLayer {
-                        name: "Layer Name".to_string(),
-                        description: "Layer Description".to_string(),
-                        workflow: Workflow {
-                            operator: MockPointSource {
-                                params: MockPointSourceParams {
-                                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                                },
-                            }
-                            .boxed()
-                            .into(),
-                        },
-                        symbology: None,
-                        metadata: Default::default(),
-                        properties: Default::default(),
-                    },
-                    &collection_id,
-                )
-                .await
-                .unwrap();
+        let req = test::TestRequest::delete()
+            .uri(&format!(
+                "/layerDb/collections/{collection_id}/layers/{layer_id}"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
 
-            let req = test::TestRequest::delete()
-                .uri(&format!(
-                    "/layerDb/collections/{collection_id}/layers/{layer_id}"
-                ))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let response = send_test_request(req, app_ctx.clone()).await;
+        assert!(
+            response.status().is_success(),
+            "{:?}: {:?}",
+            response.response().head(),
+            response.response().body()
+        );
 
-            assert!(
-                response.status().is_success(),
-                "{:?}: {:?}",
-                response.response().head(),
-                response.response().body()
-            );
-
-            // layer should be gone
-            ctx.db().load_layer(&layer_id).await.unwrap_err();
-        })
-        .await;
+        // layer should be gone
+        ctx.db().load_layer(&layer_id).await.unwrap_err();
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_remove_collection() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn test_remove_collection(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+        let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
-            let collection_id = ctx
-                .db()
-                .add_layer_collection(
-                    AddLayerCollection {
-                        name: "Foo".to_string(),
-                        description: "Bar".to_string(),
-                        properties: Default::default(),
-                    },
-                    &root_collection_id,
-                )
-                .await
-                .unwrap();
+        let collection_id = ctx
+            .db()
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Bar".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
 
-            let req = test::TestRequest::delete()
-                .uri(&format!("/layerDb/collections/{collection_id}"))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let response = send_test_request(req, app_ctx.clone()).await;
+        let req = test::TestRequest::delete()
+            .uri(&format!("/layerDb/collections/{collection_id}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
 
-            assert!(response.status().is_success(), "{response:?}");
+        assert!(response.status().is_success(), "{response:?}");
 
-            ctx.db()
-                .load_layer_collection(&collection_id, LayerCollectionListOptions::default())
-                .await
-                .unwrap_err();
+        ctx.db()
+            .load_layer_collection(&collection_id, LayerCollectionListOptions::default())
+            .await
+            .unwrap_err();
 
-            // try removing root collection id --> should fail
+        // try removing root collection id --> should fail
 
-            let req = test::TestRequest::delete()
-                .uri(&format!("/layers/collections/{root_collection_id}"))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let response = send_test_request(req, app_ctx.clone()).await;
+        let req = test::TestRequest::delete()
+            .uri(&format!("/layers/collections/{root_collection_id}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
 
-            assert!(response.status().is_client_error(), "{response:?}");
-        })
-        .await;
+        assert!(response.status().is_client_error(), "{response:?}");
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_remove_collection_from_collection() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn test_remove_collection_from_collection(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session_id = app_ctx.default_session_id().await;
+        let session_id = app_ctx.default_session_id().await;
 
-            let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+        let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
-            let collection_id = ctx
-                .db()
-                .add_layer_collection(
-                    AddLayerCollection {
-                        name: "Foo".to_string(),
-                        description: "Bar".to_string(),
-                        properties: Default::default(),
-                    },
-                    &root_collection_id,
-                )
-                .await
-                .unwrap();
+        let collection_id = ctx
+            .db()
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Bar".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
 
-            let req = test::TestRequest::delete()
-                .uri(&format!(
-                    "/layerDb/collections/{root_collection_id}/collections/{collection_id}"
-                ))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            let response = send_test_request(req, app_ctx.clone()).await;
+        let req = test::TestRequest::delete()
+            .uri(&format!(
+                "/layerDb/collections/{root_collection_id}/collections/{collection_id}"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
 
-            assert!(response.status().is_success(), "{response:?}");
+        assert!(response.status().is_success(), "{response:?}");
 
-            let root_collection = ctx
-                .db()
-                .load_layer_collection(&root_collection_id, LayerCollectionListOptions::default())
-                .await
-                .unwrap();
+        let root_collection = ctx
+            .db()
+            .load_layer_collection(&root_collection_id, LayerCollectionListOptions::default())
+            .await
+            .unwrap();
 
-            assert!(
-                !root_collection
-                    .items
-                    .iter()
-                    .any(|item| item.name() == "Foo"),
-                "{root_collection:#?}"
-            );
-        })
-        .await;
+        assert!(
+            !root_collection
+                .items
+                .iter()
+                .any(|item| item.name() == "Foo"),
+            "{root_collection:#?}"
+        );
     }
 
     struct MockRasterWorkflowLayerDescription {
@@ -1571,111 +1550,100 @@ mod tests {
         assert_eq!(workflow_result.as_slice(), dataset_result.as_slice());
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_raster_layer_to_dataset_success() {
+    fn test_raster_layer_to_dataset_success_tiling_spec() -> TilingSpecification {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 0);
-        with_temp_context_from_spec(
-            mock_source.tiling_specification,
-            TestDefault::test_default(),
-            |app_ctx, _| async move {
-                let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 0);
-                raster_layer_to_dataset_success(app_ctx, mock_source).await;
-            },
-        )
-        .await;
+        mock_source.tiling_specification
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_raster_layer_with_timeshift_to_dataset_success() {
+    #[ge_context::test(tiling_spec = "test_raster_layer_to_dataset_success_tiling_spec")]
+    async fn test_raster_layer_to_dataset_success(app_ctx: PostgresContext<NoTls>) {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 0);
+        raster_layer_to_dataset_success(app_ctx, mock_source).await;
+    }
+
+    fn test_raster_layer_with_timeshift_to_dataset_success_tiling_spec() -> TilingSpecification {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 1_000);
-        with_temp_context_from_spec(
-            mock_source.tiling_specification,
-            TestDefault::test_default(),
-            |app_ctx, _| async move {
-                let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 1_000);
-                raster_layer_to_dataset_success(app_ctx, mock_source).await;
-            },
-        )
-        .await;
+        mock_source.tiling_specification
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_raster_layer_to_dataset_no_time_interval() {
+    #[ge_context::test(
+        tiling_spec = "test_raster_layer_with_timeshift_to_dataset_success_tiling_spec"
+    )]
+    async fn test_raster_layer_with_timeshift_to_dataset_success(app_ctx: PostgresContext<NoTls>) {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 1_000);
+        raster_layer_to_dataset_success(app_ctx, mock_source).await;
+    }
+
+    fn test_raster_layer_to_dataset_no_time_interval_tiling_spec() -> TilingSpecification {
         let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
-        with_temp_context_from_spec(
-            mock_source.tiling_specification,
-            TestDefault::test_default(),
-            |app_ctx, _| async move {
-                let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
+        mock_source.tiling_specification
+    }
 
-                let session_id = app_ctx.default_session_id().await;
+    #[ge_context::test(tiling_spec = "test_raster_layer_to_dataset_no_time_interval_tiling_spec")]
+    async fn test_raster_layer_to_dataset_no_time_interval(app_ctx: PostgresContext<NoTls>) {
+        let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
 
-                let layer = mock_source.create_layer_in_context(&app_ctx).await;
+        let session_id = app_ctx.default_session_id().await;
 
-                let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+        let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
-                ErrorResponse::assert(
-                    res,
-                    400,
-                    "LayerResultDescriptorMissingFields",
-                    "Result Descriptor field 'time' is None",
-                )
-                .await;
-            },
+        let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "LayerResultDescriptorMissingFields",
+            "Result Descriptor field 'time' is None",
         )
         .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_raster_layer_to_dataset_no_bounding_box() {
+    fn test_raster_layer_to_dataset_no_bounding_box_tiling_spec() -> TilingSpecification {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, false, true, 0);
-        with_temp_context_from_spec(
-            mock_source.tiling_specification,
-            TestDefault::test_default(),
-            |app_ctx, _| async move {
-                let mock_source = MockRasterWorkflowLayerDescription::new(true, false, true, 0);
+        mock_source.tiling_specification
+    }
 
-                let session_id = app_ctx.default_session_id().await;
+    #[ge_context::test(tiling_spec = "test_raster_layer_to_dataset_no_bounding_box_tiling_spec")]
+    async fn test_raster_layer_to_dataset_no_bounding_box(app_ctx: PostgresContext<NoTls>) {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, false, true, 0);
 
-                let layer = mock_source.create_layer_in_context(&app_ctx).await;
+        let session_id = app_ctx.default_session_id().await;
 
-                let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+        let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
-                ErrorResponse::assert(
-                    res,
-                    400,
-                    "LayerResultDescriptorMissingFields",
-                    "Result Descriptor field 'bbox' is None",
-                )
-                .await;
-            },
+        let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "LayerResultDescriptorMissingFields",
+            "Result Descriptor field 'bbox' is None",
         )
         .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_raster_layer_to_dataset_no_spatial_resolution() {
+    fn test_raster_layer_to_dataset_no_spatial_resolution_tiling_spec() -> TilingSpecification {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, false, 0);
-        with_temp_context_from_spec(
-            mock_source.tiling_specification,
-            TestDefault::test_default(),
-            |app_ctx, _| async move {
-                let mock_source = MockRasterWorkflowLayerDescription::new(true, true, false, 0);
+        mock_source.tiling_specification
+    }
 
-                let session_id = app_ctx.default_session_id().await;
+    #[ge_context::test(
+        tiling_spec = "test_raster_layer_to_dataset_no_spatial_resolution_tiling_spec"
+    )]
+    async fn test_raster_layer_to_dataset_no_spatial_resolution(app_ctx: PostgresContext<NoTls>) {
+        let mock_source = MockRasterWorkflowLayerDescription::new(true, true, false, 0);
 
-                let layer = mock_source.create_layer_in_context(&app_ctx).await;
+        let session_id = app_ctx.default_session_id().await;
 
-                let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+        let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
-                ErrorResponse::assert(
-                    res,
-                    400,
-                    "LayerResultDescriptorMissingFields",
-                    "Result Descriptor field 'spatial_resolution' is None",
-                )
-                .await;
-            },
+        let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "LayerResultDescriptorMissingFields",
+            "Result Descriptor field 'spatial_resolution' is None",
         )
         .await;
     }

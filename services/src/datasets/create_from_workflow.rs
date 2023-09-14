@@ -59,6 +59,7 @@ pub struct RasterDatasetFromWorkflowResult {
 impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
 
 pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
+    pub source_name: String,
     pub workflow: Workflow,
     pub ctx: Arc<C>,
     pub info: RasterDatasetFromWorkflow,
@@ -168,9 +169,17 @@ impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C
     fn task_unique_id(&self) -> Option<String> {
         Some(self.upload.to_string())
     }
+
+    fn task_description(&self) -> String {
+        format!(
+            "Creating dataset {} from {}",
+            self.info.display_name, self.source_name
+        )
+    }
 }
 
 pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
+    source_name: String,
     workflow: Workflow,
     ctx: Arc<C>,
     info: RasterDatasetFromWorkflow,
@@ -184,6 +193,7 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
     let file_path = upload_path.clone();
 
     let task = RasterDatasetFromWorkflowTask {
+        source_name,
         workflow,
         ctx: ctx.clone(),
         info,
