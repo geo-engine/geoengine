@@ -32,6 +32,7 @@ use geoengine_operators::source::{
     OgrSourceParameters, OgrSourceTimeFormat,
 };
 use geoengine_operators::util::gdal::gdal_open_dataset;
+use geoengine_operators::util::TemporaryGdalThreadLocalConfigOptions;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
@@ -1080,6 +1081,11 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         };
 
         let mut params: Vec<GdalLoadingInfoTemporalSlice> = Vec::new();
+        // reverts the thread local configs on drop
+        let _thread_local_configs = TemporaryGdalThreadLocalConfigOptions::new(&[(
+            "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
+            "YES".to_string(),
+        )])?;
 
         if let Some(temporal_extent) = collection.extent.temporal.clone() {
             let mut temporal_values_iter = temporal_extent.values.iter();
@@ -1652,7 +1658,7 @@ mod tests {
                         geo_transform: GdalDatasetGeoTransform {
                             origin_coordinate: (0., -90.).into(),
                             x_pixel_size: 0.499_305_555_555_555_6,
-                            y_pixel_size: -0.498_614_958_448_753_5,
+                            y_pixel_size: 0.498_614_958_448_753_5,
                         },
                         width: 720,
                         height: 361,
@@ -1679,7 +1685,7 @@ mod tests {
                         geo_transform: GdalDatasetGeoTransform {
                             origin_coordinate: (0., -90.).into(),
                             x_pixel_size: 0.499_305_555_555_555_6,
-                            y_pixel_size: -0.498_614_958_448_753_5,
+                            y_pixel_size: 0.498_614_958_448_753_5,
                         },
                         width: 720,
                         height: 361,
