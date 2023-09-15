@@ -1,6 +1,7 @@
 use super::listing::LayerCollectionProvider;
 use crate::api::model::datatypes::{DataId, DataProviderId};
 use crate::datasets::external::aruna::ArunaDataProviderDefinition;
+use crate::datasets::external::edr::EdrDataProviderDefinition;
 use crate::datasets::external::gbif::GbifDataProviderDefinition;
 use crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition;
 use crate::datasets::external::gfbio_collections::GfbioCollectionsDataProviderDefinition;
@@ -86,6 +87,7 @@ pub enum TypedDataProviderDefinition {
     EbvPortalDataProviderDefinition(EbvPortalDataProviderDefinition),
     NetCdfCfDataProviderDefinition(NetCdfCfDataProviderDefinition),
     PangaeaDataProviderDefinition(PangaeaDataProviderDefinition),
+    EdrDataProviderDefinition(EdrDataProviderDefinition),
 }
 
 impl From<ArunaDataProviderDefinition> for TypedDataProviderDefinition {
@@ -130,6 +132,12 @@ impl From<PangaeaDataProviderDefinition> for TypedDataProviderDefinition {
     }
 }
 
+impl From<EdrDataProviderDefinition> for TypedDataProviderDefinition {
+    fn from(def: EdrDataProviderDefinition) -> Self {
+        Self::EdrDataProviderDefinition(def)
+    }
+}
+
 impl From<TypedDataProviderDefinition> for Box<dyn DataProviderDefinition> {
     fn from(typed: TypedDataProviderDefinition) -> Self {
         match typed {
@@ -142,6 +150,7 @@ impl From<TypedDataProviderDefinition> for Box<dyn DataProviderDefinition> {
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => Box::new(def),
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => Box::new(def),
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => Box::new(def),
+            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => Box::new(def),
         }
     }
 }
@@ -156,6 +165,7 @@ impl AsRef<dyn DataProviderDefinition> for TypedDataProviderDefinition {
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => def,
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => def,
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => def,
+            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => def,
         }
     }
 }
@@ -185,6 +195,9 @@ impl DataProviderDefinition for TypedDataProviderDefinition {
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => {
                 Box::new(def).initialize().await
             }
+            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => {
+                Box::new(def).initialize().await
+            }
         }
     }
 
@@ -199,6 +212,7 @@ impl DataProviderDefinition for TypedDataProviderDefinition {
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => def.type_name(),
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => def.type_name(),
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => def.type_name(),
+            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => def.type_name(),
         }
     }
 
@@ -211,6 +225,7 @@ impl DataProviderDefinition for TypedDataProviderDefinition {
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => def.name(),
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => def.name(),
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => def.name(),
+            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => def.name(),
         }
     }
 
@@ -223,6 +238,7 @@ impl DataProviderDefinition for TypedDataProviderDefinition {
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => def.id(),
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => def.id(),
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => def.id(),
+            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => def.id(),
         }
     }
 }
