@@ -1,0 +1,14 @@
+{
+  "type": "EdrDataProviderDefinition",
+  "id": "0668d980-6c82-47c4-b1d9-1096f6770666",
+  "name": "Open Weather",
+  "baseUrl": "https://ogcie.iblsoft.com/edr",
+  "discreteVrs": ["ibl#between-depth"],
+  "provenance": [
+    {
+      "citation": "For GFS: U.S. National Centers for Environmental Information. Scale not given. \"Global Forecast System\" <https://www.nco.ncep.noaa.gov/pmb/products/gfs/> For others look at source website.",
+      "license": "GFS is public domain. For others look at source website.",
+      "uri": "https://www.iblsoft.com/products/open-weather"
+    }
+  ]
+}
