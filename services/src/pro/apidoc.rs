@@ -65,7 +65,7 @@ use utoipa::{Modify, OpenApi};
 
 use super::handlers::permissions::{PermissionRequest, Resource};
 use super::handlers::users::AddRole;
-use super::permissions::{Permission, ResourceId, RoleDescription, RoleId};
+use super::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
 use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 
 #[derive(OpenApi)]
@@ -358,6 +358,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             Permission,
             AddRole,
             RoleDescription,
+            Role,
 
             CacheTtlSeconds
         ),

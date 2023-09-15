@@ -25,7 +25,7 @@ impl From<UserId> for RoleId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 pub struct Role {
     pub id: RoleId,
     pub name: String,
