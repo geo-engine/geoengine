@@ -283,4 +283,76 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    #[allow(dead_code)]
+    fn resolve_inner_allof() {
+        #[derive(Serialize, ToSchema)]
+        #[serde(tag = "type", rename_all = "camelCase")]
+        enum MyEnum {
+            X(MyStruct),
+        }
+        #[derive(Serialize, ToSchema)]
+        struct MyStruct {
+            name: String,
+        }
+        let mut openapi = OpenApiBuilder::new()
+            .components(Some(
+                ComponentsBuilder::new()
+                    .schema_from::<MyEnum>()
+                    .schema_from::<MyStruct>()
+                    .into(),
+            ))
+            .build();
+        let transformer = TransformSchemasWithTag;
+        transformer.modify(&mut openapi);
+
+        assert_json_eq!(
+            serde_json::to_value(openapi.components.unwrap().schemas).unwrap(),
+            json!({
+                "MyEnum": {
+                    "oneOf": [
+                        {
+                            "$ref": "#/components/schemas/MyStructWithType"
+                        }
+                    ],
+                    "discriminator": {
+                        "propertyName": "type",
+                        "mapping": {
+                            "x": "#/components/schemas/MyStructWithType",
+                        }
+                    }
+                },
+                "MyStruct": {
+                    "type": "object",
+                    "required": [
+                        "name"
+                    ],
+                    "properties": {
+                        "name": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "MyStructWithType": {
+                    "type": "object",
+                    "required": [
+                        "name",
+                        "type"
+                    ],
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": [
+                                "x"
+                            ]
+                        },
+                        "name": {
+                            "type": "string"
+                        }
+                    }
+                },
+            })
+        );
+    }
 }
