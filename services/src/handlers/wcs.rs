@@ -15,8 +15,6 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
-use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
-use utoipa::ToSchema;
 
 use crate::api::model::datatypes::TimeInterval;
 use crate::contexts::ApplicationContext;
@@ -302,7 +300,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
     get,
     path = "/wcs/{workflow}?request=GetCoverage",
     responses(
-        (status = 200, description = "OK", content_type= "image/png", body = CoverageResponse, example = json!("image bytes")),
+        (status = 200, response = crate::api::model::responses::PngResponse),
     ),
     params(
         ("workflow" = WorkflowId, description = "Workflow id"),
@@ -466,20 +464,6 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         .append_header(cache_hint.cache_control_header())
         .content_type("image/tiff")
         .body(bytes))
-}
-
-pub struct CoverageResponse {}
-
-impl<'a> ToSchema<'a> for CoverageResponse {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        (
-            "CoverageResponse",
-            ObjectBuilder::new()
-                .schema_type(SchemaType::String)
-                .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
-                .into(),
-        )
-    }
 }
 
 fn default_time_from_config() -> TimeInterval {

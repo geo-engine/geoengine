@@ -9,8 +9,6 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::{operations::image::Colorizer, primitives::SpatialResolution};
-use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
-use utoipa::ToSchema;
 
 use crate::api::model::datatypes::{SpatialReference, SpatialReferenceOption, TimeInterval};
 use crate::contexts::ApplicationContext;
@@ -238,7 +236,7 @@ fn wms_url(workflow: WorkflowId) -> Result<Url> {
     get,
     path = "/wms/{workflow}?request=GetMap",
     responses(
-        (status = 200, description = "OK", content_type= "image/png", body = MapResponse, example = json!("image bytes")),
+        (status = 200, response = crate::api::model::responses::PngResponse),
     ),
     params(
         ("workflow" = WorkflowId, description = "Workflow id"),
@@ -400,20 +398,6 @@ fn handle_wms_error(
         GetMapExceptionFormat::Json => HttpResponse::Ok().json(
             json!({"error": Into::<&str>::into(error).to_string(), "message": error.to_string() }),
         ),
-    }
-}
-
-pub struct MapResponse {}
-
-impl<'a> ToSchema<'a> for MapResponse {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        (
-            "MapResponse",
-            ObjectBuilder::new()
-                .schema_type(SchemaType::String)
-                .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
-                .into(),
-        )
     }
 }
 

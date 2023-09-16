@@ -91,5 +91,9 @@ pub struct UnauthorizedUserResponse(ErrorResponse);
 pub struct BadRequestQueryResponse(ErrorResponse);
 
 #[derive(ToResponse)]
-#[response(description = "ZIP Archive", content_type = "application/zip")]
+#[response(description = "ZIP Archive", content_type = "application/zip", example = json!("zip bytes"))]
 pub struct ZipResponse(Vec<u8>);
+
+#[derive(ToResponse)]
+#[response(description = "PNG Image", content_type = "image/png", example = json!("image bytes"))]
+pub struct PngResponse(Vec<u8>);

@@ -20,8 +20,9 @@ use crate::api::model::operators::{
 };
 use crate::api::model::responses::datasets::DatasetNameResponse;
 use crate::api::model::responses::{
-    BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, UnauthorizedAdminResponse,
-    UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse, ZipResponse,
+    BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, PngResponse,
+    UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+    ZipResponse,
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
@@ -36,9 +37,7 @@ use crate::handlers::plots::WrappedPlotOutput;
 use crate::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use crate::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
-use crate::handlers::wcs::CoverageResponse;
 use crate::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
-use crate::handlers::wms::MapResponse;
 use crate::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
 use crate::handlers::ErrorResponse;
 use crate::layers::layer::{
@@ -128,7 +127,8 @@ use utoipa::{Modify, OpenApi};
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
             BadRequestQueryResponse,
-            ZipResponse
+            ZipResponse,
+            PngResponse
         ),
         schemas(
             ErrorResponse,
@@ -228,8 +228,6 @@ use utoipa::{Modify, OpenApi};
 
 
             OgcBoundingBox,
-            MapResponse,
-            CoverageResponse,
 
             wcs::request::WcsService,
             wcs::request::WcsVersion,
