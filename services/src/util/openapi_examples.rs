@@ -290,7 +290,7 @@ where
     pub(crate) async fn check_for_bad_documentation(self) {
         let res = self.run().await;
 
-        if res.status() == 400 {
+        if res.status() != 200 {
             let method = res.request().head().method.to_string();
             let path = res.request().path().to_string();
             let body: ErrorResponse = actix_web::test::read_body_json(res).await;
