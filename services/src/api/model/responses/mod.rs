@@ -89,3 +89,7 @@ pub struct UnauthorizedUserResponse(ErrorResponse);
     })))
 ))]
 pub struct BadRequestQueryResponse(ErrorResponse);
+
+#[derive(ToResponse)]
+#[response(description = "ZIP Archive", content_type = "application/zip")]
+pub struct ZipResponse(Vec<u8>);

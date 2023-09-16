@@ -323,16 +323,20 @@ async fn workflow_provenance<C: SessionContext>(
 }
 
 /// Gets a ZIP archive of the worklow, its provenance and the output metadata.
-///
-/// # Example
-///
-/// ```text
-/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06/all_metadata/zip
-/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
-/// ```
-/// Response:
-/// <zip archive>
-/// ```
+#[utoipa::path(
+    tag = "Workflows",
+    get,
+    path = "/workflow/{id}/allMetadata/zip",
+    responses(
+        (status = 200, response = crate::api::model::responses::ZipResponse)
+    ),
+    params(
+        ("id" = WorkflowId, description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn get_workflow_all_metadata_zip_handler<C: ApplicationContext>(
     id: web::Path<WorkflowId>,
     session: C::Session,

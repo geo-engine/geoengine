@@ -21,7 +21,7 @@ use crate::api::model::operators::{
 use crate::api::model::responses::datasets::DatasetNameResponse;
 use crate::api::model::responses::{
     BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, UnauthorizedAdminResponse,
-    UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+    UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse, ZipResponse,
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
@@ -124,6 +124,7 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
         handlers::spatial_references::get_spatial_reference_specification_handler,
+        handlers::plots::get_plot_handler,
         handlers::projects::list_projects_handler,
         handlers::projects::project_versions_handler,
         handlers::projects::load_project_latest_handler,
@@ -135,7 +136,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::upload::list_upload_file_layers_handler,
         handlers::upload::upload_handler,
         pro::handlers::permissions::add_permission_handler,
-        pro::handlers::permissions::remove_permission_handler
+        pro::handlers::permissions::remove_permission_handler,
+        handlers::workflows::get_workflow_all_metadata_zip_handler
     ),
     components(
         responses(
@@ -145,7 +147,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
-            BadRequestQueryResponse
+            BadRequestQueryResponse,
+            ZipResponse
         ),
         schemas(
             ErrorResponse,

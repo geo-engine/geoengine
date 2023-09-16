@@ -21,7 +21,7 @@ use crate::api::model::operators::{
 use crate::api::model::responses::datasets::DatasetNameResponse;
 use crate::api::model::responses::{
     BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, UnauthorizedAdminResponse,
-    UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+    UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse, ZipResponse,
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
@@ -116,7 +116,8 @@ use utoipa::{Modify, OpenApi};
         handlers::projects::load_project_version_handler,
         handlers::upload::list_upload_files_handler,
         handlers::upload::list_upload_file_layers_handler,
-        handlers::upload::upload_handler
+        handlers::upload::upload_handler,
+        handlers::workflows::get_workflow_all_metadata_zip_handler
     ),
     components(
         responses(
@@ -126,7 +127,8 @@ use utoipa::{Modify, OpenApi};
             DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
-            BadRequestQueryResponse
+            BadRequestQueryResponse,
+            ZipResponse
         ),
         schemas(
             ErrorResponse,
