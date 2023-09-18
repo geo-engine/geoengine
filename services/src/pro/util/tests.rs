@@ -35,6 +35,7 @@ use geoengine_datatypes::{
     primitives::DateTime,
     raster::TilingSpecification,
     spatial_reference::SpatialReferenceOption,
+    test_data,
     util::{test::TestDefault, Identifier},
 };
 use geoengine_operators::{
@@ -127,6 +128,7 @@ pub async fn send_pro_test_request(
             .configure(configure_extractors)
             .configure(pro::handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::layers::init_layer_routes::<ProPostgresContext<NoTls>>)
+            .configure(pro::handlers::machine_learning::init_ml_routes::<ProPostgresContext<NoTls>>)
             .configure(
                 pro::handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>,
             )
@@ -486,6 +488,15 @@ where
     })
     .await
     .unwrap()
+}
+
+/// Loads a pretrained mock model from disk
+pub async fn load_mock_model_from_disk() -> Result<String, std::io::Error> {
+    let path = test_data!("pro/ml/")
+        .join("b764bf81-e21d-4eb8-bf01-fac9af13faee")
+        .join("mock_model.json");
+
+    tokio::fs::read_to_string(path).await
 }
 
 /// Execute a test function with a temporary database schema. It will be cleaned up afterwards.

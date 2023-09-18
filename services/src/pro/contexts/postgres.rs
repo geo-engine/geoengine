@@ -12,6 +12,7 @@ use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
     add_pro_providers_from_directory,
 };
+use crate::pro::machine_learning::ml_model::{MlModel, MlModelDb};
 use crate::pro::permissions::Role;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
@@ -26,11 +27,15 @@ use bb8_postgres::{
     tokio_postgres::{tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
+use geoengine_datatypes::pro::MlModelId;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{ChunkByteSize, QueryContextExtensions};
+use geoengine_operators::engine::{
+    ChunkByteSize, ExecutionContextExtensions, QueryContextExtensions,
+};
 use geoengine_operators::pro::cache::shared_cache::SharedCache;
+use geoengine_operators::pro::machine_learning::{LoadMlModel, MlModelAccess};
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, info};
@@ -258,16 +263,22 @@ where
                 email,
                 password_hash,
                 real_name,
+                quota_available,
                 active)
             VALUES (
                 $1, 
                 $2,
                 $3,
                 'admin',
+                $4,
                 true
             );"#,
             )
             .await?;
+
+        let quota_available =
+            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
+                .default_available_quota;
 
         tx.execute(
             &stmt,
@@ -276,6 +287,7 @@ where
                 &user_config.admin_email,
                 &bcrypt::hash(user_config.admin_password)
                     .expect("Admin password hash should be valid"),
+                &quota_available,
             ],
         )
         .await?;
@@ -426,11 +438,18 @@ where
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<ProPostgresDb<Tls>>::new(
-            self.db(),
-            self.context.thread_pool.clone(),
-            self.context.exe_ctx_tiling_spec,
-        ))
+        let mut extensions = ExecutionContextExtensions::default();
+        let ml_model_access: MlModelAccess = Box::new(self.db());
+        extensions.insert(ml_model_access);
+
+        Ok(
+            ExecutionContextImpl::<ProPostgresDb<Tls>>::new_with_extensions(
+                self.db(),
+                self.context.thread_pool.clone(),
+                self.context.exe_ctx_tiling_spec,
+                extensions,
+            ),
+        )
     }
 
     fn volumes(&self) -> Result<Vec<Volume>> {
@@ -481,6 +500,101 @@ where
     }
 }
 
+#[async_trait]
+impl<Tls> MlModelDb for ProPostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    /// Load a machine learning model from the database by its ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_id` - A MlModelId that identifies the desired model.
+    ///
+    /// # Returns
+    ///
+    /// * `MlModel` - The loaded machine learning model.
+    /// * `Error` - If the model cannot be found or loaded.
+    async fn load_ml_model(&self, model_id: MlModelId) -> Result<MlModel> {
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare("SELECT id, content FROM ml_models WHERE id = $1")
+            .await?;
+
+        let row = conn.query_opt(&stmt, &[&model_id]).await?;
+
+        // Handle the result of the query
+        match row {
+            Some(row) => Ok(MlModel {
+                id: row.get(0),
+                content: row.get(1),
+            }),
+            None => Err(
+                error::Error::MachineLearningError { source:
+                    crate::pro::machine_learning::ml_error::MachineLearningError::UnknownModelIdInPostgres {
+                     model_id,
+                    }
+                },
+            ),
+        }
+    }
+
+    /// Store a machine learning model in the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - The MlModel to be stored.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<()>` - Ok if the model was successfully stored, otherwise an error.
+    async fn store_ml_model(&self, model: MlModel) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        let stmt = tx
+            .prepare(
+                "
+                INSERT INTO ml_models (
+                    id,
+                    content
+                )
+                VALUES ($1, $2);",
+            )
+            .await?;
+
+        tx.execute(&stmt, &[&model.id, &model.content]).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl<Tls> LoadMlModel for ProPostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn load_ml_model_by_id(
+        &self,
+        model_id: MlModelId,
+    ) -> Result<String, geoengine_operators::error::Error> {
+        self.load_ml_model(model_id)
+            .await
+            .map(|model| model.content)
+            .map_err(|_| geoengine_operators::error::Error::MachineLearningModelNotFound)
+    }
+}
+
 impl<Tls> GeoEngineDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
@@ -521,6 +635,7 @@ mod tests {
         INTERNAL_PROVIDER_ID,
     };
     use crate::pro::ge_context;
+    use crate::pro::machine_learning::ml_model::{MlModel, MlModelDb};
     use crate::pro::permissions::{Permission, PermissionDb, RoleDescription, RoleId};
     use crate::pro::users::{
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
@@ -543,6 +658,7 @@ mod tests {
         RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
         TimeStep, VectorQueryRectangle,
     };
+    use geoengine_datatypes::pro::MlModelId;
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::test_data;
@@ -3477,5 +3593,41 @@ mod tests {
 
         assert_eq!(db.quota_used_by_user(&user1).await.unwrap(), 2);
         assert_eq!(db.quota_used_by_user(&user2).await.unwrap(), 3);
+    }
+
+    #[ge_context::test]
+    async fn it_persists_ml_models(app_ctx: ProPostgresContext<NoTls>) {
+        let id = MlModelId::from_str("3db69b02-6d7a-4112-a355-e3745be18a80").unwrap();
+        let input = MlModel {
+            id,
+            content: "model content".to_owned(),
+        };
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let db = app_ctx.session_context(session.clone()).db();
+
+        db.store_ml_model(input.clone()).await.unwrap();
+
+        let model = db.load_ml_model(id).await.unwrap();
+
+        assert_eq!(model, input);
+    }
+
+    #[ge_context::test]
+    async fn it_fails_to_load_nonexistent_ml_model(app_ctx: ProPostgresContext<NoTls>) {
+        let model_id = MlModelId::from_str("3db69b02-6d7a-4112-a355-e3745be18a80").unwrap();
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let db = app_ctx.session_context(session.clone()).db();
+
+        let result = db.load_ml_model(model_id).await;
+
+        match result {
+            Err(error::Error::MachineLearningError {
+                source: crate::pro::machine_learning::ml_error::MachineLearningError::UnknownModelIdInPostgres { .. },
+            }) => (),
+            _ => panic!("Expected UnknownModelId error"),
+        }
     }
 }

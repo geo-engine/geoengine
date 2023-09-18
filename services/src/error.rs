@@ -7,6 +7,7 @@ use crate::handlers::ErrorResponse;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
+use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::path::PathBuf;
 use strum::IntoStaticStr;
@@ -194,6 +195,7 @@ pub enum Error {
 
     UploadFieldMissingFileName,
     UnknownUploadId,
+    UnknownModelId,
     PathIsNotAFile,
     Multipart {
         // TODO: this error is not send, so this does not work
@@ -418,12 +420,25 @@ pub enum Error {
     ProviderDoesNotSupportBrowsing,
 
     InvalidPath,
+    CouldNotGetMlModelPath,
 
     InvalidWorkflowOutputType,
 
     #[snafu(display("Functionality is not implemented: '{}'", message))]
     NotImplemented {
         message: String,
+    },
+
+    // TODO: refactor error
+    #[cfg(feature = "pro")]
+    #[snafu(context(false))]
+    MachineLearningError {
+        source: crate::pro::machine_learning::ml_error::MachineLearningError,
+    },
+
+    #[snafu(display("NotNan error: {}", source))]
+    InvalidNotNanFloatKey {
+        source: ordered_float::FloatIsNan,
     },
 
     UnexpectedInvalidDbTypeConversion,
@@ -525,5 +540,11 @@ impl From<proj::ProjError> for Error {
 impl From<tokio::task::JoinError> for Error {
     fn from(source: tokio::task::JoinError) -> Self {
         Error::TokioJoin { source }
+    }
+}
+
+impl From<ordered_float::FloatIsNan> for Error {
+    fn from(source: FloatIsNan) -> Self {
+        Error::InvalidNotNanFloatKey { source }
     }
 }

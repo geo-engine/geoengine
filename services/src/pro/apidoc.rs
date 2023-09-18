@@ -64,6 +64,10 @@ use utoipa::{Modify, OpenApi};
 
 use super::handlers::permissions::{PermissionRequest, Resource};
 use super::handlers::users::AddRole;
+use super::machine_learning::{
+    GenericModel, MLTrainRequest, MachineLearningAggregator, ModelType, TrainingParams,
+    XgboostTrainingParams,
+};
 use super::permissions::{Permission, ResourceId, RoleDescription, RoleId};
 use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 
@@ -134,7 +138,8 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
         handlers::upload::list_upload_file_layers_handler,
         handlers::upload::upload_handler,
         pro::handlers::permissions::add_permission_handler,
-        pro::handlers::permissions::remove_permission_handler
+        pro::handlers::permissions::remove_permission_handler,
+        pro::handlers::machine_learning::ml_model_from_workflow_handler,
     ),
     components(
         responses(
@@ -358,6 +363,13 @@ use super::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSess
             Permission,
             AddRole,
             RoleDescription,
+
+            MLTrainRequest,
+            ModelType,
+            TrainingParams,
+            GenericModel,
+            XgboostTrainingParams,
+            MachineLearningAggregator
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),

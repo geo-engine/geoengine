@@ -11,6 +11,7 @@ use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
+use core::any::TypeId;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
@@ -21,7 +22,6 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 /// A context that provides certain utility access during operator initialization
@@ -56,11 +56,35 @@ pub trait ExecutionContext: Send
         path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedPlotOperator>;
 
-    async fn read_ml_model(&self, path: PathBuf) -> Result<String>;
-
-    async fn write_ml_model(&mut self, path: PathBuf, ml_model_str: String) -> Result<()>;
-
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId>;
+
+    /// get the `ExecutionContextExtensions` that contain additional information
+    fn extensions(&self) -> &ExecutionContextExtensions;
+}
+
+/// This type allows adding additional information to the `ExecutionContext`.
+/// It acts like a type map, allowing one to store one value per type.
+#[derive(Default)]
+pub struct ExecutionContextExtensions {
+    map: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+}
+
+impl ExecutionContextExtensions {
+    pub fn insert<T: 'static + Send + Sync>(&mut self, val: T) -> Option<T> {
+        self.map
+            .insert(TypeId::of::<T>(), Box::new(val))
+            .and_then(downcast_owned)
+    }
+
+    pub fn get<T: 'static + Send + Sync>(&self) -> Option<&T> {
+        self.map
+            .get(&TypeId::of::<T>())
+            .and_then(|boxed: &Box<dyn Any + Send + Sync>| boxed.downcast_ref())
+    }
+}
+
+fn downcast_owned<T: 'static + Send + Sync>(boxed: Box<dyn Any + Send + Sync>) -> Option<T> {
+    boxed.downcast().ok().map(|boxed| *boxed)
 }
 
 #[async_trait]
@@ -96,7 +120,7 @@ pub struct MockExecutionContext {
     pub meta_data: HashMap<DataId, Box<dyn Any + Send + Sync>>,
     pub named_data: HashMap<NamedData, DataId>,
     pub tiling_specification: TilingSpecification,
-    pub ml_models: HashMap<PathBuf, String>,
+    pub extensions: ExecutionContextExtensions,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -106,7 +130,7 @@ impl TestDefault for MockExecutionContext {
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
-            ml_models: HashMap::default(),
+            extensions: Default::default(),
         }
     }
 }
@@ -118,7 +142,7 @@ impl MockExecutionContext {
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
             tiling_specification,
-            ml_models: HashMap::default(),
+            extensions: Default::default(),
         }
     }
 
@@ -131,7 +155,7 @@ impl MockExecutionContext {
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
             tiling_specification,
-            ml_models: HashMap::default(),
+            extensions: Default::default(),
         }
     }
 
@@ -162,14 +186,6 @@ impl MockExecutionContext {
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
-    }
-
-    pub fn initialize_ml_model(&mut self, model_path: PathBuf) -> Result<()> {
-        let model = std::fs::read_to_string(&model_path)?;
-
-        self.ml_models.insert(model_path, model);
-
-        Ok(())
     }
 }
 
@@ -210,27 +226,15 @@ impl ExecutionContext for MockExecutionContext {
         op
     }
 
-    async fn read_ml_model(&self, path: PathBuf) -> Result<String> {
-        let res = self
-            .ml_models
-            .get(&path)
-            .ok_or(Error::MachineLearningModelNotFound)?
-            .clone();
-
-        Ok(res)
-    }
-
-    async fn write_ml_model(&mut self, path: PathBuf, ml_model_str: String) -> Result<()> {
-        self.ml_models.insert(path, ml_model_str);
-
-        Ok(())
-    }
-
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId> {
         self.named_data
             .get(data)
             .cloned()
             .ok_or_else(|| Error::UnknownDatasetName { name: data.clone() })
+    }
+
+    fn extensions(&self) -> &ExecutionContextExtensions {
+        &self.extensions
     }
 }
 
