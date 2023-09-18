@@ -218,7 +218,7 @@ async fn start_postgres(
         let db_config = config::get_config_element::<config::Postgres>()?;
 
         let ctx = ProPostgresContext::new_with_data(
-            bb8_postgres::tokio_postgres::Config::from(db_config),
+            bb8_postgres::tokio_postgres::Config::try_from(db_config)?,
             NoTls,
             data_path_config.dataset_defs_path,
             data_path_config.provider_defs_path,
