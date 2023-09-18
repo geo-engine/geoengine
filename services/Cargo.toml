@@ -93,7 +93,7 @@ tokio = { version = "1.15", features = [
 ] }
 tokio-postgres = { version = "0.7" }
 tokio-util = { version = "0.7", features = ["codec"] }
-tonic = { version = "0.9", features = [
+tonic = { version = "0.10", features = [
   "tls",
   "tls-roots",
 ] } # must be compatible with `aruna-rust-api`
