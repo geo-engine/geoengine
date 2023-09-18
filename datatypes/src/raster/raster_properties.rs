@@ -2,6 +2,7 @@ use crate::error::Error;
 use crate::util::{ByteSize, Result};
 
 use num_traits::FromPrimitive;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use std::collections::HashMap;
@@ -118,7 +119,9 @@ impl RasterProperties {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq, PartialOrd, Ord, FromSql, ToSql,
+)]
 pub struct RasterPropertiesKey {
     pub domain: Option<String>,
     pub key: String,
@@ -137,7 +140,7 @@ pub enum RasterPropertiesEntry {
     String(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
 pub enum RasterPropertiesEntryType {
     Number,
     String,

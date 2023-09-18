@@ -5,7 +5,6 @@ use std::{
 };
 
 use crate::{
-    api::model::datatypes::DatasetName,
     api::model::responses::datasets::{errors::*, DatasetNameResponse},
     api::model::services::{
         AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
@@ -16,6 +15,7 @@ use crate::{
         listing::{DatasetListOptions, DatasetProvider},
         storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
         upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName},
+        DatasetName,
     },
     error::{self, Result},
     util::{
@@ -1074,12 +1074,14 @@ pub async fn delete_dataset_handler<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::{DatasetName, NamedData};
-    use crate::api::model::responses::datasets::{DatasetIdAndName, DatasetNameResponse};
+    use crate::api::model::datatypes::NamedData;
+    use crate::api::model::responses::datasets::DatasetNameResponse;
+    use crate::api::model::responses::IdResponse;
     use crate::api::model::services::DatasetDefinition;
     use crate::contexts::{Session, SessionId, SimpleApplicationContext};
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::{UploadId, VolumeName};
+    use crate::datasets::DatasetIdAndName;
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
     use crate::test_data;
@@ -1088,7 +1090,6 @@ mod tests {
     use crate::util::tests::{
         read_body_json, read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
     };
-    use crate::util::IdResponse;
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;

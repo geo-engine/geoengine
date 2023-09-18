@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use super::tasks::TaskResponse;
 use crate::api::model::datatypes::{DataProviderId, LayerId};
+use crate::api::model::responses::IdResponse;
 use crate::contexts::ApplicationContext;
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::{Error, Result};
@@ -15,7 +16,6 @@ use crate::layers::listing::{
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::config::get_config_element;
 use crate::util::extractors::ValidatedQuery;
-use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
@@ -214,7 +214,7 @@ async fn get_layer_providers<C: ApplicationContext>(
     }
     let root_collection = LayerCollection {
         id: ProviderLayerCollectionId {
-            provider_id: ROOT_PROVIDER_ID,
+            provider_id: ROOT_PROVIDER_ID.into(),
             collection_id: LayerCollectionId(ROOT_COLLECTION_ID.to_string()),
         },
         name: "Layer Providers".to_string(),
@@ -287,6 +287,7 @@ async fn list_collection_handler<C: ApplicationContext>(
         return Ok(web::Json(collection));
     }
 
+    let provider = provider.into();
     let db = app_ctx.session_context(session).db();
 
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID {
@@ -482,6 +483,8 @@ async fn layer_handler<C: ApplicationContext>(
     session: C::Session,
 ) -> Result<impl Responder> {
     let (provider, item) = path.into_inner();
+    let provider = provider.into();
+    let item = item.into();
 
     let db = app_ctx.session_context(session).db();
 
@@ -512,7 +515,7 @@ async fn layer_handler<C: ApplicationContext>(
     post,
     path = "/layers/{provider}/{layer}/workflowId",
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse)
+        (status = 200, response = crate::api::model::responses::IdResponse::<WorkflowId>)
     ),
     params(
         ("provider" = DataProviderId, description = "Data provider id"),
@@ -528,6 +531,7 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
     session: C::Session,
 ) -> Result<web::Json<IdResponse<WorkflowId>>> {
     let (provider, item) = path.into_inner();
+    let (provider, item) = (provider.into(), item.into());
 
     let db = app_ctx.session_context(session).db();
     let layer = match provider {
@@ -576,6 +580,8 @@ async fn layer_to_dataset<C: ApplicationContext>(
     let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
     let (provider, item) = path.into_inner();
+    let item = item.into();
+    let provider: geoengine_datatypes::dataset::DataProviderId = provider.into();
 
     let db = ctx.db();
 
@@ -660,7 +666,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
     ),
     request_body = AddLayer,
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse)
+        (status = 200, response = crate::api::model::responses::IdResponse::<LayerId>)
     ),
     security(
         ("session_token" = [])
@@ -680,7 +686,8 @@ async fn add_layer<C: ApplicationContext>(
         .session_context(session)
         .db()
         .add_layer(add_layer, &collection)
-        .await?;
+        .await?
+        .into();
 
     Ok(web::Json(IdResponse { id }))
 }
@@ -695,7 +702,7 @@ async fn add_layer<C: ApplicationContext>(
     ),
     request_body = AddLayerCollection,
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse)
+        (status = 200, response = crate::api::model::responses::IdResponse::<LayerCollectionId>)
     ),
     security(
         ("session_token" = [])
@@ -776,10 +783,11 @@ async fn remove_layer_from_collection<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<RemoveLayerFromCollectionParams>,
 ) -> Result<HttpResponse> {
+    let RemoveLayerFromCollectionParams { collection, layer } = path.into_inner();
     app_ctx
         .session_context(session)
         .db()
-        .remove_layer_from_collection(&path.layer, &path.collection)
+        .remove_layer_from_collection(&layer.into(), &collection)
         .await?;
 
     Ok(HttpResponse::Ok().finish())
@@ -812,10 +820,11 @@ async fn add_existing_layer_to_collection<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<AddExistingLayerToCollectionParams>,
 ) -> Result<HttpResponse> {
+    let AddExistingLayerToCollectionParams { collection, layer } = path.into_inner();
     app_ctx
         .session_context(session)
         .db()
-        .add_layer_to_collection(&path.layer, &path.collection)
+        .add_layer_to_collection(&layer.into(), &collection)
         .await?;
 
     Ok(HttpResponse::Ok().finish())
@@ -970,7 +979,9 @@ mod tests {
 
             let result: IdResponse<LayerId> = test::read_body_json(response).await;
 
-            ctx.db().load_layer(&result.id).await.unwrap();
+            let layer_id = result.id.into();
+
+            ctx.db().load_layer(&layer_id).await.unwrap();
 
             let collection = ctx
                 .db()
@@ -979,7 +990,7 @@ mod tests {
                 .unwrap();
 
             assert!(collection.items.iter().any(|item| match item {
-                CollectionItem::Layer(layer) => layer.id.layer_id == result.id,
+                CollectionItem::Layer(layer) => layer.id.layer_id == layer_id,
                 CollectionItem::Collection(_) => false,
             }));
         })

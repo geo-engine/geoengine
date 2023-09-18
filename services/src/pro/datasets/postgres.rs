@@ -1,10 +1,6 @@
-use std::collections::HashMap;
-use std::str::FromStr;
-
-use crate::api::model::datatypes::{DatasetId, DatasetName, LayerId};
-use crate::api::model::responses::datasets::DatasetIdAndName;
 use crate::api::model::services::AddDataset;
 use crate::datasets::listing::ProvenanceOutput;
+use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
 use crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID;
 use crate::datasets::storage::{
@@ -12,6 +8,7 @@ use crate::datasets::storage::{
 };
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
+use crate::datasets::{DatasetIdAndName, DatasetName};
 use crate::error::{self, Error, Result};
 use crate::layers::layer::CollectionItem;
 use crate::layers::layer::Layer;
@@ -20,8 +17,6 @@ use crate::layers::layer::LayerCollectionListOptions;
 use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
-
-use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::layers::storage::INTERNAL_PROVIDER_ID;
 use crate::pro::contexts::ProPostgresDb;
@@ -30,11 +25,9 @@ use crate::projects::Symbology;
 use crate::util::operators::source_operator_from_dataset;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
-
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::{DataId, DatasetId, LayerId};
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
@@ -42,13 +35,12 @@ use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, TypedResultDescriptor,
     VectorResultDescriptor,
 };
-
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
-
 use postgres_types::{FromSql, ToSql};
 use snafu::ensure;
+use std::collections::HashMap;
+use std::str::FromStr;
 use uuid::Uuid;
 
 impl<Tls> DatasetDb for ProPostgresDb<Tls>
@@ -242,7 +234,7 @@ where
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
 
         if !self
-            .has_permission(DatasetId::from(id), Permission::Read)
+            .has_permission(id, Permission::Read)
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
@@ -314,7 +306,7 @@ where
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
 
         if !self
-            .has_permission(DatasetId::from(id), Permission::Read)
+            .has_permission(id, Permission::Read)
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
@@ -376,7 +368,7 @@ where
 
 pub struct DatasetMetaData<'m> {
     meta_data: &'m MetaDataDefinition,
-    result_descriptor: crate::api::model::operators::TypedResultDescriptor,
+    result_descriptor: TypedResultDescriptor,
 }
 
 impl<Tls> DatasetStorer for ProPostgresDb<Tls>
@@ -400,27 +392,27 @@ where
         match self {
             MetaDataDefinition::MockMetaData(d) => Ok(DatasetMetaData {
                 meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             }),
             MetaDataDefinition::OgrMetaData(d) => Ok(DatasetMetaData {
                 meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             }),
             MetaDataDefinition::GdalMetaDataRegular(d) => Ok(DatasetMetaData {
                 meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             }),
             MetaDataDefinition::GdalStatic(d) => Ok(DatasetMetaData {
                 meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             }),
             MetaDataDefinition::GdalMetadataNetCdfCf(d) => Ok(DatasetMetaData {
                 meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             }),
             MetaDataDefinition::GdalMetaDataList(d) => Ok(DatasetMetaData {
                 meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             }),
         }
     }

@@ -1,23 +1,22 @@
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 pub use crate::datasets::external::pangaea::meta::PangaeaMetaData;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
+use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{Layer, LayerCollection, LayerCollectionListOptions};
 use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use async_trait::async_trait;
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::{
     CacheTtlSeconds, RasterQueryRectangle, VectorQueryRectangle,
 };
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
+use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use reqwest::Client;
-use url::Url;
-
-use crate::error::{Error, Result};
-use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 mod meta;
 
@@ -144,7 +143,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let id: DataId = id.clone().into();
+        let id: DataId = id.clone();
 
         let doi = id
             .external()
@@ -218,7 +217,6 @@ impl
 
 #[cfg(test)]
 mod tests {
-    use crate::api::model::datatypes::{DataId, ExternalDataId, LayerId};
     use crate::datasets::external::pangaea::{PangaeaDataProviderDefinition, PANGAEA_PROVIDER_ID};
     use crate::error::Error;
     use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -227,6 +225,7 @@ mod tests {
         DataCollection, FeatureCollectionInfos, IntoGeometryIterator, MultiPointCollection,
         MultiPolygonCollection, VectorDataType,
     };
+    use geoengine_datatypes::dataset::{DataId, ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPointAccess, SpatialResolution, TimeInterval,
         VectorQueryRectangle,
@@ -407,7 +406,7 @@ mod tests {
         let meta: Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
             _,
-        > = provider.meta_data(&id.into()).await;
+        > = provider.meta_data(&id).await;
 
         server.verify_and_clear();
 
@@ -433,7 +432,7 @@ mod tests {
 
         let meta: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id.clone().into()).await.unwrap();
+        > = provider.meta_data(&id.clone()).await.unwrap();
 
         let name = geoengine_datatypes::dataset::NamedData::with_system_provider(
             PANGAEA_PROVIDER_ID.to_string(),
@@ -444,7 +443,7 @@ mod tests {
         setup_vsicurl(&mut server, doi, "pangaea_geo_none.tsv").await;
 
         let mut context = MockExecutionContext::test_default();
-        context.add_meta_data(id.clone().into(), name.clone(), meta);
+        context.add_meta_data(id.clone(), name.clone(), meta);
 
         let src = OgrSource {
             params: OgrSourceParameters {
@@ -496,7 +495,7 @@ mod tests {
 
         let meta: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id.clone().into()).await.unwrap();
+        > = provider.meta_data(&id.clone()).await.unwrap();
 
         let name = geoengine_datatypes::dataset::NamedData::with_system_provider(
             PANGAEA_PROVIDER_ID.to_string(),
@@ -507,7 +506,7 @@ mod tests {
         setup_vsicurl(&mut server, doi, "pangaea_geo_point.tsv").await;
 
         let mut context = MockExecutionContext::test_default();
-        context.add_meta_data(id.clone().into(), name.clone(), meta);
+        context.add_meta_data(id.clone(), name.clone(), meta);
 
         let src = OgrSource {
             params: OgrSourceParameters {
@@ -571,7 +570,7 @@ mod tests {
 
         let meta: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id.clone().into()).await.unwrap();
+        > = provider.meta_data(&id.clone()).await.unwrap();
 
         let name = geoengine_datatypes::dataset::NamedData::with_system_provider(
             PANGAEA_PROVIDER_ID.to_string(),
@@ -582,7 +581,7 @@ mod tests {
         setup_vsicurl(&mut server, doi, "pangaea_geo_box.tsv").await;
 
         let mut context = MockExecutionContext::test_default();
-        context.add_meta_data(id.clone().into(), name.clone(), meta);
+        context.add_meta_data(id.clone(), name.clone(), meta);
 
         let src = OgrSource {
             params: OgrSourceParameters {
@@ -642,7 +641,7 @@ mod tests {
 
         let meta: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-        > = provider.meta_data(&id.clone().into()).await.unwrap();
+        > = provider.meta_data(&id.clone()).await.unwrap();
 
         let name = geoengine_datatypes::dataset::NamedData::with_system_provider(
             PANGAEA_PROVIDER_ID.to_string(),
@@ -653,7 +652,7 @@ mod tests {
         setup_vsicurl(&mut server, doi, "pangaea_geo_lat_lon.tsv").await;
 
         let mut context = MockExecutionContext::test_default();
-        context.add_meta_data(id.clone().into(), name.clone(), meta);
+        context.add_meta_data(id.clone(), name.clone(), meta);
 
         let src = OgrSource {
             params: OgrSourceParameters {

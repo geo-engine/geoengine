@@ -6,6 +6,20 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use utoipa::{ToResponse, ToSchema};
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, ToResponse)]
+#[response(description = "Id of generated resource", example = json!({
+    "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+}))]
+pub struct IdResponse<T> {
+    pub id: T,
+}
+
+impl<T> From<T> for IdResponse<T> {
+    fn from(id: T) -> Self {
+        Self { id }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub struct ErrorResponse {
     pub error: String,
@@ -80,14 +94,6 @@ pub struct UnsupportedMediaTypeForJsonResponse(ErrorResponse);
     })))
 ))]
 pub struct PayloadTooLargeResponse(ErrorResponse);
-
-#[derive(ToResponse)]
-#[response(description = "Id of generated resource", example = json!({
-    "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
-}))]
-pub struct IdResponse {
-    pub id: String,
-}
 
 #[derive(ToResponse)]
 #[response(description = "Authorization failed", examples(

@@ -47,9 +47,7 @@ async fn bench() {
                     },
                     sources: SingleRasterSource {
                         raster: GdalSource {
-                            params: GdalSourceParameters {
-                                data: dataset.into(),
-                            },
+                            params: GdalSourceParameters { data: dataset },
                         }
                         .boxed(),
                     },

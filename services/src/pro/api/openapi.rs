@@ -13,10 +13,10 @@ use crate::api::handlers::wms::MapResponse;
 use crate::api::handlers::workflows::RasterStreamWebsocketResultType;
 use crate::api::model::datatypes::{
     BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-    Coordinate2D, DataId, DataProviderId, DatasetId, DatasetName, DateTime, DateTimeParseFormat,
-    DefaultColors, ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient,
-    Measurement, MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, OverUnderColors,
-    Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType, RasterPropertiesEntryType,
+    Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, DateTimeParseFormat, DefaultColors,
+    ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
+    MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, OverUnderColors, Palette,
+    PlotOutputFormat, PlotQueryRectangle, RasterDataType, RasterPropertiesEntryType,
     RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
     SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
     TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
@@ -45,7 +45,7 @@ use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
 use crate::datasets::upload::{UploadId, Volume, VolumeName};
-use crate::datasets::{RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
+use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
@@ -140,7 +140,11 @@ use utoipa::{Modify, OpenApi};
         responses(
             UnsupportedMediaTypeForJsonResponse,
             PayloadTooLargeResponse,
-            IdResponse,
+            IdResponse::<WorkflowId>,
+            IdResponse::<UploadId>,
+            IdResponse::<LayerId>,
+            IdResponse::<LayerCollectionId>,
+            IdResponse::<ProjectId>,
             DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,

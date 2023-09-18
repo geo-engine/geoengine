@@ -1,14 +1,13 @@
-use crate::api::model::datatypes::{DataId, DatasetId, DatasetName};
-use crate::api::model::operators::TypedResultDescriptor;
+use super::DatasetName;
 use crate::datasets::storage::Dataset;
 use crate::error::Result;
 use crate::projects::Symbology;
 use crate::util::config::{get_config_element, DatasetService};
-
 use async_trait::async_trait;
+use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
-    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
+    MetaDataProvider, RasterResultDescriptor, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -16,7 +15,6 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use utoipa::{IntoParams, ToSchema};
-
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]

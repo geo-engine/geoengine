@@ -1,5 +1,6 @@
 use super::tasks::TaskResponse;
 use crate::api::model::datatypes::{DataId, TimeInterval};
+use crate::api::model::responses::IdResponse;
 use crate::api::ogc::util::{parse_bbox, parse_time};
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
@@ -8,7 +9,6 @@ use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::util::config::get_config_element;
 use crate::util::parsing::{parse_spatial_partition, parse_spatial_resolution};
-use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::workflows::{RasterWebsocketStreamHandler, VectorWebsocketStreamHandler};
@@ -108,7 +108,7 @@ where
         }))))
     ),
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse)
+        (status = 200, response = crate::api::model::responses::IdResponse::<WorkflowId>)
     ),
     security(
         ("session_token" = [])
@@ -118,7 +118,7 @@ async fn register_workflow_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     workflow: web::Json<Workflow>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<IdResponse<WorkflowId>>> {
     let ctx = app_ctx.session_context(session);
 
     let workflow = workflow.into_inner();
@@ -297,7 +297,7 @@ async fn workflow_provenance<C: SessionContext>(
         .into_iter()
         .filter_map(|p| {
             if let Some(provenance) = p.provenance {
-                Some((p.data, provenance))
+                Some((p.data.into(), provenance))
             } else {
                 None
             }
@@ -414,11 +414,11 @@ async fn resolve_provenance<C: SessionContext>(
     id: &DataId,
 ) -> Result<ProvenanceOutput> {
     match id {
-        DataId::Internal { dataset_id } => db.load_provenance(dataset_id).await,
+        DataId::Internal { dataset_id } => db.load_provenance(&dataset_id.into()).await,
         DataId::External(e) => {
-            db.load_layer_provider(e.provider_id)
+            db.load_layer_provider(e.provider_id.into())
                 .await?
-                .provenance(id)
+                .provenance(&id.into())
                 .await
         }
     }
@@ -658,7 +658,7 @@ pub enum WorkflowApiError {
 mod tests {
 
     use super::*;
-    use crate::api::model::responses::ErrorResponse;
+    use crate::api::model::responses::{ErrorResponse, IdResponse};
     use crate::contexts::{Session, SimpleApplicationContext};
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::tasks::util::test::wait_for_task_to_finish;
@@ -670,7 +670,6 @@ mod tests {
         add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
         read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
     };
-    use crate::util::IdResponse;
     use crate::workflows::registry::WorkflowRegistry;
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};

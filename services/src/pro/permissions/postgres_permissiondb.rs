@@ -1,3 +1,6 @@
+use super::{Permission, PermissionDb, ResourceId, RoleId};
+use crate::error::{self, Error, Result};
+use crate::pro::contexts::ProPostgresDb;
 use async_trait::async_trait;
 use snafu::ensure;
 use tokio_postgres::{
@@ -5,11 +8,6 @@ use tokio_postgres::{
     Socket,
 };
 use uuid::Uuid;
-
-use crate::error::{self, Error, Result};
-use crate::pro::contexts::ProPostgresDb;
-
-use super::{Permission, PermissionDb, ResourceId, RoleId};
 
 // TODO: a postgres specific permission db trait that allows re-using connections and transactions
 

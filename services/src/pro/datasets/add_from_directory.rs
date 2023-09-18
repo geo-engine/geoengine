@@ -1,17 +1,16 @@
-use std::{
-    fs::{self, DirEntry, File},
-    io::BufReader,
-    path::PathBuf,
-};
-
 use crate::datasets::storage::DatasetDefinition;
 use crate::{
     datasets::storage::DatasetDb,
     pro::permissions::{Permission, Role},
 };
 use crate::{error::Result, pro::permissions::PermissionDb};
-
+use geoengine_datatypes::dataset::DatasetId;
 use log::warn;
+use std::{
+    fs::{self, DirEntry, File},
+    io::BufReader,
+    path::PathBuf,
+};
 
 pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
     dataset_db: &mut D,
@@ -24,7 +23,7 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
         let def: DatasetDefinition =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
-        let dataset_id = db
+        let dataset_id: DatasetId = db
             .add_dataset(
                 def.properties.clone(),
                 db.wrap_meta_data(def.meta_data.clone()),

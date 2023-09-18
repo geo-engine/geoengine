@@ -1,5 +1,4 @@
 pub use self::error::ArunaProviderError;
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -20,6 +19,7 @@ use aruna_rust_api::api::storage::services::v1::{
     GetObjectGroupObjectsRequest, GetObjectGroupsRequest,
 };
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, SpatialResolution, VectorQueryRectangle,
@@ -538,7 +538,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
     ) -> geoengine_operators::util::Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
     > {
-        let id: DataId = id.clone().into();
+        let id: DataId = id.clone();
 
         let aruna_dataset_ids = self.get_dataset_info(&id).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
@@ -594,7 +594,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
     ) -> geoengine_operators::util::Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     > {
-        let id: DataId = id.clone().into();
+        let id: DataId = id.clone();
 
         let aruna_dataset_ids = self.get_dataset_info(&id).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
@@ -906,7 +906,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
     use crate::datasets::external::aruna::metadata::GEMetadata;
     use crate::datasets::external::aruna::mock_grpc_server::MockGRPCServer;
     use crate::datasets::external::aruna::mock_grpc_server::{
@@ -932,6 +931,7 @@ mod tests {
     };
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
+    use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, CacheTtlSeconds, SpatialResolution, TimeInterval, VectorQueryRectangle,
     };
@@ -1753,7 +1753,7 @@ mod tests {
 
         let res: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        > = aruna_mock_server.provider.meta_data(&id.into()).await;
+        > = aruna_mock_server.provider.meta_data(&id).await;
 
         assert!(res.is_ok());
     }
@@ -1786,12 +1786,12 @@ mod tests {
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = aruna_mock_server
             .provider
-            .meta_data(&id.clone().into())
+            .meta_data(&id.clone())
             .await
             .unwrap();
 
         let mut context = MockExecutionContext::test_default();
-        context.add_meta_data(id.clone().into(), name.clone(), meta);
+        context.add_meta_data(id.clone(), name.clone(), meta);
 
         let src = OgrSource {
             params: OgrSourceParameters {

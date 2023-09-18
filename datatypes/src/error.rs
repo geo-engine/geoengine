@@ -324,6 +324,8 @@ pub enum Error {
         base: PathBuf,
         sub_path: PathBuf,
     },
+
+    UnexpectedInvalidDbTypeConversion,
 }
 
 impl From<arrow::error::ArrowError> for Error {

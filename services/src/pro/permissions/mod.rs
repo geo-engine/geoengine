@@ -1,19 +1,14 @@
-use std::str::FromStr;
-
-use async_trait::async_trait;
-
-use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-
-use utoipa::ToSchema;
-
-use crate::api::model::datatypes::{DatasetId, LayerId};
+use super::users::UserId;
 use crate::error::Result;
 use crate::identifier;
 use crate::layers::listing::LayerCollectionId;
 use crate::projects::ProjectId;
-
-use super::users::UserId;
+use async_trait::async_trait;
+use geoengine_datatypes::dataset::{DatasetId, LayerId};
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use utoipa::ToSchema;
 
 pub mod postgres_permissiondb;
 

@@ -2,6 +2,7 @@ mod bounding_box;
 mod circle;
 mod coordinate;
 mod datetime;
+mod db_types;
 mod error;
 mod feature_data;
 mod geometry;

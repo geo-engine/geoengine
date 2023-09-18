@@ -12,9 +12,11 @@ xgboost = ["dep:xgboost-rs", "pro"]
 [dependencies]
 arrow = { version = "45.0" }                                                                     # TODO: activate SIMD when stable
 async-trait = "0.1"
+bytes = "1.0"                                                                                    # for postgres-types impls
 chrono = "0.4"
 crossbeam = "0.8"
 csv = "1.1"
+fallible-iterator = "0.2"
 float-cmp = "0.9"
 futures = "0.3"
 gdal = "0.16"

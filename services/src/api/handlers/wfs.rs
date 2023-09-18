@@ -1176,6 +1176,7 @@ x;y
             .await
             .unwrap()
             .id
+            .into()
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]

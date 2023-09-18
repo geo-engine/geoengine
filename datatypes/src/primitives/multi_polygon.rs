@@ -1,7 +1,9 @@
 use arrow::array::BooleanArray;
 use arrow::error::ArrowError;
+use fallible_iterator::FallibleIterator;
 use float_cmp::{ApproxEq, F64Margin};
 use geo::intersects::Intersects;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::TryFrom;
@@ -164,6 +166,209 @@ impl TryFrom<TypedGeometry> for MultiPolygon {
 impl AsRef<[Polygon]> for MultiPolygon {
     fn as_ref(&self) -> &[Polygon] {
         &self.polygons
+    }
+}
+
+mod db_types {
+    use super::*;
+
+    #[derive(Debug)]
+    pub struct PolygonRef<'p> {
+        pub rings: &'p [Vec<Coordinate2D>],
+    }
+
+    #[derive(Debug)]
+    pub struct PolygonOwned {
+        pub rings: Vec<Vec<Coordinate2D>>,
+    }
+
+    impl ToSql for PolygonRef<'_> {
+        fn to_sql(
+            &self,
+            ty: &postgres_types::Type,
+            w: &mut bytes::BytesMut,
+        ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+            let postgres_types::Kind::Domain(domain_type) = ty.kind() else {
+                panic!("expected domain type");
+            };
+
+            let postgres_types::Kind::Array(member_type) = domain_type.kind() else {
+                panic!("expected array type");
+            };
+
+            let dimension = postgres_protocol::types::ArrayDimension {
+                len: self.rings.len() as i32,
+                lower_bound: 1, // arrays are one-indexed
+            };
+
+            postgres_protocol::types::array_to_sql(
+                Some(dimension),
+                member_type.oid(),
+                self.rings.iter(),
+                |coordinates, w| {
+                    postgres_protocol::types::path_to_sql(
+                        true,
+                        coordinates.iter().map(|p| (p.x, p.y)),
+                        w,
+                    )?;
+
+                    Ok(postgres_protocol::IsNull::No)
+                },
+                w,
+            )?;
+
+            Ok(postgres_types::IsNull::No)
+        }
+
+        fn accepts(ty: &postgres_types::Type) -> bool {
+            if ty.name() != "Polygon" {
+                return false;
+            }
+
+            let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
+                return false;
+            };
+
+            let postgres_types::Kind::Array(inner_type) = inner_type.kind() else {
+                return false;
+            };
+
+            matches!(inner_type, &postgres_types::Type::PATH)
+        }
+
+        postgres_types::to_sql_checked!();
+    }
+
+    impl<'a> FromSql<'a> for PolygonOwned {
+        fn from_sql(
+            _ty: &postgres_types::Type,
+            raw: &'a [u8],
+        ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+            let array = postgres_protocol::types::array_from_sql(raw)?;
+            if array.dimensions().count()? > 1 {
+                return Err("array contains too many dimensions".into());
+            }
+
+            let rings = array
+                .values()
+                .map(|raw| {
+                    let Some(raw) = raw else {
+                        return Err("array contains NULL values".into());
+                    };
+                    let path = postgres_protocol::types::path_from_sql(raw)?;
+
+                    let coordinates = path
+                        .points()
+                        .map(|point| {
+                            Ok(Coordinate2D {
+                                x: point.x(),
+                                y: point.y(),
+                            })
+                        })
+                        .collect()?;
+                    Ok(coordinates)
+                })
+                .collect()?;
+
+            Ok(Self { rings })
+        }
+
+        fn accepts(ty: &postgres_types::Type) -> bool {
+            if ty.name() != "Polygon" {
+                return false;
+            }
+
+            let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
+                return false;
+            };
+
+            let postgres_types::Kind::Array(inner_type) = inner_type.kind() else {
+                return false;
+            };
+
+            matches!(inner_type, &postgres_types::Type::PATH)
+        }
+    }
+
+    impl ToSql for MultiPolygon {
+        fn to_sql(
+            &self,
+            ty: &postgres_types::Type,
+            w: &mut bytes::BytesMut,
+        ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+            let postgres_types::Kind::Array(member_type) = ty.kind() else {
+                panic!("expected array type");
+            };
+
+            let dimension = postgres_protocol::types::ArrayDimension {
+                len: self.polygons.len() as i32,
+                lower_bound: 1, // arrays are one-indexed
+            };
+
+            postgres_protocol::types::array_to_sql(
+                Some(dimension),
+                member_type.oid(),
+                self.polygons.iter(),
+                |rings, w| match <PolygonRef as ToSql>::to_sql(
+                    &PolygonRef { rings },
+                    member_type,
+                    w,
+                )? {
+                    postgres_types::IsNull::No => Ok(postgres_protocol::IsNull::No),
+                    postgres_types::IsNull::Yes => Ok(postgres_protocol::IsNull::Yes),
+                },
+                w,
+            )?;
+
+            Ok(postgres_types::IsNull::No)
+        }
+
+        fn accepts(ty: &postgres_types::Type) -> bool {
+            let postgres_types::Kind::Array(inner_type) = ty.kind() else {
+                return false;
+            };
+
+            <PolygonRef as ToSql>::accepts(inner_type)
+        }
+
+        postgres_types::to_sql_checked!();
+    }
+
+    impl<'a> FromSql<'a> for MultiPolygon {
+        fn from_sql(
+            ty: &postgres_types::Type,
+            raw: &'a [u8],
+        ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+            let postgres_types::Kind::Array(inner_type) = ty.kind() else {
+                return Err("inner type is not of type array".into());
+            };
+
+            let array = postgres_protocol::types::array_from_sql(raw)?;
+            if array.dimensions().count()? > 1 {
+                return Err("array contains too many dimensions".into());
+            }
+
+            let polygons = array
+                .values()
+                .map(|raw| {
+                    let Some(raw) = raw else {
+                        return Err("array contains NULL values".into());
+                    };
+                    let polygon = <PolygonOwned as FromSql>::from_sql(inner_type, raw)?;
+                    Ok(polygon.rings)
+                })
+                .collect()?;
+
+            Ok(Self { polygons })
+        }
+
+        fn accepts(ty: &postgres_types::Type) -> bool {
+            let postgres_types::Kind::Array(inner_type) = ty.kind() else {
+                return false;
+            };
+
+            inner_type.name() == "Polygon"
+        }
     }
 }
 

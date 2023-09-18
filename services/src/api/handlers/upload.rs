@@ -1,21 +1,19 @@
-use std::path::Path;
-
-use gdal::vector::LayerAccess;
-use geoengine_operators::util::gdal::gdal_open_dataset;
-use serde::{Deserialize, Serialize};
-use tokio::{fs, io::AsyncWriteExt};
-
-use actix_multipart::Multipart;
-use actix_web::{web, FromRequest, Responder};
-use futures::StreamExt;
-use geoengine_datatypes::util::Identifier;
-
+use crate::api::model::responses::IdResponse;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::upload::{FileId, FileUpload, Upload, UploadDb, UploadId, UploadRootPath};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::util::{path_with_base_path, IdResponse};
+use crate::util::path_with_base_path;
+use actix_multipart::Multipart;
+use actix_web::{web, FromRequest, Responder};
+use futures::StreamExt;
+use gdal::vector::LayerAccess;
+use geoengine_datatypes::util::Identifier;
+use geoengine_operators::util::gdal::gdal_open_dataset;
+use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use std::path::Path;
+use tokio::{fs, io::AsyncWriteExt};
 use utoipa::{ToResponse, ToSchema};
 
 pub(crate) fn init_upload_routes<C>(cfg: &mut web::ServiceConfig)
@@ -63,7 +61,7 @@ impl<'a> ToSchema<'a> for FileUploadRequest {
     path = "/upload",
     request_body(content = inline(FileUploadRequest), content_type = "multipart/form-data"),
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse)
+        (status = 200, response = crate::api::model::responses::IdResponse::<UploadId>)
     ),
     security(
         ("session_token" = [])
@@ -73,7 +71,7 @@ async fn upload_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     mut body: Multipart,
-) -> Result<impl Responder> {
+) -> Result<web::Json<IdResponse<UploadId>>> {
     let upload_id = UploadId::new();
 
     let root = upload_id.root_path()?;

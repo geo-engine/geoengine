@@ -427,7 +427,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewTask<C> {
         ctx: C::TaskContext,
     ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
         let file = self.file.clone();
-        let resampling_method = self.params.resampling_method;
+        let resampling_method = self.params.resampling_method.map(Into::into);
 
         let response = with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
             // TODO: provide some detailed pct status

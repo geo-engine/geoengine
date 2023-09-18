@@ -1,3 +1,4 @@
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
@@ -30,7 +31,7 @@ impl Default for Measurement {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, FromSql, ToSql)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
     pub unit: Option<String>,

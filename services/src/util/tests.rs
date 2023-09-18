@@ -1,5 +1,4 @@
 use crate::api::model::datatypes::Coordinate2D;
-use crate::api::model::datatypes::DatasetName;
 use crate::api::model::datatypes::NamedData;
 use crate::api::model::datatypes::RasterDataType;
 use crate::api::model::datatypes::SpatialResolution;
@@ -17,6 +16,7 @@ use crate::datasets::listing::Provenance;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
 use crate::datasets::upload::UploadRootPath;
+use crate::datasets::DatasetName;
 use crate::projects::{
     CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
@@ -92,7 +92,7 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
             visibility: Default::default(),
             symbology: Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
-                colorizer: Colorizer::Rgba.into(),
+                colorizer: Colorizer::Rgba,
             }),
         })]),
         plots: None,
@@ -189,7 +189,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
         name: dataset_name.name,
     };
 
-    (dataset_id.into(), named_data)
+    (dataset_id, named_data)
 }
 
 #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
@@ -227,7 +227,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                     .collect(),
                     RgbaColor::transparent(),
                     RgbaColor::transparent(),
-                ).unwrap().into(),
+                ).unwrap(),
             })),
             provenance: Some(vec![Provenance {
                 citation: "Friedl, M., D. Sulla-Menashe. MCD12C1 MODIS/Terra+Aqua Land Cover Type Yearly L3 Global 0.05Deg CMG V006. 2015, distributed by NASA EOSDIS Land Processes DAAC, https://doi.org/10.5067/MODIS/MCD12C1.006. Accessed 2022-03-16.".to_owned(),
@@ -293,7 +293,6 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
         .await
         .expect("dataset db access")
         .id
-        .into()
 }
 
 pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(

@@ -1,5 +1,3 @@
-use crate::api::model::datatypes::{DataProviderId, LayerId};
-use crate::api::model::HashMapTextTextDbType;
 use crate::error;
 use crate::layers::external::TypedDataProviderDefinition;
 use crate::layers::layer::Property;
@@ -29,6 +27,8 @@ use bb8_postgres::tokio_postgres::{
     tls::{MakeTlsConnect, TlsConnect},
     Socket,
 };
+use geoengine_datatypes::dataset::{DataProviderId, LayerId};
+use geoengine_datatypes::util::HashMapTextTextDbType;
 use snafu::{ensure, ResultExt};
 use std::str::FromStr;
 use uuid::Uuid;

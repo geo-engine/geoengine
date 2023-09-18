@@ -1,6 +1,5 @@
 use super::listing::Provenance;
-use crate::api::model::datatypes::{DatasetId, DatasetName, LayerId};
-use crate::api::model::responses::datasets::DatasetIdAndName;
+use super::{DatasetIdAndName, DatasetName};
 use crate::api::model::services::AddDataset;
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::ProvenanceOutput;
@@ -28,7 +27,7 @@ use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
-use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::{DataId, DatasetId, LayerId};
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
@@ -337,7 +336,7 @@ where
 
 pub struct DatasetMetaData<'m> {
     meta_data: &'m MetaDataDefinition,
-    result_descriptor: crate::api::model::operators::TypedResultDescriptor,
+    result_descriptor: TypedResultDescriptor,
 }
 
 impl<Tls> DatasetStorer for PostgresDb<Tls>
@@ -361,27 +360,27 @@ where
         match self {
             MetaDataDefinition::MockMetaData(d) => Ok(DatasetMetaData {
                 meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             }),
             MetaDataDefinition::OgrMetaData(d) => Ok(DatasetMetaData {
                 meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             }),
             MetaDataDefinition::GdalMetaDataRegular(d) => Ok(DatasetMetaData {
                 meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             }),
             MetaDataDefinition::GdalStatic(d) => Ok(DatasetMetaData {
                 meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             }),
             MetaDataDefinition::GdalMetadataNetCdfCf(d) => Ok(DatasetMetaData {
                 meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             }),
             MetaDataDefinition::GdalMetaDataList(d) => Ok(DatasetMetaData {
                 meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()).into(),
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             }),
         }
     }

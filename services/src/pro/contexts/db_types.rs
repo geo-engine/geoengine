@@ -1,11 +1,11 @@
 use crate::{
-    delegate_from_to_sql,
     error::Error,
     pro::datasets::{
         GdalRetries, SentinelS2L2ACogsProviderDefinition, StacApiRetries,
         TypedProDataProviderDefinition,
     },
 };
+use geoengine_datatypes::delegate_from_to_sql;
 use postgres_types::{FromSql, ToSql};
 
 #[derive(Debug, ToSql, FromSql)]
@@ -110,11 +110,12 @@ delegate_from_to_sql!(
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::{primitives::CacheTtlSeconds, util::Identifier};
+    use geoengine_datatypes::{
+        dataset::DataProviderId, primitives::CacheTtlSeconds, util::Identifier,
+    };
 
     use super::*;
     use crate::{
-        api::model::datatypes::DataProviderId,
         pro::{
             datasets::{StacBand, StacZone},
             util::tests::with_pro_temp_context,

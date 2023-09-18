@@ -5,6 +5,7 @@ use crate::util::Result;
 use arrow::buffer::NullBuffer;
 use gdal::vector::OGRFieldType;
 use num_traits::AsPrimitive;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use snafu::ensure;
@@ -12,7 +13,7 @@ use std::convert::TryFrom;
 use std::str;
 use std::{marker::PhantomData, slice};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureDataType {
     Category,

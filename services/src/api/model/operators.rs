@@ -1,3 +1,7 @@
+use super::datatypes::{
+    BoundingBox2D, FeatureDataType, Measurement, RasterDataType, SpatialPartition2D,
+    SpatialReferenceOption, TimeInterval, VectorDataType,
+};
 use crate::api::model::datatypes::{
     Coordinate2D, DateTimeParseFormat, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
     QueryRectangle, RasterPropertiesEntryType, RasterPropertiesKey, SpatialResolution, StringPair,
@@ -9,7 +13,6 @@ use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,
 };
-use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -17,13 +20,8 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 use utoipa::ToSchema;
 
-use super::datatypes::{
-    BoundingBox2D, FeatureDataType, Measurement, RasterDataType, SpatialPartition2D,
-    SpatialReferenceOption, TimeInterval, VectorDataType,
-};
-
 /// A `ResultDescriptor` for raster queries
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, ToSql, FromSql)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
@@ -177,7 +175,7 @@ impl From<VectorColumnInfo> for geoengine_operators::engine::VectorColumnInfo {
 }
 
 /// A `ResultDescriptor` for plot queries
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, ToSchema, ToSql, FromSql)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotResultDescriptor {
     pub spatial_reference: SpatialReferenceOption,
@@ -259,7 +257,7 @@ impl From<VectorResultDescriptor> for TypedResultDescriptor {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema, FromSql, ToSql)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct MockDatasetDataSourceLoadingInfo {
     pub points: Vec<Coordinate2D>,
 }
@@ -454,7 +452,7 @@ impl<'a> ToSchema<'a> for OgrMetaData {
     }
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema, FromSql, ToSql)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
@@ -602,7 +600,7 @@ impl From<OgrSourceTimeFormat> for geoengine_operators::source::OgrSourceTimeFor
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, ToSql, FromSql)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum UnixTimeStampType {
     EpochSeconds,
@@ -629,7 +627,7 @@ impl From<UnixTimeStampType> for geoengine_operators::source::UnixTimeStampType 
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum OgrSourceErrorSpec {
     Ignore,
@@ -997,7 +995,7 @@ impl From<GdalDatasetParameters> for geoengine_operators::source::GdalDatasetPar
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema, FromSql, ToSql)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 pub struct GdalSourceTimePlaceholder {
     pub format: DateTimeParseFormat,
     pub reference: TimeReference,
@@ -1021,7 +1019,7 @@ impl From<GdalSourceTimePlaceholder> for geoengine_operators::source::GdalSource
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, ToSchema, FromSql, ToSql)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalDatasetGeoTransform {
     pub origin_coordinate: Coordinate2D,
@@ -1049,7 +1047,7 @@ impl From<GdalDatasetGeoTransform> for geoengine_operators::source::GdalDatasetG
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, ToSchema, FromSql, ToSql)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, ToSchema)]
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
@@ -1073,7 +1071,7 @@ impl From<FileNotFoundHandling> for geoengine_operators::source::FileNotFoundHan
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema, FromSql, ToSql)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub struct GdalMetadataMapping {
     pub source_key: RasterPropertiesKey,
     pub target_key: RasterPropertiesKey,
@@ -1100,7 +1098,7 @@ impl From<GdalMetadataMapping> for geoengine_operators::source::GdalMetadataMapp
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, FromSql, ToSql)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum TimeReference {
     Start,
@@ -1172,7 +1170,7 @@ impl From<GdalMetadataNetCdfCf> for geoengine_operators::source::GdalMetadataNet
     }
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema, FromSql, ToSql)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataList {
     pub result_descriptor: RasterResultDescriptor,
@@ -1198,7 +1196,7 @@ impl From<GdalMetaDataList> for geoengine_operators::source::GdalMetaDataList {
 }
 
 /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema, FromSql, ToSql)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
@@ -1231,7 +1229,7 @@ impl From<GdalLoadingInfoTemporalSlice>
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum CsvHeader {
     Yes,

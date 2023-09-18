@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-use std::marker::PhantomData;
-
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Result;
 use crate::error::{self, Error};
@@ -18,6 +14,7 @@ use bb8_postgres::bb8::{Pool, PooledConnection};
 use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
@@ -38,6 +35,8 @@ use geoengine_operators::{
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use std::collections::HashMap;
+use std::marker::PhantomData;
 
 pub const GFBIO_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x907f_9f5b_0304_4a0e_a5ef_28de_62d1_c0f9);
@@ -349,7 +348,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let id: DataId = id.clone().into();
+        let id: DataId = id.clone();
 
         let surrogate_key: i32 = id
             .external()
@@ -466,10 +465,10 @@ impl
 
 #[cfg(test)]
 mod tests {
-    use crate::api::model::datatypes::{ExternalDataId, LayerId};
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
+    use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
@@ -480,12 +479,11 @@ mod tests {
     use rand::RngCore;
     use tokio_postgres::Config;
 
+    use super::*;
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
     use crate::util::config;
     use std::{fs::File, io::Read, path::PathBuf};
-
-    use super::*;
 
     /// Create a schema with test tables and return the schema name
     async fn create_test_data(db_config: &config::Postgres) -> String {
@@ -622,13 +620,10 @@ mod tests {
             let meta: Box<
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
             > = provider
-                .meta_data(
-                    &DataId::External(ExternalDataId {
-                        provider_id: GFBIO_PROVIDER_ID,
-                        layer_id: LayerId("1".to_string()),
-                    })
-                    .into(),
-                )
+                .meta_data(&DataId::External(ExternalDataId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    layer_id: LayerId("1".to_string()),
+                }))
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -804,13 +799,10 @@ mod tests {
             let meta: Box<
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
             > = provider
-                .meta_data(
-                    &DataId::External(ExternalDataId {
-                        provider_id: GFBIO_PROVIDER_ID,
-                        layer_id: LayerId("1".to_string()),
-                    })
-                    .into(),
-                )
+                .meta_data(&DataId::External(ExternalDataId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    layer_id: LayerId("1".to_string()),
+                }))
                 .await
                 .map_err(|e| e.to_string())?;
 

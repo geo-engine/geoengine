@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{
-    DataProviderId, DatasetId, LayerId, SpatialReference, SpatialReferenceOption, TimeInstance,
+    DataProviderId, DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance,
 };
 use crate::api::model::responses::ErrorResponse;
 use crate::datasets::external::aruna::error::ArunaProviderError;
@@ -7,6 +7,7 @@ use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
+use geoengine_datatypes::dataset::LayerId;
 use snafu::prelude::*;
 use std::path::PathBuf;
 use strum::IntoStaticStr;

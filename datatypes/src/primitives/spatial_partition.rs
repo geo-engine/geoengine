@@ -1,15 +1,15 @@
-use serde::{Deserialize, Serialize};
-use snafu::prelude::*;
-
+use super::BoundingBox2D;
+use super::Coordinate2D;
+use super::SpatialResolution;
 use crate::error;
 use crate::raster::GridShape2D;
 use crate::util::helpers::snap_next;
 use crate::util::helpers::snap_prev;
 use crate::util::Result;
-
-use super::BoundingBox2D;
-use super::Coordinate2D;
-use super::SpatialResolution;
+use postgres_types::FromSql;
+use postgres_types::ToSql;
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 /// Common trait for axis-parallel boxes
 pub trait AxisAlignedRectangle: Copy {
@@ -31,7 +31,7 @@ pub trait AxisAlignedRectangle: Copy {
 }
 
 /// A partition of space that include the upper left but excludes the lower right coordinate
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct SpatialPartition2D {
     upper_left_coordinate: Coordinate2D,

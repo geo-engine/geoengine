@@ -1,3 +1,4 @@
+use crate::api::model::responses::IdResponse;
 use crate::contexts::ApplicationContext;
 use crate::contexts::SessionContext;
 use crate::error;
@@ -5,6 +6,7 @@ use crate::error::Result;
 use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::permissions::{RoleDescription, RoleId};
+use crate::pro::users::OidcError::OidcDisabled;
 use crate::pro::users::RoleDb;
 use crate::pro::users::UserAuth;
 use crate::pro::users::UserDb;
@@ -15,9 +17,6 @@ use crate::pro::users::{AuthCodeResponse, UserCredentials};
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
 use crate::util::config;
-use crate::util::IdResponse;
-
-use crate::pro::users::OidcError::OidcDisabled;
 use crate::util::extractors::ValidatedJson;
 use actix_web::FromRequest;
 use actix_web::{web, HttpResponse, Responder};
@@ -80,7 +79,7 @@ where
 pub(crate) async fn register_user_handler<C: ApplicationContext + UserAuth>(
     user: ValidatedJson<UserRegistration>,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder>
+) -> Result<web::Json<IdResponse<UserId>>>
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {

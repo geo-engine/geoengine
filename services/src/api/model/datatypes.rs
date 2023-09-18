@@ -1,6 +1,5 @@
 use crate::error::{self, Result};
 use crate::identifier;
-use fallible_iterator::FallibleIterator;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
@@ -13,9 +12,7 @@ use std::{
     fmt::{Debug, Formatter},
     str::FromStr,
 };
-use utoipa::{IntoParams, ToSchema};
-
-use super::{PolygonOwned, PolygonRef};
+use utoipa::ToSchema;
 
 identifier!(DataProviderId);
 
@@ -124,9 +121,35 @@ impl From<DataId> for geoengine_datatypes::dataset::DataId {
     }
 }
 
+impl From<&DataId> for geoengine_datatypes::dataset::DataId {
+    fn from(id: &DataId) -> Self {
+        match id {
+            DataId::Internal { dataset_id } => Self::Internal {
+                dataset_id: dataset_id.into(),
+            },
+            DataId::External(external_id) => Self::External(external_id.into()),
+        }
+    }
+}
+
 impl From<geoengine_datatypes::dataset::DatasetId> for DatasetId {
     fn from(id: geoengine_datatypes::dataset::DatasetId) -> Self {
         Self(id.0)
+    }
+}
+
+impl From<&DatasetId> for geoengine_datatypes::dataset::DatasetId {
+    fn from(value: &DatasetId) -> Self {
+        Self(value.0)
+    }
+}
+
+impl From<&ExternalDataId> for geoengine_datatypes::dataset::ExternalDataId {
+    fn from(value: &ExternalDataId) -> Self {
+        Self {
+            provider_id: value.provider_id.into(),
+            layer_id: value.layer_id.clone().into(),
+        }
     }
 }
 
@@ -193,189 +216,6 @@ impl<'a> ToSchema<'a> for NamedData {
         use utoipa::openapi::*;
         (
             "NamedData",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
-        )
-    }
-}
-
-/// A (optionally namespaced) name for a `Dataset`.
-/// It can be resolved into a [`DataId`] if you know the data provider.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, IntoParams, ToSql, FromSql)]
-pub struct DatasetName {
-    pub namespace: Option<String>,
-    pub name: String,
-}
-
-impl DatasetName {
-    /// Canonicalize a name that reflects the system namespace and provider.
-    fn canonicalize<S: Into<String> + PartialEq<&'static str>>(
-        name: S,
-        system_name: &'static str,
-    ) -> Option<String> {
-        if name == system_name {
-            None
-        } else {
-            Some(name.into())
-        }
-    }
-
-    pub fn new<S: Into<String>>(namespace: Option<String>, name: S) -> Self {
-        Self {
-            namespace,
-            name: name.into(),
-        }
-    }
-}
-
-impl std::fmt::Display for DatasetName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let d = geoengine_datatypes::dataset::NAME_DELIMITER;
-        match (&self.namespace, &self.name) {
-            (None, name) => write!(f, "{name}"),
-            (Some(namespace), name) => {
-                write!(f, "{namespace}{d}{name}")
-            }
-        }
-    }
-}
-
-impl Serialize for DatasetName {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let d = geoengine_datatypes::dataset::NAME_DELIMITER;
-        let serialized = match (&self.namespace, &self.name) {
-            (None, name) => name.to_string(),
-            (Some(namespace), name) => {
-                format!("{namespace}{d}{name}")
-            }
-        };
-
-        serializer.serialize_str(&serialized)
-    }
-}
-
-impl<'de> Deserialize<'de> for DatasetName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(DatasetNameDeserializeVisitor)
-    }
-}
-
-struct DatasetNameDeserializeVisitor;
-
-impl<'de> Visitor<'de> for DatasetNameDeserializeVisitor {
-    type Value = DatasetName;
-
-    /// always keep in sync with [`is_allowed_name_char`]
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            formatter,
-            "a string consisting of a namespace and name name, separated by a colon, only using alphanumeric characters, underscores & dashes"
-        )
-    }
-
-    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        let mut strings = [None, None];
-        let mut split = s.split(geoengine_datatypes::dataset::NAME_DELIMITER);
-
-        for (buffer, part) in strings.iter_mut().zip(&mut split) {
-            if part.is_empty() {
-                return Err(E::custom("empty part in named data"));
-            }
-
-            if let Some(c) = part
-                .matches(geoengine_datatypes::dataset::is_invalid_name_char)
-                .next()
-            {
-                return Err(E::custom(format!("invalid character '{c}' in named data")));
-            }
-
-            *buffer = Some(part.to_string());
-        }
-
-        if split.next().is_some() {
-            return Err(E::custom("named data must consist of at most two parts"));
-        }
-
-        match strings {
-            [Some(namespace), Some(name)] => Ok(DatasetName {
-                namespace: DatasetName::canonicalize(
-                    namespace,
-                    geoengine_datatypes::dataset::SYSTEM_NAMESPACE,
-                ),
-                name,
-            }),
-            [Some(name), None] => Ok(DatasetName {
-                namespace: None,
-                name,
-            }),
-            _ => Err(E::custom("empty named data")),
-        }
-    }
-}
-
-impl From<NamedData> for DatasetName {
-    fn from(
-        NamedData {
-            namespace,
-            provider: _,
-            name,
-        }: NamedData,
-    ) -> Self {
-        Self { namespace, name }
-    }
-}
-
-impl From<&NamedData> for DatasetName {
-    fn from(named_data: &NamedData) -> Self {
-        Self {
-            namespace: named_data.namespace.clone(),
-            name: named_data.name.clone(),
-        }
-    }
-}
-
-impl From<&geoengine_datatypes::dataset::NamedData> for DatasetName {
-    fn from(named_data: &geoengine_datatypes::dataset::NamedData) -> Self {
-        Self {
-            namespace: named_data.namespace.clone(),
-            name: named_data.name.clone(),
-        }
-    }
-}
-
-impl From<DatasetName> for NamedData {
-    fn from(DatasetName { namespace, name }: DatasetName) -> Self {
-        NamedData {
-            namespace,
-            provider: None,
-            name,
-        }
-    }
-}
-
-impl From<DatasetName> for geoengine_datatypes::dataset::NamedData {
-    fn from(DatasetName { namespace, name }: DatasetName) -> Self {
-        geoengine_datatypes::dataset::NamedData {
-            namespace,
-            provider: None,
-            name,
-        }
-    }
-}
-
-impl<'a> ToSchema<'a> for DatasetName {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "DatasetName",
             ObjectBuilder::new().schema_type(SchemaType::String).into(),
         )
     }
@@ -803,19 +643,7 @@ impl<'a> FromSql<'a> for SpatialReferenceOption {
 
 /// An enum that contains all possible vector data types
 #[derive(
-    Debug,
-    Ord,
-    PartialOrd,
-    Eq,
-    PartialEq,
-    Hash,
-    Deserialize,
-    Serialize,
-    Copy,
-    Clone,
-    ToSchema,
-    FromSql,
-    ToSql,
+    Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone, ToSchema,
 )]
 pub enum VectorDataType {
     Data,
@@ -941,7 +769,7 @@ impl From<chrono::DateTime<chrono::FixedOffset>> for DateTime {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureDataType {
     Category,
@@ -1010,7 +838,7 @@ impl From<Measurement> for geoengine_datatypes::primitives::Measurement {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
     pub unit: Option<String>,
@@ -1144,7 +972,7 @@ pub struct QueryRectangle<SpatialBounds> {
 }
 
 /// The spatial resolution in SRS units
-#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema, ToSql, FromSql)]
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema)]
 pub struct SpatialResolution {
     pub x: f64,
     pub y: f64,
@@ -1456,73 +1284,22 @@ impl std::fmt::Display for ResamplingMethod {
     }
 }
 
+impl From<ResamplingMethod> for geoengine_datatypes::util::gdal::ResamplingMethod {
+    fn from(value: ResamplingMethod) -> Self {
+        match value {
+            ResamplingMethod::Nearest => Self::Nearest,
+            ResamplingMethod::Average => Self::Average,
+            ResamplingMethod::Bilinear => Self::Bilinear,
+            ResamplingMethod::Cubic => Self::Cubic,
+            ResamplingMethod::CubicSpline => Self::CubicSpline,
+            ResamplingMethod::Lanczos => Self::Lanczos,
+        }
+    }
+}
+
 /// `RgbaColor` defines a 32 bit RGB color with alpha value
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct RgbaColor(pub [u8; 4]);
-
-impl ToSql for RgbaColor {
-    fn to_sql(
-        &self,
-        ty: &postgres_types::Type,
-        w: &mut bytes::BytesMut,
-    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
-        let tuple = self.0.map(i16::from);
-
-        let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
-            return Err(Box::new(
-                crate::error::Error::UnexpectedInvalidDbTypeConversion,
-            ));
-        };
-
-        <[i16; 4] as ToSql>::to_sql(&tuple, inner_type, w)
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        if ty.name() != "RgbaColor" {
-            return false;
-        }
-        let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
-            return false;
-        };
-
-        <[i16; 4] as ToSql>::accepts(inner_type)
-    }
-
-    postgres_types::to_sql_checked!();
-}
-
-impl<'a> FromSql<'a> for RgbaColor {
-    fn from_sql(
-        ty: &postgres_types::Type,
-        raw: &'a [u8],
-    ) -> Result<RgbaColor, Box<dyn std::error::Error + Sync + Send>> {
-        let array_ty = match ty.kind() {
-            postgres_types::Kind::Domain(inner_type) => inner_type,
-            _ => ty,
-        };
-
-        let tuple = <[i16; 4] as FromSql>::from_sql(array_ty, raw)?;
-
-        Ok(RgbaColor(tuple.map(|v| v as u8)))
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        type Target = [i16; 4];
-
-        if <Target as FromSql>::accepts(ty) {
-            return true;
-        }
-
-        if ty.name() != "RgbaColor" {
-            return false;
-        }
-        let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
-            return false;
-        };
-
-        <Target as FromSql>::accepts(inner_type)
-    }
-}
 
 // manual implementation utoipa generates an integer field
 impl<'a> ToSchema<'a> for RgbaColor {
@@ -1552,7 +1329,7 @@ impl From<RgbaColor> for geoengine_datatypes::operations::image::RgbaColor {
 }
 
 /// A container type for breakpoints that specify a value to color mapping
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSql, FromSql)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Breakpoint {
     pub value: NotNanF64,
     pub color: RgbaColor,
@@ -1816,20 +1593,7 @@ impl TryFrom<SerializablePalette> for Palette {
     }
 }
 
-#[derive(
-    Debug,
-    Clone,
-    Serialize,
-    Deserialize,
-    PartialEq,
-    Hash,
-    Eq,
-    PartialOrd,
-    Ord,
-    ToSchema,
-    FromSql,
-    ToSql,
-)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq, PartialOrd, Ord, ToSchema)]
 pub struct RasterPropertiesKey {
     pub domain: Option<String>,
     pub key: String,
@@ -1853,7 +1617,7 @@ impl From<RasterPropertiesKey> for geoengine_datatypes::raster::RasterProperties
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema, FromSql, ToSql)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub enum RasterPropertiesEntryType {
     Number,
     String,
@@ -1877,7 +1641,7 @@ impl From<RasterPropertiesEntryType> for geoengine_datatypes::raster::RasterProp
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema, FromSql, ToSql)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
 pub struct DateTimeParseFormat {
     fmt: String,
     has_tz: bool,
@@ -1941,83 +1705,6 @@ impl From<MultiPoint> for geoengine_datatypes::primitives::MultiPoint {
     }
 }
 
-impl ToSql for MultiPoint {
-    fn to_sql(
-        &self,
-        ty: &postgres_types::Type,
-        w: &mut bytes::BytesMut,
-    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
-        let postgres_types::Kind::Array(member_type) = ty.kind() else {
-            panic!("expected array type");
-        };
-
-        let dimension = postgres_protocol::types::ArrayDimension {
-            len: self.coordinates.len() as i32,
-            lower_bound: 1, // arrays are one-indexed
-        };
-
-        postgres_protocol::types::array_to_sql(
-            Some(dimension),
-            member_type.oid(),
-            self.coordinates.iter(),
-            |c, w| {
-                postgres_protocol::types::point_to_sql(c.x, c.y, w);
-
-                Ok(postgres_protocol::IsNull::No)
-            },
-            w,
-        )?;
-
-        Ok(postgres_types::IsNull::No)
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        let postgres_types::Kind::Array(inner_type) = ty.kind() else {
-            return false;
-        };
-
-        matches!(inner_type, &postgres_types::Type::POINT)
-    }
-
-    postgres_types::to_sql_checked!();
-}
-
-impl<'a> FromSql<'a> for MultiPoint {
-    fn from_sql(
-        _ty: &postgres_types::Type,
-        raw: &'a [u8],
-    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
-        let array = postgres_protocol::types::array_from_sql(raw)?;
-        if array.dimensions().count()? > 1 {
-            return Err("array contains too many dimensions".into());
-        }
-
-        let coordinates = array
-            .values()
-            .map(|raw| {
-                let Some(raw) = raw else {
-                    return Err("array contains NULL values".into());
-                };
-                let point = postgres_protocol::types::point_from_sql(raw)?;
-                Ok(Coordinate2D {
-                    x: point.x(),
-                    y: point.y(),
-                })
-            })
-            .collect()?;
-
-        Ok(Self { coordinates })
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        let postgres_types::Kind::Array(inner_type) = ty.kind() else {
-            return false;
-        };
-
-        matches!(inner_type, &postgres_types::Type::POINT)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct MultiLineString {
     pub coordinates: Vec<Vec<Coordinate2D>>,
@@ -2045,94 +1732,6 @@ impl From<MultiLineString> for geoengine_datatypes::primitives::MultiLineString 
                 .collect(),
         )
         .unwrap()
-    }
-}
-
-impl ToSql for MultiLineString {
-    fn to_sql(
-        &self,
-        ty: &postgres_types::Type,
-        w: &mut bytes::BytesMut,
-    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
-        let postgres_types::Kind::Array(member_type) = ty.kind() else {
-            panic!("expected array type");
-        };
-
-        let dimension = postgres_protocol::types::ArrayDimension {
-            len: self.coordinates.len() as i32,
-            lower_bound: 1, // arrays are one-indexed
-        };
-
-        postgres_protocol::types::array_to_sql(
-            Some(dimension),
-            member_type.oid(),
-            self.coordinates.iter(),
-            |coordinates, w| {
-                postgres_protocol::types::path_to_sql(
-                    false,
-                    coordinates.iter().map(|p| (p.x, p.y)),
-                    w,
-                )?;
-
-                Ok(postgres_protocol::IsNull::No)
-            },
-            w,
-        )?;
-
-        Ok(postgres_types::IsNull::No)
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        let postgres_types::Kind::Array(inner_type) = ty.kind() else {
-            return false;
-        };
-
-        matches!(inner_type, &postgres_types::Type::PATH)
-    }
-
-    postgres_types::to_sql_checked!();
-}
-
-impl<'a> FromSql<'a> for MultiLineString {
-    fn from_sql(
-        _ty: &postgres_types::Type,
-        raw: &'a [u8],
-    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
-        let array = postgres_protocol::types::array_from_sql(raw)?;
-        if array.dimensions().count()? > 1 {
-            return Err("array contains too many dimensions".into());
-        }
-
-        let coordinates = array
-            .values()
-            .map(|raw| {
-                let Some(raw) = raw else {
-                    return Err("array contains NULL values".into());
-                };
-                let path = postgres_protocol::types::path_from_sql(raw)?;
-
-                let coordinates = path
-                    .points()
-                    .map(|point| {
-                        Ok(Coordinate2D {
-                            x: point.x(),
-                            y: point.y(),
-                        })
-                    })
-                    .collect()?;
-                Ok(coordinates)
-            })
-            .collect()?;
-
-        Ok(Self { coordinates })
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        let postgres_types::Kind::Array(inner_type) = ty.kind() else {
-            return false;
-        };
-
-        matches!(inner_type, &postgres_types::Type::PATH)
     }
 }
 
@@ -2174,83 +1773,6 @@ impl From<MultiPolygon> for geoengine_datatypes::primitives::MultiPolygon {
     }
 }
 
-impl ToSql for MultiPolygon {
-    fn to_sql(
-        &self,
-        ty: &postgres_types::Type,
-        w: &mut bytes::BytesMut,
-    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
-        let postgres_types::Kind::Array(member_type) = ty.kind() else {
-            panic!("expected array type");
-        };
-
-        let dimension = postgres_protocol::types::ArrayDimension {
-            len: self.polygons.len() as i32,
-            lower_bound: 1, // arrays are one-indexed
-        };
-
-        postgres_protocol::types::array_to_sql(
-            Some(dimension),
-            member_type.oid(),
-            self.polygons.iter(),
-            |rings, w| match <PolygonRef as ToSql>::to_sql(&PolygonRef { rings }, member_type, w)? {
-                postgres_types::IsNull::No => Ok(postgres_protocol::IsNull::No),
-                postgres_types::IsNull::Yes => Ok(postgres_protocol::IsNull::Yes),
-            },
-            w,
-        )?;
-
-        Ok(postgres_types::IsNull::No)
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        let postgres_types::Kind::Array(inner_type) = ty.kind() else {
-            return false;
-        };
-
-        <PolygonRef as ToSql>::accepts(inner_type)
-    }
-
-    postgres_types::to_sql_checked!();
-}
-
-impl<'a> FromSql<'a> for MultiPolygon {
-    fn from_sql(
-        ty: &postgres_types::Type,
-        raw: &'a [u8],
-    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
-        let postgres_types::Kind::Array(inner_type) = ty.kind() else {
-            return Err("inner type is not of type array".into());
-        };
-
-        let array = postgres_protocol::types::array_from_sql(raw)?;
-        if array.dimensions().count()? > 1 {
-            return Err("array contains too many dimensions".into());
-        }
-
-        let polygons = array
-            .values()
-            .map(|raw| {
-                let Some(raw) = raw else {
-                    return Err("array contains NULL values".into());
-                };
-                let polygon = <PolygonOwned as FromSql>::from_sql(inner_type, raw)?;
-                Ok(polygon.rings)
-            })
-            .collect()?;
-
-        Ok(Self { polygons })
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        let postgres_types::Kind::Array(inner_type) = ty.kind() else {
-            return false;
-        };
-
-        inner_type.name() == "Polygon"
-    }
-}
-
 #[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
 pub struct StringPair((String, String));
 
@@ -2265,62 +1787,6 @@ impl<'a> ToSchema<'a> for StringPair {
                 .max_items(Some(2))
                 .into(),
         )
-    }
-}
-
-impl ToSql for StringPair {
-    fn to_sql(
-        &self,
-        ty: &postgres_types::Type,
-        w: &mut bytes::BytesMut,
-    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
-        // unpack domain type
-        let ty = match ty.kind() {
-            postgres_types::Kind::Domain(ty) => ty,
-            _ => ty,
-        };
-
-        let (a, b) = &self.0;
-        <[&String; 2] as ToSql>::to_sql(&[a, b], ty, w)
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        // unpack domain type
-        let ty = match ty.kind() {
-            postgres_types::Kind::Domain(ty) => ty,
-            _ => ty,
-        };
-
-        <[String; 2] as ToSql>::accepts(ty)
-    }
-
-    postgres_types::to_sql_checked!();
-}
-
-impl<'a> FromSql<'a> for StringPair {
-    fn from_sql(
-        ty: &postgres_types::Type,
-        raw: &'a [u8],
-    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
-        // unpack domain type
-        let ty = match ty.kind() {
-            postgres_types::Kind::Domain(ty) => ty,
-            _ => ty,
-        };
-
-        let [a, b] = <[String; 2] as FromSql>::from_sql(ty, raw)?;
-
-        Ok(Self((a, b)))
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        // unpack domain type
-        let ty = match ty.kind() {
-            postgres_types::Kind::Domain(ty) => ty,
-            _ => ty,
-        };
-
-        <[String; 2] as FromSql>::accepts(ty)
     }
 }
 

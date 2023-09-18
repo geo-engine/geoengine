@@ -4,11 +4,10 @@ use crate::api::model::operators::{
 };
 use crate::datasets::listing::Provenance;
 use crate::datasets::upload::{UploadId, VolumeName};
+use crate::datasets::DatasetName;
 use crate::projects::Symbology;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-
-use super::datatypes::DatasetName;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]

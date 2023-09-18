@@ -1,13 +1,11 @@
 use crate::{
     api::handlers,
-    api::model::{
-        datatypes::{DatasetId, DatasetName, NamedData},
-        services::AddDataset,
-    },
+    api::model::services::AddDataset,
     contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
     datasets::{
         listing::Provenance,
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
+        DatasetName,
     },
     pro,
     pro::{
@@ -33,6 +31,7 @@ use actix_web::dev::ServiceResponse;
 use actix_web::{http, middleware, test, web, App};
 use futures_util::Future;
 use geoengine_datatypes::{
+    dataset::{DatasetId, NamedData},
     primitives::DateTime,
     raster::TilingSpecification,
     spatial_reference::SpatialReferenceOption,
@@ -336,9 +335,7 @@ where
     let workflow = Workflow {
         operator: TypedOperator::Raster(
             GdalSource {
-                params: GdalSourceParameters {
-                    data: dataset.into(),
-                },
+                params: GdalSourceParameters { data: dataset },
             }
             .boxed(),
         ),

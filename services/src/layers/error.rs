@@ -1,5 +1,5 @@
 use super::listing::LayerCollectionId;
-use crate::api::model::datatypes::LayerId;
+use geoengine_datatypes::dataset::LayerId;
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]

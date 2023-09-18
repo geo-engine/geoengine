@@ -1,4 +1,5 @@
 use actix_web::{web, FromRequest};
+use geoengine_datatypes::dataset::DatasetId;
 use snafu::ResultExt;
 
 use crate::{
@@ -54,7 +55,7 @@ where
     path = "/dataset/public", 
     request_body = CreateDataset,
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse),
+        (status = 200, response = DatasetNameResponse),
     ),
     security(
         ("session_token" = [])
@@ -111,16 +112,17 @@ where
         .add_dataset(definition.properties, meta_data)
         .await
         .context(DatabaseAccess)?;
+    let dataset_id: DatasetId = dataset.id;
 
     db.add_permission(
         Role::registered_user_role_id(),
-        dataset.id,
+        dataset_id,
         Permission::Read,
     )
     .await
     .context(DatabaseAccess)?;
 
-    db.add_permission(Role::anonymous_role_id(), dataset.id, Permission::Read)
+    db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
         .await
         .context(DatabaseAccess)?;
 
@@ -129,13 +131,13 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::api::model::responses::IdResponse;
+    use crate::datasets::DatasetName;
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::util::tests::{with_pro_temp_context, with_pro_temp_context_from_spec};
     use crate::{
-        api::model::{
-            datatypes::{DatasetName, NamedData},
-            services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
-        },
+        api::model::services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
         contexts::{Session, SessionContext, SessionId},
         datasets::{
             listing::DatasetProvider,
@@ -148,10 +150,7 @@ mod tests {
                 tests::{admin_login, send_pro_test_request},
             },
         },
-        util::{
-            tests::{SetMultipartBody, TestDataUploads},
-            IdResponse,
-        },
+        util::tests::{SetMultipartBody, TestDataUploads},
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -173,8 +172,6 @@ mod tests {
     };
     use serde_json::json;
     use tokio_postgres::NoTls;
-
-    use super::*;
 
     pub async fn upload_ne_10m_ports_files(
         app_ctx: ProPostgresContext<NoTls>,
@@ -298,11 +295,11 @@ mod tests {
 
     pub async fn make_ogr_source<C: ExecutionContext>(
         exe_ctx: &C,
-        named_data: NamedData,
+        named_data: geoengine_datatypes::dataset::NamedData,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         OgrSource {
             params: OgrSourceParameters {
-                data: named_data.into(),
+                data: named_data,
                 attribute_projection: None,
                 attribute_filters: None,
             },

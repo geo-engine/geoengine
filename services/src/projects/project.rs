@@ -1,13 +1,9 @@
-use std::borrow::Cow;
-use std::{convert::TryInto, fmt::Debug};
-
-use crate::api::model::datatypes::Colorizer;
 use crate::error::{Error, Result};
 use crate::identifier;
 use crate::util::config::ProjectService;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
-use geoengine_datatypes::operations::image::RgbaColor;
+use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::primitives::TimeInstance;
 use geoengine_datatypes::{
@@ -19,10 +15,11 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use geoengine_operators::string_token;
-
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use std::borrow::Cow;
+use std::{convert::TryInto, fmt::Debug};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
