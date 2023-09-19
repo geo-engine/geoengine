@@ -1,9 +1,7 @@
 use super::{ExecutionContextImpl, Session, SimpleApplicationContext};
+use crate::api::cli::{add_datasets_from_directory, add_providers_from_directory};
 use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId, SimpleSession};
 use crate::contexts::{GeoEngineDb, SessionContext};
-use crate::datasets::add_from_directory::{
-    add_datasets_from_directory, add_providers_from_directory,
-};
 use crate::datasets::upload::{Volume, Volumes};
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};

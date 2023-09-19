@@ -1,5 +1,4 @@
-use super::storage::DatasetDefinition;
-use crate::datasets::storage::DatasetDb;
+use crate::datasets::storage::{DatasetDb, DatasetDefinition};
 use crate::error::Result;
 use crate::layers::external::TypedDataProviderDefinition;
 use crate::layers::storage::LayerProviderDb;
