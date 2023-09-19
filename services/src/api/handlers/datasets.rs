@@ -1,11 +1,4 @@
-use std::{
-    collections::HashMap,
-    convert::{TryFrom, TryInto},
-    path::Path,
-};
-
 use crate::{
-    api::model::datatypes::DatasetName,
     api::model::responses::datasets::{errors::*, DatasetNameResponse},
     api::model::services::{
         AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
@@ -16,6 +9,7 @@ use crate::{
         listing::{DatasetListOptions, DatasetProvider},
         storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
         upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName},
+        DatasetName,
     },
     error::{self, Result},
     util::{
@@ -43,6 +37,11 @@ use geoengine_operators::{
     util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
 };
 use snafu::ResultExt;
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    path::Path,
+};
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -374,7 +373,7 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
 
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
     let result = db
-        .add_dataset(definition.properties, meta_data)
+        .add_dataset(definition.properties.into(), meta_data)
         .await
         .context(DatabaseAccess)?;
 
@@ -405,7 +404,7 @@ async fn create_volume_dataset<C: ApplicationContext>(
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let result = db
-        .add_dataset(definition.properties, meta_data)
+        .add_dataset(definition.properties.into(), meta_data)
         .await
         .context(DatabaseAccess)?;
 
@@ -512,7 +511,7 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
     };
 
     let meta_data = db.wrap_meta_data(meta_data);
-    let result = db.add_dataset(properties, meta_data).await?;
+    let result = db.add_dataset(properties.into(), meta_data).await?;
 
     Ok(web::Json(result.name.into()))
 }
@@ -1074,18 +1073,19 @@ pub async fn delete_dataset_handler<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::{DatasetName, NamedData};
-    use crate::api::model::responses::datasets::{DatasetIdAndName, DatasetNameResponse};
+    use crate::api::model::datatypes::NamedData;
+    use crate::api::model::responses::datasets::DatasetNameResponse;
+    use crate::api::model::responses::IdResponse;
     use crate::api::model::services::DatasetDefinition;
     use crate::contexts::{PostgresContext, Session, SessionId, SimpleApplicationContext};
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::{UploadId, VolumeName};
+    use crate::datasets::DatasetIdAndName;
     use crate::error::Result;
     use crate::projects::{PointSymbology, Symbology};
     use crate::util::tests::{
         read_body_json, read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
     };
-    use crate::util::IdResponse;
     use crate::{ge_context, test_data};
     use actix_web;
     use actix_web::http::header;
@@ -1152,8 +1152,10 @@ mod tests {
         });
 
         let db = ctx.db();
-        let DatasetIdAndName { id: id1, name: _ } =
-            db.add_dataset(ds, db.wrap_meta_data(meta)).await.unwrap();
+        let DatasetIdAndName { id: id1, name: _ } = db
+            .add_dataset(ds.into(), db.wrap_meta_data(meta))
+            .await
+            .unwrap();
 
         let ds = AddDataset {
             name: Some(DatasetName::new(None, "My_Dataset2")),
@@ -1183,8 +1185,10 @@ mod tests {
             phantom: Default::default(),
         });
 
-        let DatasetIdAndName { id: id2, name: _ } =
-            db.add_dataset(ds, db.wrap_meta_data(meta)).await.unwrap();
+        let DatasetIdAndName { id: id2, name: _ } = db
+            .add_dataset(ds.into(), db.wrap_meta_data(meta))
+            .await
+            .unwrap();
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
@@ -2054,7 +2058,7 @@ mod tests {
         let DatasetIdAndName {
             id,
             name: dataset_name,
-        } = db.add_dataset(ds, db.wrap_meta_data(meta)).await?;
+        } = db.add_dataset(ds.into(), db.wrap_meta_data(meta)).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{id}"))

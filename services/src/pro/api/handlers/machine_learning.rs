@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use actix_web::{web, FromRequest, Responder};
+use actix_web::{web, FromRequest};
 use snafu::ensure;
 
+use crate::api::handlers::tasks::TaskResponse;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
-use crate::handlers::tasks::TaskResponse;
 use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use crate::pro::machine_learning::ml_model::MlModelDb;
 use crate::pro::machine_learning::{schedule_ml_model_training_task, MLTrainRequest};
@@ -41,7 +41,7 @@ pub async fn ml_model_from_workflow_handler<C: ProApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     info: web::Json<MLTrainRequest>,
-) -> Result<impl Responder>
+) -> Result<web::Json<TaskResponse>>
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: MlModelDb,
 {

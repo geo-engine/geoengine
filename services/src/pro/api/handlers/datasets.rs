@@ -1,7 +1,9 @@
-use actix_web::{web, FromRequest};
-use snafu::ResultExt;
-
 use crate::{
+    api::handlers::datasets::{
+        adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
+        delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
+        suggest_meta_data_handler,
+    },
     api::model::{
         responses::datasets::{errors::*, DatasetNameResponse},
         services::{CreateDataset, DataPath, DatasetDefinition},
@@ -12,17 +14,14 @@ use crate::{
         upload::{Volume, VolumeName},
     },
     error::Result,
-    handlers::datasets::{
-        adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
-        delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
-        suggest_meta_data_handler,
-    },
     pro::{
         contexts::{ProApplicationContext, ProGeoEngineDb},
         permissions::{Permission, PermissionDb, Role},
     },
     util::config::{get_config_element, Data},
 };
+use actix_web::{web, FromRequest};
+use snafu::ResultExt;
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -54,7 +53,7 @@ where
     path = "/dataset/public", 
     request_body = CreateDataset,
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse),
+        (status = 200, response = DatasetNameResponse),
     ),
     security(
         ("session_token" = [])
@@ -108,7 +107,7 @@ where
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let dataset = db
-        .add_dataset(definition.properties, meta_data)
+        .add_dataset(definition.properties.into(), meta_data)
         .await
         .context(DatabaseAccess)?;
 
@@ -130,13 +129,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::model::responses::IdResponse;
+    use crate::datasets::DatasetName;
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::ge_context;
     use crate::{
-        api::model::{
-            datatypes::{DatasetName, NamedData},
-            services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
-        },
+        api::model::services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
         contexts::{Session, SessionContext, SessionId},
         datasets::{
             listing::DatasetProvider,
@@ -146,14 +144,12 @@ mod tests {
             users::UserAuth,
             util::tests::{admin_login, send_pro_test_request},
         },
-        util::{
-            tests::{SetMultipartBody, TestDataUploads},
-            IdResponse,
-        },
+        util::tests::{SetMultipartBody, TestDataUploads},
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::TryStreamExt;
+    use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::{
         collections::{GeometryCollection, MultiPointCollection},
         primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle},
@@ -297,7 +293,7 @@ mod tests {
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         OgrSource {
             params: OgrSourceParameters {
-                data: named_data.into(),
+                data: named_data,
                 attribute_projection: None,
                 attribute_filters: None,
             },

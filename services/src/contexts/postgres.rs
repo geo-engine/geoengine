@@ -521,8 +521,8 @@ mod tests {
     use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
-    use crate::ge_context;
     use crate::datasets::{AddDataset, DatasetIdAndName};
+    use crate::ge_context;
     use crate::layers::external::TypedDataProviderDefinition;
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
@@ -581,9 +581,6 @@ mod tests {
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use ordered_float::NotNan;
     use serde_json::json;
-    use std::collections::HashMap;
-    use std::marker::PhantomData;
-    use std::str::FromStr;
     use std::marker::PhantomData;
     use std::str::FromStr;
     use tokio_postgres::config::Host;
@@ -838,29 +835,29 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
-                OgrSourceDataset,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            > {
-                loading_info: loading_info.clone(),
-                result_descriptor: VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [(
-                        "foo".to_owned(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    )]
-                    .into_iter()
-                    .collect(),
-                    time: None,
-                    bbox: None,
-                },
-                phantom: Default::default(),
-            });
+        let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+            OgrSourceDataset,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        > {
+            loading_info: loading_info.clone(),
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: [(
+                    "foo".to_owned(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
+            phantom: Default::default(),
+        });
 
         let session = app_ctx.default_session().await.unwrap();
 
@@ -902,33 +899,33 @@ mod tests {
 
         assert_eq!(datasets.len(), 1);
 
-            assert_eq!(
-                datasets[0],
-                DatasetListing {
-                    id: dataset_id,
-                    name: dataset_name,
-                    display_name: "Ogr Test".to_owned(),
-                    description: "desc".to_owned(),
-                    source_operator: "OgrSource".to_owned(),
-                    symbology: None,
-                    tags: vec![],
-                    result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
-                        data_type: VectorDataType::MultiPoint,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        columns: [(
-                            "foo".to_owned(),
-                            VectorColumnInfo {
-                                data_type: FeatureDataType::Float,
-                                measurement: Measurement::Unitless
-                            }
-                        )]
-                        .into_iter()
-                        .collect(),
-                        time: None,
-                        bbox: None,
-                    })
-                },
-            );
+        assert_eq!(
+            datasets[0],
+            DatasetListing {
+                id: dataset_id,
+                name: dataset_name,
+                display_name: "Ogr Test".to_owned(),
+                description: "desc".to_owned(),
+                source_operator: "OgrSource".to_owned(),
+                symbology: None,
+                tags: vec![],
+                result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: [(
+                        "foo".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Unitless
+                        }
+                    )]
+                    .into_iter()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+                })
+            },
+        );
 
         let provenance = db.load_provenance(&dataset_id).await.unwrap();
 
@@ -1804,29 +1801,29 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
-                OgrSourceDataset,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            > {
-                loading_info: loading_info.clone(),
-                result_descriptor: VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [(
-                        "foo".to_owned(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    )]
-                    .into_iter()
-                    .collect(),
-                    time: None,
-                    bbox: None,
-                },
-                phantom: Default::default(),
-            });
+        let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+            OgrSourceDataset,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        > {
+            loading_info: loading_info.clone(),
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: [(
+                    "foo".to_owned(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
+            phantom: Default::default(),
+        });
 
         let session = app_ctx.default_session().await.unwrap();
 
@@ -1897,29 +1894,29 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
-                OgrSourceDataset,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            > {
-                loading_info: loading_info.clone(),
-                result_descriptor: VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [(
-                        "foo".to_owned(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    )]
-                    .into_iter()
-                    .collect(),
-                    time: None,
-                    bbox: None,
-                },
-                phantom: Default::default(),
-            });
+        let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+            OgrSourceDataset,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        > {
+            loading_info: loading_info.clone(),
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: [(
+                    "foo".to_owned(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
+            phantom: Default::default(),
+        });
 
         let session = app_ctx.default_session().await.unwrap();
 
@@ -2343,29 +2340,29 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-            let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
-                OgrSourceDataset,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            > {
-                loading_info: loading_info.clone(),
-                result_descriptor: VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: [(
-                        "foo".to_owned(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    )]
-                    .into_iter()
-                    .collect(),
-                    time: None,
-                    bbox: None,
-                },
-                phantom: Default::default(),
-            });
+        let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+            OgrSourceDataset,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        > {
+            loading_info: loading_info.clone(),
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: [(
+                    "foo".to_owned(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
+            phantom: Default::default(),
+        });
 
         let DatasetIdAndName {
             id: dataset_id1,
@@ -2400,7 +2397,7 @@ mod tests {
     async fn test_postgres_type_serialization(app_ctx: PostgresContext<NoTls>) {
         let pool = app_ctx.pool.get().await.unwrap();
 
-            assert_sql_type(&pool, "RgbaColor", [RgbaColor::new(0, 1, 2, 3)]).await;
+        assert_sql_type(&pool, "RgbaColor", [RgbaColor::new(0, 1, 2, 3)]).await;
 
         assert_sql_type(
             &pool,
@@ -2409,36 +2406,226 @@ mod tests {
         )
         .await;
 
-            assert_sql_type(
-                &pool,
-                "Breakpoint",
-                [Breakpoint {
-                    value: NotNan::<f64>::new(1.0).unwrap(),
-                    color: RgbaColor::new(0, 0, 0, 0),
-                }],
-            )
-            .await;
+        assert_sql_type(
+            &pool,
+            "Breakpoint",
+            [Breakpoint {
+                value: NotNan::<f64>::new(1.0).unwrap(),
+                color: RgbaColor::new(0, 0, 0, 0),
+            }],
+        )
+        .await;
 
-            assert_sql_type(
-                &pool,
-                "DefaultColors",
-                [
-                    DefaultColors::DefaultColor {
-                        default_color: RgbaColor::new(0, 10, 20, 30),
-                    },
-                    DefaultColors::OverUnder {
+        assert_sql_type(
+            &pool,
+            "DefaultColors",
+            [
+                DefaultColors::DefaultColor {
+                    default_color: RgbaColor::new(0, 10, 20, 30),
+                },
+                DefaultColors::OverUnder {
+                    over_color: RgbaColor::new(1, 2, 3, 4),
+                    under_color: RgbaColor::new(5, 6, 7, 8),
+                },
+            ],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "Colorizer",
+            [
+                Colorizer::LinearGradient {
+                    breakpoints: vec![
+                        Breakpoint {
+                            value: NotNan::<f64>::new(-10.0).unwrap(),
+                            color: RgbaColor::new(0, 0, 0, 0),
+                        },
+                        Breakpoint {
+                            value: NotNan::<f64>::new(2.0).unwrap(),
+                            color: RgbaColor::new(255, 0, 0, 255),
+                        },
+                    ],
+                    no_data_color: RgbaColor::new(0, 10, 20, 30),
+                    default_colors: DefaultColors::OverUnder {
                         over_color: RgbaColor::new(1, 2, 3, 4),
                         under_color: RgbaColor::new(5, 6, 7, 8),
                     },
-                ],
-            )
-            .await;
+                },
+                Colorizer::LogarithmicGradient {
+                    breakpoints: vec![
+                        Breakpoint {
+                            value: NotNan::<f64>::new(1.0).unwrap(),
+                            color: RgbaColor::new(0, 0, 0, 0),
+                        },
+                        Breakpoint {
+                            value: NotNan::<f64>::new(2.0).unwrap(),
+                            color: RgbaColor::new(255, 0, 0, 255),
+                        },
+                    ],
+                    no_data_color: RgbaColor::new(0, 10, 20, 30),
+                    default_colors: DefaultColors::OverUnder {
+                        over_color: RgbaColor::new(1, 2, 3, 4),
+                        under_color: RgbaColor::new(5, 6, 7, 8),
+                    },
+                },
+                Colorizer::palette(
+                    [
+                        (NotNan::<f64>::new(1.0).unwrap(), RgbaColor::new(0, 0, 0, 0)),
+                        (
+                            NotNan::<f64>::new(2.0).unwrap(),
+                            RgbaColor::new(255, 0, 0, 255),
+                        ),
+                        (
+                            NotNan::<f64>::new(3.0).unwrap(),
+                            RgbaColor::new(0, 10, 20, 30),
+                        ),
+                    ]
+                    .into(),
+                    RgbaColor::new(1, 2, 3, 4),
+                    RgbaColor::new(5, 6, 7, 8),
+                )
+                .unwrap(),
+                Colorizer::Rgba,
+            ],
+        )
+        .await;
 
-            assert_sql_type(
-                &pool,
-                "Colorizer",
-                [
-                    Colorizer::LinearGradient {
+        assert_sql_type(
+            &pool,
+            "ColorParam",
+            [
+                ColorParam::Static {
+                    color: RgbaColor::new(0, 10, 20, 30),
+                },
+                ColorParam::Derived(DerivedColor {
+                    attribute: "foobar".to_string(),
+                    colorizer: Colorizer::Rgba,
+                }),
+            ],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "NumberParam",
+            [
+                NumberParam::Static { value: 42 },
+                NumberParam::Derived(DerivedNumber {
+                    attribute: "foobar".to_string(),
+                    factor: 1.0,
+                    default_value: 42.,
+                }),
+            ],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "StrokeParam",
+            [StrokeParam {
+                width: NumberParam::Static { value: 42 },
+                color: ColorParam::Static {
+                    color: RgbaColor::new(0, 10, 20, 30),
+                },
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "TextSymbology",
+            [TextSymbology {
+                attribute: "attribute".to_string(),
+                fill_color: ColorParam::Static {
+                    color: RgbaColor::new(0, 10, 20, 30),
+                },
+                stroke: StrokeParam {
+                    width: NumberParam::Static { value: 42 },
+                    color: ColorParam::Static {
+                        color: RgbaColor::new(0, 10, 20, 30),
+                    },
+                },
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "Symbology",
+            [
+                Symbology::Point(PointSymbology {
+                    fill_color: ColorParam::Static {
+                        color: RgbaColor::new(0, 10, 20, 30),
+                    },
+                    stroke: StrokeParam {
+                        width: NumberParam::Static { value: 42 },
+                        color: ColorParam::Static {
+                            color: RgbaColor::new(0, 10, 20, 30),
+                        },
+                    },
+                    radius: NumberParam::Static { value: 42 },
+                    text: Some(TextSymbology {
+                        attribute: "attribute".to_string(),
+                        fill_color: ColorParam::Static {
+                            color: RgbaColor::new(0, 10, 20, 30),
+                        },
+                        stroke: StrokeParam {
+                            width: NumberParam::Static { value: 42 },
+                            color: ColorParam::Static {
+                                color: RgbaColor::new(0, 10, 20, 30),
+                            },
+                        },
+                    }),
+                }),
+                Symbology::Line(LineSymbology {
+                    stroke: StrokeParam {
+                        width: NumberParam::Static { value: 42 },
+                        color: ColorParam::Static {
+                            color: RgbaColor::new(0, 10, 20, 30),
+                        },
+                    },
+                    text: Some(TextSymbology {
+                        attribute: "attribute".to_string(),
+                        fill_color: ColorParam::Static {
+                            color: RgbaColor::new(0, 10, 20, 30),
+                        },
+                        stroke: StrokeParam {
+                            width: NumberParam::Static { value: 42 },
+                            color: ColorParam::Static {
+                                color: RgbaColor::new(0, 10, 20, 30),
+                            },
+                        },
+                    }),
+                    auto_simplified: true,
+                }),
+                Symbology::Polygon(PolygonSymbology {
+                    fill_color: ColorParam::Static {
+                        color: RgbaColor::new(0, 10, 20, 30),
+                    },
+                    stroke: StrokeParam {
+                        width: NumberParam::Static { value: 42 },
+                        color: ColorParam::Static {
+                            color: RgbaColor::new(0, 10, 20, 30),
+                        },
+                    },
+                    text: Some(TextSymbology {
+                        attribute: "attribute".to_string(),
+                        fill_color: ColorParam::Static {
+                            color: RgbaColor::new(0, 10, 20, 30),
+                        },
+                        stroke: StrokeParam {
+                            width: NumberParam::Static { value: 42 },
+                            color: ColorParam::Static {
+                                color: RgbaColor::new(0, 10, 20, 30),
+                            },
+                        },
+                    }),
+                    auto_simplified: true,
+                }),
+                Symbology::Raster(RasterSymbology {
+                    opacity: 1.0,
+                    colorizer: Colorizer::LinearGradient {
                         breakpoints: vec![
                             Breakpoint {
                                 value: NotNan::<f64>::new(-10.0).unwrap(),
@@ -2455,218 +2642,28 @@ mod tests {
                             under_color: RgbaColor::new(5, 6, 7, 8),
                         },
                     },
-                    Colorizer::LogarithmicGradient {
-                        breakpoints: vec![
-                            Breakpoint {
-                                value: NotNan::<f64>::new(1.0).unwrap(),
-                                color: RgbaColor::new(0, 0, 0, 0),
-                            },
-                            Breakpoint {
-                                value: NotNan::<f64>::new(2.0).unwrap(),
-                                color: RgbaColor::new(255, 0, 0, 255),
-                            },
-                        ],
-                        no_data_color: RgbaColor::new(0, 10, 20, 30),
-                        default_colors: DefaultColors::OverUnder {
-                            over_color: RgbaColor::new(1, 2, 3, 4),
-                            under_color: RgbaColor::new(5, 6, 7, 8),
-                        },
-                    },
-                    Colorizer::palette(
-                        [
-                            (NotNan::<f64>::new(1.0).unwrap(), RgbaColor::new(0, 0, 0, 0)),
-                            (
-                                NotNan::<f64>::new(2.0).unwrap(),
-                                RgbaColor::new(255, 0, 0, 255),
-                            ),
-                            (
-                                NotNan::<f64>::new(3.0).unwrap(),
-                                RgbaColor::new(0, 10, 20, 30),
-                            ),
-                        ]
-                        .into(),
-                        RgbaColor::new(1, 2, 3, 4),
-                        RgbaColor::new(5, 6, 7, 8),
-                    )
-                    .unwrap(),
-                    Colorizer::Rgba,
-                ],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "ColorParam",
-                [
-                    ColorParam::Static {
-                        color: RgbaColor::new(0, 10, 20, 30),
-                    },
-                    ColorParam::Derived(DerivedColor {
-                        attribute: "foobar".to_string(),
-                        colorizer: Colorizer::Rgba,
-                    }),
-                ],
-            )
-            .await;
-
-        assert_sql_type(
-            &pool,
-            "NumberParam",
-            [
-                NumberParam::Static { value: 42 },
-                NumberParam::Derived(DerivedNumber {
-                    attribute: "foobar".to_string(),
-                    factor: 1.0,
-                    default_value: 42.,
                 }),
             ],
         )
         .await;
 
-            assert_sql_type(
-                &pool,
-                "StrokeParam",
-                [StrokeParam {
-                    width: NumberParam::Static { value: 42 },
-                    color: ColorParam::Static {
-                        color: RgbaColor::new(0, 10, 20, 30),
-                    },
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "TextSymbology",
-                [TextSymbology {
-                    attribute: "attribute".to_string(),
-                    fill_color: ColorParam::Static {
-                        color: RgbaColor::new(0, 10, 20, 30),
-                    },
-                    stroke: StrokeParam {
-                        width: NumberParam::Static { value: 42 },
-                        color: ColorParam::Static {
-                            color: RgbaColor::new(0, 10, 20, 30),
-                        },
-                    },
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "Symbology",
-                [
-                    Symbology::Point(PointSymbology {
-                        fill_color: ColorParam::Static {
-                            color: RgbaColor::new(0, 10, 20, 30),
-                        },
-                        stroke: StrokeParam {
-                            width: NumberParam::Static { value: 42 },
-                            color: ColorParam::Static {
-                                color: RgbaColor::new(0, 10, 20, 30),
-                            },
-                        },
-                        radius: NumberParam::Static { value: 42 },
-                        text: Some(TextSymbology {
-                            attribute: "attribute".to_string(),
-                            fill_color: ColorParam::Static {
-                                color: RgbaColor::new(0, 10, 20, 30),
-                            },
-                            stroke: StrokeParam {
-                                width: NumberParam::Static { value: 42 },
-                                color: ColorParam::Static {
-                                    color: RgbaColor::new(0, 10, 20, 30),
-                                },
-                            },
-                        }),
-                    }),
-                    Symbology::Line(LineSymbology {
-                        stroke: StrokeParam {
-                            width: NumberParam::Static { value: 42 },
-                            color: ColorParam::Static {
-                                color: RgbaColor::new(0, 10, 20, 30),
-                            },
-                        },
-                        text: Some(TextSymbology {
-                            attribute: "attribute".to_string(),
-                            fill_color: ColorParam::Static {
-                                color: RgbaColor::new(0, 10, 20, 30),
-                            },
-                            stroke: StrokeParam {
-                                width: NumberParam::Static { value: 42 },
-                                color: ColorParam::Static {
-                                    color: RgbaColor::new(0, 10, 20, 30),
-                                },
-                            },
-                        }),
-                        auto_simplified: true,
-                    }),
-                    Symbology::Polygon(PolygonSymbology {
-                        fill_color: ColorParam::Static {
-                            color: RgbaColor::new(0, 10, 20, 30),
-                        },
-                        stroke: StrokeParam {
-                            width: NumberParam::Static { value: 42 },
-                            color: ColorParam::Static {
-                                color: RgbaColor::new(0, 10, 20, 30),
-                            },
-                        },
-                        text: Some(TextSymbology {
-                            attribute: "attribute".to_string(),
-                            fill_color: ColorParam::Static {
-                                color: RgbaColor::new(0, 10, 20, 30),
-                            },
-                            stroke: StrokeParam {
-                                width: NumberParam::Static { value: 42 },
-                                color: ColorParam::Static {
-                                    color: RgbaColor::new(0, 10, 20, 30),
-                                },
-                            },
-                        }),
-                        auto_simplified: true,
-                    }),
-                    Symbology::Raster(RasterSymbology {
-                        opacity: 1.0,
-                        colorizer: Colorizer::LinearGradient {
-                            breakpoints: vec![
-                                Breakpoint {
-                                    value: NotNan::<f64>::new(-10.0).unwrap(),
-                                    color: RgbaColor::new(0, 0, 0, 0),
-                                },
-                                Breakpoint {
-                                    value: NotNan::<f64>::new(2.0).unwrap(),
-                                    color: RgbaColor::new(255, 0, 0, 255),
-                                },
-                            ],
-                            no_data_color: RgbaColor::new(0, 10, 20, 30),
-                            default_colors: DefaultColors::OverUnder {
-                                over_color: RgbaColor::new(1, 2, 3, 4),
-                                under_color: RgbaColor::new(5, 6, 7, 8),
-                            },
-                        },
-                    }),
-                ],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "RasterDataType",
-                [
-                    RasterDataType::U8,
-                    RasterDataType::U16,
-                    RasterDataType::U32,
-                    RasterDataType::U64,
-                    RasterDataType::I8,
-                    RasterDataType::I16,
-                    RasterDataType::I32,
-                    RasterDataType::I64,
-                    RasterDataType::F32,
-                    RasterDataType::F64,
-                ],
-            )
-            .await;
+        assert_sql_type(
+            &pool,
+            "RasterDataType",
+            [
+                RasterDataType::U8,
+                RasterDataType::U16,
+                RasterDataType::U32,
+                RasterDataType::U64,
+                RasterDataType::I8,
+                RasterDataType::I16,
+                RasterDataType::I32,
+                RasterDataType::I64,
+                RasterDataType::F32,
+                RasterDataType::F64,
+            ],
+        )
+        .await;
 
         assert_sql_type(
             &pool,
@@ -2685,89 +2682,136 @@ mod tests {
         )
         .await;
 
-            assert_sql_type(&pool, "Coordinate2D", [Coordinate2D::new(0.0f64, 1.)]).await;
+        assert_sql_type(&pool, "Coordinate2D", [Coordinate2D::new(0.0f64, 1.)]).await;
 
-            assert_sql_type(
-                &pool,
-                "SpatialPartition2D",
-                [SpatialPartition2D::new(
-                    Coordinate2D::new(0.0f64, 1.),
-                    Coordinate2D::new(2., 0.5),
-                )
-                .unwrap()],
-            )
-            .await;
+        assert_sql_type(
+            &pool,
+            "SpatialPartition2D",
+            [
+                SpatialPartition2D::new(Coordinate2D::new(0.0f64, 1.), Coordinate2D::new(2., 0.5))
+                    .unwrap(),
+            ],
+        )
+        .await;
 
-            assert_sql_type(
-                &pool,
-                "BoundingBox2D",
-                [
+        assert_sql_type(
+            &pool,
+            "BoundingBox2D",
+            [
+                BoundingBox2D::new(Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0))
+                    .unwrap(),
+            ],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "SpatialResolution",
+            [SpatialResolution { x: 1.2, y: 2.3 }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "VectorDataType",
+            [
+                VectorDataType::Data,
+                VectorDataType::MultiPoint,
+                VectorDataType::MultiLineString,
+                VectorDataType::MultiPolygon,
+            ],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "FeatureDataType",
+            [
+                FeatureDataType::Category,
+                FeatureDataType::Int,
+                FeatureDataType::Float,
+                FeatureDataType::Text,
+                FeatureDataType::Bool,
+                FeatureDataType::DateTime,
+            ],
+        )
+        .await;
+
+        assert_sql_type(&pool, "TimeInterval", [TimeInterval::default()]).await;
+
+        assert_sql_type(
+            &pool,
+            "SpatialReference",
+            [
+                SpatialReferenceOption::Unreferenced,
+                SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
+            ],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "PlotResultDescriptor",
+            [PlotResultDescriptor {
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                time: None,
+                bbox: None,
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "VectorResultDescriptor",
+            [VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::SpatialReference(
+                    SpatialReference::epsg_4326(),
+                ),
+                columns: [(
+                    "foo".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into(),
+                time: Some(TimeInterval::default()),
+                bbox: Some(
                     BoundingBox2D::new(Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0))
                         .unwrap(),
-                ],
-            )
-            .await;
+                ),
+            }],
+        )
+        .await;
 
-            assert_sql_type(
-                &pool,
-                "SpatialResolution",
-                [SpatialResolution { x: 1.2, y: 2.3 }],
-            )
-            .await;
+        assert_sql_type(
+            &pool,
+            "RasterResultDescriptor",
+            [RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReferenceOption::SpatialReference(
+                    SpatialReference::epsg_4326(),
+                ),
+                measurement: Measurement::Unitless,
+                time: Some(TimeInterval::default()),
+                bbox: Some(
+                    SpatialPartition2D::new(
+                        Coordinate2D::new(0.0f64, 1.),
+                        Coordinate2D::new(2., 0.5),
+                    )
+                    .unwrap(),
+                ),
+                resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
+            }],
+        )
+        .await;
 
-            assert_sql_type(
-                &pool,
-                "VectorDataType",
-                [
-                    VectorDataType::Data,
-                    VectorDataType::MultiPoint,
-                    VectorDataType::MultiLineString,
-                    VectorDataType::MultiPolygon,
-                ],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "FeatureDataType",
-                [
-                    FeatureDataType::Category,
-                    FeatureDataType::Int,
-                    FeatureDataType::Float,
-                    FeatureDataType::Text,
-                    FeatureDataType::Bool,
-                    FeatureDataType::DateTime,
-                ],
-            )
-            .await;
-
-            assert_sql_type(&pool, "TimeInterval", [TimeInterval::default()]).await;
-
-            assert_sql_type(
-                &pool,
-                "SpatialReference",
-                [
-                    SpatialReferenceOption::Unreferenced,
-                    SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
-                ],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "PlotResultDescriptor",
-                [PlotResultDescriptor {
-                    spatial_reference: SpatialReferenceOption::Unreferenced,
-                    time: None,
-                    bbox: None,
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "VectorResultDescriptor",
-                [VectorResultDescriptor {
+        assert_sql_type(
+            &pool,
+            "ResultDescriptor",
+            [
+                TypedResultDescriptor::Vector(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReferenceOption::SpatialReference(
                         SpatialReference::epsg_4326(),
@@ -2788,14 +2832,8 @@ mod tests {
                         )
                         .unwrap(),
                     ),
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "RasterResultDescriptor",
-                [RasterResultDescriptor {
+                }),
+                TypedResultDescriptor::Raster(RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReferenceOption::SpatialReference(
                         SpatialReference::epsg_4326(),
@@ -2810,15 +2848,367 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
-                }],
-            )
-            .await;
+                }),
+                TypedResultDescriptor::Plot(PlotResultDescriptor {
+                    spatial_reference: SpatialReferenceOption::Unreferenced,
+                    time: None,
+                    bbox: None,
+                }),
+            ],
+        )
+        .await;
 
-            assert_sql_type(
-                &pool,
-                "ResultDescriptor",
-                [
-                    TypedResultDescriptor::Vector(VectorResultDescriptor {
+        assert_sql_type(
+            &pool,
+            "MockDatasetDataSourceLoadingInfo",
+            [MockDatasetDataSourceLoadingInfo {
+                points: vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "OgrSourceTimeFormat",
+            [
+                OgrSourceTimeFormat::Auto,
+                OgrSourceTimeFormat::Custom {
+                    custom_format: geoengine_datatypes::primitives::DateTimeParseFormat::custom(
+                        "%Y-%m-%dT%H:%M:%S%.3fZ".to_string(),
+                    ),
+                },
+                OgrSourceTimeFormat::UnixTimeStamp {
+                    timestamp_type: UnixTimeStampType::EpochSeconds,
+                    fmt: geoengine_datatypes::primitives::DateTimeParseFormat::unix(),
+                },
+            ],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "OgrSourceDurationSpec",
+            [
+                OgrSourceDurationSpec::Infinite,
+                OgrSourceDurationSpec::Zero,
+                OgrSourceDurationSpec::Value(TimeStep {
+                    granularity: TimeGranularity::Millis,
+                    step: 1000,
+                }),
+            ],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "OgrSourceDatasetTimeType",
+            [
+                OgrSourceDatasetTimeType::None,
+                OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_string(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                OgrSourceDatasetTimeType::StartEnd {
+                    start_field: "start".to_string(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    end_field: "end".to_string(),
+                    end_format: OgrSourceTimeFormat::Auto,
+                },
+                OgrSourceDatasetTimeType::StartDuration {
+                    start_field: "start".to_string(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration_field: "duration".to_string(),
+                },
+            ],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "FormatSpecifics",
+            [FormatSpecifics::Csv {
+                header: CsvHeader::Yes,
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "OgrSourceColumnSpec",
+            [OgrSourceColumnSpec {
+                format_specifics: Some(FormatSpecifics::Csv {
+                    header: CsvHeader::Auto,
+                }),
+                x: "x".to_string(),
+                y: Some("y".to_string()),
+                int: vec!["int".to_string()],
+                float: vec!["float".to_string()],
+                text: vec!["text".to_string()],
+                bool: vec!["bool".to_string()],
+                datetime: vec!["datetime".to_string()],
+                rename: Some(
+                    [
+                        ("xx".to_string(), "xx_renamed".to_string()),
+                        ("yx".to_string(), "yy_renamed".to_string()),
+                    ]
+                    .into(),
+                ),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "point[]",
+            [MultiPoint::new(vec![
+                Coordinate2D::new(0.0f64, 0.5),
+                Coordinate2D::new(2., 1.0),
+            ])
+            .unwrap()],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "path[]",
+            [MultiLineString::new(vec![
+                vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
+                vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
+            ])
+            .unwrap()],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "\"Polygon\"[]",
+            [MultiPolygon::new(vec![
+                vec![
+                    vec![
+                        Coordinate2D::new(0.0f64, 0.5),
+                        Coordinate2D::new(2., 1.0),
+                        Coordinate2D::new(2., 1.0),
+                        Coordinate2D::new(0.0f64, 0.5),
+                    ],
+                    vec![
+                        Coordinate2D::new(0.0f64, 0.5),
+                        Coordinate2D::new(2., 1.0),
+                        Coordinate2D::new(2., 1.0),
+                        Coordinate2D::new(0.0f64, 0.5),
+                    ],
+                ],
+                vec![
+                    vec![
+                        Coordinate2D::new(0.0f64, 0.5),
+                        Coordinate2D::new(2., 1.0),
+                        Coordinate2D::new(2., 1.0),
+                        Coordinate2D::new(0.0f64, 0.5),
+                    ],
+                    vec![
+                        Coordinate2D::new(0.0f64, 0.5),
+                        Coordinate2D::new(2., 1.0),
+                        Coordinate2D::new(2., 1.0),
+                        Coordinate2D::new(0.0f64, 0.5),
+                    ],
+                ],
+            ])
+            .unwrap()],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "TypedGeometry",
+            [
+                TypedGeometry::Data(NoGeometry),
+                TypedGeometry::MultiPoint(
+                    MultiPoint::new(vec![
+                        Coordinate2D::new(0.0f64, 0.5),
+                        Coordinate2D::new(2., 1.0),
+                    ])
+                    .unwrap(),
+                ),
+                TypedGeometry::MultiLineString(
+                    MultiLineString::new(vec![
+                        vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
+                        vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
+                    ])
+                    .unwrap(),
+                ),
+                TypedGeometry::MultiPolygon(
+                    MultiPolygon::new(vec![
+                        vec![
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5),
+                                Coordinate2D::new(2., 1.0),
+                                Coordinate2D::new(2., 1.0),
+                                Coordinate2D::new(0.0f64, 0.5),
+                            ],
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5),
+                                Coordinate2D::new(2., 1.0),
+                                Coordinate2D::new(2., 1.0),
+                                Coordinate2D::new(0.0f64, 0.5),
+                            ],
+                        ],
+                        vec![
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5),
+                                Coordinate2D::new(2., 1.0),
+                                Coordinate2D::new(2., 1.0),
+                                Coordinate2D::new(0.0f64, 0.5),
+                            ],
+                            vec![
+                                Coordinate2D::new(0.0f64, 0.5),
+                                Coordinate2D::new(2., 1.0),
+                                Coordinate2D::new(2., 1.0),
+                                Coordinate2D::new(0.0f64, 0.5),
+                            ],
+                        ],
+                    ])
+                    .unwrap(),
+                ),
+            ],
+        )
+        .await;
+
+        assert_sql_type(&pool, "int", [CacheTtlSeconds::new(100)]).await;
+
+        assert_sql_type(
+            &pool,
+            "OgrSourceDataset",
+            [OgrSourceDataset {
+                file_name: "test".into(),
+                layer_name: "test".to_string(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_string(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: Some(TypedGeometry::MultiPoint(
+                    MultiPoint::new(vec![
+                        Coordinate2D::new(0.0f64, 0.5),
+                        Coordinate2D::new(2., 1.0),
+                    ])
+                    .unwrap(),
+                )),
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: Some(FormatSpecifics::Csv {
+                        header: CsvHeader::Auto,
+                    }),
+                    x: "x".to_string(),
+                    y: Some("y".to_string()),
+                    int: vec!["int".to_string()],
+                    float: vec!["float".to_string()],
+                    text: vec!["text".to_string()],
+                    bool: vec!["bool".to_string()],
+                    datetime: vec!["datetime".to_string()],
+                    rename: Some(
+                        [
+                            ("xx".to_string(), "xx_renamed".to_string()),
+                            ("yx".to_string(), "yy_renamed".to_string()),
+                        ]
+                        .into(),
+                    ),
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: true,
+                on_error: OgrSourceErrorSpec::Abort,
+                sql_query: None,
+                attribute_query: Some("foo = 'bar'".to_string()),
+                cache_ttl: CacheTtlSeconds::new(5),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "MockMetaData",
+            [StaticMetaData::<
+                MockDatasetDataSourceLoadingInfo,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            > {
+                loading_info: MockDatasetDataSourceLoadingInfo {
+                    points: vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReferenceOption::SpatialReference(
+                        SpatialReference::epsg_4326(),
+                    ),
+                    columns: [(
+                        "foo".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Int,
+                            measurement: Measurement::Unitless,
+                        },
+                    )]
+                    .into(),
+                    time: Some(TimeInterval::default()),
+                    bbox: Some(
+                        BoundingBox2D::new(
+                            Coordinate2D::new(0.0f64, 0.5),
+                            Coordinate2D::new(2., 1.0),
+                        )
+                        .unwrap(),
+                    ),
+                },
+                phantom: PhantomData,
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "OgrMetaData",
+            [
+                StaticMetaData::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle> {
+                    loading_info: OgrSourceDataset {
+                        file_name: "test".into(),
+                        layer_name: "test".to_string(),
+                        data_type: Some(VectorDataType::MultiPoint),
+                        time: OgrSourceDatasetTimeType::Start {
+                            start_field: "start".to_string(),
+                            start_format: OgrSourceTimeFormat::Auto,
+                            duration: OgrSourceDurationSpec::Zero,
+                        },
+                        default_geometry: Some(TypedGeometry::MultiPoint(
+                            MultiPoint::new(vec![
+                                Coordinate2D::new(0.0f64, 0.5),
+                                Coordinate2D::new(2., 1.0),
+                            ])
+                            .unwrap(),
+                        )),
+                        columns: Some(OgrSourceColumnSpec {
+                            format_specifics: Some(FormatSpecifics::Csv {
+                                header: CsvHeader::Auto,
+                            }),
+                            x: "x".to_string(),
+                            y: Some("y".to_string()),
+                            int: vec!["int".to_string()],
+                            float: vec!["float".to_string()],
+                            text: vec!["text".to_string()],
+                            bool: vec!["bool".to_string()],
+                            datetime: vec!["datetime".to_string()],
+                            rename: Some(
+                                [
+                                    ("xx".to_string(), "xx_renamed".to_string()),
+                                    ("yx".to_string(), "yy_renamed".to_string()),
+                                ]
+                                .into(),
+                            ),
+                        }),
+                        force_ogr_time_filter: false,
+                        force_ogr_spatial_filter: true,
+                        on_error: OgrSourceErrorSpec::Abort,
+                        sql_query: None,
+                        attribute_query: Some("foo = 'bar'".to_string()),
+                        cache_ttl: CacheTtlSeconds::new(5),
+                    },
+                    result_descriptor: VectorResultDescriptor {
                         data_type: VectorDataType::MultiPoint,
                         spatial_reference: SpatialReferenceOption::SpatialReference(
                             SpatialReference::epsg_4326(),
@@ -2839,301 +3229,334 @@ mod tests {
                             )
                             .unwrap(),
                         ),
-                    }),
-                    TypedResultDescriptor::Raster(RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReferenceOption::SpatialReference(
-                            SpatialReference::epsg_4326(),
-                        ),
-                        measurement: Measurement::Unitless,
-                        time: Some(TimeInterval::default()),
-                        bbox: Some(
-                            SpatialPartition2D::new(
-                                Coordinate2D::new(0.0f64, 1.),
-                                Coordinate2D::new(2., 0.5),
-                            )
-                            .unwrap(),
-                        ),
-                        resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
-                    }),
-                    TypedResultDescriptor::Plot(PlotResultDescriptor {
-                        spatial_reference: SpatialReferenceOption::Unreferenced,
-                        time: None,
-                        bbox: None,
-                    }),
-                ],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "MockDatasetDataSourceLoadingInfo",
-                [MockDatasetDataSourceLoadingInfo {
-                    points: vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "OgrSourceTimeFormat",
-                [
-                    OgrSourceTimeFormat::Auto,
-                    OgrSourceTimeFormat::Custom {
-                        custom_format: geoengine_datatypes::primitives::DateTimeParseFormat::custom(
-                            "%Y-%m-%dT%H:%M:%S%.3fZ".to_string(),
-                        ),
                     },
-                    OgrSourceTimeFormat::UnixTimeStamp {
-                        timestamp_type: UnixTimeStampType::EpochSeconds,
-                        fmt: geoengine_datatypes::primitives::DateTimeParseFormat::unix(),
-                    },
-                ],
-            )
-            .await;
+                    phantom: PhantomData,
+                },
+            ],
+        )
+        .await;
 
-            assert_sql_type(
-                &pool,
-                "OgrSourceDurationSpec",
-                [
-                    OgrSourceDurationSpec::Infinite,
-                    OgrSourceDurationSpec::Zero,
-                    OgrSourceDurationSpec::Value(TimeStep {
-                        granularity: TimeGranularity::Millis,
-                        step: 1000,
+        assert_sql_type(
+            &pool,
+            "GdalDatasetGeoTransform",
+            [GdalDatasetGeoTransform {
+                origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
+                x_pixel_size: 1.0,
+                y_pixel_size: 2.0,
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "FileNotFoundHandling",
+            [FileNotFoundHandling::NoData, FileNotFoundHandling::Error],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "GdalMetadataMapping",
+            [GdalMetadataMapping {
+                source_key: RasterPropertiesKey {
+                    domain: None,
+                    key: "foo".to_string(),
+                },
+                target_key: RasterPropertiesKey {
+                    domain: Some("bar".to_string()),
+                    key: "foo".to_string(),
+                },
+                target_type: RasterPropertiesEntryType::String,
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "StringPair",
+            [StringPair::from(("foo".to_string(), "bar".to_string()))],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "GdalDatasetParameters",
+            [GdalDatasetParameters {
+                file_path: "text".into(),
+                rasterband_channel: 1,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
+                    x_pixel_size: 1.0,
+                    y_pixel_size: 2.0,
+                },
+                width: 42,
+                height: 23,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: Some(42.0),
+                properties_mapping: Some(vec![GdalMetadataMapping {
+                    source_key: RasterPropertiesKey {
+                        domain: None,
+                        key: "foo".to_string(),
+                    },
+                    target_key: RasterPropertiesKey {
+                        domain: Some("bar".to_string()),
+                        key: "foo".to_string(),
+                    },
+                    target_type: RasterPropertiesEntryType::String,
+                }]),
+                gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
+                allow_alphaband_as_mask: false,
+                retry: Some(GdalRetryOptions { max_retries: 3 }),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "GdalMetaDataRegular",
+            [GdalMetaDataRegular {
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Continuous(ContinuousMeasurement {
+                        measurement: "Temperature".to_string(),
+                        unit: Some("°C".to_string()),
                     }),
-                ],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "OgrSourceDatasetTimeType",
-                [
-                    OgrSourceDatasetTimeType::None,
-                    OgrSourceDatasetTimeType::Start {
-                        start_field: "start".to_string(),
-                        start_format: OgrSourceTimeFormat::Auto,
-                        duration: OgrSourceDurationSpec::Zero,
-                    },
-                    OgrSourceDatasetTimeType::StartEnd {
-                        start_field: "start".to_string(),
-                        start_format: OgrSourceTimeFormat::Auto,
-                        end_field: "end".to_string(),
-                        end_format: OgrSourceTimeFormat::Auto,
-                    },
-                    OgrSourceDatasetTimeType::StartDuration {
-                        start_field: "start".to_string(),
-                        start_format: OgrSourceTimeFormat::Auto,
-                        duration_field: "duration".to_string(),
-                    },
-                ],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "FormatSpecifics",
-                [FormatSpecifics::Csv {
-                    header: CsvHeader::Yes,
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "OgrSourceColumnSpec",
-                [OgrSourceColumnSpec {
-                    format_specifics: Some(FormatSpecifics::Csv {
-                        header: CsvHeader::Auto,
-                    }),
-                    x: "x".to_string(),
-                    y: Some("y".to_string()),
-                    int: vec!["int".to_string()],
-                    float: vec!["float".to_string()],
-                    text: vec!["text".to_string()],
-                    bool: vec!["bool".to_string()],
-                    datetime: vec!["datetime".to_string()],
-                    rename: Some(
-                        [
-                            ("xx".to_string(), "xx_renamed".to_string()),
-                            ("yx".to_string(), "yy_renamed".to_string()),
-                        ]
-                        .into(),
-                    ),
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "point[]",
-                [MultiPoint::new(vec![
-                    Coordinate2D::new(0.0f64, 0.5),
-                    Coordinate2D::new(2., 1.0),
-                ])
-                .unwrap()],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "path[]",
-                [MultiLineString::new(vec![
-                    vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
-                    vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
-                ])
-                .unwrap()],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "\"Polygon\"[]",
-                [MultiPolygon::new(vec![
-                    vec![
-                        vec![
-                            Coordinate2D::new(0.0f64, 0.5),
-                            Coordinate2D::new(2., 1.0),
-                            Coordinate2D::new(2., 1.0),
-                            Coordinate2D::new(0.0f64, 0.5),
-                        ],
-                        vec![
-                            Coordinate2D::new(0.0f64, 0.5),
-                            Coordinate2D::new(2., 1.0),
-                            Coordinate2D::new(2., 1.0),
-                            Coordinate2D::new(0.0f64, 0.5),
-                        ],
-                    ],
-                    vec![
-                        vec![
-                            Coordinate2D::new(0.0f64, 0.5),
-                            Coordinate2D::new(2., 1.0),
-                            Coordinate2D::new(2., 1.0),
-                            Coordinate2D::new(0.0f64, 0.5),
-                        ],
-                        vec![
-                            Coordinate2D::new(0.0f64, 0.5),
-                            Coordinate2D::new(2., 1.0),
-                            Coordinate2D::new(2., 1.0),
-                            Coordinate2D::new(0.0f64, 0.5),
-                        ],
-                    ],
-                ])
-                .unwrap()],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "TypedGeometry",
-                [
-                    TypedGeometry::Data(NoGeometry),
-                    TypedGeometry::MultiPoint(
-                        MultiPoint::new(vec![
-                            Coordinate2D::new(0.0f64, 0.5),
-                            Coordinate2D::new(2., 1.0),
-                        ])
+                    time: TimeInterval::new_unchecked(0, 1).into(),
+                    bbox: Some(
+                        SpatialPartition2D::new(
+                            Coordinate2D::new(0.0f64, 1.),
+                            Coordinate2D::new(2., 0.5),
+                        )
                         .unwrap(),
                     ),
-                    TypedGeometry::MultiLineString(
-                        MultiLineString::new(vec![
-                            vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
-                            vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
-                        ])
-                        .unwrap(),
-                    ),
-                    TypedGeometry::MultiPolygon(
-                        MultiPolygon::new(vec![
-                            vec![
-                                vec![
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                    Coordinate2D::new(2., 1.0),
-                                    Coordinate2D::new(2., 1.0),
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                ],
-                                vec![
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                    Coordinate2D::new(2., 1.0),
-                                    Coordinate2D::new(2., 1.0),
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                ],
-                            ],
-                            vec![
-                                vec![
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                    Coordinate2D::new(2., 1.0),
-                                    Coordinate2D::new(2., 1.0),
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                ],
-                                vec![
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                    Coordinate2D::new(2., 1.0),
-                                    Coordinate2D::new(2., 1.0),
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                ],
-                            ],
-                        ])
-                        .unwrap(),
-                    ),
-                ],
-            )
-            .await;
-
-        assert_sql_type(&pool, "int", [CacheTtlSeconds::new(100)]).await;
-
-            assert_sql_type(
-                &pool,
-                "OgrSourceDataset",
-                [OgrSourceDataset {
-                    file_name: "test".into(),
-                    layer_name: "test".to_string(),
-                    data_type: Some(VectorDataType::MultiPoint),
-                    time: OgrSourceDatasetTimeType::Start {
-                        start_field: "start".to_string(),
-                        start_format: OgrSourceTimeFormat::Auto,
-                        duration: OgrSourceDurationSpec::Zero,
+                    resolution: Some(SpatialResolution::zero_point_one()),
+                },
+                params: GdalDatasetParameters {
+                    file_path: "text".into(),
+                    rasterband_channel: 1,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
+                        x_pixel_size: 1.0,
+                        y_pixel_size: 2.0,
                     },
-                    default_geometry: Some(TypedGeometry::MultiPoint(
-                        MultiPoint::new(vec![
-                            Coordinate2D::new(0.0f64, 0.5),
-                            Coordinate2D::new(2., 1.0),
-                        ])
-                        .unwrap(),
-                    )),
-                    columns: Some(OgrSourceColumnSpec {
-                        format_specifics: Some(FormatSpecifics::Csv {
-                            header: CsvHeader::Auto,
-                        }),
-                        x: "x".to_string(),
-                        y: Some("y".to_string()),
-                        int: vec!["int".to_string()],
-                        float: vec!["float".to_string()],
-                        text: vec!["text".to_string()],
-                        bool: vec!["bool".to_string()],
-                        datetime: vec!["datetime".to_string()],
-                        rename: Some(
-                            [
-                                ("xx".to_string(), "xx_renamed".to_string()),
-                                ("yx".to_string(), "yy_renamed".to_string()),
-                            ]
-                            .into(),
-                        ),
-                    }),
-                    force_ogr_time_filter: false,
-                    force_ogr_spatial_filter: true,
-                    on_error: OgrSourceErrorSpec::Abort,
-                    sql_query: None,
-                    attribute_query: Some("foo = 'bar'".to_string()),
-                    cache_ttl: CacheTtlSeconds::new(5),
-                }],
-            )
-            .await;
+                    width: 42,
+                    height: 23,
+                    file_not_found_handling: FileNotFoundHandling::NoData,
+                    no_data_value: Some(42.0),
+                    properties_mapping: Some(vec![GdalMetadataMapping {
+                        source_key: RasterPropertiesKey {
+                            domain: None,
+                            key: "foo".to_string(),
+                        },
+                        target_key: RasterPropertiesKey {
+                            domain: Some("bar".to_string()),
+                            key: "foo".to_string(),
+                        },
+                        target_type: RasterPropertiesEntryType::String,
+                    }]),
+                    gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                    gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
+                    allow_alphaband_as_mask: false,
+                    retry: Some(GdalRetryOptions { max_retries: 3 }),
+                },
+                time_placeholders: [(
+                    "foo".to_string(),
+                    GdalSourceTimePlaceholder {
+                        format: geoengine_datatypes::primitives::DateTimeParseFormat::unix(),
+                        reference: TimeReference::Start,
+                    },
+                )]
+                .into(),
+                data_time: TimeInterval::new_unchecked(0, 1),
+                step: TimeStep {
+                    granularity: TimeGranularity::Millis,
+                    step: 1,
+                },
+                cache_ttl: CacheTtlSeconds::max(),
+            }],
+        )
+        .await;
 
-            assert_sql_type(
-                &pool,
-                "MockMetaData",
-                [StaticMetaData::<
+        assert_sql_type(
+            &pool,
+            "GdalMetaDataStatic",
+            [GdalMetaDataStatic {
+                time: Some(TimeInterval::new_unchecked(0, 1)),
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Continuous(ContinuousMeasurement {
+                        measurement: "Temperature".to_string(),
+                        unit: Some("°C".to_string()),
+                    }),
+                    time: TimeInterval::new_unchecked(0, 1).into(),
+                    bbox: Some(
+                        SpatialPartition2D::new(
+                            Coordinate2D::new(0.0f64, 1.),
+                            Coordinate2D::new(2., 0.5),
+                        )
+                        .unwrap(),
+                    ),
+                    resolution: Some(SpatialResolution::zero_point_one()),
+                },
+                params: GdalDatasetParameters {
+                    file_path: "text".into(),
+                    rasterband_channel: 1,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
+                        x_pixel_size: 1.0,
+                        y_pixel_size: 2.0,
+                    },
+                    width: 42,
+                    height: 23,
+                    file_not_found_handling: FileNotFoundHandling::NoData,
+                    no_data_value: Some(42.0),
+                    properties_mapping: Some(vec![GdalMetadataMapping {
+                        source_key: RasterPropertiesKey {
+                            domain: None,
+                            key: "foo".to_string(),
+                        },
+                        target_key: RasterPropertiesKey {
+                            domain: Some("bar".to_string()),
+                            key: "foo".to_string(),
+                        },
+                        target_type: RasterPropertiesEntryType::String,
+                    }]),
+                    gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                    gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
+                    allow_alphaband_as_mask: false,
+                    retry: Some(GdalRetryOptions { max_retries: 3 }),
+                },
+                cache_ttl: CacheTtlSeconds::max(),
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "GdalMetadataNetCdfCf",
+            [GdalMetadataNetCdfCf {
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Continuous(ContinuousMeasurement {
+                        measurement: "Temperature".to_string(),
+                        unit: Some("°C".to_string()),
+                    }),
+                    time: TimeInterval::new_unchecked(0, 1).into(),
+                    bbox: Some(
+                        SpatialPartition2D::new(
+                            Coordinate2D::new(0.0f64, 1.),
+                            Coordinate2D::new(2., 0.5),
+                        )
+                        .unwrap(),
+                    ),
+                    resolution: Some(SpatialResolution::zero_point_one()),
+                },
+                params: GdalDatasetParameters {
+                    file_path: "text".into(),
+                    rasterband_channel: 1,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
+                        x_pixel_size: 1.0,
+                        y_pixel_size: 2.0,
+                    },
+                    width: 42,
+                    height: 23,
+                    file_not_found_handling: FileNotFoundHandling::NoData,
+                    no_data_value: Some(42.0),
+                    properties_mapping: Some(vec![GdalMetadataMapping {
+                        source_key: RasterPropertiesKey {
+                            domain: None,
+                            key: "foo".to_string(),
+                        },
+                        target_key: RasterPropertiesKey {
+                            domain: Some("bar".to_string()),
+                            key: "foo".to_string(),
+                        },
+                        target_type: RasterPropertiesEntryType::String,
+                    }]),
+                    gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                    gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
+                    allow_alphaband_as_mask: false,
+                    retry: Some(GdalRetryOptions { max_retries: 3 }),
+                },
+                start: TimeInstance::from_millis(0).unwrap(),
+                end: TimeInstance::from_millis(1000).unwrap(),
+                cache_ttl: CacheTtlSeconds::max(),
+                step: TimeStep {
+                    granularity: TimeGranularity::Millis,
+                    step: 1,
+                },
+                band_offset: 3,
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "GdalMetaDataList",
+            [GdalMetaDataList {
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    measurement: Measurement::Continuous(ContinuousMeasurement {
+                        measurement: "Temperature".to_string(),
+                        unit: Some("°C".to_string()),
+                    }),
+                    time: TimeInterval::new_unchecked(0, 1).into(),
+                    bbox: Some(
+                        SpatialPartition2D::new(
+                            Coordinate2D::new(0.0f64, 1.),
+                            Coordinate2D::new(2., 0.5),
+                        )
+                        .unwrap(),
+                    ),
+                    resolution: Some(SpatialResolution::zero_point_one()),
+                },
+                params: vec![GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new_unchecked(0, 1),
+                    params: Some(GdalDatasetParameters {
+                        file_path: "text".into(),
+                        rasterband_channel: 1,
+                        geo_transform: GdalDatasetGeoTransform {
+                            origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
+                            x_pixel_size: 1.0,
+                            y_pixel_size: 2.0,
+                        },
+                        width: 42,
+                        height: 23,
+                        file_not_found_handling: FileNotFoundHandling::NoData,
+                        no_data_value: Some(42.0),
+                        properties_mapping: Some(vec![GdalMetadataMapping {
+                            source_key: RasterPropertiesKey {
+                                domain: None,
+                                key: "foo".to_string(),
+                            },
+                            target_key: RasterPropertiesKey {
+                                domain: Some("bar".to_string()),
+                                key: "foo".to_string(),
+                            },
+                            target_type: RasterPropertiesEntryType::String,
+                        }]),
+                        gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
+                        gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
+                        allow_alphaband_as_mask: false,
+                        retry: Some(GdalRetryOptions { max_retries: 3 }),
+                    }),
+                    cache_ttl: CacheTtlSeconds::max(),
+                }],
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "MetaDataDefinition",
+            [
+                MetaDataDefinition::MockMetaData(StaticMetaData::<
                     MockDatasetDataSourceLoadingInfo,
                     VectorResultDescriptor,
                     VectorQueryRectangle,
@@ -3164,169 +3587,79 @@ mod tests {
                         ),
                     },
                     phantom: PhantomData,
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "OgrMetaData",
-                [
-                    StaticMetaData::<
-                        OgrSourceDataset,
-                        VectorResultDescriptor,
-                        VectorQueryRectangle,
-                    > {
-                        loading_info: OgrSourceDataset {
-                            file_name: "test".into(),
-                            layer_name: "test".to_string(),
-                            data_type: Some(VectorDataType::MultiPoint),
-                            time: OgrSourceDatasetTimeType::Start {
-                                start_field: "start".to_string(),
-                                start_format: OgrSourceTimeFormat::Auto,
-                                duration: OgrSourceDurationSpec::Zero,
-                            },
-                            default_geometry: Some(TypedGeometry::MultiPoint(
-                                MultiPoint::new(vec![
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                    Coordinate2D::new(2., 1.0),
-                                ])
-                                .unwrap(),
-                            )),
-                            columns: Some(OgrSourceColumnSpec {
-                                format_specifics: Some(FormatSpecifics::Csv {
-                                    header: CsvHeader::Auto,
-                                }),
-                                x: "x".to_string(),
-                                y: Some("y".to_string()),
-                                int: vec!["int".to_string()],
-                                float: vec!["float".to_string()],
-                                text: vec!["text".to_string()],
-                                bool: vec!["bool".to_string()],
-                                datetime: vec!["datetime".to_string()],
-                                rename: Some(
-                                    [
-                                        ("xx".to_string(), "xx_renamed".to_string()),
-                                        ("yx".to_string(), "yy_renamed".to_string()),
-                                    ]
-                                    .into(),
-                                ),
+                }),
+                MetaDataDefinition::OgrMetaData(StaticMetaData::<
+                    OgrSourceDataset,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                > {
+                    loading_info: OgrSourceDataset {
+                        file_name: "test".into(),
+                        layer_name: "test".to_string(),
+                        data_type: Some(VectorDataType::MultiPoint),
+                        time: OgrSourceDatasetTimeType::Start {
+                            start_field: "start".to_string(),
+                            start_format: OgrSourceTimeFormat::Auto,
+                            duration: OgrSourceDurationSpec::Zero,
+                        },
+                        default_geometry: Some(TypedGeometry::MultiPoint(
+                            MultiPoint::new(vec![
+                                Coordinate2D::new(0.0f64, 0.5),
+                                Coordinate2D::new(2., 1.0),
+                            ])
+                            .unwrap(),
+                        )),
+                        columns: Some(OgrSourceColumnSpec {
+                            format_specifics: Some(FormatSpecifics::Csv {
+                                header: CsvHeader::Auto,
                             }),
-                            force_ogr_time_filter: false,
-                            force_ogr_spatial_filter: true,
-                            on_error: OgrSourceErrorSpec::Abort,
-                            sql_query: None,
-                            attribute_query: Some("foo = 'bar'".to_string()),
-                            cache_ttl: CacheTtlSeconds::new(5),
-                        },
-                        result_descriptor: VectorResultDescriptor {
-                            data_type: VectorDataType::MultiPoint,
-                            spatial_reference: SpatialReferenceOption::SpatialReference(
-                                SpatialReference::epsg_4326(),
+                            x: "x".to_string(),
+                            y: Some("y".to_string()),
+                            int: vec!["int".to_string()],
+                            float: vec!["float".to_string()],
+                            text: vec!["text".to_string()],
+                            bool: vec!["bool".to_string()],
+                            datetime: vec!["datetime".to_string()],
+                            rename: Some(
+                                [
+                                    ("xx".to_string(), "xx_renamed".to_string()),
+                                    ("yx".to_string(), "yy_renamed".to_string()),
+                                ]
+                                .into(),
                             ),
-                            columns: [(
-                                "foo".to_string(),
-                                VectorColumnInfo {
-                                    data_type: FeatureDataType::Int,
-                                    measurement: Measurement::Unitless,
-                                },
-                            )]
-                            .into(),
-                            time: Some(TimeInterval::default()),
-                            bbox: Some(
-                                BoundingBox2D::new(
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                    Coordinate2D::new(2., 1.0),
-                                )
-                                .unwrap(),
-                            ),
-                        },
-                        phantom: PhantomData,
+                        }),
+                        force_ogr_time_filter: false,
+                        force_ogr_spatial_filter: true,
+                        on_error: OgrSourceErrorSpec::Abort,
+                        sql_query: None,
+                        attribute_query: Some("foo = 'bar'".to_string()),
+                        cache_ttl: CacheTtlSeconds::new(5),
                     },
-                ],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "GdalDatasetGeoTransform",
-                [GdalDatasetGeoTransform {
-                    origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                    x_pixel_size: 1.0,
-                    y_pixel_size: 2.0,
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "FileNotFoundHandling",
-                [FileNotFoundHandling::NoData, FileNotFoundHandling::Error],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "GdalMetadataMapping",
-                [GdalMetadataMapping {
-                    source_key: RasterPropertiesKey {
-                        domain: None,
-                        key: "foo".to_string(),
+                    result_descriptor: VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReferenceOption::SpatialReference(
+                            SpatialReference::epsg_4326(),
+                        ),
+                        columns: [(
+                            "foo".to_string(),
+                            VectorColumnInfo {
+                                data_type: FeatureDataType::Int,
+                                measurement: Measurement::Unitless,
+                            },
+                        )]
+                        .into(),
+                        time: Some(TimeInterval::default()),
+                        bbox: Some(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(0.0f64, 0.5),
+                                Coordinate2D::new(2., 1.0),
+                            )
+                            .unwrap(),
+                        ),
                     },
-                    target_key: RasterPropertiesKey {
-                        domain: Some("bar".to_string()),
-                        key: "foo".to_string(),
-                    },
-                    target_type: RasterPropertiesEntryType::String,
-                }],
-            )
-            .await;
-
-        assert_sql_type(
-            &pool,
-            "StringPair",
-            [StringPair::from(("foo".to_string(), "bar".to_string()))],
-        )
-        .await;
-
-            assert_sql_type(
-                &pool,
-                "GdalDatasetParameters",
-                [GdalDatasetParameters {
-                    file_path: "text".into(),
-                    rasterband_channel: 1,
-                    geo_transform: GdalDatasetGeoTransform {
-                        origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                        x_pixel_size: 1.0,
-                        y_pixel_size: 2.0,
-                    },
-                    width: 42,
-                    height: 23,
-                    file_not_found_handling: FileNotFoundHandling::NoData,
-                    no_data_value: Some(42.0),
-                    properties_mapping: Some(vec![GdalMetadataMapping {
-                        source_key: RasterPropertiesKey {
-                            domain: None,
-                            key: "foo".to_string(),
-                        },
-                        target_key: RasterPropertiesKey {
-                            domain: Some("bar".to_string()),
-                            key: "foo".to_string(),
-                        },
-                        target_type: RasterPropertiesEntryType::String,
-                    }]),
-                    gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                    gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                    allow_alphaband_as_mask: false,
-                    retry: Some(GdalRetryOptions { max_retries: 3 }),
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "GdalMetaDataRegular",
-                [GdalMetaDataRegular {
+                    phantom: PhantomData,
+                }),
+                MetaDataDefinition::GdalMetaDataRegular(GdalMetaDataRegular {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
@@ -3375,7 +3708,7 @@ mod tests {
                     time_placeholders: [(
                         "foo".to_string(),
                         GdalSourceTimePlaceholder {
-                            format: geoengine_datatypes::primitives::DateTimeParseFormat::unix(),
+                            format: DateTimeParseFormat::unix(),
                             reference: TimeReference::Start,
                         },
                     )]
@@ -3386,14 +3719,8 @@ mod tests {
                         step: 1,
                     },
                     cache_ttl: CacheTtlSeconds::max(),
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "GdalMetaDataStatic",
-                [GdalMetaDataStatic {
+                }),
+                MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
                     time: Some(TimeInterval::new_unchecked(0, 1)),
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
@@ -3441,14 +3768,8 @@ mod tests {
                         retry: Some(GdalRetryOptions { max_retries: 3 }),
                     },
                     cache_ttl: CacheTtlSeconds::max(),
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "GdalMetadataNetCdfCf",
-                [GdalMetadataNetCdfCf {
+                }),
+                MetaDataDefinition::GdalMetadataNetCdfCf(GdalMetadataNetCdfCf {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
@@ -3502,14 +3823,8 @@ mod tests {
                         step: 1,
                     },
                     band_offset: 3,
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "GdalMetaDataList",
-                [GdalMetaDataList {
+                }),
+                MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
@@ -3555,350 +3870,16 @@ mod tests {
                             gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
                             gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
                             allow_alphaband_as_mask: false,
-                            retry: Some(GdalRetryOptions { max_retries: 3 }),
+                            retry: None,
                         }),
                         cache_ttl: CacheTtlSeconds::max(),
                     }],
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "MetaDataDefinition",
-                [
-                    MetaDataDefinition::MockMetaData(StaticMetaData::<
-                        MockDatasetDataSourceLoadingInfo,
-                        VectorResultDescriptor,
-                        VectorQueryRectangle,
-                    > {
-                        loading_info: MockDatasetDataSourceLoadingInfo {
-                            points: vec![
-                                Coordinate2D::new(0.0f64, 0.5),
-                                Coordinate2D::new(2., 1.0),
-                            ],
-                        },
-                        result_descriptor: VectorResultDescriptor {
-                            data_type: VectorDataType::MultiPoint,
-                            spatial_reference: SpatialReferenceOption::SpatialReference(
-                                SpatialReference::epsg_4326(),
-                            ),
-                            columns: [(
-                                "foo".to_string(),
-                                VectorColumnInfo {
-                                    data_type: FeatureDataType::Int,
-                                    measurement: Measurement::Unitless,
-                                },
-                            )]
-                            .into(),
-                            time: Some(TimeInterval::default()),
-                            bbox: Some(
-                                BoundingBox2D::new(
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                    Coordinate2D::new(2., 1.0),
-                                )
-                                .unwrap(),
-                            ),
-                        },
-                        phantom: PhantomData,
-                    }),
-                    MetaDataDefinition::OgrMetaData(StaticMetaData::<
-                        OgrSourceDataset,
-                        VectorResultDescriptor,
-                        VectorQueryRectangle,
-                    > {
-                        loading_info: OgrSourceDataset {
-                            file_name: "test".into(),
-                            layer_name: "test".to_string(),
-                            data_type: Some(VectorDataType::MultiPoint),
-                            time: OgrSourceDatasetTimeType::Start {
-                                start_field: "start".to_string(),
-                                start_format: OgrSourceTimeFormat::Auto,
-                                duration: OgrSourceDurationSpec::Zero,
-                            },
-                            default_geometry: Some(TypedGeometry::MultiPoint(
-                                MultiPoint::new(vec![
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                    Coordinate2D::new(2., 1.0),
-                                ])
-                                .unwrap(),
-                            )),
-                            columns: Some(OgrSourceColumnSpec {
-                                format_specifics: Some(FormatSpecifics::Csv {
-                                    header: CsvHeader::Auto,
-                                }),
-                                x: "x".to_string(),
-                                y: Some("y".to_string()),
-                                int: vec!["int".to_string()],
-                                float: vec!["float".to_string()],
-                                text: vec!["text".to_string()],
-                                bool: vec!["bool".to_string()],
-                                datetime: vec!["datetime".to_string()],
-                                rename: Some(
-                                    [
-                                        ("xx".to_string(), "xx_renamed".to_string()),
-                                        ("yx".to_string(), "yy_renamed".to_string()),
-                                    ]
-                                    .into(),
-                                ),
-                            }),
-                            force_ogr_time_filter: false,
-                            force_ogr_spatial_filter: true,
-                            on_error: OgrSourceErrorSpec::Abort,
-                            sql_query: None,
-                            attribute_query: Some("foo = 'bar'".to_string()),
-                            cache_ttl: CacheTtlSeconds::new(5),
-                        },
-                        result_descriptor: VectorResultDescriptor {
-                            data_type: VectorDataType::MultiPoint,
-                            spatial_reference: SpatialReferenceOption::SpatialReference(
-                                SpatialReference::epsg_4326(),
-                            ),
-                            columns: [(
-                                "foo".to_string(),
-                                VectorColumnInfo {
-                                    data_type: FeatureDataType::Int,
-                                    measurement: Measurement::Unitless,
-                                },
-                            )]
-                            .into(),
-                            time: Some(TimeInterval::default()),
-                            bbox: Some(
-                                BoundingBox2D::new(
-                                    Coordinate2D::new(0.0f64, 0.5),
-                                    Coordinate2D::new(2., 1.0),
-                                )
-                                .unwrap(),
-                            ),
-                        },
-                        phantom: PhantomData,
-                    }),
-                    MetaDataDefinition::GdalMetaDataRegular(GdalMetaDataRegular {
-                        result_descriptor: RasterResultDescriptor {
-                            data_type: RasterDataType::U8,
-                            spatial_reference: SpatialReference::epsg_4326().into(),
-                            measurement: Measurement::Continuous(ContinuousMeasurement {
-                                measurement: "Temperature".to_string(),
-                                unit: Some("°C".to_string()),
-                            }),
-                            time: TimeInterval::new_unchecked(0, 1).into(),
-                            bbox: Some(
-                                SpatialPartition2D::new(
-                                    Coordinate2D::new(0.0f64, 1.),
-                                    Coordinate2D::new(2., 0.5),
-                                )
-                                .unwrap(),
-                            ),
-                            resolution: Some(SpatialResolution::zero_point_one()),
-                        },
-                        params: GdalDatasetParameters {
-                            file_path: "text".into(),
-                            rasterband_channel: 1,
-                            geo_transform: GdalDatasetGeoTransform {
-                                origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                                x_pixel_size: 1.0,
-                                y_pixel_size: 2.0,
-                            },
-                            width: 42,
-                            height: 23,
-                            file_not_found_handling: FileNotFoundHandling::NoData,
-                            no_data_value: Some(42.0),
-                            properties_mapping: Some(vec![GdalMetadataMapping {
-                                source_key: RasterPropertiesKey {
-                                    domain: None,
-                                    key: "foo".to_string(),
-                                },
-                                target_key: RasterPropertiesKey {
-                                    domain: Some("bar".to_string()),
-                                    key: "foo".to_string(),
-                                },
-                                target_type: RasterPropertiesEntryType::String,
-                            }]),
-                            gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                            gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                            allow_alphaband_as_mask: false,
-                            retry: Some(GdalRetryOptions { max_retries: 3 }),
-                        },
-                        time_placeholders: [(
-                            "foo".to_string(),
-                            GdalSourceTimePlaceholder {
-                                format: DateTimeParseFormat::unix(),
-                                reference: TimeReference::Start,
-                            },
-                        )]
-                        .into(),
-                        data_time: TimeInterval::new_unchecked(0, 1),
-                        step: TimeStep {
-                            granularity: TimeGranularity::Millis,
-                            step: 1,
-                        },
-                        cache_ttl: CacheTtlSeconds::max(),
-                    }),
-                    MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
-                        time: Some(TimeInterval::new_unchecked(0, 1)),
-                        result_descriptor: RasterResultDescriptor {
-                            data_type: RasterDataType::U8,
-                            spatial_reference: SpatialReference::epsg_4326().into(),
-                            measurement: Measurement::Continuous(ContinuousMeasurement {
-                                measurement: "Temperature".to_string(),
-                                unit: Some("°C".to_string()),
-                            }),
-                            time: TimeInterval::new_unchecked(0, 1).into(),
-                            bbox: Some(
-                                SpatialPartition2D::new(
-                                    Coordinate2D::new(0.0f64, 1.),
-                                    Coordinate2D::new(2., 0.5),
-                                )
-                                .unwrap(),
-                            ),
-                            resolution: Some(SpatialResolution::zero_point_one()),
-                        },
-                        params: GdalDatasetParameters {
-                            file_path: "text".into(),
-                            rasterband_channel: 1,
-                            geo_transform: GdalDatasetGeoTransform {
-                                origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                                x_pixel_size: 1.0,
-                                y_pixel_size: 2.0,
-                            },
-                            width: 42,
-                            height: 23,
-                            file_not_found_handling: FileNotFoundHandling::NoData,
-                            no_data_value: Some(42.0),
-                            properties_mapping: Some(vec![GdalMetadataMapping {
-                                source_key: RasterPropertiesKey {
-                                    domain: None,
-                                    key: "foo".to_string(),
-                                },
-                                target_key: RasterPropertiesKey {
-                                    domain: Some("bar".to_string()),
-                                    key: "foo".to_string(),
-                                },
-                                target_type: RasterPropertiesEntryType::String,
-                            }]),
-                            gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                            gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                            allow_alphaband_as_mask: false,
-                            retry: Some(GdalRetryOptions { max_retries: 3 }),
-                        },
-                        cache_ttl: CacheTtlSeconds::max(),
-                    }),
-                    MetaDataDefinition::GdalMetadataNetCdfCf(GdalMetadataNetCdfCf {
-                        result_descriptor: RasterResultDescriptor {
-                            data_type: RasterDataType::U8,
-                            spatial_reference: SpatialReference::epsg_4326().into(),
-                            measurement: Measurement::Continuous(ContinuousMeasurement {
-                                measurement: "Temperature".to_string(),
-                                unit: Some("°C".to_string()),
-                            }),
-                            time: TimeInterval::new_unchecked(0, 1).into(),
-                            bbox: Some(
-                                SpatialPartition2D::new(
-                                    Coordinate2D::new(0.0f64, 1.),
-                                    Coordinate2D::new(2., 0.5),
-                                )
-                                .unwrap(),
-                            ),
-                            resolution: Some(SpatialResolution::zero_point_one()),
-                        },
-                        params: GdalDatasetParameters {
-                            file_path: "text".into(),
-                            rasterband_channel: 1,
-                            geo_transform: GdalDatasetGeoTransform {
-                                origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                                x_pixel_size: 1.0,
-                                y_pixel_size: 2.0,
-                            },
-                            width: 42,
-                            height: 23,
-                            file_not_found_handling: FileNotFoundHandling::NoData,
-                            no_data_value: Some(42.0),
-                            properties_mapping: Some(vec![GdalMetadataMapping {
-                                source_key: RasterPropertiesKey {
-                                    domain: None,
-                                    key: "foo".to_string(),
-                                },
-                                target_key: RasterPropertiesKey {
-                                    domain: Some("bar".to_string()),
-                                    key: "foo".to_string(),
-                                },
-                                target_type: RasterPropertiesEntryType::String,
-                            }]),
-                            gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                            gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                            allow_alphaband_as_mask: false,
-                            retry: Some(GdalRetryOptions { max_retries: 3 }),
-                        },
-                        start: TimeInstance::from_millis(0).unwrap(),
-                        end: TimeInstance::from_millis(1000).unwrap(),
-                        cache_ttl: CacheTtlSeconds::max(),
-                        step: TimeStep {
-                            granularity: TimeGranularity::Millis,
-                            step: 1,
-                        },
-                        band_offset: 3,
-                    }),
-                    MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
-                        result_descriptor: RasterResultDescriptor {
-                            data_type: RasterDataType::U8,
-                            spatial_reference: SpatialReference::epsg_4326().into(),
-                            measurement: Measurement::Continuous(ContinuousMeasurement {
-                                measurement: "Temperature".to_string(),
-                                unit: Some("°C".to_string()),
-                            }),
-                            time: TimeInterval::new_unchecked(0, 1).into(),
-                            bbox: Some(
-                                SpatialPartition2D::new(
-                                    Coordinate2D::new(0.0f64, 1.),
-                                    Coordinate2D::new(2., 0.5),
-                                )
-                                .unwrap(),
-                            ),
-                            resolution: Some(SpatialResolution::zero_point_one()),
-                        },
-                        params: vec![GdalLoadingInfoTemporalSlice {
-                            time: TimeInterval::new_unchecked(0, 1),
-                            params: Some(GdalDatasetParameters {
-                                file_path: "text".into(),
-                                rasterband_channel: 1,
-                                geo_transform: GdalDatasetGeoTransform {
-                                    origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                                    x_pixel_size: 1.0,
-                                    y_pixel_size: 2.0,
-                                },
-                                width: 42,
-                                height: 23,
-                                file_not_found_handling: FileNotFoundHandling::NoData,
-                                no_data_value: Some(42.0),
-                                properties_mapping: Some(vec![GdalMetadataMapping {
-                                    source_key: RasterPropertiesKey {
-                                        domain: None,
-                                        key: "foo".to_string(),
-                                    },
-                                    target_key: RasterPropertiesKey {
-                                        domain: Some("bar".to_string()),
-                                        key: "foo".to_string(),
-                                    },
-                                    target_type: RasterPropertiesEntryType::String,
-                                }]),
-                                gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                                gdal_config_options: Some(vec![(
-                                    "foo".to_string(),
-                                    "bar".to_string(),
-                                )]),
-                                allow_alphaband_as_mask: false,
-                                retry: None,
-                            }),
-                            cache_ttl: CacheTtlSeconds::max(),
-                        }],
-                    }),
-                ],
-            )
-            .await;
-
-            test_data_provider_definition_types(&pool).await;
-        })
+                }),
+            ],
+        )
         .await;
+
+        test_data_provider_definition_types(&pool).await;
     }
 
     #[test]

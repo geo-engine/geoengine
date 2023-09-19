@@ -1,30 +1,22 @@
-use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
-use geoengine_datatypes::primitives::CacheHint;
-use geoengine_operators::util::input::RasterOrVectorOperator;
-use reqwest::Url;
-use serde_json::json;
-use snafu::{ensure, ResultExt};
-
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
-};
-use geoengine_datatypes::{operations::image::Colorizer, primitives::SpatialResolution};
-use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
-use utoipa::ToSchema;
-
 use crate::api::model::datatypes::{SpatialReference, SpatialReferenceOption, TimeInterval};
-use crate::contexts::ApplicationContext;
+use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
+use crate::api::ogc::wms::request::{
+    GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat,
+};
+use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::handlers::SessionContext;
-use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
-use crate::ogc::wms::request::{GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat};
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
-
+use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use geoengine_datatypes::primitives::CacheHint;
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
+};
+use geoengine_datatypes::{operations::image::Colorizer, primitives::SpatialResolution};
 use geoengine_operators::engine::{
     CanonicOperatorName, ExecutionContext, ResultDescriptor, SingleRasterOrVectorSource,
     WorkflowOperatorPath,
@@ -32,11 +24,17 @@ use geoengine_operators::engine::{
 use geoengine_operators::processing::{
     InitializedRasterReprojection, Reprojection, ReprojectionParams,
 };
+use geoengine_operators::util::input::RasterOrVectorOperator;
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
+use reqwest::Url;
+use serde_json::json;
+use snafu::{ensure, ResultExt};
 use std::str::FromStr;
 use std::time::Duration;
+use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
+use utoipa::ToSchema;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -465,25 +463,25 @@ fn default_time_from_config() -> TimeInterval {
                                 geoengine_datatypes::primitives::TimeInstance::now(),
                             )
                             .expect("is a valid time interval")
-                            .into()
                         },
                         |time| time.time_interval(),
                     )
             },
             |time| time.time_interval(),
         )
+        .into()
 }
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
-    use crate::api::model::datatypes::DatasetName;
+    use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
     use crate::datasets::listing::DatasetProvider;
     use crate::datasets::storage::DatasetStore;
+    use crate::datasets::DatasetName;
     use crate::ge_context;
-    use crate::handlers::ErrorResponse;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
         register_ndvi_workflow_helper_with_cache_ttl, send_test_request,
@@ -655,7 +653,7 @@ mod tests {
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small.png");
 
         assert_eq!(
-            include_bytes!("../../../test_data/wms/raster_small.png") as &[u8],
+            include_bytes!("../../../../test_data/wms/raster_small.png") as &[u8],
             image_bytes.as_slice()
         );
     }
@@ -709,7 +707,7 @@ mod tests {
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map.png");
 
         assert_eq!(
-            include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
+            include_bytes!("../../../../test_data/wms/get_map.png") as &[u8],
             image_bytes
         );
     }
@@ -736,7 +734,7 @@ mod tests {
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi.png");
 
         assert_eq!(
-            include_bytes!("../../../test_data/wms/get_map_ndvi.png") as &[u8],
+            include_bytes!("../../../../test_data/wms/get_map_ndvi.png") as &[u8],
             image_bytes
         );
     }
@@ -760,7 +758,7 @@ mod tests {
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map.png");
 
         assert_eq!(
-            include_bytes!("../../../test_data/wms/get_map.png") as &[u8],
+            include_bytes!("../../../../test_data/wms/get_map.png") as &[u8],
             image_bytes
         );
     }
@@ -845,7 +843,7 @@ mod tests {
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_colorizer.png");
 
         assert_eq!(
-            include_bytes!("../../../test_data/wms/get_map_colorizer.png") as &[u8],
+            include_bytes!("../../../../test_data/wms/get_map_colorizer.png") as &[u8],
             image_bytes
         );
     }

@@ -1536,7 +1536,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{SessionContext, SimpleApplicationContext};
+    use crate::contexts::{PostgresContext, SessionContext, SimpleApplicationContext};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::ge_context;
     use crate::layers::storage::LayerProviderDb;

@@ -1,16 +1,14 @@
-use std::collections::HashMap;
-use std::io::{Cursor, Write};
-use std::sync::Arc;
-
+use crate::api::handlers::tasks::TaskResponse;
 use crate::api::model::datatypes::{DataId, TimeInterval};
-use crate::contexts::ApplicationContext;
+use crate::api::model::responses::IdResponse;
+use crate::api::ogc::util::{parse_bbox, parse_time};
+use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
+use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::Result;
-use crate::handlers::SessionContext;
 use crate::layers::storage::LayerProviderDb;
-use crate::ogc::util::{parse_bbox, parse_time};
+use crate::util::config::get_config_element;
 use crate::util::parsing::{parse_spatial_partition, parse_spatial_resolution};
-use crate::util::IdResponse;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::workflows::{RasterWebsocketStreamHandler, VectorWebsocketStreamHandler};
@@ -26,12 +24,11 @@ use geoengine_operators::engine::{
     ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
 };
 use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
-
-use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
-use crate::handlers::tasks::TaskResponse;
-use crate::util::config::get_config_element;
 use snafu::{ResultExt, Snafu};
+use std::collections::HashMap;
+use std::io::{Cursor, Write};
+use std::sync::Arc;
+use utoipa::{IntoParams, ToSchema};
 use zip::{write::FileOptions, ZipWriter};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
@@ -111,7 +108,7 @@ where
         }))))
     ),
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse)
+        (status = 200, response = IdResponse::<WorkflowId>)
     ),
     security(
         ("session_token" = [])
@@ -121,7 +118,7 @@ async fn register_workflow_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     workflow: web::Json<Workflow>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<IdResponse<WorkflowId>>> {
     let ctx = app_ctx.session_context(session);
 
     let workflow = workflow.into_inner();
@@ -300,7 +297,7 @@ async fn workflow_provenance<C: SessionContext>(
         .into_iter()
         .filter_map(|p| {
             if let Some(provenance) = p.provenance {
-                Some((p.data, provenance))
+                Some((p.data.into(), provenance))
             } else {
                 None
             }
@@ -417,11 +414,11 @@ async fn resolve_provenance<C: SessionContext>(
     id: &DataId,
 ) -> Result<ProvenanceOutput> {
     match id {
-        DataId::Internal { dataset_id } => db.load_provenance(dataset_id).await,
+        DataId::Internal { dataset_id } => db.load_provenance(&dataset_id.into()).await,
         DataId::External(e) => {
-            db.load_layer_provider(e.provider_id)
+            db.load_layer_provider(e.provider_id.into())
                 .await?
-                .provenance(id)
+                .provenance(&id.into())
                 .await
         }
     }
@@ -661,12 +658,11 @@ pub enum WorkflowApiError {
 mod tests {
 
     use super::*;
-    use crate::api::model::datatypes::DatasetName;
+    use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
     use crate::datasets::storage::DatasetStore;
-    use crate::datasets::RasterDatasetFromWorkflowResult;
+    use crate::datasets::{DatasetName, RasterDatasetFromWorkflowResult};
     use crate::ge_context;
-    use crate::handlers::ErrorResponse;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
@@ -674,7 +670,6 @@ mod tests {
         add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
         read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
     };
-    use crate::util::IdResponse;
     use crate::workflows::registry::WorkflowRegistry;
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
@@ -1138,9 +1133,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters {
-                        data: dataset.into(),
-                    },
+                    params: GdalSourceParameters { data: dataset },
                 }
                 .boxed(),
             ),
@@ -1241,7 +1234,7 @@ mod tests {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
-                        data: dataset_name.clone().into(),
+                        data: dataset_name.clone(),
                     },
                 }
                 .boxed(),
@@ -1354,9 +1347,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters {
-                        data: dataset.into(),
-                    },
+                    params: GdalSourceParameters { data: dataset },
                 }
                 .boxed(),
             ),
@@ -1470,7 +1461,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
+            include_bytes!("../../../../test_data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
             result.as_slice()
         );

@@ -127,7 +127,7 @@ pub async fn send_pro_test_request(
             .configure(configure_extractors)
             .configure(pro::api::handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::layers::init_layer_routes::<ProPostgresContext<NoTls>>)
-            .configure(pro::handlers::machine_learning::init_ml_routes::<ProPostgresContext<NoTls>>)
+            .configure(pro::api::handlers::machine_learning::init_ml_routes::<ProPostgresContext<NoTls>>)
             .configure(
                 pro::api::handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>,
             )

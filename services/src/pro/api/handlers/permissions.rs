@@ -1,17 +1,16 @@
-use actix_web::{web, FromRequest, HttpResponse};
-use serde::Deserialize;
-use utoipa::ToSchema;
-
-use crate::api::model::datatypes::{DatasetName, LayerId};
+use crate::api::model::datatypes::LayerId;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::storage::DatasetDb;
+use crate::datasets::DatasetName;
 use crate::error::Result;
-
 use crate::layers::listing::LayerCollectionId;
 use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use crate::pro::permissions::Permission;
 use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
 use crate::projects::ProjectId;
+use actix_web::{web, FromRequest, HttpResponse};
+use serde::Deserialize;
+use utoipa::ToSchema;
 
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -50,7 +49,7 @@ pub enum Resource {
 impl Resource {
     pub async fn into_resource_id<D: DatasetDb>(self, db: &D) -> Result<ResourceId> {
         Ok(match self {
-            Resource::Layer(layer_id) => ResourceId::Layer(layer_id),
+            Resource::Layer(layer_id) => ResourceId::Layer(layer_id.into()),
             Resource::LayerCollection(layer_collection_id) => {
                 ResourceId::LayerCollection(layer_collection_id)
             }
@@ -195,7 +194,7 @@ mod tests {
             add_ndvi_to_datasets(&app_ctx, false, false).await;
         let gdal = GdalSource {
             params: GdalSourceParameters {
-                data: gdal_dataset_name.into(),
+                data: gdal_dataset_name,
             },
         }
         .boxed();
@@ -204,7 +203,7 @@ mod tests {
             add_ports_to_datasets(&app_ctx, false, false).await;
         let ogr = OgrSource {
             params: OgrSourceParameters {
-                data: ogr_dataset_name.into(),
+                data: ogr_dataset_name,
                 attribute_filters: None,
                 attribute_projection: None,
             },

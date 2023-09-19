@@ -1,12 +1,11 @@
-use crate::contexts::ApplicationContext;
+use crate::api::model::responses::IdResponse;
+use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
-use crate::handlers::SessionContext;
 use crate::projects::{
     CreateProject, LoadVersion, ProjectDb, ProjectId, ProjectListOptions, ProjectVersionId,
     UpdateProject,
 };
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
-use crate::util::IdResponse;
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
@@ -42,7 +41,7 @@ where
     path = "/project",
     request_body = CreateProject,
     responses(
-        (status = 200, response = crate::api::model::responses::IdResponse)
+        (status = 200, response = IdResponse::<ProjectId>)
     ),
     security(
         ("session_token" = [])
@@ -52,7 +51,7 @@ pub(crate) async fn create_project_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: ValidatedJson<CreateProject>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<IdResponse<ProjectId>>> {
     let create = create.into_inner();
     let id = app_ctx
         .session_context(session)
@@ -331,10 +330,11 @@ pub(crate) async fn project_versions_handler<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::Colorizer;
-    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext, SimpleSession};
+    use crate::api::model::responses::ErrorResponse;
+    use crate::contexts::{
+        PostgresContext, Session, SessionContext, SimpleApplicationContext, SimpleSession,
+    };
     use crate::ge_context;
-    use crate::handlers::ErrorResponse;
     use crate::projects::{
         LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId, ProjectLayer,
         ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
@@ -347,6 +347,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::operations::image::Colorizer;
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use serde_json::json;

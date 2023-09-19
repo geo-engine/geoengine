@@ -1,3 +1,4 @@
+use crate::api::model::responses::IdResponse;
 use crate::contexts::ApplicationContext;
 use crate::contexts::SessionContext;
 use crate::error;
@@ -17,7 +18,6 @@ use crate::projects::ProjectId;
 use crate::projects::STRectangle;
 use crate::util::config;
 use crate::util::extractors::ValidatedJson;
-use crate::util::IdResponse;
 use actix_web::FromRequest;
 use actix_web::{web, HttpResponse, Responder};
 use serde::Deserialize;
@@ -715,8 +715,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{Session, SessionContext};
-    use crate::handlers::ErrorResponse;
     use crate::pro::ge_context;
     use crate::pro::permissions::Role;
     use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb, UserAuth};

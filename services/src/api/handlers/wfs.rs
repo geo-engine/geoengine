@@ -1,29 +1,20 @@
-use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
-use futures::future::BoxFuture;
-use futures_util::TryStreamExt;
-use geoengine_datatypes::primitives::CacheHint;
-use geoengine_datatypes::primitives::VectorQueryRectangle;
-use geoengine_operators::util::abortable_query_execution;
-use geoengine_operators::util::input::RasterOrVectorOperator;
-use reqwest::Url;
-use serde::Deserialize;
-use snafu::{ensure, ResultExt};
-use utoipa::openapi::ArrayBuilder;
-use utoipa::ToSchema;
-
 use crate::api::model::datatypes::TimeInterval;
-use crate::contexts::ApplicationContext;
+use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
+use crate::api::ogc::wfs::request::{GetCapabilities, GetFeature};
+use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error;
 use crate::error::Result;
-use crate::handlers::SessionContext;
-use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
-use crate::ogc::wfs::request::{GetCapabilities, GetFeature};
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
+use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use futures::future::BoxFuture;
+use futures_util::TryStreamExt;
 use geoengine_datatypes::collections::ToGeoJson;
+use geoengine_datatypes::primitives::CacheHint;
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::SpatialResolution,
@@ -40,9 +31,16 @@ use geoengine_operators::engine::{QueryProcessor, WorkflowOperatorPath};
 use geoengine_operators::processing::{
     InitializedVectorReprojection, Reprojection, ReprojectionParams,
 };
+use geoengine_operators::util::abortable_query_execution;
+use geoengine_operators::util::input::RasterOrVectorOperator;
+use reqwest::Url;
+use serde::Deserialize;
 use serde_json::json;
+use snafu::{ensure, ResultExt};
 use std::str::FromStr;
 use std::time::Duration;
+use utoipa::openapi::ArrayBuilder;
+use utoipa::ToSchema;
 
 pub(crate) fn init_wfs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -683,23 +681,23 @@ fn default_time_from_config() -> TimeInterval {
                                 geoengine_datatypes::primitives::TimeInstance::now(),
                             )
                             .expect("is a valid time interval")
-                            .into()
                         },
                         |time| time.time_interval(),
                     )
             },
             |time| time.time_interval(),
         )
+        .into()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::api::model::datatypes::{DataId, DatasetId};
+    use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
     use crate::datasets::storage::{DatasetDefinition, DatasetStore};
     use crate::ge_context;
-    use crate::handlers::ErrorResponse;
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
     use crate::workflows::workflow::Workflow;
     use actix_web::dev::ServiceResponse;
@@ -1173,6 +1171,7 @@ x;y
             .await
             .unwrap()
             .id
+            .into()
     }
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
