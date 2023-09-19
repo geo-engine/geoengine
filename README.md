@@ -66,13 +66,16 @@ sudo -u postgres psql << EOF
 \set AUTOCOMMIT on
 CREATE USER geoengine WITH PASSWORD 'geoengine' CREATEDB;
 CREATE DATABASE geoengine OWNER geoengine;
+\c geoengine
+CREATE EXTENSION postgis;
 EOF
 ```
 
-During development, you can use the following command to clean the database and start the server.
+During development, you can use the following setting in your Settings.toml to clean the database on server startup:
 
-```bash
-sudo -u postgres psql -d geoengine -c "drop schema public cascade; create schema public authorization geoengine; create extension postgis;" && cargo run --features pro
+```
+[postgres]
+clear_database_on_start = true
 ```
 
 ##### NFDI / GFBio
