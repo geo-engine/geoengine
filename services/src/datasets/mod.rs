@@ -12,3 +12,4 @@ pub(crate) use create_from_workflow::{
     RasterDatasetFromWorkflowResult,
 };
 pub use name::{DatasetIdAndName, DatasetName};
+pub use storage::AddDataset;

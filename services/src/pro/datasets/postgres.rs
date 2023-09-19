@@ -1,4 +1,3 @@
-use crate::api::model::services::AddDataset;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
@@ -8,7 +7,7 @@ use crate::datasets::storage::{
 };
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
-use crate::datasets::{DatasetIdAndName, DatasetName};
+use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::error::{self, Error, Result};
 use crate::layers::layer::CollectionItem;
 use crate::layers::layer::Layer;

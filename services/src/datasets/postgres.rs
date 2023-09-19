@@ -1,6 +1,5 @@
 use super::listing::Provenance;
-use super::{DatasetIdAndName, DatasetName};
-use crate::api::model::services::AddDataset;
+use super::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};

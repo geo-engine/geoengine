@@ -501,14 +501,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::services::AddDataset;
     use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
     use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
-    use crate::datasets::DatasetIdAndName;
+    use crate::datasets::{AddDataset, DatasetIdAndName};
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
         LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,

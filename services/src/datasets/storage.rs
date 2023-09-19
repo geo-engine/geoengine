@@ -1,6 +1,5 @@
 use super::listing::Provenance;
 use super::{DatasetIdAndName, DatasetName};
-use crate::api::model::services::AddDataset;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
@@ -54,6 +53,17 @@ impl Dataset {
             symbology: self.symbology.clone(),
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AddDataset {
+    pub name: Option<DatasetName>,
+    pub display_name: String,
+    pub description: String,
+    pub source_operator: String,
+    pub symbology: Option<Symbology>,
+    pub provenance: Option<Vec<Provenance>>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]

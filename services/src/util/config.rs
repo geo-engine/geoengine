@@ -1,9 +1,9 @@
-use crate::api::model::datatypes::TimeInterval;
 use crate::contexts::SessionId;
 use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
+use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
 use snafu::ResultExt;
@@ -271,12 +271,10 @@ impl OgcDefaultTime {
             OgcDefaultTime::Now => geoengine_datatypes::primitives::TimeInterval::new_instant(
                 geoengine_datatypes::primitives::TimeInstance::now(),
             )
-            .expect("config error")
-            .into(),
+            .expect("config error"),
             OgcDefaultTime::Value(value) => {
                 geoengine_datatypes::primitives::TimeInterval::new(&value.start, &value.end)
                     .expect("config error")
-                    .into()
             }
         }
     }

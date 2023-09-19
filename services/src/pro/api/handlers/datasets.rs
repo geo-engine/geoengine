@@ -1,7 +1,3 @@
-use actix_web::{web, FromRequest};
-use geoengine_datatypes::dataset::DatasetId;
-use snafu::ResultExt;
-
 use crate::{
     api::handlers::datasets::{
         adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
@@ -24,6 +20,9 @@ use crate::{
     },
     util::config::{get_config_element, Data},
 };
+use actix_web::{web, FromRequest};
+use geoengine_datatypes::dataset::DatasetId;
+use snafu::ResultExt;
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -109,7 +108,7 @@ where
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let dataset = db
-        .add_dataset(definition.properties, meta_data)
+        .add_dataset(definition.properties.into(), meta_data)
         .await
         .context(DatabaseAccess)?;
     let dataset_id: DatasetId = dataset.id;

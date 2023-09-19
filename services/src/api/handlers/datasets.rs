@@ -374,7 +374,7 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
 
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
     let result = db
-        .add_dataset(definition.properties, meta_data)
+        .add_dataset(definition.properties.into(), meta_data)
         .await
         .context(DatabaseAccess)?;
 
@@ -405,7 +405,7 @@ async fn create_volume_dataset<C: ApplicationContext>(
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let result = db
-        .add_dataset(definition.properties, meta_data)
+        .add_dataset(definition.properties.into(), meta_data)
         .await
         .context(DatabaseAccess)?;
 
@@ -512,7 +512,7 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
     };
 
     let meta_data = db.wrap_meta_data(meta_data);
-    let result = db.add_dataset(properties, meta_data).await?;
+    let result = db.add_dataset(properties.into(), meta_data).await?;
 
     Ok(web::Json(result.name.into()))
 }
@@ -1156,8 +1156,10 @@ mod tests {
             });
 
             let db = ctx.db();
-            let DatasetIdAndName { id: id1, name: _ } =
-                db.add_dataset(ds, db.wrap_meta_data(meta)).await.unwrap();
+            let DatasetIdAndName { id: id1, name: _ } = db
+                .add_dataset(ds.into(), db.wrap_meta_data(meta))
+                .await
+                .unwrap();
 
             let ds = AddDataset {
                 name: Some(DatasetName::new(None, "My_Dataset2")),
@@ -1187,8 +1189,10 @@ mod tests {
                 phantom: Default::default(),
             });
 
-            let DatasetIdAndName { id: id2, name: _ } =
-                db.add_dataset(ds, db.wrap_meta_data(meta)).await.unwrap();
+            let DatasetIdAndName { id: id2, name: _ } = db
+                .add_dataset(ds.into(), db.wrap_meta_data(meta))
+                .await
+                .unwrap();
 
             let req = actix_web::test::TestRequest::get()
                 .uri(&format!(
@@ -2075,7 +2079,7 @@ mod tests {
             let DatasetIdAndName {
                 id,
                 name: dataset_name,
-            } = db.add_dataset(ds, db.wrap_meta_data(meta)).await?;
+            } = db.add_dataset(ds.into(), db.wrap_meta_data(meta)).await?;
 
             let req = actix_web::test::TestRequest::get()
                 .uri(&format!("/dataset/{id}"))

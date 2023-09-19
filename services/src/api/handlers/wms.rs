@@ -466,13 +466,13 @@ fn default_time_from_config() -> TimeInterval {
                                 geoengine_datatypes::primitives::TimeInstance::now(),
                             )
                             .expect("is a valid time interval")
-                            .into()
                         },
                         |time| time.time_interval(),
                     )
             },
             |time| time.time_interval(),
         )
+        .into()
 }
 
 #[cfg(test)]

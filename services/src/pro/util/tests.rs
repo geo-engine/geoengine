@@ -1,11 +1,10 @@
 use crate::{
     api::handlers,
-    api::model::services::AddDataset,
     contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
     datasets::{
         listing::Provenance,
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
-        DatasetName,
+        AddDataset, DatasetName,
     },
     pro,
     pro::{

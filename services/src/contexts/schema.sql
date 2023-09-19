@@ -421,6 +421,10 @@ CREATE TYPE "GdalMetadataMapping" AS (
 
 CREATE DOMAIN "StringPair" AS text [2];
 
+CREATE TYPE "GdalRetryOptions" AS (
+    max_retries bigint
+);
+
 CREATE TYPE "GdalDatasetParameters" AS (
     file_path text,
     rasterband_channel bigint,
@@ -432,7 +436,8 @@ CREATE TYPE "GdalDatasetParameters" AS (
     properties_mapping "GdalMetadataMapping" [],
     gdal_open_options text [],
     gdal_config_options "StringPair" [],
-    allow_alphaband_as_mask boolean
+    allow_alphaband_as_mask boolean,
+    retry "GdalRetryOptions"
 );
 
 CREATE TYPE "TimeReference" AS ENUM (

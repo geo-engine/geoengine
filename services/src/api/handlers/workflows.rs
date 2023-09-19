@@ -1134,9 +1134,7 @@ mod tests {
             let workflow = Workflow {
                 operator: TypedOperator::Raster(
                     GdalSource {
-                        params: GdalSourceParameters {
-                            data: dataset.into(),
-                        },
+                        params: GdalSourceParameters { data: dataset },
                     }
                     .boxed(),
                 ),
@@ -1246,7 +1244,7 @@ mod tests {
                     operator: TypedOperator::Raster(
                         GdalSource {
                             params: GdalSourceParameters {
-                                data: dataset_name.clone().into(),
+                                data: dataset_name.clone(),
                             },
                         }
                         .boxed(),
@@ -1364,9 +1362,7 @@ mod tests {
                 let workflow = Workflow {
                     operator: TypedOperator::Raster(
                         GdalSource {
-                            params: GdalSourceParameters {
-                                data: dataset.into(),
-                            },
+                            params: GdalSourceParameters { data: dataset },
                         }
                         .boxed(),
                     ),

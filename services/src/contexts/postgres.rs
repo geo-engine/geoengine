@@ -510,7 +510,6 @@ impl From<config::Postgres> for Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::services::AddDataset;
     use crate::datasets::external::aruna::ArunaDataProviderDefinition;
     use crate::datasets::external::gbif::GbifDataProviderDefinition;
     use crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition;
@@ -524,7 +523,7 @@ mod tests {
     use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
-    use crate::datasets::DatasetIdAndName;
+    use crate::datasets::{AddDataset, DatasetIdAndName};
     use crate::layers::external::TypedDataProviderDefinition;
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,

@@ -1,7 +1,7 @@
-use crate::apidoc::ApiDoc;
+use crate::api::apidoc::ApiDoc;
+use crate::api::handlers;
 use crate::contexts::{PostgresContext, SimpleApplicationContext};
 use crate::error::{Error, Result};
-use crate::handlers;
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::server::{
@@ -123,7 +123,7 @@ where
                 "EBV",
                 "../api-docs/ebv/openapi.json",
                 "/api-docs/ebv/openapi.json",
-                crate::handlers::ebv::ApiDoc::openapi(),
+                crate::api::handlers::ebv::ApiDoc::openapi(),
             );
         }
 

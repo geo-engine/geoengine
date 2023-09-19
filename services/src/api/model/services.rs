@@ -79,6 +79,32 @@ pub struct AddDataset {
     pub provenance: Option<Vec<Provenance>>,
 }
 
+impl From<AddDataset> for crate::datasets::storage::AddDataset {
+    fn from(value: AddDataset) -> Self {
+        Self {
+            name: value.name,
+            display_name: value.display_name,
+            description: value.description,
+            source_operator: value.source_operator,
+            symbology: value.symbology,
+            provenance: value.provenance,
+        }
+    }
+}
+
+impl From<crate::datasets::storage::AddDataset> for AddDataset {
+    fn from(value: crate::datasets::storage::AddDataset) -> Self {
+        Self {
+            name: value.name,
+            display_name: value.display_name,
+            description: value.description,
+            source_operator: value.source_operator,
+            symbology: value.symbology,
+            provenance: value.provenance,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetDefinition {

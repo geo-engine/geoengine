@@ -73,6 +73,7 @@ impl TryFrom<GdalDatasetParametersDbType> for GdalDatasetParameters {
 }
 
 #[derive(Debug, FromSql, ToSql)]
+#[postgres(name = "GdalRetryOptions")]
 pub struct GdalRetryOptionsDbType {
     pub max_retries: i64,
 }
