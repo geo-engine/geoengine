@@ -5,6 +5,7 @@ use crate::layers::listing::LayerCollectionId;
 use crate::projects::ProjectId;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, LayerId};
+use geoengine_datatypes::pro::MlModelId;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -86,6 +87,7 @@ pub enum ResourceId {
     LayerCollection(LayerCollectionId), // TODO: UUID?
     Project(ProjectId),
     DatasetId(DatasetId),
+    ModelId(MlModelId),
 }
 
 impl From<LayerId> for ResourceId {

@@ -18,13 +18,14 @@ use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::Spat
 use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
 use utoipa::ToSchema;
 
-use super::spatial_references::{spatial_reference_specification, AxisOrder};
 use crate::api::model::datatypes::TimeInterval;
-use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
-use crate::api::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
-use crate::contexts::{ApplicationContext, SessionContext};
+use crate::contexts::ApplicationContext;
 use crate::error::Result;
 use crate::error::{self, Error};
+use crate::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
+use crate::handlers::SessionContext;
+use crate::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
+use crate::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
@@ -496,13 +497,13 @@ fn default_time_from_config() -> TimeInterval {
                                 geoengine_datatypes::primitives::TimeInstance::now(),
                             )
                             .expect("is a valid time interval")
+                            .into()
                         },
                         |time| time.time_interval(),
                     )
             },
             |time| time.time_interval(),
         )
-        .into()
 }
 
 #[cfg(test)]
@@ -716,9 +717,8 @@ mod tests {
 
                 assert_eq!(res.status(), 200);
                 assert_eq!(
-                    include_bytes!(
-                        "../../../../test_data/raster/geotiff_from_stream_compressed.tiff"
-                    ) as &[u8],
+                    include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
+                        as &[u8],
                     test::read_body(res).await.as_ref()
                 );
             },

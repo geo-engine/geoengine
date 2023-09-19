@@ -1538,9 +1538,8 @@ mod tests {
     use super::*;
     use crate::contexts::{SessionContext, SimpleApplicationContext};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
+    use crate::ge_context;
     use crate::layers::storage::LayerProviderDb;
-
-    use crate::util::tests::with_temp_context;
     use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
@@ -1564,6 +1563,7 @@ mod tests {
             GdalLoadingInfoTemporalSlice,
         },
     };
+    use tokio_postgres::NoTls;
 
     #[test]
     fn it_parses_netcdf_layer_collection_ids() {
@@ -2228,21 +2228,19 @@ mod tests {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_irregular_time_series() {
-        with_temp_context(|app_ctx, _| async move {
+    #[ge_context::test]
+    async fn test_irregular_time_series(app_ctx: PostgresContext<NoTls>) {
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let land_cover_dataset_id = add_land_cover_to_datasets(&ctx.db()).await;
 
-        let provider_definition  =
-            EbvPortalDataProviderDefinition {
-                name: "EBV Portal".to_string(),
-                path: test_data!("netcdf4d/").into(),
-                base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
-                overviews: test_data!("netcdf4d/overviews/").into(),
-                cache_ttl: Default::default(),
-            };
+        let provider_definition = EbvPortalDataProviderDefinition {
+            name: "EBV Portal".to_string(),
+            path: test_data!("netcdf4d/").into(),
+            base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
+            overviews: test_data!("netcdf4d/overviews/").into(),
+            cache_ttl: Default::default(),
+        };
 
         ctx.db()
             .add_layer_provider(provider_definition.into())
@@ -2299,7 +2297,9 @@ mod tests {
             .await
             .unwrap();
 
-        let TypedPlotQueryProcessor::JsonVega(processor) = initialized_operator.query_processor().unwrap() else {
+        let TypedPlotQueryProcessor::JsonVega(processor) =
+            initialized_operator.query_processor().unwrap()
+        else {
             panic!("wrong plot type");
         };
 
@@ -2329,8 +2329,5 @@ mod tests {
             vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.34280000000002},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.54399999999997}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
             metadata: PlotMetaData::None,
         });
-
-        })
-        .await;
     }
 }

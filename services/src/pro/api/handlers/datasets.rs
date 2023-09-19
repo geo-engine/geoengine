@@ -1,9 +1,7 @@
+use actix_web::{web, FromRequest};
+use snafu::ResultExt;
+
 use crate::{
-    api::handlers::datasets::{
-        adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
-        delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
-        suggest_meta_data_handler,
-    },
     api::model::{
         responses::datasets::{errors::*, DatasetNameResponse},
         services::{CreateDataset, DataPath, DatasetDefinition},
@@ -14,15 +12,17 @@ use crate::{
         upload::{Volume, VolumeName},
     },
     error::Result,
+    handlers::datasets::{
+        adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
+        delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
+        suggest_meta_data_handler,
+    },
     pro::{
         contexts::{ProApplicationContext, ProGeoEngineDb},
         permissions::{Permission, PermissionDb, Role},
     },
     util::config::{get_config_element, Data},
 };
-use actix_web::{web, FromRequest};
-use geoengine_datatypes::dataset::DatasetId;
-use snafu::ResultExt;
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -54,7 +54,7 @@ where
     path = "/dataset/public", 
     request_body = CreateDataset,
     responses(
-        (status = 200, response = DatasetNameResponse),
+        (status = 200, response = crate::api::model::responses::IdResponse),
     ),
     security(
         ("session_token" = [])
@@ -108,20 +108,19 @@ where
     let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let dataset = db
-        .add_dataset(definition.properties.into(), meta_data)
+        .add_dataset(definition.properties, meta_data)
         .await
         .context(DatabaseAccess)?;
-    let dataset_id: DatasetId = dataset.id;
 
     db.add_permission(
         Role::registered_user_role_id(),
-        dataset_id,
+        dataset.id,
         Permission::Read,
     )
     .await
     .context(DatabaseAccess)?;
 
-    db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+    db.add_permission(Role::anonymous_role_id(), dataset.id, Permission::Read)
         .await
         .context(DatabaseAccess)?;
 
@@ -131,12 +130,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::responses::IdResponse;
-    use crate::datasets::DatasetName;
     use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::util::tests::{with_pro_temp_context, with_pro_temp_context_from_spec};
+    use crate::pro::ge_context;
     use crate::{
-        api::model::services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
+        api::model::{
+            datatypes::{DatasetName, NamedData},
+            services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
+        },
         contexts::{Session, SessionContext, SessionId},
         datasets::{
             listing::DatasetProvider,
@@ -144,12 +144,12 @@ mod tests {
         },
         pro::{
             users::UserAuth,
-            util::{
-                config::Quota,
-                tests::{admin_login, send_pro_test_request},
-            },
+            util::tests::{admin_login, send_pro_test_request},
         },
-        util::tests::{SetMultipartBody, TestDataUploads},
+        util::{
+            tests::{SetMultipartBody, TestDataUploads},
+            IdResponse,
+        },
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -159,7 +159,6 @@ mod tests {
         primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle},
         raster::{GridShape2D, TilingSpecification},
         test_data,
-        util::test::TestDefault,
     };
     use geoengine_operators::{
         engine::{
@@ -294,11 +293,11 @@ mod tests {
 
     pub async fn make_ogr_source<C: ExecutionContext>(
         exe_ctx: &C,
-        named_data: geoengine_datatypes::dataset::NamedData,
+        named_data: NamedData,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         OgrSource {
             params: OgrSourceParameters {
-                data: named_data,
+                data: named_data.into(),
                 attribute_projection: None,
                 attribute_filters: None,
             },
@@ -309,231 +308,211 @@ mod tests {
         .map_err(Into::into)
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn create_dataset() -> Result<()> {
-        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
-
-        let exe_ctx_tiling_spec = TilingSpecification {
+    /// override the pixel size since this test was designed for 600 x 600 pixel tiles
+    fn create_dataset_tiling_specification() -> TilingSpecification {
+        TilingSpecification {
             origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
-        };
-
-        // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        with_pro_temp_context_from_spec(
-            exe_ctx_tiling_spec,
-            TestDefault::test_default(),
-            get_config_element::<Quota>().unwrap(),
-            |app_ctx, _| async move {
-                let session = app_ctx.create_anonymous_session().await.unwrap();
-                let ctx = app_ctx.session_context(session.clone());
-
-                let session_id = session.id();
-
-                let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
-                test_data.uploads.push(upload_id);
-
-                let dataset_name =
-                    construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
-                let exe_ctx = ctx.execution_context()?;
-
-                let source = make_ogr_source(&exe_ctx, dataset_name.into()).await?;
-
-                let query_processor = source.query_processor()?.multi_point().unwrap();
-                let query_ctx = ctx.query_context()?;
-
-                let query = query_processor
-                    .query(
-                        VectorQueryRectangle {
-                            spatial_bounds: BoundingBox2D::new(
-                                (1.85, 50.88).into(),
-                                (4.82, 52.95).into(),
-                            )?,
-                            time_interval: Default::default(),
-                            spatial_resolution: SpatialResolution::new(1., 1.)?,
-                        },
-                        &query_ctx,
-                    )
-                    .await
-                    .unwrap();
-
-                let result: Vec<MultiPointCollection> = query.try_collect().await?;
-
-                let coords = result[0].coordinates();
-                assert_eq!(coords.len(), 10);
-                assert_eq!(
-                    coords,
-                    &[
-                        [2.933_686_69, 51.23].into(),
-                        [3.204_593_64_f64, 51.336_388_89].into(),
-                        [4.651_413_428, 51.805_833_33].into(),
-                        [4.11, 51.95].into(),
-                        [4.386_160_188, 50.886_111_11].into(),
-                        [3.767_373_38, 51.114_444_44].into(),
-                        [4.293_757_362, 51.297_777_78].into(),
-                        [1.850_176_678, 50.965_833_33].into(),
-                        [2.170_906_949, 51.021_666_67].into(),
-                        [4.292_873_969, 51.927_222_22].into(),
-                    ]
-                );
-
-                Ok(())
-            },
-        )
-        .await
+        }
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_creates_volume_dataset() -> Result<()> {
-        with_pro_temp_context(|app_ctx, _| async move {
-            let session = app_ctx.create_anonymous_session().await.unwrap();
-
-            let volume = VolumeName("test_data".to_string());
-
-            let mut meta_data = create_ndvi_meta_data();
-
-            // make path relative to volume
-            meta_data.params.file_path =
-                "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
-
-            let create = CreateDataset {
-                data_path: DataPath::Volume(volume.clone()),
-                definition: DatasetDefinition {
-                    properties: AddDataset {
-                        name: None,
-                        display_name: "ndvi".to_string(),
-                        description: "ndvi".to_string(),
-                        source_operator: "GdalSource".to_string(),
-                        symbology: None,
-                        provenance: None,
-                    },
-                    meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
-                },
-            };
-
-            // create via admin session
-            let admin_session = admin_login(&app_ctx).await;
-            let req = actix_web::test::TestRequest::post()
-                .uri("/dataset")
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((
-                    header::AUTHORIZATION,
-                    Bearer::new(admin_session.id().to_string()),
-                ))
-                .append_header((header::CONTENT_TYPE, "application/json"))
-                .set_json(create);
-            let res = send_pro_test_request(req, app_ctx.clone()).await;
-            assert_eq!(res.status(), 200);
-
-            let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
-
-            let req = actix_web::test::TestRequest::get()
-                .uri(&format!("/dataset/{dataset_name}"))
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-
-            let res = send_pro_test_request(req, app_ctx.clone()).await;
-            assert_eq!(res.status(), 200);
-
-            Ok(())
-        })
-        .await
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_deletes_dataset() -> Result<()> {
+    #[ge_context::test(tiling_spec = "create_dataset_tiling_specification")]
+    async fn create_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        with_pro_temp_context(|app_ctx, _| async move {
-            let session = app_ctx.create_anonymous_session().await.unwrap();
-            let session_id = session.id();
-            let ctx = app_ctx.session_context(session);
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-            let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
-            test_data.uploads.push(upload_id);
+        let session_id = session.id();
 
-            let dataset_name =
-                construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
 
-            let db = ctx.db();
-            let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
+        let dataset_name =
+            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
+        let exe_ctx = ctx.execution_context()?;
 
-            assert!(db.load_dataset(&dataset_id).await.is_ok());
+        let source = make_ogr_source(&exe_ctx, dataset_name.into()).await?;
 
-            let req = actix_web::test::TestRequest::delete()
-                .uri(&format!("/dataset/{dataset_name}"))
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-                .append_header((header::CONTENT_TYPE, "application/json"));
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+        let query_ctx = ctx.query_context()?;
 
-            let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                },
+                &query_ctx,
+            )
+            .await
+            .unwrap();
 
-            assert_eq!(res.status(), 200, "response: {res:?}");
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
 
-            assert!(db.load_dataset(&dataset_id).await.is_err());
+        let coords = result[0].coordinates();
+        assert_eq!(coords.len(), 10);
+        assert_eq!(
+            coords,
+            &[
+                [2.933_686_69, 51.23].into(),
+                [3.204_593_64_f64, 51.336_388_89].into(),
+                [4.651_413_428, 51.805_833_33].into(),
+                [4.11, 51.95].into(),
+                [4.386_160_188, 50.886_111_11].into(),
+                [3.767_373_38, 51.114_444_44].into(),
+                [4.293_757_362, 51.297_777_78].into(),
+                [1.850_176_678, 50.965_833_33].into(),
+                [2.170_906_949, 51.021_666_67].into(),
+                [4.292_873_969, 51.927_222_22].into(),
+            ]
+        );
 
-            Ok(())
-        })
-        .await
+        Ok(())
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_deletes_volume_dataset() -> Result<()> {
-        with_pro_temp_context(|app_ctx, _| async move {
-            let volume = VolumeName("test_data".to_string());
+    #[ge_context::test]
+    async fn it_creates_volume_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-            let mut meta_data = create_ndvi_meta_data();
+        let volume = VolumeName("test_data".to_string());
 
-            // make path relative to volume
-            meta_data.params.file_path =
-                "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+        let mut meta_data = create_ndvi_meta_data();
 
-            let create = CreateDataset {
-                data_path: DataPath::Volume(volume.clone()),
-                definition: DatasetDefinition {
-                    properties: AddDataset {
-                        name: None,
-                        display_name: "ndvi".to_string(),
-                        description: "ndvi".to_string(),
-                        source_operator: "GdalSource".to_string(),
-                        symbology: None,
-                        provenance: None,
-                    },
-                    meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+        // make path relative to volume
+        meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "GdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
                 },
-            };
+                meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+            },
+        };
 
-            let session = admin_login(&app_ctx).await;
-            let ctx = app_ctx.session_context(session.clone());
+        // create via admin session
+        let admin_session = admin_login(&app_ctx).await;
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id().to_string()),
+            ))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_json(create);
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200);
 
-            let db = ctx.db();
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
 
-            let req = actix_web::test::TestRequest::post()
-                .uri("/dataset")
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-                .append_header((header::CONTENT_TYPE, "application/json"))
-                .set_payload(serde_json::to_string(&create)?);
-            let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
 
-            let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
-            let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200);
 
-            assert!(db.load_dataset(&dataset_id).await.is_ok());
+        Ok(())
+    }
 
-            let req = actix_web::test::TestRequest::delete()
-                .uri(&format!("/dataset/{dataset_name}"))
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-                .append_header((header::CONTENT_TYPE, "application/json"));
+    #[ge_context::test]
+    async fn it_deletes_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-            let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let session_id = session.id();
+        let ctx = app_ctx.session_context(session);
 
-            assert_eq!(res.status(), 200);
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
 
-            assert!(db.load_dataset(&dataset_id).await.is_err());
+        let dataset_name =
+            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
 
-            Ok(())
-        })
-        .await
+        let db = ctx.db();
+        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_name}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
+
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        assert!(db.load_dataset(&dataset_id).await.is_err());
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_deletes_volume_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let volume = VolumeName("test_data".to_string());
+
+        let mut meta_data = create_ndvi_meta_data();
+
+        // make path relative to volume
+        meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "GdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                },
+                meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+            },
+        };
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_name}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
+
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        assert!(db.load_dataset(&dataset_id).await.is_err());
+
+        Ok(())
     }
 }

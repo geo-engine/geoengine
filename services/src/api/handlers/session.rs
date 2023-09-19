@@ -128,10 +128,9 @@ async fn session_view_handler<C: SimpleApplicationContext>(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use crate::api::model::responses::ErrorResponse;
-    use crate::contexts::{Session, SessionContext};
-    use crate::util::tests::with_temp_context;
+    use crate::contexts::{PostgresContext, Session, SessionContext};
+    use crate::ge_context;
+    use crate::handlers::ErrorResponse;
     use crate::{
         contexts::SimpleSession,
         util::tests::{check_allowed_http_methods, create_project_helper, send_test_request},
@@ -140,132 +139,123 @@ mod tests {
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use tokio_postgres::NoTls;
 
-    use serial_test::serial;
+    #[ge_context::test]
+    async fn session(app_ctx: PostgresContext<NoTls>) {
+        let session = app_ctx.default_session().await.unwrap();
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn session() {
-        with_temp_context(|app_ctx, _| async move {
-            let session = app_ctx.default_session().await.unwrap();
+        let req = test::TestRequest::get()
+            .uri("/session")
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, app_ctx).await;
+        let deserialized_session: SimpleSession = test::read_body_json(res).await;
 
-            let req = test::TestRequest::get()
-                .uri("/session")
-                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-            let res = send_test_request(req, app_ctx).await;
-            let deserialized_session: SimpleSession = test::read_body_json(res).await;
-
-            assert_eq!(session, deserialized_session);
-        })
-        .await;
+        assert_eq!(session, deserialized_session);
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn session_view_project() {
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+    #[ge_context::test]
+    async fn session_view_project(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let session = ctx.session().clone();
-            let project = create_project_helper(&app_ctx).await;
+        let session = ctx.session().clone();
+        let project = create_project_helper(&app_ctx).await;
 
-            let req = test::TestRequest::post()
-                .uri(&format!("/session/project/{project}"))
-                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-            let res = send_test_request(req, app_ctx.clone()).await;
+        let req = test::TestRequest::post()
+            .uri(&format!("/session/project/{project}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-            assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
-            assert_eq!(
-                app_ctx.default_session().await.unwrap().project(),
-                Some(project)
-            );
+        assert_eq!(
+            app_ctx.default_session().await.unwrap().project(),
+            Some(project)
+        );
 
-            let rect = STRectangle::new_unchecked(
-                SpatialReferenceOption::Unreferenced,
-                0.,
-                0.,
-                1.,
-                1.,
-                0,
-                1,
-            );
-            let req = test::TestRequest::post()
-                .uri("/session/view")
-                .append_header((header::CONTENT_LENGTH, 0))
-                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-                .set_json(&rect);
-            let res = send_test_request(req, app_ctx.clone()).await;
+        let rect =
+            STRectangle::new_unchecked(SpatialReferenceOption::Unreferenced, 0., 0., 1., 1., 0, 1);
+        let req = test::TestRequest::post()
+            .uri("/session/view")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_json(&rect);
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-            assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
-            assert_eq!(
-                app_ctx.default_session().await.unwrap().view(),
-                Some(rect).as_ref()
-            );
-        })
-        .await;
+        assert_eq!(
+            app_ctx.default_session().await.unwrap().view(),
+            Some(rect).as_ref()
+        );
     }
 
-    async fn anonymous_test_helper(method: Method) -> ServiceResponse {
-        with_temp_context(|app_ctx, _| async move {
-            let req = test::TestRequest::default()
-                .method(method)
-                .uri("/anonymous");
-            send_test_request(req, app_ctx).await
-        })
-        .await
+    async fn anonymous_test_helper(
+        app_ctx: PostgresContext<NoTls>,
+        method: Method,
+    ) -> ServiceResponse {
+        let req = test::TestRequest::default()
+            .method(method)
+            .uri("/anonymous");
+        send_test_request(req, app_ctx).await
     }
 
-    #[serial]
-    async fn anonymous() {
-        let res = anonymous_test_helper(Method::POST).await;
+    #[ge_context::test(test_execution = "serial")]
+    async fn anonymous(app_ctx: PostgresContext<NoTls>) {
+        let res = anonymous_test_helper(app_ctx, Method::POST).await;
 
         assert_eq!(res.status(), 200);
 
         let _session: SimpleSession = test::read_body_json(res).await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn anonymous_invalid_method() {
-        check_allowed_http_methods(anonymous_test_helper, &[Method::POST]).await;
+    #[ge_context::test]
+    async fn anonymous_invalid_method(app_ctx: PostgresContext<NoTls>) {
+        check_allowed_http_methods(
+            |method| anonymous_test_helper(app_ctx.clone(), method),
+            &[Method::POST],
+        )
+        .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[serial]
-    async fn it_disables_anonymous_access() {
+    fn it_disables_anonymous_access_before() {
         config::set_config(
             "session.fixed_session_token",
             "18fec623-6600-41af-b82b-24ccf47cb9f9",
         )
         .unwrap();
+    }
 
-        with_temp_context(|app_ctx, _| async move {
-            let req = test::TestRequest::post().uri("/anonymous");
-            let res = send_test_request(req, app_ctx.clone()).await;
+    #[ge_context::test(
+        test_execution = "serial",
+        before = "it_disables_anonymous_access_before"
+    )]
+    async fn it_disables_anonymous_access(app_ctx: PostgresContext<NoTls>) {
+        let req = test::TestRequest::post().uri("/anonymous");
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-            assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200);
 
-            let session: SimpleSession = actix_web::test::read_body_json(res).await;
+        let session: SimpleSession = actix_web::test::read_body_json(res).await;
 
-            assert_eq!(
-                session.id().to_string(),
-                "18fec623-6600-41af-b82b-24ccf47cb9f9"
-            );
+        assert_eq!(
+            session.id().to_string(),
+            "18fec623-6600-41af-b82b-24ccf47cb9f9"
+        );
 
-            config::set_config("session.anonymous_access", false).unwrap();
+        config::set_config("session.anonymous_access", false).unwrap();
 
-            let req = test::TestRequest::post().uri("/anonymous");
-            let res = send_test_request(req, app_ctx.clone()).await;
+        let req = test::TestRequest::post().uri("/anonymous");
+        let res = send_test_request(req, app_ctx.clone()).await;
 
-            config::set_config("session.anonymous_access", true).unwrap();
+        config::set_config("session.anonymous_access", true).unwrap();
 
-            ErrorResponse::assert(
-                res,
-                401,
-                "Unauthorized",
-                "Authorization error: Anonymous access is disabled, please log in",
-            )
-            .await;
-        })
+        ErrorResponse::assert(
+            res,
+            401,
+            "Unauthorized",
+            "Authorization error: Anonymous access is disabled, please log in",
+        )
         .await;
     }
 }

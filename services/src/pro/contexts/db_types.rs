@@ -117,121 +117,121 @@ mod tests {
     use super::*;
     use crate::{
         pro::{
+            contexts::ProPostgresContext,
             datasets::{StacBand, StacZone},
-            util::tests::with_pro_temp_context,
+            ge_context,
         },
         util::postgres::assert_sql_type,
     };
+    use geoengine_datatypes::{primitives::CacheTtlSeconds, util::Identifier};
+    use tokio_postgres::NoTls;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_postgres_type_serialization() {
-        with_pro_temp_context(|app_ctx, _| async move {
-            let pool = app_ctx.pool.get().await.unwrap();
+    async fn test_postgres_type_serialization(app_ctx: ProPostgresContext<NoTls>) {
+        let pool = app_ctx.pool.get().await.unwrap();
 
-            assert_sql_type(
-                &pool,
-                "StacApiRetries",
-                [StacApiRetries {
-                    number_of_retries: 3,
-                    initial_delay_ms: 4,
-                    exponential_backoff_factor: 5.,
-                }],
-            )
-            .await;
+        assert_sql_type(
+            &pool,
+            "StacApiRetries",
+            [StacApiRetries {
+                number_of_retries: 3,
+                initial_delay_ms: 4,
+                exponential_backoff_factor: 5.,
+            }],
+        )
+        .await;
 
-            assert_sql_type(
-                &pool,
-                "GdalRetries",
-                [GdalRetries {
-                    number_of_retries: 3,
-                }],
-            )
-            .await;
+        assert_sql_type(
+            &pool,
+            "GdalRetries",
+            [GdalRetries {
+                number_of_retries: 3,
+            }],
+        )
+        .await;
 
-            assert_sql_type(
-                &pool,
-                "StacBand",
-                [StacBand {
+        assert_sql_type(
+            &pool,
+            "StacBand",
+            [StacBand {
+                name: "band".to_owned(),
+                no_data_value: Some(133.7),
+                data_type: geoengine_datatypes::raster::RasterDataType::F32,
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "StacZone",
+            [StacZone {
+                name: "zone".to_owned(),
+                epsg: 4326,
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "SentinelS2L2ACogsProviderDefinition",
+            [SentinelS2L2ACogsProviderDefinition {
+                name: "foo".to_owned(),
+                id: DataProviderId::new(),
+                api_url: "http://api.url".to_owned(),
+                bands: vec![StacBand {
                     name: "band".to_owned(),
                     no_data_value: Some(133.7),
                     data_type: geoengine_datatypes::raster::RasterDataType::F32,
                 }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "StacZone",
-                [StacZone {
+                zones: vec![StacZone {
                     name: "zone".to_owned(),
                     epsg: 4326,
                 }],
-            )
-            .await;
+                stac_api_retries: StacApiRetries {
+                    number_of_retries: 3,
+                    initial_delay_ms: 4,
+                    exponential_backoff_factor: 5.,
+                },
+                gdal_retries: GdalRetries {
+                    number_of_retries: 3,
+                },
+                cache_ttl: CacheTtlSeconds::new(60),
+            }],
+        )
+        .await;
 
-            assert_sql_type(
-                &pool,
-                "SentinelS2L2ACogsProviderDefinition",
-                [SentinelS2L2ACogsProviderDefinition {
-                    name: "foo".to_owned(),
-                    id: DataProviderId::new(),
-                    api_url: "http://api.url".to_owned(),
-                    bands: vec![StacBand {
-                        name: "band".to_owned(),
-                        no_data_value: Some(133.7),
-                        data_type: geoengine_datatypes::raster::RasterDataType::F32,
-                    }],
-                    zones: vec![StacZone {
-                        name: "zone".to_owned(),
-                        epsg: 4326,
-                    }],
-                    stac_api_retries: StacApiRetries {
-                        number_of_retries: 3,
-                        initial_delay_ms: 4,
-                        exponential_backoff_factor: 5.,
-                    },
-                    gdal_retries: GdalRetries {
-                        number_of_retries: 3,
-                    },
-                    cache_ttl: CacheTtlSeconds::new(60),
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "ProDataProviderDefinition",
-                [
-                    TypedProDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(
-                        SentinelS2L2ACogsProviderDefinition {
-                            name: "foo".to_owned(),
-                            id: DataProviderId::new(),
-                            api_url: "http://api.url".to_owned(),
-                            bands: vec![StacBand {
-                                name: "band".to_owned(),
-                                no_data_value: Some(133.7),
-                                data_type: geoengine_datatypes::raster::RasterDataType::F32,
-                            }],
-                            zones: vec![StacZone {
-                                name: "zone".to_owned(),
-                                epsg: 4326,
-                            }],
-                            stac_api_retries: StacApiRetries {
-                                number_of_retries: 3,
-                                initial_delay_ms: 4,
-                                exponential_backoff_factor: 5.,
-                            },
-                            gdal_retries: GdalRetries {
-                                number_of_retries: 3,
-                            },
-                            cache_ttl: CacheTtlSeconds::new(60),
+        assert_sql_type(
+            &pool,
+            "ProDataProviderDefinition",
+            [
+                TypedProDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(
+                    SentinelS2L2ACogsProviderDefinition {
+                        name: "foo".to_owned(),
+                        id: DataProviderId::new(),
+                        api_url: "http://api.url".to_owned(),
+                        bands: vec![StacBand {
+                            name: "band".to_owned(),
+                            no_data_value: Some(133.7),
+                            data_type: geoengine_datatypes::raster::RasterDataType::F32,
+                        }],
+                        zones: vec![StacZone {
+                            name: "zone".to_owned(),
+                            epsg: 4326,
+                        }],
+                        stac_api_retries: StacApiRetries {
+                            number_of_retries: 3,
+                            initial_delay_ms: 4,
+                            exponential_backoff_factor: 5.,
                         },
-                    ),
-                ],
-            )
-            .await;
-        })
+                        gdal_retries: GdalRetries {
+                            number_of_retries: 3,
+                        },
+                        cache_ttl: CacheTtlSeconds::new(60),
+                    },
+                ),
+            ],
+        )
         .await;
     }
 }

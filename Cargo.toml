@@ -1,9 +1,5 @@
 [workspace]
-members = [
-    "datatypes",
-    "operators",
-    "services",
-]
+members = ["datatypes", "macros", "operators", "services"]
 # Edition 2021 defaults to resolver 2, but virtul workspaces default to resolver 1, so we need to set it explicitly.
 # TODO: This fails only for our xgboost dependency. If we can fix this, we can set this to "2".
 resolver = "1"

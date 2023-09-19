@@ -172,8 +172,9 @@ fn send_result(
 mod tests {
     use super::*;
     use crate::{
-        contexts::{PostgresSessionContext, SimpleApplicationContext},
-        util::tests::{register_ndvi_workflow_helper, with_temp_context},
+        contexts::{PostgresContext, PostgresSessionContext, SimpleApplicationContext},
+        ge_context,
+        util::tests::register_ndvi_workflow_helper,
     };
     use actix_http::error::PayloadError;
     use actix_web_actors::ws::WebsocketContext;
@@ -185,8 +186,8 @@ mod tests {
     };
     use tokio_postgres::NoTls;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_websocket_stream() {
+    #[ge_context::test]
+    async fn test_websocket_stream(app_ctx: PostgresContext<NoTls>) {
         fn send_next(input_sender: &UnboundedSender<Result<Bytes, PayloadError>>) {
             let mut buf = BytesMut::new();
             actix_http::ws::Parser::write_message(
@@ -200,55 +201,52 @@ mod tests {
             input_sender.unbounded_send(Ok(buf.into())).unwrap();
         }
 
-        with_temp_context(|app_ctx, _| async move {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+        let ctx = app_ctx.default_session_context().await.unwrap();
 
-            let (workflow, _workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (workflow, _workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
-            let query_rectangle = RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::one(),
-            };
+        let query_rectangle = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
+                .unwrap(),
+            time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
+                .unwrap(),
+            spatial_resolution: SpatialResolution::one(),
+        };
 
-            let handler = RasterWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(
-                workflow.operator.get_raster().unwrap(),
-                query_rectangle,
-                ctx.execution_context().unwrap(),
-                ctx.query_context().unwrap(),
-            )
-            .await
-            .unwrap();
+        let handler = RasterWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(
+            workflow.operator.get_raster().unwrap(),
+            query_rectangle,
+            ctx.execution_context().unwrap(),
+            ctx.query_context().unwrap(),
+        )
+        .await
+        .unwrap();
 
-            let (input_sender, input_receiver) = futures::channel::mpsc::unbounded();
+        let (input_sender, input_receiver) = futures::channel::mpsc::unbounded();
 
-            let mut websocket_context = WebsocketContext::create(handler, input_receiver);
+        let mut websocket_context = WebsocketContext::create(handler, input_receiver);
 
-            // 4 tiles
-            for _ in 0..4 {
-                send_next(&input_sender);
-
-                let bytes = websocket_context.next().await.unwrap().unwrap();
-
-                let pos = bytes.windows(6).position(|w| w == b"ARROW1").unwrap();
-                let bytes = &bytes[pos..]; // the first "pos" bytes are WS op bytes
-
-                let record_batches = arrow_ipc_file_to_record_batches(bytes).unwrap();
-                assert_eq!(record_batches.len(), 1);
-                let record_batch = record_batches.first().unwrap();
-                let schema = record_batch.schema();
-
-                assert_eq!(schema.metadata()["spatialReference"], "EPSG:4326");
-            }
-
+        // 4 tiles
+        for _ in 0..4 {
             send_next(&input_sender);
-            assert_eq!(websocket_context.next().await.unwrap().unwrap().len(), 4); // close frame
 
-            send_next(&input_sender);
-            assert!(websocket_context.next().await.is_none());
-        })
-        .await;
+            let bytes = websocket_context.next().await.unwrap().unwrap();
+
+            let pos = bytes.windows(6).position(|w| w == b"ARROW1").unwrap();
+            let bytes = &bytes[pos..]; // the first "pos" bytes are WS op bytes
+
+            let record_batches = arrow_ipc_file_to_record_batches(bytes).unwrap();
+            assert_eq!(record_batches.len(), 1);
+            let record_batch = record_batches.first().unwrap();
+            let schema = record_batch.schema();
+
+            assert_eq!(schema.metadata()["spatialReference"], "EPSG:4326");
+        }
+
+        send_next(&input_sender);
+        assert_eq!(websocket_context.next().await.unwrap().unwrap().len(), 4); // close frame
+
+        send_next(&input_sender);
+        assert!(websocket_context.next().await.is_none());
     }
 }

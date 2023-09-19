@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a new handler `Model Training` and task `Machine Learning Model`. These provide the ability to train a machine learning model with xgboost on geospatial data and store it for further usage.
+
+  - https://github.com/geo-engine/geoengine/pull/846
+
 - Added a generic permission API for all resource types and a role management.
 
   - https://github.com/geo-engine/geoengine/pull/756
