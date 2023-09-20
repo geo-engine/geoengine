@@ -1,10 +1,10 @@
 use super::external::{DataProvider, TypedDataProviderDefinition};
 use super::layer::{AddLayer, AddLayerCollection};
 use super::listing::LayerCollectionId;
-use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::error::Result;
 
 use async_trait::async_trait;
+use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

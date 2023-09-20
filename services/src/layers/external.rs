@@ -1,5 +1,4 @@
 use super::listing::LayerCollectionProvider;
-use crate::api::model::datatypes::{DataId, DataProviderId};
 use crate::datasets::external::aruna::ArunaDataProviderDefinition;
 use crate::datasets::external::edr::EdrDataProviderDefinition;
 use crate::datasets::external::gbif::GbifDataProviderDefinition;
@@ -11,6 +10,8 @@ use crate::datasets::external::pangaea::PangaeaDataProviderDefinition;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Result;
 use async_trait::async_trait;
+use geoengine_datatypes::dataset::DataId;
+use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::util::AsAny;
 use geoengine_operators::engine::{

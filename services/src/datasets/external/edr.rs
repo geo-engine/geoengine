@@ -1,4 +1,3 @@
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -12,6 +11,7 @@ use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use gdal::Dataset;
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::hashmap;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds, ContinuousMeasurement, Coordinate2D,
@@ -1169,13 +1169,13 @@ pub enum EdrProviderError {
 
 #[cfg(test)]
 mod tests {
-    use crate::api::model::datatypes::ExternalDataId;
-    use geoengine_datatypes::{primitives::SpatialResolution, util::gdal::hide_gdal_errors};
+    use super::*;
+    use geoengine_datatypes::{
+        dataset::ExternalDataId, primitives::SpatialResolution, util::gdal::hide_gdal_errors,
+    };
     use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
     use httptest::{matchers::*, responders::status_code, Expectation, Server};
     use std::path::PathBuf;
-
-    use super::*;
 
     const DEMO_PROVIDER_ID: DataProviderId =
         DataProviderId::from_u128(0xdc2d_dc34_b0d9_4ee0_bf3e_414f_01a8_05ad);
@@ -1509,13 +1509,10 @@ mod tests {
         let provider = create_provider(server).await;
 
         let meta: Box<dyn MetaData<L, R, Q>> = provider
-            .meta_data(
-                &DataId::External(ExternalDataId {
-                    provider_id: DEMO_PROVIDER_ID,
-                    layer_id: LayerId(format!("collections!{collection}")),
-                })
-                .into(),
-            )
+            .meta_data(&DataId::External(ExternalDataId {
+                provider_id: DEMO_PROVIDER_ID,
+                layer_id: LayerId(format!("collections!{collection}")),
+            }))
             .await
             .unwrap();
         server.verify_and_clear();

@@ -1,18 +1,15 @@
-use crate::api::model::datatypes::{DataProviderId, DatasetId, DatasetName};
-use crate::api::model::operators::TypedResultDescriptor;
-use crate::api::model::responses::datasets::DatasetIdAndName;
-use crate::api::model::services::AddDataset;
+use super::listing::Provenance;
+use super::{DatasetIdAndName, DatasetName};
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
 use crate::error;
 use crate::error::Result;
-
 use crate::projects::Symbology;
-
 use async_trait::async_trait;
+use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
 use geoengine_datatypes::primitives::VectorQueryRectangle;
-use geoengine_operators::engine::MetaData;
+use geoengine_operators::engine::{MetaData, TypedResultDescriptor};
 use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf};
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
@@ -23,8 +20,6 @@ use std::fmt::Debug;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
-
-use super::listing::Provenance;
 
 pub const DATASET_DB_LAYER_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0xac50_ed0d_c9a0_41f8_9ce8_35fc_9e38_299b);
@@ -58,6 +53,17 @@ impl Dataset {
             symbology: self.symbology.clone(),
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AddDataset {
+    pub name: Option<DatasetName>,
+    pub display_name: String,
+    pub description: String,
+    pub source_operator: String,
+    pub symbology: Option<Symbology>,
+    pub provenance: Option<Vec<Provenance>>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]

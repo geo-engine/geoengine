@@ -1,20 +1,19 @@
-use std::convert::{TryFrom, TryInto};
-
-use arrow::array::{BooleanArray, FixedSizeListArray, Float64Array};
-use arrow::error::ArrowError;
-use float_cmp::{ApproxEq, F64Margin};
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-use wkt::{ToWkt, Wkt};
-
+use super::SpatialBounded;
 use crate::collections::VectorDataType;
 use crate::error::Error;
 use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
 use crate::primitives::{Coordinate2D, Geometry};
 use crate::util::arrow::{downcast_array, padded_buffer_size, ArrowTyped};
 use crate::util::Result;
-
-use super::SpatialBounded;
+use arrow::array::{BooleanArray, FixedSizeListArray, Float64Array};
+use arrow::error::ArrowError;
+use fallible_iterator::FallibleIterator;
+use float_cmp::{ApproxEq, F64Margin};
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+use std::convert::{TryFrom, TryInto};
+use wkt::{ToWkt, Wkt};
 
 /// A trait that allows a common access to points of `MultiPoint`s and its references
 pub trait MultiPointAccess {
@@ -109,6 +108,83 @@ impl TryFrom<Vec<(f64, f64)>> for MultiPoint {
 
     fn try_from(coordinates: Vec<(f64, f64)>) -> Result<Self, Self::Error> {
         MultiPoint::new(coordinates.into_iter().map(Into::into).collect())
+    }
+}
+
+impl ToSql for MultiPoint {
+    fn to_sql(
+        &self,
+        ty: &postgres_types::Type,
+        w: &mut bytes::BytesMut,
+    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        let postgres_types::Kind::Array(member_type) = ty.kind() else {
+            panic!("expected array type");
+        };
+
+        let dimension = postgres_protocol::types::ArrayDimension {
+            len: self.coordinates.len() as i32,
+            lower_bound: 1, // arrays are one-indexed
+        };
+
+        postgres_protocol::types::array_to_sql(
+            Some(dimension),
+            member_type.oid(),
+            self.coordinates.iter(),
+            |c, w| {
+                postgres_protocol::types::point_to_sql(c.x, c.y, w);
+
+                Ok(postgres_protocol::IsNull::No)
+            },
+            w,
+        )?;
+
+        Ok(postgres_types::IsNull::No)
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        let postgres_types::Kind::Array(inner_type) = ty.kind() else {
+            return false;
+        };
+
+        matches!(inner_type, &postgres_types::Type::POINT)
+    }
+
+    postgres_types::to_sql_checked!();
+}
+
+impl<'a> FromSql<'a> for MultiPoint {
+    fn from_sql(
+        _ty: &postgres_types::Type,
+        raw: &'a [u8],
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        let array = postgres_protocol::types::array_from_sql(raw)?;
+        if array.dimensions().count()? > 1 {
+            return Err("array contains too many dimensions".into());
+        }
+
+        let coordinates = array
+            .values()
+            .map(|raw| {
+                let Some(raw) = raw else {
+                    return Err("array contains NULL values".into());
+                };
+                let point = postgres_protocol::types::point_from_sql(raw)?;
+                Ok(Coordinate2D {
+                    x: point.x(),
+                    y: point.y(),
+                })
+            })
+            .collect()?;
+
+        Ok(Self { coordinates })
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        let postgres_types::Kind::Array(inner_type) = ty.kind() else {
+            return false;
+        };
+
+        matches!(inner_type, &postgres_types::Type::POINT)
     }
 }
 

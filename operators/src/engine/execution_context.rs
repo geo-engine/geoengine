@@ -291,6 +291,83 @@ where
     }
 }
 
+mod db_types {
+    use geoengine_datatypes::delegate_from_to_sql;
+    use postgres_types::{FromSql, ToSql};
+
+    use super::*;
+
+    pub type MockMetaData = StaticMetaData<
+        MockDatasetDataSourceLoadingInfo,
+        VectorResultDescriptor,
+        VectorQueryRectangle,
+    >;
+
+    #[derive(Debug, ToSql, FromSql)]
+    #[postgres(name = "MockMetaData")]
+    pub struct MockMetaDataDbType {
+        pub loading_info: MockDatasetDataSourceLoadingInfo,
+        pub result_descriptor: VectorResultDescriptor,
+    }
+
+    impl From<&MockMetaData> for MockMetaDataDbType {
+        fn from(other: &MockMetaData) -> Self {
+            Self {
+                loading_info: other.loading_info.clone(),
+                result_descriptor: other.result_descriptor.clone(),
+            }
+        }
+    }
+
+    impl TryFrom<MockMetaDataDbType> for MockMetaData {
+        type Error = Error;
+
+        fn try_from(other: MockMetaDataDbType) -> Result<Self, Self::Error> {
+            Ok(Self {
+                loading_info: other.loading_info,
+                result_descriptor: other.result_descriptor,
+                phantom: PhantomData,
+            })
+        }
+    }
+
+    pub type OgrMetaData =
+        StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>;
+
+    #[derive(Debug, ToSql, FromSql)]
+    #[postgres(name = "OgrMetaData")]
+    pub struct OgrMetaDataDbType {
+        pub loading_info: OgrSourceDataset,
+        pub result_descriptor: VectorResultDescriptor,
+    }
+
+    impl From<&StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>
+        for OgrMetaDataDbType
+    {
+        fn from(other: &OgrMetaData) -> Self {
+            Self {
+                loading_info: other.loading_info.clone(),
+                result_descriptor: other.result_descriptor.clone(),
+            }
+        }
+    }
+
+    impl TryFrom<OgrMetaDataDbType> for OgrMetaData {
+        type Error = Error;
+
+        fn try_from(other: OgrMetaDataDbType) -> Result<Self, Self::Error> {
+            Ok(Self {
+                loading_info: other.loading_info,
+                result_descriptor: other.result_descriptor,
+                phantom: PhantomData,
+            })
+        }
+    }
+
+    delegate_from_to_sql!(MockMetaData, MockMetaDataDbType);
+    delegate_from_to_sql!(OgrMetaData, OgrMetaDataDbType);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

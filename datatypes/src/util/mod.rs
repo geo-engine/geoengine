@@ -1,6 +1,7 @@
 mod any;
 pub mod arrow;
 mod byte_size;
+mod db_types;
 pub mod gdal;
 pub mod helpers;
 pub mod identifiers;
@@ -12,6 +13,7 @@ pub mod well_known_data;
 pub use self::identifiers::Identifier;
 pub use any::{AsAny, AsAnyArc};
 pub use byte_size::ByteSize;
+pub use db_types::{HashMapTextTextDbType, NotNanF64, StringPair, TextTextKeyValue};
 pub use result::Result;
 use std::path::{Path, PathBuf};
 

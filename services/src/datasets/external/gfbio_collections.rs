@@ -1,9 +1,5 @@
-use std::collections::HashMap;
-use std::fmt;
-use std::marker::PhantomData;
-use std::str::FromStr;
-
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
+use super::gfbio_abcd::GfbioAbcdDataProvider;
+use super::pangaea::{PangaeaDataProvider, PangaeaMetaData};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error::ProviderDoesNotSupportBrowsing;
 use crate::error::{Error, Result};
@@ -21,6 +17,7 @@ use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
 use futures::future::join_all;
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
@@ -40,11 +37,12 @@ use geoengine_operators::{
 };
 use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fmt;
+use std::marker::PhantomData;
+use std::str::FromStr;
 use url::Url;
 use uuid::Uuid;
-
-use super::gfbio_abcd::GfbioAbcdDataProvider;
-use super::pangaea::{PangaeaDataProvider, PangaeaMetaData};
 
 pub const GFBIO_COLLECTIONS_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0xf64e_2d5b_3b80_476a_83f5_c330_956b_2909);
@@ -787,10 +785,11 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::Read, path::PathBuf};
-
+    use super::*;
+    use crate::{datasets::listing::Provenance, util::config};
     use bb8_postgres::bb8::ManageConnection;
     use geoengine_datatypes::{
+        dataset::ExternalDataId,
         primitives::{BoundingBox2D, SpatialResolution, TimeInterval},
         test_data,
     };
@@ -801,13 +800,8 @@ mod tests {
         Expectation, Server,
     };
     use rand::RngCore;
+    use std::{fs::File, io::Read, path::PathBuf};
     use tokio_postgres::Config;
-
-    use crate::{
-        api::model::datatypes::ExternalDataId, datasets::listing::Provenance, util::config,
-    };
-
-    use super::*;
 
     /// Create a schema with test tables and return the schema name
     async fn create_test_data(db_config: &config::Postgres) -> String {
@@ -1043,7 +1037,6 @@ mod tests {
                         provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
                         layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0602".to_string()),
                     })
-                    .into(),
                 )
                 .await
                 .map_err(|e| e.to_string())?;

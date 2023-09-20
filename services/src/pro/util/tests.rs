@@ -1,14 +1,12 @@
 use crate::{
-    api::model::{
-        datatypes::{DatasetId, DatasetName, NamedData},
-        services::AddDataset,
-    },
+    api::handlers,
     contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
     datasets::{
         listing::Provenance,
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
+        AddDataset, DatasetName,
     },
-    handlers, pro,
+    pro,
     pro::{
         contexts::{ProApplicationContext, ProGeoEngineDb, ProPostgresContext},
         permissions::{Permission, PermissionDb, Role},
@@ -32,6 +30,7 @@ use actix_web::dev::ServiceResponse;
 use actix_web::{http, middleware, test, web, App};
 use futures_util::Future;
 use geoengine_datatypes::{
+    dataset::{DatasetId, NamedData},
     primitives::DateTime,
     raster::TilingSpecification,
     spatial_reference::SpatialReferenceOption,
@@ -126,15 +125,15 @@ pub async fn send_pro_test_request(
             )
             .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
-            .configure(pro::handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
+            .configure(pro::api::handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::layers::init_layer_routes::<ProPostgresContext<NoTls>>)
-            .configure(pro::handlers::machine_learning::init_ml_routes::<ProPostgresContext<NoTls>>)
+            .configure(pro::api::handlers::machine_learning::init_ml_routes::<ProPostgresContext<NoTls>>)
             .configure(
-                pro::handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>,
+                pro::api::handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>,
             )
             .configure(handlers::plots::init_plot_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::projects::init_project_routes::<ProPostgresContext<NoTls>>)
-            .configure(pro::handlers::users::init_user_routes::<ProPostgresContext<NoTls>>)
+            .configure(pro::api::handlers::users::init_user_routes::<ProPostgresContext<NoTls>>)
             .configure(
                 handlers::spatial_references::init_spatial_reference_routes::<
                     ProPostgresContext<NoTls>,
@@ -337,9 +336,7 @@ where
     let workflow = Workflow {
         operator: TypedOperator::Raster(
             GdalSource {
-                params: GdalSourceParameters {
-                    data: dataset.into(),
-                },
+                params: GdalSourceParameters { data: dataset },
             }
             .boxed(),
         ),

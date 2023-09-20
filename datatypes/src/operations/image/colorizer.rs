@@ -3,6 +3,7 @@ use crate::operations::image::RgbaTransmutable;
 use crate::raster::Pixel;
 use crate::util::Result;
 use ordered_float::{FloatIsNan, NotNan};
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
@@ -606,6 +607,10 @@ impl Palette {
     pub fn into_inner(self) -> HashMap<NotNan<f64>, RgbaColor> {
         self.0
     }
+
+    pub fn inner(&self) -> &HashMap<NotNan<f64>, RgbaColor> {
+        &self.0
+    }
 }
 
 /// A type that is solely for serde's serializability.
@@ -722,6 +727,70 @@ impl From<RgbaColor> for image::Rgba<u8> {
     fn from(color: RgbaColor) -> image::Rgba<u8> {
         // [r, g, b, a]
         image::Rgba(color.0)
+    }
+}
+
+impl ToSql for RgbaColor {
+    fn to_sql(
+        &self,
+        ty: &postgres_types::Type,
+        w: &mut bytes::BytesMut,
+    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        let tuple = self.0.map(i16::from);
+
+        let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
+            return Err(Box::new(
+                crate::error::Error::UnexpectedInvalidDbTypeConversion,
+            ));
+        };
+
+        <[i16; 4] as ToSql>::to_sql(&tuple, inner_type, w)
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        if ty.name() != "RgbaColor" {
+            return false;
+        }
+        let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
+            return false;
+        };
+
+        <[i16; 4] as ToSql>::accepts(inner_type)
+    }
+
+    postgres_types::to_sql_checked!();
+}
+
+impl<'a> FromSql<'a> for RgbaColor {
+    fn from_sql(
+        ty: &postgres_types::Type,
+        raw: &'a [u8],
+    ) -> Result<RgbaColor, Box<dyn std::error::Error + Sync + Send>> {
+        let array_ty = match ty.kind() {
+            postgres_types::Kind::Domain(inner_type) => inner_type,
+            _ => ty,
+        };
+
+        let tuple = <[i16; 4] as FromSql>::from_sql(array_ty, raw)?;
+
+        Ok(RgbaColor(tuple.map(|v| v as u8)))
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        type Target = [i16; 4];
+
+        if <Target as FromSql>::accepts(ty) {
+            return true;
+        }
+
+        if ty.name() != "RgbaColor" {
+            return false;
+        }
+        let postgres_types::Kind::Domain(inner_type) = ty.kind() else {
+            return false;
+        };
+
+        <Target as FromSql>::accepts(inner_type)
     }
 }
 

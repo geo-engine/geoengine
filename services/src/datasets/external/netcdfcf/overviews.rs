@@ -1,6 +1,5 @@
 use super::{error, NetCdfCf4DProviderError, TimeCoverage};
 use crate::{
-    api::model::datatypes::ResamplingMethod,
     datasets::{external::netcdfcf::NetCdfCfDataProvider, storage::MetaDataDefinition},
     tasks::{TaskContext, TaskStatusInfo},
     util::{config::get_config_element, path_with_base_path},
@@ -17,6 +16,7 @@ use gdal_sys::GDALGetRasterStatistics;
 use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{DateTimeParseFormat, TimeInstance, TimeInterval},
+    util::gdal::ResamplingMethod,
 };
 use geoengine_datatypes::{
     primitives::CacheTtlSeconds, spatial_reference::SpatialReference, util::canonicalize_subpath,

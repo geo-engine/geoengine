@@ -1,6 +1,7 @@
 use crate::error::ErrorSource;
 use crate::primitives::TimeInstance;
 use chrono::{Datelike, NaiveDate, Timelike};
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::cmp::Ordering;
@@ -376,7 +377,7 @@ impl From<&DateTime> for chrono::DateTime<chrono::FixedOffset> {
 /// | %6f       | Similar to %.6f but without the leading dot. 6                         | 026490     |
 /// | %9f       | Similar to %.9f but without the leading dot. 6                         | 026490000  |
 ///
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, FromSql, ToSql)]
 pub struct DateTimeParseFormat {
     fmt: String,
     has_tz: bool,

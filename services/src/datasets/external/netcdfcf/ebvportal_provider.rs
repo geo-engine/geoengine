@@ -1,19 +1,7 @@
-use std::{path::PathBuf, str::FromStr};
-
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
-use async_trait::async_trait;
-use geoengine_datatypes::primitives::{
-    CacheTtlSeconds, RasterQueryRectangle, VectorQueryRectangle,
+use super::{
+    ebvportal_api::{EbvPortalApi, NetCdfCfDataProviderPaths},
+    layer_from_netcdf_overview, NetCdfCfDataProvider,
 };
-use geoengine_operators::{
-    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
-    mock::MockDatasetDataSourceLoadingInfo,
-    source::{GdalLoadingInfo, OgrSourceDataset},
-};
-use reqwest::Url;
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-
 use crate::{
     datasets::external::netcdfcf::find_group,
     error::{Error, Result},
@@ -26,11 +14,20 @@ use crate::{
         listing::{LayerCollectionId, LayerCollectionProvider},
     },
 };
-
-use super::{
-    ebvportal_api::{EbvPortalApi, NetCdfCfDataProviderPaths},
-    layer_from_netcdf_overview, NetCdfCfDataProvider,
+use async_trait::async_trait;
+use geoengine_datatypes::{
+    dataset::{DataId, DataProviderId, LayerId},
+    primitives::{CacheTtlSeconds, RasterQueryRectangle, VectorQueryRectangle},
 };
+use geoengine_operators::{
+    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
+    mock::MockDatasetDataSourceLoadingInfo,
+    source::{GdalLoadingInfo, OgrSourceDataset},
+};
+use reqwest::Url;
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+use std::{path::PathBuf, str::FromStr};
 
 /// Singleton Provider with id `77d0bf11-986e-43f5-b11d-898321f1854c`
 pub const EBV_PROVIDER_ID: DataProviderId =

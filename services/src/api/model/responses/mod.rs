@@ -1,7 +1,79 @@
 pub mod datasets;
 
-use crate::handlers::ErrorResponse;
-use utoipa::ToResponse;
+use actix_http::StatusCode;
+use actix_web::{dev::ServiceResponse, HttpResponse};
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use utoipa::{ToResponse, ToSchema};
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, ToResponse)]
+#[response(description = "Id of generated resource", example = json!({
+    "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+}))]
+pub struct IdResponse<T> {
+    pub id: T,
+}
+
+impl<T> From<T> for IdResponse<T> {
+    fn from(id: T) -> Self {
+        Self { id }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub struct ErrorResponse {
+    pub error: String,
+    pub message: String,
+}
+
+impl ErrorResponse {
+    /// Assert that a `Response` has a certain `status` and `error` message.
+    ///
+    /// # Panics
+    /// Panics if `status` or `error` do not match.
+    ///
+    pub async fn assert(res: ServiceResponse, status: u16, error: &str, message: &str) {
+        assert_eq!(res.status(), status);
+
+        let body: Self = actix_web::test::read_body_json(res).await;
+        assert_eq!(
+            body,
+            Self {
+                error: error.to_string(),
+                message: message.to_string(),
+            }
+        );
+    }
+}
+
+impl<'a, T> From<&'a T> for ErrorResponse
+where
+    T: snafu::Error,
+    &'static str: From<&'a T>,
+{
+    fn from(value: &'a T) -> Self {
+        ErrorResponse {
+            error: Into::<&str>::into(value).to_string(),
+            message: value.to_string(),
+        }
+    }
+}
+
+impl actix_web::ResponseError for ErrorResponse {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(self)
+    }
+
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
+    }
+}
+
+impl fmt::Display for ErrorResponse {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {}", self.error, self.message)
+    }
+}
 
 #[derive(ToResponse)]
 #[response(description = "Media type of application/json is expected", example = json!({
@@ -22,14 +94,6 @@ pub struct UnsupportedMediaTypeForJsonResponse(ErrorResponse);
     })))
 ))]
 pub struct PayloadTooLargeResponse(ErrorResponse);
-
-#[derive(ToResponse)]
-#[response(description = "Id of generated resource", example = json!({
-    "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
-}))]
-pub struct IdResponse {
-    pub id: String,
-}
 
 #[derive(ToResponse)]
 #[response(description = "Authorization failed", examples(

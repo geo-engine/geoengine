@@ -1,4 +1,3 @@
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId, NamedData};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::{self, Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -12,6 +11,7 @@ use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, S
 use crate::util::operators::source_operator_from_dataset;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
 use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
@@ -118,7 +118,7 @@ impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
         self.name.clone()
     }
 
-    fn id(&self) -> DataProviderId {
+    fn id(&self) -> geoengine_datatypes::dataset::DataProviderId {
         self.id
     }
 }
@@ -224,8 +224,7 @@ impl SentinelS2L2aCogsDataProvider {
                                         under_color: RgbaColor::black(),
                                     },
                                 )
-                                .expect("valid colorizer")
-                                .into(),
+                                .expect("valid colorizer"),
                         })), // TODO: individual colorizer per band
                         properties: vec![],
                         metadata: HashMap::new(),
@@ -323,8 +322,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                                 namespace: None,
                                 provider: Some(self.id.to_string()),
                                 name: id.to_string(),
-                            }
-                            .into(),
+                            },
                         },
                     }
                     .boxed(),
@@ -686,7 +684,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let id: DataId = id.clone().into();
+        let id: DataId = id.clone();
 
         let dataset = self
             .datasets
@@ -751,7 +749,6 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use super::*;
     use crate::{
-        api::model::datatypes::ExternalDataId,
         contexts::{ApplicationContext, SessionContext},
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
         pro::{
@@ -762,7 +759,7 @@ mod tests {
     };
     use futures::StreamExt;
     use geoengine_datatypes::{
-        dataset::DatasetId,
+        dataset::{DatasetId, ExternalDataId},
         primitives::{SpatialPartition2D, SpatialResolution},
         util::{gdal::hide_gdal_errors, test::TestDefault, Identifier},
     };
@@ -897,12 +894,12 @@ mod tests {
                 layer_id: LayerId("UTM32N:B01".to_owned()),
             }
             .into(),
-            name.clone().into(),
+            name.clone(),
             meta,
         );
 
         let op = GdalSource {
-            params: GdalSourceParameters { data: name.into() },
+            params: GdalSourceParameters { data: name },
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe)
@@ -1258,7 +1255,7 @@ mod tests {
         };
         execution_context.add_meta_data(
             id.clone(),
-            name.clone().into(),
+            name.clone(),
             Box::new(GdalMetaDataStatic {
                 time: None,
                 result_descriptor: RasterResultDescriptor {
@@ -1275,7 +1272,7 @@ mod tests {
         );
 
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { data: name.into() },
+            params: GdalSourceParameters { data: name },
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)

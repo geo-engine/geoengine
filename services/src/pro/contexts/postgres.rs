@@ -1,13 +1,13 @@
 use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
-use crate::api::model::datatypes::DatasetName;
+use crate::api::cli::add_providers_from_directory;
 use crate::contexts::{ApplicationContext, PostgresContext, QueryContextImpl, SessionId};
 use crate::contexts::{GeoEngineDb, SessionContext};
-use crate::datasets::add_from_directory::add_providers_from_directory;
 use crate::datasets::upload::{Volume, Volumes};
+use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
 use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
 use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
-use crate::pro::datasets::add_datasets_from_directory;
+use crate::pro::api::cli::add_datasets_from_directory;
 use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
     add_pro_providers_from_directory,
@@ -616,15 +616,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::{DataProviderId, DatasetName, LayerId};
-    use crate::api::model::responses::datasets::DatasetIdAndName;
-    use crate::api::model::services::AddDataset;
     use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
     use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
+    use crate::datasets::{AddDataset, DatasetIdAndName};
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
         LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
@@ -652,6 +650,7 @@ mod tests {
     use bb8_postgres::tokio_postgres::NoTls;
     use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
+    use geoengine_datatypes::dataset::{DataProviderId, LayerId};
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
@@ -1251,7 +1250,6 @@ mod tests {
                     time: None,
                     bbox: None,
                 })
-                .into(),
             },
         );
 
