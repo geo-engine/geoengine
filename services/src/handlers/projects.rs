@@ -7,7 +7,12 @@ use crate::projects::{
 };
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use crate::util::IdResponse;
-use actix_web::{web, FromRequest, HttpResponse, Responder};
+use actix_web::{web, FromRequest, HttpResponse, Responder, ResponseError};
+use snafu::prelude::*;
+use snafu::ResultExt;
+use strum::IntoStaticStr;
+
+use crate::{handlers::ErrorResponse, projects::error::ProjectDbError};
 
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -35,6 +40,54 @@ where
         );
 }
 
+#[derive(Debug, Snafu, IntoStaticStr)]
+#[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
+pub enum ProjectHandlerError {
+    #[snafu(display("Could not create project: {source}"))]
+    CreateProject { source: ProjectDbError },
+    #[snafu(display("Could not list projects: {source}"))]
+    ListProjects { source: ProjectDbError },
+    #[snafu(display("Could not update project: {source}"))]
+    UpdateProject { source: ProjectDbError },
+    #[snafu(display("Could not delete project: {source}"))]
+    DeleteProject { source: ProjectDbError },
+    #[snafu(display("Could not load project version: {source}"))]
+    LoadProjectVersion { source: ProjectDbError },
+    #[snafu(display("Could not load latest project version: {source}"))]
+    LoadLatestProjectVersion { source: ProjectDbError },
+    #[snafu(display("Could not list project versions: {source}"))]
+    ListProjectVersions { source: ProjectDbError },
+}
+
+impl ProjectHandlerError {
+    pub fn source(&self) -> &ProjectDbError {
+        match self {
+            ProjectHandlerError::CreateProject { source }
+            | ProjectHandlerError::ListProjects { source }
+            | ProjectHandlerError::UpdateProject { source }
+            | ProjectHandlerError::DeleteProject { source }
+            | ProjectHandlerError::LoadProjectVersion { source }
+            | ProjectHandlerError::LoadLatestProjectVersion { source }
+            | ProjectHandlerError::ListProjectVersions { source } => source,
+        }
+    }
+}
+
+impl ResponseError for ProjectHandlerError {
+    fn status_code(&self) -> actix_http::StatusCode {
+        match self.source() {
+            ProjectDbError::Postgres { .. } | ProjectDbError::Bb8 { .. } => {
+                actix_http::StatusCode::INTERNAL_SERVER_ERROR
+            }
+            _ => actix_http::StatusCode::BAD_REQUEST,
+        }
+    }
+
+    fn error_response(&self) -> HttpResponse<actix_http::body::BoxBody> {
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
+    }
+}
+
 /// Create a new project for the user.
 #[utoipa::path(
     tag = "Projects",
@@ -52,13 +105,14 @@ pub(crate) async fn create_project_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: ValidatedJson<CreateProject>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     let create = create.into_inner();
     let id = app_ctx
         .session_context(session)
         .db()
         .create_project(create)
-        .await?;
+        .await
+        .context(error::CreateProject)?;
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -90,13 +144,14 @@ pub(crate) async fn list_projects_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     options: ValidatedQuery<ProjectListOptions>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     let options = options.into_inner();
     let listing = app_ctx
         .session_context(session)
         .db()
         .list_projects(options)
-        .await?;
+        .await
+        .context(error::ListProjects)?;
     Ok(web::Json(listing))
 }
 
@@ -122,14 +177,15 @@ pub(crate) async fn update_project_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     update: ValidatedJson<UpdateProject>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     let mut update = update.into_inner();
     update.id = project.into_inner(); // TODO: avoid passing project id in path AND body
     app_ctx
         .session_context(session)
         .db()
         .update_project(update)
-        .await?;
+        .await
+        .context(error::UpdateProject)?;
     Ok(HttpResponse::Ok())
 }
 
@@ -152,12 +208,13 @@ pub(crate) async fn delete_project_handler<C: ApplicationContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     app_ctx
         .session_context(session)
         .db()
         .delete_project(*project)
-        .await?;
+        .await
+        .context(error::DeleteProject)?;
     Ok(HttpResponse::Ok())
 }
 
@@ -215,13 +272,14 @@ pub(crate) async fn load_project_version_handler<C: ApplicationContext>(
     project: web::Path<(ProjectId, ProjectVersionId)>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     let project = project.into_inner();
     let id = app_ctx
         .session_context(session)
         .db()
         .load_project_version(project.0, LoadVersion::Version(project.1))
-        .await?;
+        .await
+        .context(error::LoadProjectVersion)?;
     Ok(web::Json(id))
 }
 
@@ -278,12 +336,13 @@ pub(crate) async fn load_project_latest_handler<C: ApplicationContext>(
     project: web::Path<ProjectId>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     let id = app_ctx
         .session_context(session)
         .db()
         .load_project_version(project.into_inner(), LoadVersion::Latest)
-        .await?;
+        .await
+        .context(error::LoadLatestProjectVersion)?;
     Ok(web::Json(id))
 }
 
@@ -319,12 +378,13 @@ pub(crate) async fn project_versions_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     project: web::Path<ProjectId>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder, ProjectHandlerError> {
     let versions = app_ctx
         .session_context(session)
         .db()
         .list_project_versions(project.into_inner())
-        .await?;
+        .await
+        .context(error::ListProjectVersions)?;
     Ok(web::Json(versions))
 }
 
@@ -441,7 +501,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "missing field `name` at line 1 column 195",
+            "Error in user input: missing field `name` at line 1 column 195",
         )
         .await;
     }
@@ -668,7 +728,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "expected ident at line 1 column 2",
+            "Error in user input: expected ident at line 1 column 2",
         )
         .await;
     }
@@ -706,7 +766,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "missing field `id` at line 1 column 260",
+            "Error in user input: missing field `id` at line 1 column 260",
         )
         .await;
     }
@@ -1023,8 +1083,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             400,
-            "ProjectDeleteFailed",
-            "Failed to delete the project.",
+            "DeleteProject",
+            &format!("Could not delete project: Project {project} does not exist"),
         )
         .await;
     }

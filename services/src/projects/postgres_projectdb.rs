@@ -1,6 +1,5 @@
 use crate::contexts::PostgresDb;
-use crate::error;
-use crate::error::Result;
+use crate::projects::error::ProjectNotFoundProjectDbError;
 use crate::projects::Plot;
 use crate::projects::ProjectLayer;
 use crate::projects::{
@@ -8,6 +7,9 @@ use crate::projects::{
     ProjectVersion, ProjectVersionId, UpdateProject,
 };
 
+use super::error::Bb8ProjectDbError;
+use super::error::PostgresProjectDbError;
+use super::error::ProjectDbError;
 use super::LoadVersion;
 use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
@@ -19,11 +21,12 @@ use bb8_postgres::{
     tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
 use snafu::ensure;
+use snafu::ResultExt;
 
 async fn list_plots<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
     project_version_id: &ProjectVersionId,
-) -> Result<Vec<String>>
+) -> Result<Vec<String>, ProjectDbError>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -38,9 +41,13 @@ where
                     WHERE project_version_id = $1;
                 ",
         )
-        .await?;
+        .await
+        .context(PostgresProjectDbError)?;
 
-    let plot_rows = conn.query(&stmt, &[project_version_id]).await?;
+    let plot_rows = conn
+        .query(&stmt, &[project_version_id])
+        .await
+        .context(PostgresProjectDbError)?;
     let plot_names = plot_rows.iter().map(|row| row.get(0)).collect();
 
     Ok(plot_names)
@@ -49,7 +56,7 @@ where
 async fn load_plots<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
     project_version_id: &ProjectVersionId,
-) -> Result<Vec<Plot>>
+) -> Result<Vec<Plot>, ProjectDbError>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -66,9 +73,13 @@ where
                 ORDER BY plot_index ASC
                 ",
         )
-        .await?;
+        .await
+        .context(PostgresProjectDbError)?;
 
-    let rows = conn.query(&stmt, &[project_version_id]).await?;
+    let rows = conn
+        .query(&stmt, &[project_version_id])
+        .await
+        .context(PostgresProjectDbError)?;
 
     let plots = rows
         .into_iter()
@@ -86,7 +97,7 @@ async fn update_plots(
     project_id: &ProjectId,
     project_version_id: &ProjectVersionId,
     plots: &[Plot],
-) -> Result<()> {
+) -> Result<(), ProjectDbError> {
     for (idx, plot) in plots.iter().enumerate() {
         let stmt = trans
             .prepare(
@@ -100,7 +111,8 @@ async fn update_plots(
                     VALUES ($1, $2, $3, $4, $5);
                     ",
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         trans
             .execute(
@@ -113,7 +125,8 @@ async fn update_plots(
                     &plot.workflow,
                 ],
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
     }
 
     Ok(())
@@ -127,10 +140,13 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn list_projects(&self, options: ProjectListOptions) -> Result<Vec<ProjectListing>> {
+    async fn list_projects(
+        &self,
+        options: ProjectListOptions,
+    ) -> Result<Vec<ProjectListing>, ProjectDbError> {
         // TODO: project filters
 
-        let conn = self.conn_pool.get().await?;
+        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
         let stmt = conn
             .prepare(&format!(
@@ -144,14 +160,16 @@ where
         OFFSET $2;",
                 options.order.to_sql_string()
             ))
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         let project_rows = conn
             .query(
                 &stmt,
                 &[&i64::from(options.limit), &i64::from(options.offset)],
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         let mut project_listings = vec![];
         for project_row in project_rows {
@@ -168,9 +186,13 @@ where
                     FROM project_version_layers
                     WHERE project_version_id = $1;",
                 )
-                .await?;
+                .await
+                .context(PostgresProjectDbError)?;
 
-            let layer_rows = conn.query(&stmt, &[&project_version_id]).await?;
+            let layer_rows = conn
+                .query(&stmt, &[&project_version_id])
+                .await
+                .context(PostgresProjectDbError)?;
             let layer_names = layer_rows.iter().map(|row| row.get(0)).collect();
 
             project_listings.push(ProjectListing {
@@ -185,18 +207,26 @@ where
         Ok(project_listings)
     }
 
-    async fn create_project(&self, create: CreateProject) -> Result<ProjectId> {
-        let mut conn = self.conn_pool.get().await?;
+    async fn create_project(&self, create: CreateProject) -> Result<ProjectId, ProjectDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
         let project: Project = Project::from_create_project(create);
 
-        let trans = conn.build_transaction().start().await?;
+        let trans = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresProjectDbError)?;
 
         let stmt = trans
             .prepare("INSERT INTO projects (id) VALUES ($1);")
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
-        trans.execute(&stmt, &[&project.id]).await?;
+        trans
+            .execute(&stmt, &[&project.id])
+            .await
+            .context(PostgresProjectDbError)?;
 
         let stmt = trans
             .prepare(
@@ -210,7 +240,8 @@ where
                     changed)
                     VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);",
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         let version_id = ProjectVersionId::new();
 
@@ -226,25 +257,30 @@ where
                     &project.time_step,
                 ],
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
-        trans.commit().await?;
+        trans.commit().await.context(PostgresProjectDbError)?;
 
         Ok(project.id)
     }
 
-    async fn load_project(&self, project: ProjectId) -> Result<Project> {
+    async fn load_project(&self, project: ProjectId) -> Result<Project, ProjectDbError> {
         self.load_project_version(project, LoadVersion::Latest)
             .await
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn update_project(&self, update: UpdateProject) -> Result<()> {
+    async fn update_project(&self, update: UpdateProject) -> Result<(), ProjectDbError> {
         let update = update;
 
-        let mut conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
-        let trans = conn.build_transaction().start().await?;
+        let trans = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresProjectDbError)?;
 
         let project = self.load_project(update.id).await?; // TODO: move inside transaction?
 
@@ -263,7 +299,8 @@ where
                     changed)
                 VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);",
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         trans
             .execute(
@@ -277,7 +314,8 @@ where
                     &project.time_step,
                 ],
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
         for (idx, layer) in project.layers.iter().enumerate() {
             let stmt = trans
@@ -293,7 +331,8 @@ where
                     visibility)
                 VALUES ($1, $2, $3, $4, $5, $6, $7);",
                 )
-                .await?;
+                .await
+                .context(PostgresProjectDbError)?;
 
             trans
                 .execute(
@@ -308,24 +347,34 @@ where
                         &layer.visibility,
                     ],
                 )
-                .await?;
+                .await
+                .context(PostgresProjectDbError)?;
         }
 
         update_plots(&trans, &project.id, &project.version.id, &project.plots).await?;
 
-        trans.commit().await?;
+        trans.commit().await.context(PostgresProjectDbError)?;
 
         Ok(())
     }
 
-    async fn delete_project(&self, project: ProjectId) -> Result<()> {
-        let conn = self.conn_pool.get().await?;
+    async fn delete_project(&self, project: ProjectId) -> Result<(), ProjectDbError> {
+        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
-        let stmt = conn.prepare("DELETE FROM projects WHERE id = $1;").await?;
+        let stmt = conn
+            .prepare("DELETE FROM projects WHERE id = $1;")
+            .await
+            .context(PostgresProjectDbError)?;
 
-        let rows_affected = conn.execute(&stmt, &[&project]).await?;
+        let rows_affected = conn
+            .execute(&stmt, &[&project])
+            .await
+            .context(PostgresProjectDbError)?;
 
-        ensure!(rows_affected == 1, error::ProjectDeleteFailed);
+        ensure!(
+            rows_affected == 1,
+            ProjectNotFoundProjectDbError { project }
+        );
 
         Ok(())
     }
@@ -335,10 +384,10 @@ where
         &self,
         project: ProjectId,
         version: LoadVersion,
-    ) -> Result<Project> {
-        let conn = self.conn_pool.get().await?;
+    ) -> Result<Project, ProjectDbError> {
+        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
-        let row = if let LoadVersion::Version(version) = version {
+        let rows = if let LoadVersion::Version(version) = version {
             let stmt = conn
                 .prepare(
                     "
@@ -354,9 +403,19 @@ where
                 project_versions p
             WHERE p.project_id = $1 AND p.id = $2",
                 )
-                .await?;
+                .await
+                .context(PostgresProjectDbError)?;
 
-            conn.query_one(&stmt, &[&project, &version]).await?
+            let rows = conn
+                .query(&stmt, &[&project, &version])
+                .await
+                .context(PostgresProjectDbError)?;
+
+            if rows.is_empty() {
+                return Err(ProjectDbError::ProjectVersionNotFound { project, version });
+            }
+
+            rows
         } else {
             let stmt = conn
                 .prepare(
@@ -375,10 +434,22 @@ where
                 SELECT changed FROM project_versions WHERE project_id = $1
             )",
                 )
-                .await?;
+                .await
+                .context(PostgresProjectDbError)?;
 
-            conn.query_one(&stmt, &[&project]).await?
+            let rows = conn
+                .query(&stmt, &[&project])
+                .await
+                .context(PostgresProjectDbError)?;
+
+            if rows.is_empty() {
+                return Err(ProjectDbError::ProjectNotFound { project });
+            }
+
+            rows
         };
+
+        let row = &rows[0];
 
         let project_id = ProjectId(row.get(0));
         let version_id = ProjectVersionId(row.get(1));
@@ -397,9 +468,13 @@ where
         WHERE project_version_id = $1
         ORDER BY layer_index ASC",
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
-        let rows = conn.query(&stmt, &[&version_id]).await?;
+        let rows = conn
+            .query(&stmt, &[&version_id])
+            .await
+            .context(PostgresProjectDbError)?;
 
         let mut layers = vec![];
         for row in rows {
@@ -426,8 +501,11 @@ where
         })
     }
 
-    async fn list_project_versions(&self, project: ProjectId) -> Result<Vec<ProjectVersion>> {
-        let conn = self.conn_pool.get().await?;
+    async fn list_project_versions(
+        &self,
+        project: ProjectId,
+    ) -> Result<Vec<ProjectVersion>, ProjectDbError> {
+        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
         let stmt = conn
             .prepare(
@@ -441,9 +519,13 @@ where
                 ORDER BY 
                     changed DESC",
             )
-            .await?;
+            .await
+            .context(PostgresProjectDbError)?;
 
-        let rows = conn.query(&stmt, &[&project]).await?;
+        let rows = conn
+            .query(&stmt, &[&project])
+            .await
+            .context(PostgresProjectDbError)?;
 
         Ok(rows
             .iter()
