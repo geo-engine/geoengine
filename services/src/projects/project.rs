@@ -1,5 +1,6 @@
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::identifier;
+use crate::projects::error::ProjectDbError;
 use crate::util::config::ProjectService;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
@@ -62,11 +63,12 @@ impl Project {
     /// If the updates layer list is longer than the current list,
     /// it just inserts new layers to the end.
     ///
-    pub fn update_project(&self, update: UpdateProject) -> Result<Project> {
+    pub fn update_project(&self, update: UpdateProject) -> Result<Project, ProjectDbError> {
         fn update_layer_or_plots<Content>(
+            project: ProjectId,
             state: Vec<Content>,
             updates: Vec<VecUpdate<Content>>,
-        ) -> Result<Vec<Content>> {
+        ) -> Result<Vec<Content>, ProjectDbError> {
             let mut result = Vec::new();
 
             let mut updates = updates.into_iter();
@@ -83,7 +85,7 @@ impl Project {
                 if let VecUpdate::UpdateOrInsert(new_content) = update {
                     result.push(new_content);
                 } else {
-                    return Err(Error::ProjectUpdateFailed);
+                    return Err(ProjectDbError::ProjectUpdateFailed { project });
                 }
             }
 
@@ -102,11 +104,11 @@ impl Project {
         }
 
         if let Some(layer_updates) = update.layers {
-            project.layers = update_layer_or_plots(project.layers, layer_updates)?;
+            project.layers = update_layer_or_plots(update.id, project.layers, layer_updates)?;
         }
 
         if let Some(plot_updates) = update.plots {
-            project.plots = update_layer_or_plots(project.plots, plot_updates)?;
+            project.plots = update_layer_or_plots(update.id, project.plots, plot_updates)?;
         }
 
         if let Some(bounds) = update.bounds {
@@ -425,18 +427,6 @@ impl From<&Project> for ProjectListing {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema, Default)]
-pub enum ProjectFilter {
-    Name {
-        term: String,
-    },
-    Description {
-        term: String,
-    },
-    #[default]
-    None,
-}
-
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, Validate)]
 #[serde(rename_all = "camelCase")]
 #[schema(example = json!({
@@ -563,8 +553,6 @@ impl<'a> ToSchema<'a> for PlotUpdate {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, IntoParams, Validate)]
 pub struct ProjectListOptions {
-    #[serde(default)]
-    pub filter: ProjectFilter,
     #[param(example = "NameAsc")]
     pub order: OrderBy,
     #[param(example = 0)]

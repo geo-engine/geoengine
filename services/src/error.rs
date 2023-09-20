@@ -130,6 +130,9 @@ pub enum Error {
     ))]
     ClearDatabaseOnStartupNotAllowed,
 
+    #[snafu(display("Database schema must not be `public`."))]
+    InvalidDatabaseSchema,
+
     #[snafu(display("Identifier does not have the right format."))]
     InvalidUuid,
     SessionNotInitialized,

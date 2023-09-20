@@ -642,8 +642,8 @@ mod tests {
     use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::projects::{
         CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
-        ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
-        STRectangle, UpdateProject,
+        ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
+        UpdateProject,
     };
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
@@ -958,7 +958,6 @@ mod tests {
         session: &UserSession,
     ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
-            filter: ProjectFilter::None,
             order: OrderBy::NameDesc,
             offset: 0,
             limit: 2,

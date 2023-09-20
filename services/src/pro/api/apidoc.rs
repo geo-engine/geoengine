@@ -58,8 +58,8 @@ use crate::pro::users::{UserCredentials, UserId, UserInfo, UserRegistration, Use
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
-    ProjectFilter, ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId,
-    RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
+    ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId, RasterSymbology,
+    STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
 use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
@@ -346,7 +346,6 @@ use utoipa::{Modify, OpenApi};
             CreateProject,
             Project,
             UpdateProject,
-            ProjectFilter,
             ProjectListing,
             ProjectVersion,
             LayerUpdate,

@@ -50,8 +50,8 @@ use crate::layers::listing::LayerCollectionId;
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
-    ProjectFilter, ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId,
-    RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
+    ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId, RasterSymbology,
+    STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
 use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
@@ -327,7 +327,6 @@ use utoipa::{Modify, OpenApi};
             PlotUpdate,
             ProjectLayer,
             LayerVisibility,
-            ProjectFilter,
             Plot,
             ProjectVersion,
             RasterStreamWebsocketResultType

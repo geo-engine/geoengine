@@ -25,6 +25,7 @@ use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::{debug, info};
 use rayon::ThreadPool;
+use snafu::ensure;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -180,14 +181,15 @@ where
 
         let database_status = Self::check_schema_status(&conn).await?;
 
+        let schema_name = postgres_config.schema;
+
         match database_status {
-            DatabaseStatus::InitializedClearDatabase if postgres_config.clear_database_on_start => {
-                let schema_name = postgres_config.schema;
+            DatabaseStatus::InitializedClearDatabase
+                if postgres_config.clear_database_on_start && schema_name != "pg_temp" =>
+            {
                 info!("Clearing schema {}.", schema_name);
-                conn.batch_execute(&format!(
-                    "DROP SCHEMA {schema_name} CASCADE; CREATE SCHEMA {schema_name};"
-                ))
-                .await?;
+                conn.batch_execute(&format!("DROP SCHEMA {schema_name} CASCADE;"))
+                    .await?;
             }
             DatabaseStatus::InitializedKeepDatabase if postgres_config.clear_database_on_start => {
                 return Err(Error::ClearDatabaseOnStartupNotAllowed)
@@ -199,6 +201,11 @@ where
         };
 
         let tx = conn.build_transaction().start().await?;
+
+        if schema_name != "pg_temp" {
+            tx.batch_execute(&format!("CREATE SCHEMA IF NOT EXISTS {schema_name};",))
+                .await?;
+        }
 
         tx.batch_execute(include_str!("schema.sql")).await?;
 
@@ -490,8 +497,15 @@ where
 {
 }
 
-impl From<config::Postgres> for Config {
-    fn from(db_config: config::Postgres) -> Self {
+impl TryFrom<config::Postgres> for Config {
+    type Error = Error;
+
+    fn try_from(db_config: config::Postgres) -> Result<Self> {
+        ensure!(
+            db_config.schema != "public",
+            crate::error::InvalidDatabaseSchema
+        );
+
         let mut pg_config = Config::new();
         pg_config
             .user(&db_config.user)
@@ -501,7 +515,7 @@ impl From<config::Postgres> for Config {
             .port(db_config.port)
             // fix schema by providing `search_path` option
             .options(&format!("-c search_path={}", db_config.schema));
-        pg_config
+        Ok(pg_config)
     }
 }
 
@@ -536,8 +550,8 @@ mod tests {
     use crate::projects::{
         ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LineSymbology,
         LoadVersion, NumberParam, OrderBy, Plot, PlotUpdate, PointSymbology, PolygonSymbology,
-        ProjectDb, ProjectFilter, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing,
-        RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
+        ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, RasterSymbology,
+        STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
     };
     use crate::util::postgres::{assert_sql_type, DatabaseConnectionConfig};
     use crate::util::tests::register_ndvi_workflow_helper;
@@ -732,7 +746,6 @@ mod tests {
         session: &SimpleSession,
     ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
-            filter: ProjectFilter::None,
             order: OrderBy::NameDesc,
             offset: 0,
             limit: 2,
@@ -3887,7 +3900,7 @@ mod tests {
         let host = "localhost";
         let port = 8095;
         let ge_default = "geoengine";
-        let schema = "public";
+        let schema = "geoengine";
 
         let db_config = config::Postgres {
             host: host.to_string(),
@@ -3899,7 +3912,7 @@ mod tests {
             clear_database_on_start: false,
         };
 
-        let pg_config = Config::from(db_config);
+        let pg_config = Config::try_from(db_config).unwrap();
 
         assert_eq!(ge_default, pg_config.get_user().unwrap());
         assert_eq!(

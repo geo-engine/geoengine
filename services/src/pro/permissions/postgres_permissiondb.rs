@@ -108,6 +108,19 @@ where
         Ok(row.get::<usize, i64>(0) > 0)
     }
 
+    #[must_use]
+    async fn ensure_permission<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        permission: Permission,
+    ) -> Result<()> {
+        let has_permission = self.has_permission(resource, permission).await?;
+
+        ensure!(has_permission, error::PermissionDenied);
+
+        Ok(())
+    }
+
     async fn add_permission<R: Into<ResourceId> + Send + Sync>(
         &self,
         role: RoleId,
