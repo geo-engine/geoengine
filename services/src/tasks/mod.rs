@@ -130,15 +130,20 @@ impl<'a> ToSchema<'a> for TaskStatus {
                                 .schema_type(SchemaType::String)
                                 .enum_values::<[&str; 1], &str>(Some(["running"])),
                         )
+                        .required("status")
                         .property("taskType", Object::with_type(SchemaType::String))
+                        .required("taskType")
                         .property("description", Object::with_type(SchemaType::String))
                         .property("info", Object::with_type(SchemaType::Value))
                         .property("pctComplete", Object::with_type(SchemaType::String))
+                        .required("pctComplete")
                         .property(
                             "estimatedTimeRemaining",
                             Object::with_type(SchemaType::String),
                         )
-                        .property("timeStarted", Object::with_type(SchemaType::String)),
+                        .required("estimatedTimeRemaining")
+                        .property("timeStarted", Object::with_type(SchemaType::String))
+                        .required("timeStarted"),
                 )
                 .item(
                     ObjectBuilder::new()
@@ -148,11 +153,15 @@ impl<'a> ToSchema<'a> for TaskStatus {
                                 .schema_type(SchemaType::String)
                                 .enum_values::<[&str; 1], &str>(Some(["completed"])),
                         )
+                        .required("status")
                         .property("taskType", Object::with_type(SchemaType::String))
+                        .required("taskType")
                         .property("description", Object::with_type(SchemaType::String))
                         .property("info", Object::with_type(SchemaType::Value))
                         .property("timeTotal", Object::with_type(SchemaType::String))
-                        .property("timeStarted", Object::with_type(SchemaType::String)),
+                        .required("timeTotal")
+                        .property("timeStarted", Object::with_type(SchemaType::String))
+                        .required("timeStarted"),
                 )
                 .item(
                     ObjectBuilder::new()
@@ -162,7 +171,9 @@ impl<'a> ToSchema<'a> for TaskStatus {
                                 .schema_type(SchemaType::String)
                                 .enum_values::<[&str; 1], &str>(Some(["aborted"])),
                         )
-                        .property("cleanUp", Object::with_type(SchemaType::Value)),
+                        .required("status")
+                        .property("cleanUp", Object::with_type(SchemaType::Value))
+                        .required("cleanUp"),
                 )
                 .item(
                     ObjectBuilder::new()
@@ -172,8 +183,11 @@ impl<'a> ToSchema<'a> for TaskStatus {
                                 .schema_type(SchemaType::String)
                                 .enum_values::<[&str; 1], &str>(Some(["failed"])),
                         )
+                        .required("status")
                         .property("error", Object::with_type(SchemaType::Value))
-                        .property("cleanUp", Object::with_type(SchemaType::Value)),
+                        .required("error")
+                        .property("cleanUp", Object::with_type(SchemaType::Value))
+                        .required("cleanUp"),
                 )
                 .discriminator(Some(Discriminator::new("status")))
                 .into(),
