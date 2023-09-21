@@ -28,14 +28,10 @@
 )]
 
 pub mod api;
-#[cfg(not(feature = "pro"))]
-pub mod apidoc;
 pub mod contexts;
 pub mod datasets;
 pub mod error;
-pub mod handlers;
 pub mod layers;
-pub mod ogc;
 pub mod projects;
 #[cfg(not(feature = "pro"))]
 pub mod server;

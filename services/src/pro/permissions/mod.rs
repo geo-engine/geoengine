@@ -1,19 +1,15 @@
-use std::str::FromStr;
-
-use async_trait::async_trait;
-
-use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-
-use utoipa::ToSchema;
-
-use crate::api::model::datatypes::{DatasetId, LayerId};
+use super::users::UserId;
 use crate::error::Result;
 use crate::identifier;
 use crate::layers::listing::LayerCollectionId;
 use crate::projects::ProjectId;
-
-use super::users::UserId;
+use async_trait::async_trait;
+use geoengine_datatypes::dataset::{DatasetId, LayerId};
+use geoengine_datatypes::pro::MlModelId;
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
+use utoipa::ToSchema;
 
 pub mod postgres_permissiondb;
 
@@ -91,6 +87,7 @@ pub enum ResourceId {
     LayerCollection(LayerCollectionId), // TODO: UUID?
     Project(ProjectId),
     DatasetId(DatasetId),
+    ModelId(MlModelId),
 }
 
 impl From<LayerId> for ResourceId {
@@ -129,6 +126,14 @@ pub trait PermissionDb {
         resource: R,
         permission: Permission,
     ) -> Result<bool>;
+
+    /// Ensure `permission` for `resource` exists. Throws error if not allowed.
+    #[must_use]
+    async fn ensure_permission<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        permission: Permission,
+    ) -> Result<()>;
 
     /// Give `permission` to `role` for `resource`.
     /// Requires `Owner` permission for `resource`.

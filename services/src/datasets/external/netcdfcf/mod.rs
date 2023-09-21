@@ -4,7 +4,6 @@ use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId, ResamplingMethod};
 use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::MetaDataDefinition;
@@ -25,8 +24,10 @@ use crate::projects::Symbology;
 use crate::tasks::TaskContext;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
+pub use ebvportal_provider::EbvPortalDataProviderDefinition;
 use gdal::raster::{Dimension, GdalDataType, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
@@ -37,6 +38,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::canonicalize_subpath;
+use geoengine_datatypes::util::gdal::ResamplingMethod;
 use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::TypedOperator;
 use geoengine_operators::source::GdalSource;
@@ -65,8 +67,6 @@ mod ebvportal_api;
 mod ebvportal_provider;
 pub mod error;
 mod overviews;
-
-pub use ebvportal_provider::EbvPortalDataProviderDefinition;
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
@@ -1241,7 +1241,7 @@ pub fn layer_from_netcdf_overview(
         },
         symbology: Some(Symbology::Raster(RasterSymbology {
             opacity: 1.0,
-            colorizer: colorizer.into(),
+            colorizer,
         })),
         properties: [(
             "author".to_string(),
@@ -1481,7 +1481,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let dataset = id.clone().into();
+        let dataset = id.clone();
         let path = self.path.clone();
         let overviews = self.overviews.clone();
         let cache_ttl = self.cache_ttl;
@@ -1536,12 +1536,12 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::ExternalDataId;
     use crate::contexts::{PostgresContext, SessionContext, SimpleApplicationContext};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::ge_context;
     use crate::layers::storage::LayerProviderDb;
     use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
+    use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
     use geoengine_datatypes::{
         primitives::{
@@ -1938,20 +1938,17 @@ mod tests {
         };
 
         let metadata = provider
-            .meta_data(
-                &DataId::External(ExternalDataId {
-                    provider_id: NETCDF_CF_PROVIDER_ID,
-                    layer_id: LayerId(
-                        serde_json::json!({
-                            "fileName": "dataset_sm.nc",
-                            "groupNames": ["scenario_5", "metric_2"],
-                            "entity": 1
-                        })
-                        .to_string(),
-                    ),
-                })
-                .into(),
-            )
+            .meta_data(&DataId::External(ExternalDataId {
+                provider_id: NETCDF_CF_PROVIDER_ID,
+                layer_id: LayerId(
+                    serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_5", "metric_2"],
+                        "entity": 1
+                    })
+                    .to_string(),
+                ),
+            }))
             .await
             .unwrap();
 
@@ -2065,20 +2062,17 @@ mod tests {
             .unwrap();
 
         let metadata = provider
-            .meta_data(
-                &DataId::External(ExternalDataId {
-                    provider_id: NETCDF_CF_PROVIDER_ID,
-                    layer_id: LayerId(
-                        serde_json::json!({
-                            "fileName": "dataset_sm.nc",
-                            "groupNames": ["scenario_5", "metric_2"],
-                            "entity": 1
-                        })
-                        .to_string(),
-                    ),
-                })
-                .into(),
-            )
+            .meta_data(&DataId::External(ExternalDataId {
+                provider_id: NETCDF_CF_PROVIDER_ID,
+                layer_id: LayerId(
+                    serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_5", "metric_2"],
+                        "entity": 1
+                    })
+                    .to_string(),
+                ),
+            }))
             .await
             .unwrap();
 

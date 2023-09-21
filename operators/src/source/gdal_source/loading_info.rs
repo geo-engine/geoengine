@@ -1,20 +1,18 @@
-use std::collections::HashMap;
-
-use async_trait::async_trait;
-use geoengine_datatypes::primitives::{
-    CacheTtlSeconds, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
-};
-use serde::{Deserialize, Serialize};
-
+use super::{GdalDatasetParameters, GdalSourceTimePlaceholder};
 use crate::{
     engine::{MetaData, RasterResultDescriptor},
     error::Error,
     util::Result,
 };
+use async_trait::async_trait;
+use geoengine_datatypes::primitives::{
+    CacheTtlSeconds, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
+};
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-use super::{GdalDatasetParameters, GdalSourceTimePlaceholder};
-
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
@@ -182,7 +180,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 // TODO: custom deserializer that checks that that params are sorted and do not overlap
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataList {
     pub result_descriptor: RasterResultDescriptor,
@@ -487,7 +485,7 @@ impl Iterator for GdalLoadingInfoTemporalSliceIterator {
 }
 
 /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,

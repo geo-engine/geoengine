@@ -1,9 +1,7 @@
-use crate::api::model::datatypes::DatasetName;
-use crate::api::model::responses::datasets::DatasetIdAndName;
-use crate::api::model::services::AddDataset;
 use crate::contexts::SessionContext;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
+use crate::datasets::AddDataset;
 use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
 use crate::workflows::workflow::Workflow;
@@ -28,6 +26,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
 use utoipa::ToSchema;
+
+use super::{DatasetIdAndName, DatasetName};
 
 /// parameter for the dataset from workflow handler (body)
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]

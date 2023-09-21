@@ -1,3 +1,6 @@
+use super::{Permission, PermissionDb, ResourceId, RoleId};
+use crate::error::{self, Error, Result};
+use crate::pro::contexts::ProPostgresDb;
 use async_trait::async_trait;
 use snafu::ensure;
 use tokio_postgres::{
@@ -5,11 +8,6 @@ use tokio_postgres::{
     Socket,
 };
 use uuid::Uuid;
-
-use crate::error::{self, Error, Result};
-use crate::pro::contexts::ProPostgresDb;
-
-use super::{Permission, PermissionDb, ResourceId, RoleId};
 
 // TODO: a postgres specific permission db trait that allows re-using connections and transactions
 
@@ -26,6 +24,7 @@ impl ResourceTypeName for ResourceId {
             ResourceId::LayerCollection(_) => "layer_collection_id",
             ResourceId::Project(_) => "project_id",
             ResourceId::DatasetId(_) => "dataset_id",
+            ResourceId::ModelId(_) => "model_id",
         }
     }
 
@@ -37,6 +36,7 @@ impl ResourceTypeName for ResourceId {
             }
             ResourceId::Project(id) => Ok(id.0),
             ResourceId::DatasetId(id) => Ok(id.0),
+            ResourceId::ModelId(id) => Ok(id.0),
         }
     }
 }
@@ -106,6 +106,19 @@ where
             .await?;
 
         Ok(row.get::<usize, i64>(0) > 0)
+    }
+
+    #[must_use]
+    async fn ensure_permission<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        permission: Permission,
+    ) -> Result<()> {
+        let has_permission = self.has_permission(resource, permission).await?;
+
+        ensure!(has_permission, error::PermissionDenied);
+
+        Ok(())
     }
 
     async fn add_permission<R: Into<ResourceId> + Send + Sync>(

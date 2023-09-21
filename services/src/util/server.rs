@@ -1,5 +1,5 @@
+use crate::api::model::responses::ErrorResponse;
 use crate::error::Result;
-use crate::handlers::ErrorResponse;
 use crate::util::config::get_config_element;
 
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
@@ -140,7 +140,7 @@ pub fn handle_json_payload_error(err: actix_web::error::JsonPayloadError) -> act
         .into(),
         JsonPayloadError::Deserialize(err) => ErrorResponse {
             error: "BodyDeserializeError".to_string(),
-            message: err.to_string(),
+            message: format!("Error in user input: {err}"),
         }
         .into(),
         JsonPayloadError::Serialize(err) => ErrorResponse {

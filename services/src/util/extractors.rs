@@ -7,7 +7,7 @@ use futures::FutureExt;
 use serde::de::DeserializeOwned;
 use validator::Validate;
 
-use crate::handlers::ErrorResponse;
+use crate::api::model::responses::ErrorResponse;
 
 /// A Json extractor that validates the content after deserialization
 #[derive(Debug)]

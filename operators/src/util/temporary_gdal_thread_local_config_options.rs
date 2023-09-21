@@ -1,7 +1,7 @@
 use super::Result;
 
 /// Set thread local gdal options and revert them on drop
-pub(crate) struct TemporaryGdalThreadLocalConfigOptions {
+pub struct TemporaryGdalThreadLocalConfigOptions {
     original_configs: Vec<(String, Option<String>)>,
 }
 

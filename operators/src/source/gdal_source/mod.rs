@@ -50,6 +50,7 @@ pub use loading_info::{
 };
 use log::debug;
 use num::FromPrimitive;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
@@ -59,6 +60,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+mod db_types;
 mod error;
 mod loading_info;
 
@@ -106,14 +108,14 @@ impl OperatorData for GdalSourceParameters {
 type GdalMetaData =
     Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalSourceTimePlaceholder {
     pub format: DateTimeParseFormat,
     pub reference: TimeReference,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub enum TimeReference {
     Start,
@@ -174,7 +176,7 @@ impl GdalReadWindow {
 /// in the upper left corner. It should only be used for loading rasters with Gdal and not internally.
 /// The GDAL pixel space is usually anchored at the "top-left" corner of the data spatial bounds. Therefore the raster data is stored with spatial coordinate y-values decreasing with the rasters rows. This is represented by a negative pixel size.
 /// However, there are datasets where the data is stored "upside-down". If this is the case, the pixel size is positive.
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalDatasetGeoTransform {
     pub origin_coordinate: Coordinate2D,
@@ -365,7 +367,7 @@ impl GridShapeAccess for GdalDatasetParameters {
 }
 
 /// How to handle file not found errors
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, FromSql, ToSql)]
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
@@ -1096,7 +1098,7 @@ fn create_no_data_tile<T: Pixel>(
     )
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
 pub struct GdalMetadataMapping {
     pub source_key: RasterPropertiesKey,
     pub target_key: RasterPropertiesKey,

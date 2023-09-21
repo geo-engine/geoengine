@@ -1,10 +1,7 @@
-use crate::api::model::datatypes::{DataProviderId, LayerId};
-use crate::api::model::HashMapTextTextDbType;
-
+use super::external::TypedDataProviderDefinition;
 use crate::contexts::PostgresDb;
 use crate::error;
 use crate::layers::layer::Property;
-
 use crate::workflows::workflow::WorkflowId;
 use crate::{
     error::Result,
@@ -28,12 +25,11 @@ use bb8_postgres::tokio_postgres::{
     tls::{MakeTlsConnect, TlsConnect},
     Socket,
 };
-
+use geoengine_datatypes::dataset::{DataProviderId, LayerId};
+use geoengine_datatypes::util::HashMapTextTextDbType;
 use snafu::ResultExt;
 use std::str::FromStr;
 use uuid::Uuid;
-
-use super::external::TypedDataProviderDefinition;
 
 /// delete all collections without parent collection
 async fn _remove_collections_without_parent_collection(

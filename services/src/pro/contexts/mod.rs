@@ -7,10 +7,10 @@ use std::sync::Arc;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_operators::engine::{
-    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, MetaData,
-    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor, WorkflowOperatorPath,
+    CreateSpan, ExecutionContext, ExecutionContextExtensions, InitializedPlotOperator,
+    InitializedVectorOperator, MetaData, MetaDataProvider, RasterResultDescriptor,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::pro::cache::cache_operator::InitializedCacheOperator;
@@ -20,22 +20,21 @@ use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 pub use postgres::ProPostgresContext;
 use rayon::ThreadPool;
-use tokio::io::AsyncWriteExt;
 
 use crate::contexts::{ApplicationContext, GeoEngineDb};
 use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
+use crate::pro::machine_learning::ml_model::MlModelDb;
 
 use crate::layers::storage::LayerProviderDb;
 use crate::pro::users::{OidcRequestDb, UserDb};
-use crate::util::config::get_config_element;
-use crate::util::path_with_base_path;
 
 use async_trait::async_trait;
 
 use super::permissions::PermissionDb;
 use super::users::{RoleDb, UserAuth, UserSession};
 use super::util::config::{Cache, QuotaTrackingMode};
+use crate::util::config::get_config_element;
 
 pub use postgres::ProPostgresDb;
 
@@ -44,7 +43,7 @@ pub trait ProApplicationContext: ApplicationContext<Session = UserSession> + Use
     fn oidc_request_db(&self) -> Option<&OidcRequestDb>;
 }
 
-pub trait ProGeoEngineDb: GeoEngineDb + UserDb + PermissionDb + RoleDb {}
+pub trait ProGeoEngineDb: GeoEngineDb + UserDb + PermissionDb + RoleDb + MlModelDb {}
 
 pub struct ExecutionContextImpl<D>
 where
@@ -53,6 +52,7 @@ where
     db: D,
     thread_pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
+    extensions: ExecutionContextExtensions,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -68,6 +68,21 @@ where
             db,
             thread_pool,
             tiling_specification,
+            extensions: ExecutionContextExtensions::default(),
+        }
+    }
+
+    pub fn new_with_extensions(
+        db: D,
+        thread_pool: Arc<ThreadPool>,
+        tiling_specification: TilingSpecification,
+        extensions: ExecutionContextExtensions,
+    ) -> Self {
+        Self {
+            db,
+            thread_pool,
+            tiling_specification,
+            extensions,
         }
     }
 }
@@ -82,7 +97,8 @@ where
             VectorQueryRectangle,
         > + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + LayerProviderDb,
+        + LayerProviderDb
+        + MlModelDb,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
@@ -144,52 +160,6 @@ where
         op
     }
 
-    /// This method is meant to read a ml model from disk, specified by the config key `machinelearning.model_defs_path`.
-    async fn read_ml_model(
-        &self,
-        model_sub_path: std::path::PathBuf,
-    ) -> geoengine_operators::util::Result<String> {
-        let cfg = get_config_element::<crate::util::config::MachineLearning>()
-            .map_err(|_| geoengine_operators::error::Error::InvalidMachineLearningConfig)?;
-
-        let model_base_path = cfg.model_defs_path;
-
-        let model_path = canonicalize_subpath(&model_base_path, &model_sub_path)?;
-        let model = tokio::fs::read_to_string(model_path).await?;
-
-        Ok(model)
-    }
-
-    /// This method is meant to write a ml model to disk.
-    /// The provided path for the model has to exist.
-    async fn write_ml_model(
-        &mut self,
-        model_sub_path: std::path::PathBuf,
-        ml_model_str: String,
-    ) -> geoengine_operators::util::Result<()> {
-        let cfg = get_config_element::<crate::util::config::MachineLearning>()
-            .map_err(|_| geoengine_operators::error::Error::InvalidMachineLearningConfig)?;
-
-        let model_base_path = cfg.model_defs_path;
-
-        // make sure, that the model sub path is not escaping the config path
-        let model_path = path_with_base_path(&model_base_path, &model_sub_path)
-            .map_err(|_| geoengine_operators::error::Error::InvalidMlModelPath)?;
-
-        let parent_dir = model_path
-            .parent()
-            .ok_or(geoengine_operators::error::Error::CouldNotGetMlModelDirectory)?;
-
-        tokio::fs::create_dir_all(parent_dir).await?;
-
-        // TODO: add routine or error, if a given modelpath would overwrite an existing model
-        let mut file = tokio::fs::File::create(model_path).await?;
-        file.write_all(ml_model_str.as_bytes()).await?;
-        file.flush().await?;
-
-        Ok(())
-    }
-
     async fn resolve_named_data(
         &self,
         data: &geoengine_datatypes::dataset::NamedData,
@@ -218,6 +188,10 @@ where
             )?;
 
         Ok(dataset_id.into())
+    }
+
+    fn extensions(&self) -> &ExecutionContextExtensions {
+        &self.extensions
     }
 }
 
@@ -257,7 +231,7 @@ where
             }
             DataId::External(external) => {
                 self.db
-                    .load_layer_provider(external.provider_id.into())
+                    .load_layer_provider(external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
@@ -295,7 +269,7 @@ where
             }
             DataId::External(external) => {
                 self.db
-                    .load_layer_provider(external.provider_id.into())
+                    .load_layer_provider(external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
@@ -333,7 +307,7 @@ where
             }
             DataId::External(external) => {
                 self.db
-                    .load_layer_provider(external.provider_id.into())
+                    .load_layer_provider(external.provider_id)
                     .await
                     .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
                         source: Box::new(e),
@@ -380,83 +354,5 @@ impl<U: UserDb> QuotaCheck for QuotaCheckerImpl<U> {
         }
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::contexts::{PostgresContext, SimpleApplicationContext};
-    use crate::ge_context;
-    use crate::{contexts::SessionContext, util::config::set_config};
-    use geoengine_datatypes::test_data;
-    use std::path::PathBuf;
-    use tokio_postgres::NoTls;
-
-    #[ge_context::test(test_execution = "serial")]
-    async fn read_model_test(app_ctx: PostgresContext<NoTls>) {
-        let cfg = get_config_element::<crate::util::config::MachineLearning>().unwrap();
-        let cfg_backup = &cfg.model_defs_path;
-
-        set_config(
-            "machinelearning.model_defs_path",
-            test_data!("pro/ml").to_str().unwrap(),
-        )
-        .unwrap();
-        let ctx = app_ctx.default_session_context().await.unwrap();
-
-        let exe_ctx = ctx.execution_context().unwrap();
-
-        let model_path = PathBuf::from("xgboost/s2_10m_de_marburg/model.json");
-        let mut model = exe_ctx.read_ml_model(model_path).await.unwrap();
-
-        let actual: String = model.drain(0..277).collect();
-
-        set_config(
-            "machinelearning.model_defs_path",
-            cfg_backup.to_str().unwrap(),
-        )
-        .unwrap();
-
-        let expected = "{\"learner\":{\"attributes\":{},\"feature_names\":[],\"feature_types\":[],\"gradient_booster\":{\"model\":{\"gbtree_model_param\":{\"num_parallel_tree\":\"1\",\"num_trees\":\"16\",\"size_leaf_vector\":\"0\"},\"tree_info\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"trees\":[{\"base_weights\":[5.192308E-1,9.722222E-1";
-
-        assert_eq!(actual, expected);
-    }
-
-    #[ge_context::test(test_execution = "serial")]
-    async fn write_model_test(app_ctx: PostgresContext<NoTls>) {
-        let cfg = get_config_element::<crate::util::config::MachineLearning>().unwrap();
-        let cfg_backup = cfg.model_defs_path;
-
-        let tmp_dir = tempfile::tempdir().unwrap();
-        let tmp_path = tmp_dir.path();
-        std::fs::create_dir_all(tmp_path.join("pro/ml/xgboost")).unwrap();
-
-        let temp_ml_path = tmp_path.join("pro/ml").to_str().unwrap().to_string();
-
-        set_config("machinelearning.model_defs_path", temp_ml_path).unwrap();
-
-        let ctx = app_ctx.default_session_context().await.unwrap();
-
-        let mut exe_ctx = ctx.execution_context().unwrap();
-
-        let model_path = PathBuf::from("xgboost/model.json");
-
-        exe_ctx
-            .write_ml_model(model_path, String::from("model content"))
-            .await
-            .unwrap();
-
-        set_config(
-            "machinelearning.model_defs_path",
-            cfg_backup.to_str().unwrap(),
-        )
-        .unwrap();
-
-        let actual = tokio::fs::read_to_string(tmp_path.join("pro/ml/xgboost/model.json"))
-            .await
-            .unwrap();
-
-        assert_eq!(actual, "model content");
     }
 }

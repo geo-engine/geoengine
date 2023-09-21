@@ -421,6 +421,10 @@ CREATE TYPE "GdalMetadataMapping" AS (
 
 CREATE DOMAIN "StringPair" AS text [2];
 
+CREATE TYPE "GdalRetryOptions" AS (
+    max_retries bigint
+);
+
 CREATE TYPE "GdalDatasetParameters" AS (
     file_path text,
     rasterband_channel bigint,
@@ -432,7 +436,8 @@ CREATE TYPE "GdalDatasetParameters" AS (
     properties_mapping "GdalMetadataMapping" [],
     gdal_open_options text [],
     gdal_config_options "StringPair" [],
-    allow_alphaband_as_mask boolean
+    allow_alphaband_as_mask boolean,
+    retry "GdalRetryOptions"
 );
 
 CREATE TYPE "TimeReference" AS ENUM (
@@ -695,6 +700,22 @@ CREATE TYPE "PangaeaDataProviderDefinition" AS (
     cache_ttl int
 );
 
+CREATE TYPE "EdrVectorSpec" AS (
+    x text,
+    y text,
+    "time" text
+);
+
+CREATE TYPE "EdrDataProviderDefinition" AS (
+    "name" text,
+    id uuid,
+    base_url text,
+    vector_spec "EdrVectorSpec",
+    cache_ttl int,
+    discrete_vrs text [],
+    provenance "Provenance" []
+);
+
 CREATE TYPE "DataProviderDefinition" AS (
     -- one of
     aruna_data_provider_definition "ArunaDataProviderDefinition",
@@ -704,7 +725,8 @@ CREATE TYPE "DataProviderDefinition" AS (
     "GfbioCollectionsDataProviderDefinition",
     ebv_portal_data_provider_definition "EbvPortalDataProviderDefinition",
     net_cdf_cf_data_provider_definition "NetCdfCfDataProviderDefinition",
-    pangaea_data_provider_definition "PangaeaDataProviderDefinition"
+    pangaea_data_provider_definition "PangaeaDataProviderDefinition",
+    edr_data_provider_definition "EdrDataProviderDefinition"
 );
 
 CREATE TABLE layer_providers (

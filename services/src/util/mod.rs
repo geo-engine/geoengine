@@ -1,5 +1,4 @@
 use crate::error::{Error, Result};
-use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -16,17 +15,6 @@ pub mod parsing;
 pub mod postgres;
 pub mod server;
 pub mod tests;
-
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct IdResponse<T> {
-    pub id: T,
-}
-
-impl<T> From<T> for IdResponse<T> {
-    fn from(id: T) -> Self {
-        Self { id }
-    }
-}
 
 /// Serde deserializer <https://docs.rs/serde_qs/0.6.0/serde_qs/index.html#flatten-workaround>
 pub fn from_str<'de, D, S>(deserializer: D) -> Result<S, D::Error>

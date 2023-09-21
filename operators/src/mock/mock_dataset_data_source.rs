@@ -13,11 +13,12 @@ use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, VectorQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // TODO: generify this to support all data types
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, FromSql, ToSql)]
 pub struct MockDatasetDataSourceLoadingInfo {
     pub points: Vec<Coordinate2D>,
 }

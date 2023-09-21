@@ -2,6 +2,7 @@ use crate::util::statistics::StatisticsError;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::FeatureDataType;
+use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::ops::Range;
 use std::path::PathBuf;
@@ -123,6 +124,11 @@ pub enum Error {
         found: String,
     },
 
+    #[snafu(display("NotNan error: {}", source))]
+    InvalidNotNanFloatKey {
+        source: ordered_float::FloatIsNan,
+    },
+
     #[snafu(display("Column types do not match: {:?} - {:?}", left, right))]
     ColumnTypeMismatch {
         left: FeatureDataType,
@@ -141,6 +147,11 @@ pub enum Error {
     CannotResolveDatasetName {
         name: NamedData,
         source: Box<dyn ErrorSource>,
+    },
+
+    #[snafu(display("There is no Model with id {:?} avaiable.", id))]
+    UnknownModelId {
+        id: String,
     },
 
     InvalidDatasetSpec {
@@ -346,15 +357,25 @@ pub enum Error {
 
     InvalidMachineLearningConfig,
 
+    MachineLearningFeatureDataNotAvailable,
+    MachineLearningFeaturesNotAvailable,
     MachineLearningModelNotFound,
+    MachineLearningMustHaveAtLeastTwoFeatures,
 
-    InvalidMlModelPath,
+    CouldNotCreateMlModelFilePath,
+    CouldNotGetMlLabelKeyName,
     CouldNotGetMlModelDirectory,
+    CouldNotGetMlModelFileName,
+    CouldNotStoreMlModelInDb,
+    InvalidMlModelPath,
 
-    #[cfg(feature = "xgboost")]
+    #[snafu(display("Valid filetypes: 'json'"))]
+    NoValidMlModelFileType,
+
+    #[cfg(feature = "pro")]
     #[snafu(context(false))]
     XGBoost {
-        source: crate::pro::ml::xgboost::XGBoostModuleError,
+        source: crate::pro::xg_error::XGBoostModuleError,
     },
 
     #[snafu(context(false))]
@@ -463,5 +484,11 @@ impl From<tokio::task::JoinError> for Error {
 impl From<crate::util::statistics::StatisticsError> for Error {
     fn from(source: StatisticsError) -> Self {
         Error::Statistics { source }
+    }
+}
+
+impl From<ordered_float::FloatIsNan> for Error {
+    fn from(source: FloatIsNan) -> Self {
+        Error::InvalidNotNanFloatKey { source }
     }
 }

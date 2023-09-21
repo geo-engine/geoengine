@@ -1,7 +1,7 @@
-use crate::apidoc::ApiDoc;
+use crate::api::apidoc::ApiDoc;
+use crate::api::handlers;
 use crate::contexts::{PostgresContext, SimpleApplicationContext};
 use crate::error::{Error, Result};
-use crate::handlers;
 use crate::util::config;
 use crate::util::config::get_config_element;
 use crate::util::server::{
@@ -47,7 +47,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let db_config = config::get_config_element::<config::Postgres>()?;
 
     let ctx = PostgresContext::new_with_data(
-        bb8_postgres::tokio_postgres::Config::from(db_config),
+        bb8_postgres::tokio_postgres::Config::try_from(db_config)?,
         tokio_postgres::NoTls,
         data_path_config.dataset_defs_path,
         data_path_config.provider_defs_path,
@@ -123,7 +123,7 @@ where
                 "EBV",
                 "../api-docs/ebv/openapi.json",
                 "/api-docs/ebv/openapi.json",
-                crate::handlers::ebv::ApiDoc::openapi(),
+                crate::api::handlers::ebv::ApiDoc::openapi(),
             );
         }
 

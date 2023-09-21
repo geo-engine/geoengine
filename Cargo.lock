@@ -1653,7 +1653,16 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d07adf7be193b71cc36b193d0f5fe60b918a3a9db4dad0449f57bcfd519704a3"
 dependencies = [
- "derive_builder_macro",
+ "derive_builder_macro 0.11.2",
+]
+
+[[package]]
+name = "derive_builder"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d67778784b508018359cbc8696edb3db78160bab2c2a28ba7f56ef6932997f8"
+dependencies = [
+ "derive_builder_macro 0.12.0",
 ]
 
 [[package]]
@@ -1669,12 +1678,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive_builder_core"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c11bdc11a0c47bc7d37d582b5285da6849c96681023680b906673c5707af7b0f"
+dependencies = [
+ "darling 0.14.4",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "derive_builder_macro"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f0314b72bed045f3a68671b3c86328386762c93f82d98c65c3cb5e5f573dd68"
 dependencies = [
- "derive_builder_core",
+ "derive_builder_core 0.11.2",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "derive_builder_macro"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebcda35c7a396850a55ffeac740804b40ffec779b98fffbb1738f4033f0ee79e"
+dependencies = [
+ "derive_builder_core 0.12.0",
  "syn 1.0.109",
 ]
 
@@ -2260,6 +2291,7 @@ dependencies = [
  "bytes",
  "chrono",
  "criterion",
+ "fallible-iterator",
  "float-cmp",
  "gdal",
  "geo 0.26.0",
@@ -2299,9 +2331,11 @@ dependencies = [
  "arrow",
  "async-stream",
  "async-trait",
+ "bytes",
  "chrono",
  "crossbeam",
  "csv",
+ "fallible-iterator",
  "float-cmp",
  "futures",
  "gdal",
@@ -2318,6 +2352,7 @@ dependencies = [
  "ndarray",
  "num",
  "num-traits",
+ "ordered-float 3.9.1",
  "ouroboros",
  "paste",
  "pest",
@@ -2332,6 +2367,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
+ "serial_test 1.0.0",
  "snafu",
  "stream-cancel",
  "tempfile",
@@ -2365,6 +2401,7 @@ dependencies = [
  "bytes",
  "chrono",
  "config",
+ "derive_builder 0.12.0",
  "erased-serde",
  "fallible-iterator",
  "flexi_logger",
@@ -2381,6 +2418,8 @@ dependencies = [
  "httptest",
  "hyper",
  "image",
+ "itertools 0.10.5",
+ "lazy_static",
  "log",
  "mime",
  "nix",
@@ -2405,7 +2444,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "serde_with",
- "serial_test",
+ "serial_test 2.0.0",
  "snafu",
  "stream-cancel",
  "strum",
@@ -2427,6 +2466,7 @@ dependencies = [
  "validator",
  "vergen",
  "walkdir",
+ "xgboost-rs",
  "xml-rs",
  "zip",
 ]
@@ -4955,6 +4995,20 @@ dependencies = [
 
 [[package]]
 name = "serial_test"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "538c30747ae860d6fb88330addbbd3e0ddbe46d662d032855596d8a8ca260611"
+dependencies = [
+ "dashmap",
+ "futures",
+ "lazy_static",
+ "log",
+ "parking_lot",
+ "serial_test_derive 1.0.0",
+]
+
+[[package]]
+name = "serial_test"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e56dd856803e253c8f298af3f4d7eb0ae5e23a737252cd90bb4f3b435033b2d"
@@ -4964,7 +5018,18 @@ dependencies = [
  "lazy_static",
  "log",
  "parking_lot",
- "serial_test_derive",
+ "serial_test_derive 2.0.0",
+]
+
+[[package]]
+name = "serial_test_derive"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "079a83df15f85d89a68d64ae1238f142f172b1fa915d0d76b26a7cba1b659a69"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -6354,15 +6419,16 @@ dependencies = [
 
 [[package]]
 name = "xgboost-rs"
-version = "0.1.31"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "497ab740ce0a669d39ea698a7fc72c93121c0d1dcec5a47485f3e87c0d2cb5af"
+checksum = "841f5e1011730c1d71d9cdc20ac269242dfaf64710c07e153c18770d46cd039b"
 dependencies = [
- "derive_builder",
+ "derive_builder 0.11.2",
  "indexmap 1.9.3",
  "libc",
  "log",
  "ndarray",
+ "serde",
  "tempfile",
  "xgboost-rs-sys",
 ]

@@ -1,7 +1,7 @@
 use crate::engine::{
-    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, MetaData, MetaDataProvider, MockExecutionContext, ResultDescriptor,
-    WorkflowOperatorPath,
+    CreateSpan, ExecutionContext, ExecutionContextExtensions, InitializedPlotOperator,
+    InitializedRasterOperator, InitializedVectorOperator, MetaData, MetaDataProvider,
+    MockExecutionContext, ResultDescriptor, WorkflowOperatorPath,
 };
 use crate::pro::meta::wrapper::InitializedOperatorWrapper;
 use crate::util::Result;
@@ -10,7 +10,6 @@ use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use rayon::ThreadPool;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 /// A mock execution context that wraps all operators with a statistics operator.
@@ -63,16 +62,12 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
         op
     }
 
-    async fn read_ml_model(&self, path: PathBuf) -> Result<String> {
-        self.inner.read_ml_model(path).await
-    }
-
-    async fn write_ml_model(&mut self, path: PathBuf, ml_model_str: String) -> Result<()> {
-        self.inner.write_ml_model(path, ml_model_str).await
-    }
-
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId> {
         self.inner.resolve_named_data(data).await
+    }
+
+    fn extensions(&self) -> &ExecutionContextExtensions {
+        self.inner.extensions()
     }
 }
 

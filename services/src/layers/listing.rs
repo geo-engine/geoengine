@@ -1,15 +1,11 @@
-use std::fmt;
-
-use crate::api::model::datatypes::LayerId;
-use async_trait::async_trait;
-use postgres_types::{FromSql, ToSql};
-use utoipa::{IntoParams, ToSchema};
-
-use crate::error::Result;
-
 use super::layer::{Layer, LayerCollection, LayerCollectionListOptions};
-
+use crate::error::Result;
+use async_trait::async_trait;
+use geoengine_datatypes::dataset::LayerId;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use utoipa::{IntoParams, ToSchema};
 
 #[derive(
     Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams, ToSql, FromSql,
