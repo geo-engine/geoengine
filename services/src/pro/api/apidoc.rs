@@ -61,7 +61,10 @@ use crate::projects::{
     STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
-use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
+use crate::util::{
+    apidoc::{OpenApiServerInfo, TransformSchemasWithTag},
+    server::ServerInfo,
+};
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -364,7 +367,7 @@ use utoipa::{Modify, OpenApi};
             RoleDescription,
         ),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
+    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
 )]
 pub struct ApiDoc;
