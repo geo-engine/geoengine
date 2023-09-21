@@ -132,7 +132,7 @@ impl<'a> ToSchema<'a> for TaskStatus {
                         )
                         .property("taskType", Object::with_type(SchemaType::String))
                         .property("description", Object::with_type(SchemaType::String))
-                        .property("info", Object::new())
+                        .property("info", Object::with_type(SchemaType::Value))
                         .property("pctComplete", Object::with_type(SchemaType::String))
                         .property(
                             "estimatedTimeRemaining",
@@ -150,7 +150,7 @@ impl<'a> ToSchema<'a> for TaskStatus {
                         )
                         .property("taskType", Object::with_type(SchemaType::String))
                         .property("description", Object::with_type(SchemaType::String))
-                        .property("info", Object::new())
+                        .property("info", Object::with_type(SchemaType::Value))
                         .property("timeTotal", Object::with_type(SchemaType::String))
                         .property("timeStarted", Object::with_type(SchemaType::String)),
                 )
@@ -162,7 +162,7 @@ impl<'a> ToSchema<'a> for TaskStatus {
                                 .schema_type(SchemaType::String)
                                 .enum_values::<[&str; 1], &str>(Some(["aborted"])),
                         )
-                        .property("cleanUp", Object::new()),
+                        .property("cleanUp", Object::with_type(SchemaType::Value)),
                 )
                 .item(
                     ObjectBuilder::new()
@@ -172,9 +172,10 @@ impl<'a> ToSchema<'a> for TaskStatus {
                                 .schema_type(SchemaType::String)
                                 .enum_values::<[&str; 1], &str>(Some(["failed"])),
                         )
-                        .property("error", Object::new())
-                        .property("cleanUp", Object::new()),
+                        .property("error", Object::with_type(SchemaType::Value))
+                        .property("cleanUp", Object::with_type(SchemaType::Value)),
                 )
+                .discriminator(Some(Discriminator::new("status")))
                 .into(),
         )
     }
