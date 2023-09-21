@@ -17,10 +17,6 @@ use uuid::Uuid;
 
 /// Recursively checks that schemas referenced in the given schema object exist in the provided map.
 fn can_resolve_schema(schema: &RefOr<Schema>, components: &Components) {
-    println!(
-        "Resolving schema: {}",
-        serde_json::to_string_pretty(schema).unwrap()
-    );
     match schema {
         RefOr::Ref(reference) => {
             can_resolve_reference(reference, components);
@@ -58,10 +54,6 @@ fn can_resolve_schema(schema: &RefOr<Schema>, components: &Components) {
 
 /// Recursively checks that schemas referenced in the given response object exist in the provided map.
 fn can_resolve_response(response: &RefOr<Response>, components: &Components) {
-    println!(
-        "Resolving response: {}",
-        serde_json::to_string(response).unwrap()
-    );
     match response {
         RefOr::Ref(reference) => {
             can_resolve_reference(reference, components);
@@ -78,7 +70,6 @@ fn can_resolve_response(response: &RefOr<Response>, components: &Components) {
 fn can_resolve_reference(reference: &Ref, components: &Components) {
     const SCHEMA_REF_PREFIX: &str = "#/components/schemas/";
     const RESPONSE_REF_PREFIX: &str = "#/components/responses/";
-    println!("Resolving reference: {}", reference.ref_location);
 
     if reference.ref_location.starts_with(SCHEMA_REF_PREFIX) {
         let schema_name = &reference.ref_location[SCHEMA_REF_PREFIX.len()..];
