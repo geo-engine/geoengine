@@ -25,6 +25,7 @@ where
 
 /// Create a task somewhere and respond with a task id to query the task status.
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct TaskResponse {
     pub task_id: TaskId,
 }
