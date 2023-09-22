@@ -579,7 +579,7 @@ impl<'a> ToSchema<'a> for Coordinates {
 #[derive(Debug, Deserialize, ToSchema)]
 pub enum FeatureType {
     Point,
-    MulitPoint,
+    MultiPoint,
     LineString,
     MultiLineString,
     Polygon,
