@@ -52,7 +52,7 @@ use crate::layers::layer::{
 use crate::layers::listing::LayerCollectionId;
 use crate::pro;
 use crate::pro::api::handlers::users::{Quota, UpdateQuota};
-use crate::pro::permissions::{Permission, ResourceId, RoleDescription, RoleId};
+use crate::pro::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
 use crate::pro::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
@@ -362,6 +362,7 @@ use utoipa::{Modify, OpenApi};
             Permission,
             AddRole,
             RoleDescription,
+            Role
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
