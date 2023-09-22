@@ -66,7 +66,7 @@ pub struct GetMap {
     #[param(example = "<Workflow Id>")]
     pub layers: String,
     #[serde(alias = "CRS")]
-    #[param(example = "EPSG:4326")]
+    #[param(example = "EPSG:4326", value_type = String)]
     pub crs: Option<SpatialReference>,
     #[serde(alias = "STYLES")]
     #[param(

@@ -377,16 +377,6 @@ impl SpatialReference {
     }
 }
 
-impl<'a> ToSchema<'a> for SpatialReference {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "SpatialReference",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
-        )
-    }
-}
-
 impl From<geoengine_datatypes::spatial_reference::SpatialReference> for SpatialReference {
     fn from(value: geoengine_datatypes::spatial_reference::SpatialReference) -> Self {
         Self {
@@ -479,7 +469,7 @@ impl<'de> Deserialize<'de> for SpatialReference {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ToSchema)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SpatialReferenceOption {
     SpatialReference(SpatialReference),
     Unreferenced,

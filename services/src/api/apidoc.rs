@@ -15,7 +15,7 @@ use crate::api::model::datatypes::{
     LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon, NamedData,
     NoGeometry, OverUnderColors, Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType,
     RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
-    SpatialPartition2D, SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption,
+    SpatialPartition2D, SpatialReferenceAuthority,
     SpatialResolution, StringPair, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
     VectorDataType, VectorQueryRectangle,
 };
@@ -163,8 +163,6 @@ use utoipa::{Modify, OpenApi};
             BoundingBox2D,
             SpatialPartition2D,
             SpatialResolution,
-            SpatialReference,
-            SpatialReferenceOption,
             SpatialReferenceAuthority,
             SpatialReferenceSpecification,
             AxisOrder,
@@ -362,7 +360,7 @@ struct ApiDocInfo;
 
 impl Modify for ApiDocInfo {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        openapi.info.title = "Geo Engine Pro API".to_string();
+        openapi.info.title = "Geo Engine API".to_string();
 
         openapi.info.contact = Some(
             utoipa::openapi::ContactBuilder::new()

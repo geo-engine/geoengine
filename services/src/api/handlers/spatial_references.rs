@@ -27,6 +27,7 @@ where
 #[serde(rename_all = "camelCase")]
 pub struct SpatialReferenceSpecification {
     pub name: String,
+    #[schema(value_type = String)]
     pub spatial_reference: SpatialReference,
     pub proj_string: String,
     pub extent: BoundingBox2D,

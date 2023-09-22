@@ -80,7 +80,7 @@ pub struct GetCoverage {
     pub boundingbox: WcsBoundingbox, // TODO: optional?
     #[serde(alias = "GRIDBASECRS", alias = "CRS", alias = "crs")]
     #[serde(deserialize_with = "parse_wcs_crs")]
-    #[param(example = "urn:ogc:def:crs:EPSG::4326")]
+    #[param(example = "urn:ogc:def:crs:EPSG::4326", value_type = String)]
     pub gridbasecrs: SpatialReference,
     #[serde(default)]
     #[serde(alias = "GRIDORIGIN")]

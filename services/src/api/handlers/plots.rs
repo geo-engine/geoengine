@@ -38,7 +38,7 @@ pub(crate) struct GetPlot {
     #[serde(deserialize_with = "parse_bbox")]
     #[param(example = "0,-0.3,0.2,0", value_type = String)]
     pub bbox: BoundingBox2D,
-    #[param(example = "EPSG:4326")]
+    #[param(example = "EPSG:4326", value_type = String)]
     pub crs: Option<SpatialReference>,
     #[serde(deserialize_with = "parse_time")]
     #[param(example = "2020-01-01T00:00:00.0Z")]

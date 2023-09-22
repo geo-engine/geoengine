@@ -68,7 +68,7 @@ pub struct GetFeature {
     #[serde(deserialize_with = "parse_time_option")]
     #[param(example = "2014-04-01T12:00:00.000Z")]
     pub time: Option<TimeInterval>,
-    #[param(example = "EPSG:4326")]
+    #[param(example = "EPSG:4326", value_type = String)]
     pub srs_name: Option<SpatialReference>,
     pub namespaces: Option<String>, // TODO e.g. xmlns(dog=http://www.example.com/namespaces/dog)
     #[serde(default)]

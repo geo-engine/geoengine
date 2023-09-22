@@ -16,8 +16,8 @@ use crate::api::model::datatypes::{
     LinearGradient, LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon,
     NamedData, NoGeometry, OverUnderColors, Palette, PlotOutputFormat, PlotQueryRectangle,
     RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
-    RgbaColor, SpatialPartition2D, SpatialReference, SpatialReferenceAuthority,
-    SpatialReferenceOption, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
+    RgbaColor, SpatialPartition2D, SpatialReferenceAuthority,
+    SpatialResolution, StringPair, TimeGranularity, TimeInstance,
     TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
@@ -188,8 +188,6 @@ use utoipa::{Modify, OpenApi};
             BoundingBox2D,
             SpatialPartition2D,
             SpatialResolution,
-            SpatialReference,
-            SpatialReferenceOption,
             SpatialReferenceAuthority,
             SpatialReferenceSpecification,
             AxisOrder,
