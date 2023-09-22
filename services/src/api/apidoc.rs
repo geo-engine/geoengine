@@ -4,7 +4,7 @@ use super::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecificati
 use super::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use super::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
 use super::handlers::wcs::CoverageResponse;
-use super::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
+use super::handlers::wfs::{CollectionType, GeoJson};
 use super::handlers::wms::MapResponse;
 use super::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
 use super::model::responses::ErrorResponse;
@@ -263,9 +263,6 @@ use utoipa::{Modify, OpenApi};
 
             GeoJson,
             CollectionType,
-            Feature,
-            FeatureType,
-            Coordinates,
 
             UploadFilesResponse,
             UploadFileLayersResponse,
@@ -365,7 +362,7 @@ struct ApiDocInfo;
 
 impl Modify for ApiDocInfo {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        openapi.info.title = "Geo Engine API".to_string();
+        openapi.info.title = "Geo Engine Pro API".to_string();
 
         openapi.info.contact = Some(
             utoipa::openapi::ContactBuilder::new()

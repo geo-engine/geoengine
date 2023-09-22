@@ -6,7 +6,7 @@ use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecif
 use crate::api::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::api::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
 use crate::api::handlers::wcs::CoverageResponse;
-use crate::api::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
+use crate::api::handlers::wfs::{CollectionType, GeoJson};
 use crate::api::handlers::wms::MapResponse;
 use crate::api::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
 use crate::api::model::datatypes::{
@@ -287,9 +287,6 @@ use utoipa::{Modify, OpenApi};
 
             GeoJson,
             CollectionType,
-            Feature,
-            FeatureType,
-            Coordinates,
 
             UploadFilesResponse,
             UploadFileLayersResponse,
