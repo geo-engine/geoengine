@@ -1143,20 +1143,10 @@ impl From<TimeStep> for geoengine_datatypes::primitives::TimeStep {
 }
 
 /// Stores time intervals in ms in close-open semantic [start, end)
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql, ToSchema)]
 pub struct TimeInterval {
     start: TimeInstance,
     end: TimeInstance,
-}
-
-impl<'a> ToSchema<'a> for TimeInterval {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "TimeInterval",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
-        )
-    }
 }
 
 impl From<TimeInterval> for geoengine_datatypes::primitives::TimeInterval {

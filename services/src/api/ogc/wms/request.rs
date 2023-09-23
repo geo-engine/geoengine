@@ -66,7 +66,7 @@ pub struct GetMap {
     #[param(example = "<Workflow Id>")]
     pub layers: String,
     #[serde(alias = "CRS")]
-    #[param(example = "EPSG:4326", value_type = String)]
+    #[param(example = "EPSG:4326", value_type = Option<String>)]
     pub crs: Option<SpatialReference>,
     #[serde(alias = "STYLES")]
     #[param(
@@ -76,7 +76,7 @@ pub struct GetMap {
     #[serde(default)]
     #[serde(alias = "TIME")]
     #[serde(deserialize_with = "parse_time_option")]
-    #[param(example = "2014-04-01T12:00:00.000Z")]
+    #[param(value_type = String, example = "2014-04-01T12:00:00.000Z")]
     pub time: Option<TimeInterval>,
     #[serde(alias = "TRANSPARENT")]
     #[serde(default)]

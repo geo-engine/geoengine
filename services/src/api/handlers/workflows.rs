@@ -479,6 +479,7 @@ pub struct RasterStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_spatial_partition")]
     pub spatial_bounds: SpatialPartition2D,
     #[serde(deserialize_with = "parse_time")]
+    #[param(value_type = String)]
     pub time_interval: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
     pub spatial_resolution: SpatialResolution,
@@ -567,6 +568,7 @@ pub struct VectorStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_bbox")]
     pub spatial_bounds: BoundingBox2D,
     #[serde(deserialize_with = "parse_time")]
+    #[param(value_type = String)]
     pub time_interval: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
     pub spatial_resolution: SpatialResolution,

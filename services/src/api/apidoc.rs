@@ -3,11 +3,9 @@ use super::handlers::plots::WrappedPlotOutput;
 use super::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use super::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use super::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
-use super::handlers::wcs::CoverageResponse;
 use super::handlers::wfs::{CollectionType, GeoJson};
-use super::handlers::wms::MapResponse;
 use super::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
-use super::model::responses::ErrorResponse;
+use super::model::responses::{ErrorResponse, PngResponse, ZipResponse};
 use crate::api::model::datatypes::{
     AxisLabels, BoundingBox2D, Breakpoint, CacheTtlSeconds, ClassificationMeasurement, Colorizer,
     ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat,
@@ -15,9 +13,8 @@ use crate::api::model::datatypes::{
     LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon, NamedData,
     NoGeometry, OverUnderColors, Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType,
     RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
-    SpatialPartition2D, SpatialReferenceAuthority,
-    SpatialResolution, StringPair, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
-    VectorDataType, VectorQueryRectangle,
+    SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity,
+    TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -101,6 +98,7 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::load_workflow_handler,
         handlers::workflows::raster_stream_websocket,
         handlers::workflows::register_workflow_handler,
+        handlers::workflows::get_workflow_all_metadata_zip_handler,
         handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
@@ -133,7 +131,9 @@ use utoipa::{Modify, OpenApi};
             DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
-            BadRequestQueryResponse
+            BadRequestQueryResponse,
+            PngResponse,
+            ZipResponse
         ),
         schemas(
             ErrorResponse,
@@ -232,8 +232,6 @@ use utoipa::{Modify, OpenApi};
 
 
             OgcBoundingBox,
-            MapResponse,
-            CoverageResponse,
 
             wcs::request::WcsService,
             wcs::request::WcsVersion,
@@ -360,7 +358,7 @@ struct ApiDocInfo;
 
 impl Modify for ApiDocInfo {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        openapi.info.title = "Geo Engine API".to_string();
+        openapi.info.title = "Geo Engine Pro API".to_string();
 
         openapi.info.contact = Some(
             utoipa::openapi::ContactBuilder::new()

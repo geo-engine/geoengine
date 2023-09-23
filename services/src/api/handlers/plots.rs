@@ -38,10 +38,10 @@ pub(crate) struct GetPlot {
     #[serde(deserialize_with = "parse_bbox")]
     #[param(example = "0,-0.3,0.2,0", value_type = String)]
     pub bbox: BoundingBox2D,
-    #[param(example = "EPSG:4326", value_type = String)]
+    #[param(example = "EPSG:4326", value_type = Option<String>)]
     pub crs: Option<SpatialReference>,
     #[serde(deserialize_with = "parse_time")]
-    #[param(example = "2020-01-01T00:00:00.0Z")]
+    #[param(example = "2020-01-01T00:00:00.0Z", value_type = String)]
     pub time: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
     #[param(example = "0.1,0.1", value_type = String)]

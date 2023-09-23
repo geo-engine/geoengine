@@ -30,8 +30,6 @@ use snafu::{ensure, ResultExt};
 use std::str::FromStr;
 use std::time::Duration;
 use url::Url;
-use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
-use utoipa::ToSchema;
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -297,7 +295,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
     get,
     path = "/wcs/{workflow}?request=GetCoverage",
     responses(
-        (status = 200, description = "OK", content_type= "image/png", body = CoverageResponse, example = json!("image bytes")),
+        (status = 200, response = crate::api::model::responses::PngResponse),
     ),
     params(
         ("workflow" = WorkflowId, description = "Workflow id"),
@@ -461,20 +459,6 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         .append_header(cache_hint.cache_control_header())
         .content_type("image/tiff")
         .body(bytes))
-}
-
-pub struct CoverageResponse {}
-
-impl<'a> ToSchema<'a> for CoverageResponse {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        (
-            "CoverageResponse",
-            ObjectBuilder::new()
-                .schema_type(SchemaType::String)
-                .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
-                .into(),
-        )
-    }
 }
 
 fn default_time_from_config() -> TimeInterval {

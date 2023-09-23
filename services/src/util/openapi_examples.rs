@@ -17,7 +17,6 @@ use uuid::Uuid;
 
 /// Recursively checks that schemas referenced in the given schema object exist in the provided map.
 fn can_resolve_schema(schema: &RefOr<Schema>, components: &Components) {
-    println!("Resolving schema: {}", serde_json::to_string_pretty(schema).unwrap());
     match schema {
         RefOr::Ref(reference) => {
             can_resolve_reference(reference, components);
@@ -55,7 +54,6 @@ fn can_resolve_schema(schema: &RefOr<Schema>, components: &Components) {
 
 /// Recursively checks that schemas referenced in the given response object exist in the provided map.
 fn can_resolve_response(response: &RefOr<Response>, components: &Components) {
-    println!("Resolving response: {}", serde_json::to_string_pretty(response).unwrap());
     match response {
         RefOr::Ref(reference) => {
             can_resolve_reference(reference, components);
@@ -70,7 +68,6 @@ fn can_resolve_response(response: &RefOr<Response>, components: &Components) {
 
 /// Checks that the given reference can be resolved using the provided map.
 fn can_resolve_reference(reference: &Ref, components: &Components) {
-    println!("Resolving reference: {}", serde_json::to_string_pretty(reference).unwrap());
     const SCHEMA_REF_PREFIX: &str = "#/components/schemas/";
     const RESPONSE_REF_PREFIX: &str = "#/components/responses/";
 
@@ -110,9 +107,7 @@ pub fn can_resolve_api(api: OpenApi) {
     let components = api.components.expect("api has at least one component");
 
     for (path, path_item) in api.paths.paths {
-        println!("Path: {path}");
         for operation in path_item.operations.into_values() {
-            println!("Operation: {}", serde_json::to_string_pretty(&operation).unwrap());
             if let Some(request_body) = operation.request_body {
                 for content in request_body.content.into_values() {
                     can_resolve_schema(&content.schema, &components);

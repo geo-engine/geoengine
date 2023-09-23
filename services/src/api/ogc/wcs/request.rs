@@ -100,6 +100,7 @@ pub struct GetCoverage {
     #[serde(default)]
     #[serde(deserialize_with = "parse_time_option")]
     #[serde(alias = "timesequence")] // owsLib sends it like this
+    #[param(value_type = String)]
     pub time: Option<TimeInterval>,
 
     // fallback (to support clients using some weird mixture of 1.0 and 1.1)
@@ -152,6 +153,7 @@ impl GetCoverage {
 #[derive(PartialEq, Debug, Deserialize, Serialize, ToSchema)]
 pub struct WcsBoundingbox {
     pub bbox: [f64; 4],
+    #[schema(value_type = Option<String>)]
     pub spatial_reference: Option<SpatialReference>,
 }
 

@@ -5,9 +5,7 @@ use crate::api::handlers::plots::WrappedPlotOutput;
 use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use crate::api::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::api::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
-use crate::api::handlers::wcs::CoverageResponse;
 use crate::api::handlers::wfs::{CollectionType, GeoJson};
-use crate::api::handlers::wms::MapResponse;
 use crate::api::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
 use crate::api::model::datatypes::{
     AxisLabels, BoundingBox2D, Breakpoint, CacheTtlSeconds, ClassificationMeasurement, Colorizer,
@@ -16,9 +14,8 @@ use crate::api::model::datatypes::{
     LinearGradient, LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon,
     NamedData, NoGeometry, OverUnderColors, Palette, PlotOutputFormat, PlotQueryRectangle,
     RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
-    RgbaColor, SpatialPartition2D, SpatialReferenceAuthority,
-    SpatialResolution, StringPair, TimeGranularity, TimeInstance,
-    TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
+    RgbaColor, SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair,
+    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -31,10 +28,10 @@ use crate::api::model::operators::{
     VectorResultDescriptor,
 };
 use crate::api::model::responses::datasets::DatasetNameResponse;
-use crate::api::model::responses::ErrorResponse;
 use crate::api::model::responses::{
-    BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, UnauthorizedAdminResponse,
-    UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+    BadRequestQueryResponse, ErrorResponse, IdResponse, PayloadTooLargeResponse, PngResponse,
+    UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+    ZipResponse,
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
@@ -104,6 +101,7 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::load_workflow_handler,
         handlers::workflows::raster_stream_websocket,
         handlers::workflows::register_workflow_handler,
+        handlers::workflows::get_workflow_all_metadata_zip_handler,
         pro::api::handlers::users::anonymous_handler,
         pro::api::handlers::users::login_handler,
         pro::api::handlers::users::logout_handler,
@@ -150,7 +148,9 @@ use utoipa::{Modify, OpenApi};
             DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
-            BadRequestQueryResponse
+            BadRequestQueryResponse,
+            PngResponse,
+            ZipResponse
         ),
         schemas(
             ErrorResponse,
@@ -256,8 +256,6 @@ use utoipa::{Modify, OpenApi};
             OverUnderColors,
 
             OgcBoundingBox,
-            MapResponse,
-            CoverageResponse,
 
             wcs::request::WcsService,
             wcs::request::WcsVersion,
