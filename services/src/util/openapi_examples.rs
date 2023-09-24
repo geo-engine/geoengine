@@ -106,7 +106,7 @@ fn can_resolve_reference(reference: &Ref, components: &Components) {
 pub fn can_resolve_api(api: OpenApi) {
     let components = api.components.expect("api has at least one component");
 
-    for (path, path_item) in api.paths.paths {
+    for path_item in api.paths.paths.into_values() {
         for operation in path_item.operations.into_values() {
             if let Some(request_body) = operation.request_body {
                 for content in request_body.content.into_values() {

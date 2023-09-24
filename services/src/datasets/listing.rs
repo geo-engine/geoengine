@@ -32,6 +32,7 @@ pub struct DatasetListing {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, IntoParams, Validate)]
+#[into_params(parameter_in = Query)]
 pub struct DatasetListOptions {
     #[param(example = "Germany")]
     #[validate(length(min = 3, max = 256))]
