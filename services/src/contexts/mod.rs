@@ -12,6 +12,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 mod db_types;
+mod migrations;
 mod postgres;
 mod session;
 mod simple_context;

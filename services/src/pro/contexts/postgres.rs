@@ -86,7 +86,7 @@ where
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
-        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
+        let created_schema = PostgresContext::create_database(pool.get().await?).await?;
         if created_schema {
             Self::create_pro_schema(pool.get().await?).await?;
         }
@@ -124,7 +124,7 @@ where
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
-        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
+        let created_schema = PostgresContext::create_database(pool.get().await?).await?;
         if created_schema {
             Self::create_pro_schema(pool.get().await?).await?;
         }
@@ -175,7 +175,7 @@ where
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
-        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
+        let created_schema = PostgresContext::create_database(pool.get().await?).await?;
         if created_schema {
             Self::create_pro_schema(pool.get().await?).await?;
         }

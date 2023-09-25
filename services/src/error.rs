@@ -446,6 +446,16 @@ pub enum Error {
     },
 
     UnexpectedInvalidDbTypeConversion,
+
+    #[snafu(display(
+        "Unexpected database version during migration, expected `{}` but found `{}`",
+        expected,
+        found
+    ))]
+    UnexpectedDatabaseVersionDuringMigration {
+        expected: String,
+        found: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
