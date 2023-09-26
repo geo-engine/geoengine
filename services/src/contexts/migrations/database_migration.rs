@@ -5,24 +5,16 @@ use snafu::ensure;
 use tokio_postgres::{
     error::SqlState,
     tls::{MakeTlsConnect, TlsConnect},
-    Socket,
+    Socket, Transaction,
 };
 
 use crate::error::{Result, UnexpectedDatabaseVersionDuringMigration};
-
-use super::migrations;
 
 pub type DatabaseVersion = String;
 
 /// The logic for migrating the database from one version to another.
 #[async_trait]
-pub trait Migration<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
+pub trait Migration: Send + Sync {
     /// The previous version of the database. `None` if this is the first migration.
     /// The database must be in this version in order for the migration to be applied.
     fn prev_version(&self) -> Option<DatabaseVersion>;
@@ -30,13 +22,10 @@ where
     /// The new version of the database after applying this migration.
     fn version(&self) -> DatabaseVersion;
 
-    /// Apply the migration to the database. This has to be an atomic operation, i.e. all changes must be rolled back if the operation fails.
-    /// If this operation succeeds, the database is in the new version.
-    async fn migrate(
-        &self,
-        conn: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
-        config: &crate::util::config::Postgres,
-    ) -> Result<()>;
+    /// Apply the migration to the database.
+    ///
+    /// Note: The migration shall not update the version and not commit the transaction. This is done by the migration framework.
+    async fn migrate(&self, tx: &Transaction<'_>) -> Result<()>;
 }
 
 /// The current version of the database. `None` if the database is empty.
@@ -77,8 +66,13 @@ pub enum MigrationResult {
 }
 
 /// Migrate the database to the latest version. If the database is empty, the initial migration is applied.
+///
+/// # Panics
+///
+/// Panics if there is an error in the migration logic.
 pub async fn migrate_database<Tls>(
     conn: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    migrations: &[Box<dyn Migration>],
 ) -> Result<MigrationResult>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
@@ -86,8 +80,6 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    let migrations = migrations::<Tls>();
-
     let pre_migration_version = determine_current_database_version(conn).await?;
     info!("Current database version: {:?}", pre_migration_version);
 
@@ -96,33 +88,32 @@ where
         .iter()
         .skip_while(|m| m.prev_version() != pre_migration_version);
 
-    let mut already_applied_migration = false;
+    let mut current_version = pre_migration_version.clone();
 
     for migration in applicable_migrations {
-        if already_applied_migration {
-            // in migration chain: check that the previous migration was applied
-            //  TODO: this check only makes sense if the database_version is managed by the migrations, but we could also do this here and get rid of the check
-            let current_version = determine_current_database_version(conn).await?;
-
-            ensure!(
-                migration.prev_version() == current_version,
-                UnexpectedDatabaseVersionDuringMigration {
-                    expected: migration.prev_version().unwrap_or_default(),
-                    found: current_version.unwrap_or_default()
-                }
-            );
-        }
+        ensure!(
+            migration.prev_version() == current_version,
+            UnexpectedDatabaseVersionDuringMigration {
+                expected: migration.prev_version().unwrap_or_default(),
+                found: current_version.unwrap_or_default()
+            }
+        );
 
         info!("Applying migration: {}", migration.version());
 
-        migration
-            .migrate(
-                conn,
-                &crate::util::config::get_config_element::<crate::util::config::Postgres>()?,
-            )
+        let tx = conn.build_transaction().start().await?;
+
+        migration.migrate(&tx).await?;
+
+        let stmt = tx
+            .prepare("UPDATE geoengine SET database_version = $1")
             .await?;
 
-        already_applied_migration = true;
+        tx.execute(&stmt, &[&migration.version()]).await?;
+
+        tx.commit().await?;
+
+        current_version = Some(migration.version());
     }
 
     let current_version = determine_current_database_version(conn)
@@ -172,8 +163,13 @@ mod tests {
 
         let m = Migration0000Initial;
 
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        m.migrate(&mut conn, &postgres_config).await?;
+        let tx = conn.build_transaction().start().await?;
+
+        m.migrate(&tx).await?;
+
+        tx.commit().await?;
+
+        // TODO: test a "fake" migration
 
         Ok(())
     }

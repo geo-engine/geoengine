@@ -1,9 +1,5 @@
 use async_trait::async_trait;
-use bb8_postgres::{bb8::PooledConnection, PostgresConnectionManager};
-use tokio_postgres::{
-    tls::{MakeTlsConnect, TlsConnect},
-    Socket,
-};
+use tokio_postgres::Transaction;
 
 use crate::{
     error::Result,
@@ -17,13 +13,7 @@ use super::database_migration::{DatabaseVersion, Migration};
 pub struct Migration0000Initial;
 
 #[async_trait]
-impl<Tls> Migration<Tls> for Migration0000Initial
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
+impl Migration for Migration0000Initial {
     fn prev_version(&self) -> Option<DatabaseVersion> {
         None
     }
@@ -32,14 +22,10 @@ where
         "0000_initial".into()
     }
 
-    async fn migrate(
-        &self,
-        conn: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
-        config: &crate::util::config::Postgres,
-    ) -> Result<()> {
-        let schema_name = &config.schema;
+    async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
+        let config = crate::util::config::get_config_element::<crate::util::config::Postgres>()?;
 
-        let tx = conn.build_transaction().start().await?;
+        let schema_name = &config.schema;
 
         if schema_name != "pg_temp" {
             tx.batch_execute(&format!("CREATE SCHEMA IF NOT EXISTS {schema_name};",))
@@ -113,8 +99,6 @@ where
             ],
         )
         .await?;
-
-        tx.commit().await?;
 
         Ok(())
     }

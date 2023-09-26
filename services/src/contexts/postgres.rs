@@ -1,4 +1,4 @@
-use super::migrations::{migrate_database, MigrationResult};
+use super::migrations::{all_migrations, migrate_database, MigrationResult};
 use super::{ExecutionContextImpl, Session, SimpleApplicationContext};
 use crate::api::cli::{add_datasets_from_directory, add_providers_from_directory};
 use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId, SimpleSession};
@@ -172,15 +172,12 @@ where
         }
     }
 
-    #[allow(clippy::too_many_lines)]
-    /// Creates the database schema. Returns true if the schema was created, false if it already existed.
-    pub(crate) async fn create_database(
-        mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<bool> {
+    /// Clears the database if the Settings demand and the database properties allows it.
+    pub(crate) async fn maybe_clear_database(
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<()> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-
-        let database_status = Self::check_schema_status(&conn).await?;
-
+        let database_status = Self::check_schema_status(conn).await?;
         let schema_name = postgres_config.schema;
 
         match database_status {
@@ -194,13 +191,22 @@ where
             DatabaseStatus::InitializedKeepDatabase if postgres_config.clear_database_on_start => {
                 return Err(Error::ClearDatabaseOnStartupNotAllowed)
             }
-            DatabaseStatus::InitializedClearDatabase | DatabaseStatus::InitializedKeepDatabase => {
-                return Ok(false)
-            }
-            DatabaseStatus::Unitialized => (),
+            DatabaseStatus::InitializedClearDatabase
+            | DatabaseStatus::InitializedKeepDatabase
+            | DatabaseStatus::Unitialized => (),
         };
 
-        let migration = migrate_database(&mut conn).await?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_lines)]
+    /// Creates the database schema. Returns true if the schema was created, false if it already existed.
+    pub(crate) async fn create_database(
+        mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<bool> {
+        Self::maybe_clear_database(&conn).await?;
+
+        let migration = migrate_database(&mut conn, &all_migrations()).await?;
 
         Ok(migration == MigrationResult::CreatedDatabase)
     }
