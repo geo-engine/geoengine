@@ -46,7 +46,8 @@ where
                 .await?;
         }
 
-        tx.batch_execute(include_str!("../schema.sql")).await?;
+        tx.batch_execute(include_str!("migration_0000_initial.sql"))
+            .await?;
 
         let stmt = tx
             .prepare(
