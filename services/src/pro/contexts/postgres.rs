@@ -85,10 +85,7 @@ where
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
-        let created_schema = PostgresContext::create_database(pool.get().await?).await?;
-        if created_schema {
-            Self::create_pro_database(pool.get().await?).await?;
-        }
+        Self::create_pro_database(pool.get().await?).await?;
 
         let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(
@@ -123,10 +120,7 @@ where
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
-        let created_schema = PostgresContext::create_database(pool.get().await?).await?;
-        if created_schema {
-            Self::create_pro_database(pool.get().await?).await?;
-        }
+        Self::create_pro_database(pool.get().await?).await?;
 
         let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(
