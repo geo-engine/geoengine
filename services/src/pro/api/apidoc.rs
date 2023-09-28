@@ -1,5 +1,6 @@
 use super::handlers::permissions::{PermissionRequest, Resource};
 use super::handlers::users::AddRole;
+use super::model::MlModelId;
 use crate::api::handlers;
 use crate::api::handlers::plots::WrappedPlotOutput;
 use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
@@ -358,7 +359,9 @@ use utoipa::{Modify, OpenApi};
             Permission,
             AddRole,
             RoleDescription,
-            Role
+            Role,
+
+            MlModelId
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
