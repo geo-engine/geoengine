@@ -1,3 +1,4 @@
+use crate::engine::RasterResultDescriptor;
 use crate::util::statistics::StatisticsError;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
@@ -395,6 +396,12 @@ pub enum Error {
     #[snafu(display("Cache can't produce the promissed result error: {source}"))]
     CacheCantProduceResult {
         source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[snafu(display("RasterResults are incompatible error: {a:?} vs {b:?}"))]
+    RasterResultsIncompatible {
+        a: RasterResultDescriptor,
+        b: RasterResultDescriptor,
     },
 }
 

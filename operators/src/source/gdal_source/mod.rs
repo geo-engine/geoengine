@@ -32,13 +32,13 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
     RasterSpatialQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
-use geoengine_datatypes::raster::TileInformation;
 use geoengine_datatypes::raster::{
-    EmptyGrid, GeoTransform, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
-    MapElements, MaskedGrid, NoDataValueGrid, Pixel, RasterDataType, RasterProperties,
-    RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
-    TilingStrategy,
+    EmptyGrid, GeoTransform, GridBoundingBoxExt, GridBounds, GridIdx2D, GridOrEmpty, GridOrEmpty2D,
+    GridShape2D, GridShapeAccess, MapElements, MaskedGrid, NoDataValueGrid, Pixel, RasterDataType,
+    RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
+    RasterTile2D, TilingStrategy, ChangeGridBounds,
 };
+use geoengine_datatypes::raster::{GridIntersection, TileInformation};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{
     primitives::TimeInterval,
@@ -160,6 +160,19 @@ struct GdalReadWindow {
 }
 
 impl GdalReadWindow {
+
+    pub fn new(
+        start: GridIdx2D,
+        size: GridShape2D,
+    ) -> Self {
+        Self {
+            read_start_x: start.x(),
+            read_start_y: start.y(),
+            read_size_x: size.axis_size_x(),
+            read_size_y: size.axis_size_y(),
+        }
+    }
+
     fn gdal_window_start(&self) -> (isize, isize) {
         (self.read_start_x, self.read_start_y)
     }
@@ -676,15 +689,42 @@ where
 
         let query_geo_transform = query.spatial_query().geo_transform;
 
-        assert_eq!(
-            query_geo_transform.origin_coordinate,
-            self.tiling_specification.origin_coordinate
+        debug_assert_eq!(
+            query_geo_transform.origin_coordinate, self.tiling_specification.origin_coordinate,
+            "query origin does not match tiling origin",
         );
 
-        let tiling_strategy = TilingStrategy::new(
-            self.tiling_specification.tile_size_in_pixels,
-            query_geo_transform,
+        if query_geo_transform.origin_coordinate != self.tiling_specification.origin_coordinate {
+            debug!(
+                "Query origin {:?} does not match tiling origin {:?}.",
+                query_geo_transform.origin_coordinate, self.tiling_specification.origin_coordinate
+            );
+        }
+
+        let result_descriptor = self.meta_data.result_descriptor().await?;
+
+        // TODO: we now longer map all origins to the query origin. However, this requires a bit more logic
+        let data_geo_transform = result_descriptor
+            .geo_transform()
+            .expect("must know geotransform");
+
+        let pixel_nearest_to_zero = data_geo_transform.nearest_pixel_to_zero(); // TODO: could also be nearest to anchor coordinate?
+        let coordinate_nearest_to_zero =
+            data_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(pixel_nearest_to_zero);
+
+        let pixel_distance_origin_from_nearest_zero = pixel_nearest_to_zero * -1;
+
+        debug!(
+            "pixel_distance_origin_from_nearest_zero: {:?}",
+            pixel_distance_origin_from_nearest_zero
         );
+
+        let tiling_spec = TilingSpecification {
+            tile_size_in_pixels: self.tiling_specification.tile_size_in_pixels,
+            origin_coordinate: coordinate_nearest_to_zero,
+        };
+
+        debug!("tiling_spec: {:?}", tiling_spec);
 
         // A `GeoTransform` maps pixel space to world space.
         // Usually a SRS has axis directions pointing "up" (y-axis) and "up" (y-axis).
@@ -699,7 +739,8 @@ where
         let pixel_size_y = query_geo_transform.y_pixel_size();
         debug_assert!(pixel_size_y.is_sign_negative());
 
-        let result_descriptor = self.meta_data.result_descriptor().await?;
+        let tiling_strategy =
+            TilingStrategy::new_with_tiling_spec(tiling_spec, pixel_size_x, pixel_size_y);
 
         let mut empty = false;
         debug!("result descr bbox: {:?}", result_descriptor.bbox);
@@ -993,6 +1034,30 @@ where
     let gdal_dataset_geotransform = GdalDatasetGeoTransform::from(dataset.geo_transform()?);
     let (gdal_dataset_pixels_x, gdal_dataset_pixels_y) = dataset.raster_size();
 
+    // check that the dataset pixel size is the same as the one we get from GDAL
+    debug_assert_eq!(gdal_dataset_pixels_x, dataset_params.width);
+    debug_assert_eq!(gdal_dataset_pixels_y, dataset_params.height);
+
+    // figure out if the y axis is flipped
+    let is_y_axis_flipped = tile_info
+        .global_geo_transform
+        .y_pixel_size()
+        .is_sign_negative()
+        != gdal_dataset_geotransform.y_pixel_size.is_sign_negative();
+
+    if is_y_axis_flipped {
+        debug!("The GDAL data has a flipped y-axis. Need to unflip it!");
+    }
+
+    // this are the bounds of the dataset in pixel space relative to the origin of the dataset
+    let data_grid_bounds_in_data_geotransform = GridBoundingBox2D::new_unchecked(
+        [0, 0],
+        [
+            gdal_dataset_pixels_y as isize,
+            gdal_dataset_pixels_x as isize,
+        ],
+    );
+
     if !approx_eq!(
         GdalDatasetGeoTransform,
         gdal_dataset_geotransform,
@@ -1005,52 +1070,175 @@ where
         );
     };
 
-    debug_assert_eq!(gdal_dataset_pixels_x, dataset_params.width);
-    debug_assert_eq!(gdal_dataset_pixels_y, dataset_params.height);
+    // build a GeoTransform with the origin of the data but the pixel size of the tile we want to fill.
+    // Fixme: this needs to change when the resolution is specific to the dataset
+    let data_geo_transform_with_query_res = GeoTransform::new(
+        gdal_dataset_geotransform.origin_coordinate,
+        tile_info.global_geo_transform.x_pixel_size(),
+        tile_info.global_geo_transform.y_pixel_size(),
+    );
 
-    let gdal_dataset_bounds =
-        gdal_dataset_geotransform.spatial_partition(gdal_dataset_pixels_x, gdal_dataset_pixels_y);
+    // check that the tile we are trying to fill is anchored at the tiling origin of the dataset
+    // TODO: we should allow that the anchor point of the tile is not zero. However this will not change anything here except the method name.
+    debug_assert_eq!(
+        tile_info.global_geo_transform.nearest_pixel_to_zero(),
+        GridIdx([0, 0]),
+        "tile is not anchored at the tiling origin of the dataset"
+    );
 
-    let output_bounds = tile_info.spatial_partition();
-    let dataset_intersects_tile = gdal_dataset_bounds.intersection(&output_bounds);
-    let output_shape = tile_info.tile_size_in_pixels();
+    // calculate the pixel offset between the tile and the data based on the anchor "pixel" which is relative to the origin of the dataset and the data resolution.
+    let pixel_offset_between_tile_and_data_in_query_res = tile_info.global_geo_transform.nearest_pixel_to_zero()
+        - data_geo_transform_with_query_res.nearest_pixel_to_zero();
 
-    let Some(dataset_intersection_area) = dataset_intersects_tile else {
-        return Ok(GridOrEmpty::from(EmptyGrid::new(output_shape)));
-    };
+    // get the bounds of the tile in the pixels relative to the tiling origin
+    let tile_pixel_bounds_in_query_res = tile_info.global_pixel_bounds();
 
-    let tile_geo_transform = tile_info.tile_geo_transform();
+    // now we move the tile grid we need to fill into the dataset grid space which lets us calculate the intersection between the tile and the dataset in dataset grid space.
+    let shifted_tile_grid_bounds_in_query_res = tile_pixel_bounds_in_query_res.shift_by_offset(pixel_offset_between_tile_and_data_in_query_res);
 
-    let gdal_read_window =
-        gdal_dataset_geotransform.spatial_partition_to_read_window(&dataset_intersection_area);
+    // ----- From here on we work with pixel coordinates relative to the data origin aka the ul of the raster is [0,0] -----
 
-    let is_y_axis_flipped = tile_geo_transform.y_pixel_size().is_sign_negative()
-        != gdal_dataset_geotransform.y_pixel_size.is_sign_negative();
+    // Now we need to calculate the intersection in the pixel size of the dataset to figure out what we need to read from the dataset.
+    // Here it gets a bit tricky because we need to take into account that the tile and the dataset can have different resolutions.
+    // If the resolution we request is a multiple of the dataset resolution we can just divide the intersection area by the resolution.
 
-    if is_y_axis_flipped {
-        debug!("The GDAL data has a flipped y-axis. Need to unflip it!");
+    let x_factor =
+        gdal_dataset_geotransform.x_pixel_size / tile_info.global_geo_transform.x_pixel_size();
+    let y_factor =
+        gdal_dataset_geotransform.y_pixel_size / tile_info.global_geo_transform.y_pixel_size() ; // TODO: care for non negative y axis
+
+    if !approx_eq!(f64, x_factor.fract(), 0.0) {
+        log::debug!(
+            "The x resolution of the tile is not a multiple of the dataset resolution: {} / {} = {}",
+            gdal_dataset_geotransform.x_pixel_size,
+            tile_info.global_geo_transform.x_pixel_size(),            
+            x_factor
+        );
     }
 
-    let result_grid = if dataset_intersection_area == output_bounds {
+    if !approx_eq!(f64, y_factor.fract(), 0.0) {
+        log::debug!(
+            "The y resolution of the tile is not a multiple of the dataset resolution: {} / {} = {}",
+            gdal_dataset_geotransform.y_pixel_size,
+            tile_info.global_geo_transform.y_pixel_size(),            
+            y_factor
+        );
+    }
+
+    // create a pixel bounding box of the dataset with the pixel size of the tile
+    let dataset_grid_bounds_in_query_res = GridBoundingBox2D::new_unchecked(
+        [0, 0],
+        [
+            (gdal_dataset_pixels_y as f64 / y_factor).floor() as isize,
+            (gdal_dataset_pixels_x as f64 / x_factor).floor() as isize,
+        ],
+    );
+
+    // calculate the intersection between the tile and the dataset in dataset grid space.
+    // This implies that the [0,0] pixel is the origin of the dataset.
+    let intersection_area_in_query_res = dataset_grid_bounds_in_query_res.intersection(&shifted_tile_grid_bounds_in_query_res);
+
+    // if there is no intersection we can return an empty grid. This can happen if the tile is outside of the dataset.
+    let intersection_area_in_query_res = if let Some(intersection_area_in_query_res) = intersection_area_in_query_res {
+        intersection_area_in_query_res
+    } else {
+        debug!("Tile {:?} does not intersect dataset.", &tile_info);
+        return Ok(EmptyGrid::new(tile_info.tile_size_in_pixels).into());
+    };
+
+    // calculate the location of the intersection in the pixel space of the dataset
+    let ul_x_in_data_res = intersection_area_in_query_res.min_index().x() as f64 * x_factor;
+    let ul_y_in_data_res = intersection_area_in_query_res.min_index().y() as f64 * y_factor;
+    let lr_x_in_data_res = intersection_area_in_query_res.max_index().x() as f64 * x_factor;
+    let lr_y_in_data_res = intersection_area_in_query_res.max_index().y() as f64 * y_factor;
+
+    // we can't read data outside of the dataset so we need to clamp the intersection to the dataset bounds and we also need to correct the intersection area
+    // since the pixels we want to fill might be smaller than the pixels of the dataset we need to calculate the offset of the tile pixels relative to the dataset pixels
+    fn correct_ul(ul: f64) -> (f64, f64) {
+        if ul < 0.0 {
+            (0., ul) // negative ul means we are outside of the dataset and have to adapt the area we are reading from the dataset
+        } else {
+            (ul.floor(), ul.fract()) // positive ul means we are inside the dataset and the pixels we are going to fill are a fraction of the dataset pixels. Therefore we need to pad the pixels we read from the dataset to fill the pixel area
+        }
+    }
+
+    let (ul_y_in_data_res, ul_y_correction) = correct_ul(ul_y_in_data_res);
+    let (ul_x_in_data_res, ul_x_correction) = correct_ul(ul_x_in_data_res);
+
+    fn correct_lr(lr: f64, max: f64) -> (f64, f64) {
+        if lr > max {
+            (max, lr - max) // an lr value larger then the dataset size means we are outside of the dataset and have to adapt the area we are reading from the dataset
+        } else {
+            (lr.floor(), lr.fract() - 1.0) // a lr value smaller then the dataset size means we are inside the dataset and might have a fraction of a dataset pixel to correct by padding
+        }
+    }
+
+    let (lr_y_in_data_res, lr_y_correction) = correct_lr(lr_y_in_data_res, gdal_dataset_pixels_y as f64);
+    let (lr_x_in_data_res, lr_x_correction) = correct_lr(lr_x_in_data_res, gdal_dataset_pixels_x as f64);
+
+    // this are the bounds of the intersection in pixel space of the dataset clipped to the dataset bounds aka the area we need to read from the dataset
+    let dataset_intersection_area = GridBoundingBox2D::new_unchecked(
+        [ul_y_in_data_res as isize, ul_x_in_data_res as isize ],
+        [lr_y_in_data_res as isize, lr_x_in_data_res as isize],
+    );
+
+    // now we need to adapt our read window in target pixel space to the clipped dataset intersection area
+    let tile_pixel_offset_ul_x = ul_x_correction / x_factor;
+    let tile_pixel_offset_ul_y = ul_y_correction / y_factor;
+       
+
+    // this is the offset of the tile pixels relative to the dataset pixels upper left corner
+    let tile_pixel_offset_ul = [tile_pixel_offset_ul_y as isize, tile_pixel_offset_ul_x as isize];
+
+    debug!(
+        "tile_pixel_offset_ul: {:?}, tile_pixel_offset_ul_y: {}, tile_pixel_offset_ul_x: {}",
+        tile_pixel_offset_ul, tile_pixel_offset_ul_y, tile_pixel_offset_ul_x
+    );
+
+    let tile_pixel_offset_lr_x = lr_x_correction / x_factor;
+    let tile_pixel_offset_lr_y = lr_y_correction / y_factor;
+    
+    // this is the offset of the tile pixels relative to the dataset pixels lower right corner
+    let tile_pixel_offset_lr = [tile_pixel_offset_lr_y as isize, tile_pixel_offset_lr_x as isize];
+
+    debug!(
+        "tile_pixel_offset_lr: {:?}, tile_pixel_offset_lr_y: {}, tile_pixel_offset_lr_x: {}",
+        tile_pixel_offset_lr, tile_pixel_offset_lr_y, tile_pixel_offset_lr_x
+    );
+
+    // now this is the grid we need to fill with the read window
+    // TODO: we might also use "+" if we invert the output of the correction functions
+    let corrected_intersection_area_in_query_res = GridBoundingBox2D::new_unchecked(
+        [intersection_area_in_query_res.min_index().y() - tile_pixel_offset_ul[0], intersection_area_in_query_res.min_index().x() - tile_pixel_offset_ul[1]].into(),
+        [intersection_area_in_query_res.max_index().y() - tile_pixel_offset_lr[0], intersection_area_in_query_res.max_index().x() - tile_pixel_offset_lr[1]].into(),
+    );
+
+    let is_ez_case = corrected_intersection_area_in_query_res == intersection_area_in_query_res && corrected_intersection_area_in_query_res.grid_shape() == tile_info.tile_size_in_pixels;
+
+    let gdal_read_window = GdalReadWindow::new(
+        dataset_intersection_area.min_index(),
+        dataset_intersection_area.grid_shape(),
+    );        
+
+    let result_grid = if is_ez_case {
         read_grid_from_raster(
             rasterband,
             &gdal_read_window,
-            output_shape,
+            tile_info.tile_size_in_pixels,
             dataset_params,
             is_y_axis_flipped,
         )?
     } else {
-        let partial_tile_grid_bounds =
-            tile_geo_transform.spatial_to_grid_bounds(&dataset_intersection_area);
+       
 
-        read_partial_grid_from_raster(
-            rasterband,
-            &gdal_read_window,
-            partial_tile_grid_bounds,
-            output_shape,
-            dataset_params,
-            is_y_axis_flipped,
-        )?
+        let r = read_grid_from_raster(rasterband, &gdal_read_window, corrected_intersection_area_in_query_res, dataset_params, is_y_axis_flipped)?;
+        let mut tile_raster = GridOrEmpty::from(EmptyGrid::new(shifted_tile_grid_bounds_in_query_res));
+        tile_raster.grid_blit_from(&r);
+
+        
+
+        Ok(x)
+        
     };
 
     Ok(result_grid)

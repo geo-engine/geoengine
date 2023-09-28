@@ -1133,8 +1133,14 @@ mod tests {
                     .into(),
                 measurement: Measurement::Unitless,
                 time: None,
-                bbox: None,
-                resolution: None,
+                bbox: Some(SpatialPartition2D::new_unchecked(
+                    (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+                    (20_037_508.342_789_244, -20_048_966.104_014_594).into(),
+                )),
+                resolution: Some(SpatialResolution::new_unchecked(
+                    14_052.950_258_048_739,
+                    14_057.881_117_788_405,
+                )),
             },
             cache_ttl: CacheTtlSeconds::default(),
         };

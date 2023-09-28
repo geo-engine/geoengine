@@ -196,7 +196,7 @@ impl GeoTransform {
         &self,
         spatial_partition: &SpatialPartition2D,
     ) -> GridBoundingBox2D {
-        let GridIdx([ul_y, ul_x]) = self.upper_left_pixel_idx(spatial_partition);
+        let GridIdx([ul_y, ul_x]) = self.coordinate_to_grid_idx_2d(spatial_partition.upper_left());
         let GridIdx([lr_y, lr_x]) = self.lower_right_pixel_idx(spatial_partition); // this is the pixel inside the spatial partition
 
         debug_assert!(ul_x <= lr_x);

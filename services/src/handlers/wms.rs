@@ -26,8 +26,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 
 use geoengine_operators::engine::{
-    CanonicOperatorName, ExecutionContext, ResultDescriptor, SingleRasterOrVectorSource,
-    WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, SingleRasterOrVectorSource, WorkflowOperatorPath,
 };
 use geoengine_operators::processing::{
     InitializedRasterReprojection, Reprojection, ReprojectionParams,
@@ -298,9 +297,13 @@ async fn wms_map_handler<C: ApplicationContext>(
             .await
             .context(error::Operator)?;
 
+        let result_descriptor = initialized.result_descriptor();
+
+        tracing::debug!(?result_descriptor, "data result descriptor");
+
         // handle request and workflow crs matching
         let workflow_spatial_ref: SpatialReferenceOption =
-            initialized.result_descriptor().spatial_reference().into();
+            result_descriptor.spatial_reference.into();
         let workflow_spatial_ref: Option<SpatialReference> = workflow_spatial_ref.into();
         let workflow_spatial_ref =
             workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
@@ -342,19 +345,32 @@ async fn wms_map_handler<C: ApplicationContext>(
             Box::new(irp)
         };
 
+        let result_descriptor = initialized.result_descriptor();
+
+        tracing::debug!(
+            ?result_descriptor,
+            "data result descriptor after reprojection"
+        );
+
         let processor = initialized.query_processor().context(error::Operator)?;
 
         let query_bbox: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
         let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
         let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
 
+        tracing::debug!(?query_bbox, "query_bbox");
+
         // FIXME: we query with a grid that is snapped to the grid origin. We COULD also query with the origin of the query OR the native origin of the workflow.
         let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
             query_bbox,
             SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution),
-            execution_context.tiling_specification().origin_coordinate,
+            result_descriptor
+                .tiling_origin()
+                .expect("Tile origin is required"),
             request.time.unwrap_or_else(default_time_from_config).into(),
         );
+
+        tracing::debug!(?query_rect, "query_rect");
 
         let query_ctx = ctx.query_context()?;
 

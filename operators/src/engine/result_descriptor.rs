@@ -1,7 +1,8 @@
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, FeatureDataType, Measurement, SpatialPartition2D,
-    SpatialResolution, TimeInterval,
+    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType, Measurement,
+    SpatialPartition2D, SpatialResolution, TimeInterval,
 };
+use geoengine_datatypes::raster::{GeoTransform, GridShape2D, TilingSpecification};
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
 };
@@ -104,7 +105,46 @@ impl ResultDescriptor for RasterResultDescriptor {
     }
 }
 
-impl RasterResultDescriptor {}
+impl RasterResultDescriptor {
+    /// Returns the geo transform of the data, i.e. the transformation from pixel coordinates to world coordinates.
+    pub fn geo_transform(&self) -> Option<GeoTransform> {
+        match (self.bbox.as_ref(), self.resolution) {
+            (Some(bbox), Some(res)) => Some(GeoTransform::new(bbox.upper_left(), res.x, -res.y)), // TODO: allow x any y to be negative in resolution
+            _ => None,
+        }
+    }
+
+    /// Returns the tiling origin of the data, i.e. the upper left corner of the pixel nearest to zero.
+    pub fn tiling_origin(&self) -> Option<Coordinate2D> {
+        self.geo_transform()
+            .map(|gt| gt.grid_idx_to_pixel_upper_left_coordinate_2d(gt.nearest_pixel_to_zero()))
+    }
+
+    /// Returns the data tiling specification for the given tile size in pixels.
+    pub fn generate_data_tiling_spec(
+        &self,
+        tile_size_in_pixels: GridShape2D,
+    ) -> Option<TilingSpecification> {
+        self.tiling_origin()
+            .map(|origin_coordinate| TilingSpecification {
+                origin_coordinate,
+                tile_size_in_pixels,
+            })
+    }
+
+    pub fn spatial_tiling_equals(&self, other: &Self) -> bool {
+        self.spatial_reference == other.spatial_reference
+            && self.tiling_origin() == other.tiling_origin()
+            && self.resolution == other.resolution
+    }
+
+    /// Returns `true` if the spatial reference, tiling origin and resolution are the same.
+    pub fn spatial_tiling_compat(&self, other: &Self) -> bool {
+        self.spatial_reference == other.spatial_reference
+            && self.tiling_origin() == other.tiling_origin() // TODO: maybe allow a very small delta of the origin. Something like 1e-6 * resolution.
+            && self.resolution == other.resolution
+    }
+}
 
 /// A `ResultDescriptor` for vector queries
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -294,6 +334,7 @@ impl From<VectorResultDescriptor> for TypedResultDescriptor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use float_cmp::assert_approx_eq;
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
     #[test]
@@ -333,5 +374,54 @@ mod tests {
                 bbox: None,
             }
         );
+    }
+
+    #[test]
+    fn raster_tiling_origin() {
+        let descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            measurement: Measurement::Unitless,
+            time: None,
+            bbox: Some(SpatialPartition2D::new_unchecked(
+                Coordinate2D::new(-10., 10.),
+                Coordinate2D::new(1., 1.),
+            )),
+            resolution: SpatialResolution::new(0.3, 0.3).ok(),
+        };
+
+        let to = descriptor.tiling_origin().unwrap();
+
+        assert_approx_eq!(f64, to.x, -0.09999999999999964);
+        assert_approx_eq!(f64, to.y, 0.09999999999999964);
+    }
+
+    #[test]
+    fn raster_tiling_equals() {
+        let descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            measurement: Measurement::Unitless,
+            time: None,
+            bbox: Some(SpatialPartition2D::new_unchecked(
+                Coordinate2D::new(-15., 15.),
+                Coordinate2D::new(10., -10.),
+            )),
+            resolution: SpatialResolution::new(0.5, 0.5).ok(),
+        };
+
+        let descriptor2 = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            measurement: Measurement::Unitless,
+            time: None,
+            bbox: Some(SpatialPartition2D::new_unchecked(
+                Coordinate2D::new(-10., 10.),
+                Coordinate2D::new(1., 1.),
+            )),
+            resolution: SpatialResolution::new(0.5, 0.5).ok(),
+        };
+
+        assert!(descriptor.spatial_tiling_equals(&descriptor2));
     }
 }

@@ -158,7 +158,8 @@ where
     GridBoundingBox<I>: GridSize,
     GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
 {
-    type Output;
+    type BoundedOutput;
+    type UnboundedOutput;
 
     fn shift_bounding_box(&self, offset: GridIdx<I>) -> GridBoundingBox<I> {
         let bounds = self.bounding_box();
@@ -169,10 +170,13 @@ where
     }
 
     /// shift using an offset
-    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output;
+    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::BoundedOutput;
 
     /// set new bounds. will fail if the axis sizes do not match.
-    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output>;
+    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::BoundedOutput>;
+
+    /// remove the bounds. Keep the shape
+    fn unbounded(self) -> Self::UnboundedOutput;
 }
 
 pub trait GridStep<I>: GridSpaceToLinearSpace<IndexArray = I>
@@ -209,12 +213,4 @@ where
         let l = l - step;
         self.grid_idx(l)
     }
-}
-
-impl<G, I> GridStep<I> for G
-where
-    G: GridSpaceToLinearSpace<IndexArray = I>,
-    I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
-    GridBoundingBox<I>: GridSize,
-{
 }

@@ -333,3 +333,54 @@ where
         GridIdx([a % a_other, b % b_other, c % c_other])
     }
 }
+
+impl GridIdx1D {
+    pub fn x(&self) -> isize {
+        let [a] = self.0;
+        a
+    }
+
+    pub fn to_2d(&self) -> GridIdx2D {
+        let [a] = self.0;
+        GridIdx([a, 0])
+    }
+
+    pub fn to_3d(&self) -> GridIdx3D {
+        let [a] = self.0;
+        GridIdx([a, 0, 0])
+    }
+}
+
+impl GridIdx2D {
+    pub fn x(&self) -> isize {
+        let [_, x] = self.0;
+        x
+    }
+
+    pub fn y(&self) -> isize {
+        let [y, _] = self.0;
+        y
+    }
+
+    pub fn to_3d(&self) -> GridIdx3D {
+        let [a, b] = self.0;
+        GridIdx([a, b, 0])
+    }
+}
+
+impl GridIdx3D {
+    pub fn x(&self) -> isize {
+        let [_, _, x] = self.0;
+        x
+    }
+
+    pub fn y(&self) -> isize {
+        let [_, y, _] = self.0;
+        y
+    }
+
+    pub fn z(&self) -> isize {
+        let [z, _, _] = self.0;
+        z
+    }
+}

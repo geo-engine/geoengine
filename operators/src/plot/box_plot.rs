@@ -101,6 +101,17 @@ impl PlotOperator for BoxPlot {
                     .map(InitializedRasterOperator::result_descriptor)
                     .collect::<Vec<_>>();
 
+                // TODO: refine checkings
+                for &other_descriptor in in_descriptors.iter().skip(1) {
+                    ensure!(
+                        in_descriptors[0].spatial_tiling_compat(other_descriptor),
+                        crate::error::RasterResultsIncompatible {
+                            a: in_descriptors[0].clone(),
+                            b: other_descriptor.clone(),
+                        }
+                    );
+                }
+
                 let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
                 let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
 

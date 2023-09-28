@@ -42,7 +42,7 @@ where
 
 impl<D, T> GridSize for EmptyGrid<D, T>
 where
-    D: GridSize + GridSpaceToLinearSpace,
+    D: GridSpaceToLinearSpace,
 {
     type ShapeArray = D::ShapeArray;
 
@@ -88,19 +88,25 @@ where
 impl<D, T, I> ChangeGridBounds<I> for EmptyGrid<D, T>
 where
     I: AsRef<[isize]> + Clone,
-    D: GridBounds<IndexArray = I> + Clone,
+    D: GridBounds<IndexArray = I> + Clone + GridShapeAccess,
     T: Copy,
     GridBoundingBox<I>: GridSize,
     GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
+    GridShape<D::ShapeArray>: GridSize,
 {
-    type Output = EmptyGrid<GridBoundingBox<I>, T>;
+    type BoundedOutput = EmptyGrid<GridBoundingBox<I>, T>;
+    type UnboundedOutput = EmptyGrid<GridShape<D::ShapeArray>, T>;
 
-    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {
+    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::BoundedOutput {
         EmptyGrid::new(self.shift_bounding_box(offset))
     }
 
-    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
+    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::BoundedOutput> {
         Ok(EmptyGrid::new(bounds))
+    }
+
+    fn unbounded(self) -> Self::UnboundedOutput {
+        EmptyGrid::new(self.shape.grid_shape())
     }
 }
 

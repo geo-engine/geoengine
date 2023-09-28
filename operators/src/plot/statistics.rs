@@ -86,6 +86,17 @@ impl PlotOperator for Statistics {
                     .collect::<Vec<_>>();
 
                 if rasters.len() > 1 {
+                    // TODO: refine checkings
+                    for &other_descriptor in in_descriptors.iter().skip(1) {
+                        ensure!(
+                            in_descriptors[0].spatial_tiling_compat(other_descriptor),
+                            crate::error::RasterResultsIncompatible {
+                                a: in_descriptors[0].clone(),
+                                b: other_descriptor.clone(),
+                            }
+                        );
+                    }
+
                     let srs = in_descriptors[0].spatial_reference;
                     ensure!(
                         in_descriptors.iter().all(|d| d.spatial_reference == srs),

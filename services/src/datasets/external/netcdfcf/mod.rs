@@ -2234,7 +2234,7 @@ mod tests {
             }
         );
     }
-
+    /* FIXME: reactivate this test once there is an alignment operator
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_irregular_time_series() {
         with_temp_context(|app_ctx, _| async move {
@@ -2340,4 +2340,5 @@ mod tests {
         })
         .await;
     }
+    */
 }

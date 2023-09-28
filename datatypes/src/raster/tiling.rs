@@ -309,7 +309,7 @@ impl SpatialPartitioned for TileInformation {
 #[cfg(test)]
 mod tests {
 
-    use crate::raster::{geo_transform, GridIntersection};
+    use crate::raster::GridIntersection;
 
     use super::*;
 
@@ -347,6 +347,28 @@ mod tests {
         for tile in tiles {
             assert!(grid_bounds.intersects(&tile.global_pixel_bounds()));
         }
+    }
+
+    #[test]
+    fn it_generates_all_interesected_tiles() {
+        let strat = TilingStrategy {
+            tile_size_in_pixels: [512, 512].into(),
+            geo_transform: GeoTransform::new((0., -0.).into(), 10., -10.),
+        };
+
+        let bounds =
+            GridBoundingBox2D::new(GridIdx2D::new([-513, -513]), GridIdx2D::new([512, 512]))
+                .unwrap();
+
+        let tiles_idxs = strat
+            .tile_idx_iterator_from_grid_bounds(bounds)
+            .collect::<Vec<_>>();
+
+        assert_eq!(tiles_idxs.len(), 4 * 4);
+        assert_eq!(tiles_idxs[0], [-2, -2].into());
+        assert_eq!(tiles_idxs[1], [-2, -1].into());
+        assert_eq!(tiles_idxs[14], [1, 0].into());
+        assert_eq!(tiles_idxs[15], [1, 1].into());
     }
 
     #[test]

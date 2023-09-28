@@ -27,7 +27,7 @@ port = 5432
 database = "geoengine"
 schema = "public"
 user = "geoengine"
-password = "geoengine"
+password = "geoengine123123"
 # Set to `true` to start with a fresh database each time.
 # If this parameter is set to `false` at the first start, subsequent changes to `true` will result in an error.
 # This helps to protect production environments from unwanted data loss.

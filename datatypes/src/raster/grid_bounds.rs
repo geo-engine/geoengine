@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -343,7 +345,7 @@ impl GridContains<GridBoundingBox2D> for GridBoundingBox2D {
     }
 }
 
-pub trait GridBoundingBoxExt {
+pub trait GridBoundingBoxExt: GridBounds {
     fn extend(&mut self, other: &Self);
 
     #[must_use]
@@ -354,6 +356,16 @@ pub trait GridBoundingBoxExt {
         let mut extended = self.clone();
         extended.extend(other);
         extended
+    }
+
+    fn shift_by_offset(
+        &self,
+        offset: GridIdx<Self::IndexArray>,
+    ) -> GridBoundingBox<Self::IndexArray>
+    where
+        GridIdx<Self::IndexArray>: Add<Output = GridIdx<Self::IndexArray>> + Clone,
+    {
+        GridBoundingBox::new_unchecked(self.min_index() + offset.clone(), self.max_index() + offset)
     }
 }
 

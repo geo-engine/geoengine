@@ -161,6 +161,19 @@ impl RasterOperator for Rgb {
 
         let sources = self.sources.initialize_sources(path, context).await?;
 
+        // TODO: refine checkings
+        let first_result_descriptor = sources.red.result_descriptor();
+        for other_source in sources.iter().skip(1) {
+            let other_res_desc = other_source.result_descriptor();
+            ensure!(
+                first_result_descriptor.spatial_tiling_compat(other_res_desc),
+                crate::error::RasterResultsIncompatible {
+                    a: first_result_descriptor.clone(),
+                    b: other_res_desc.clone(),
+                }
+            );
+        }
+
         let spatial_reference = sources.red.result_descriptor().spatial_reference;
 
         ensure!(

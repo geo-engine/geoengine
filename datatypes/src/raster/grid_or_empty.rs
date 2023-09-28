@@ -201,27 +201,40 @@ where
     }
 }
 
-impl<D, T, I> ChangeGridBounds<I> for GridOrEmpty<D, T>
+impl<D, T, I, A> ChangeGridBounds<I> for GridOrEmpty<D, T>
 where
     I: AsRef<[isize]> + Clone,
-    D: GridBounds<IndexArray = I> + Clone + GridSpaceToLinearSpace<IndexArray = I>,
+    A: AsRef<[usize]> + Into<GridShape<A>>,
+    D: GridBounds<IndexArray = I>
+        + Clone
+        + GridSpaceToLinearSpace<IndexArray = I, ShapeArray = A>
+        + GridShapeAccess<ShapeArray = A>,
     T: Copy,
     GridBoundingBox<I>: GridSize,
     GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
+    GridShape<A>: GridSize,
 {
-    type Output = GridOrEmpty<GridBoundingBox<I>, T>;
+    type BoundedOutput = GridOrEmpty<GridBoundingBox<I>, T>;
+    type UnboundedOutput = GridOrEmpty<GridShape<A>, T>;
 
-    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {
+    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::BoundedOutput {
         match self {
             GridOrEmpty::Grid(g) => GridOrEmpty::Grid(g.shift_by_offset(offset)),
             GridOrEmpty::Empty(n) => GridOrEmpty::Empty(n.shift_by_offset(offset)),
         }
     }
 
-    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
+    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::BoundedOutput> {
         match self {
             GridOrEmpty::Grid(g) => g.set_grid_bounds(bounds).map(Into::into),
             GridOrEmpty::Empty(n) => n.set_grid_bounds(bounds).map(Into::into),
+        }
+    }
+
+    fn unbounded(self) -> Self::UnboundedOutput {
+        match self {
+            GridOrEmpty::Grid(g) => GridOrEmpty::Grid(g.unbounded()),
+            GridOrEmpty::Empty(n) => GridOrEmpty::Empty(n.unbounded()),
         }
     }
 }
