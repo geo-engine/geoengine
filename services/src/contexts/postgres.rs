@@ -199,7 +199,6 @@ where
         Ok(())
     }
 
-    #[allow(clippy::too_many_lines)]
     /// Creates the database schema. Returns true if the schema was created, false if it already existed.
     pub(crate) async fn create_database(
         mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
