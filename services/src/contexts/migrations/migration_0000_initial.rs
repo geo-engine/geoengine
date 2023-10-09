@@ -1,14 +1,14 @@
 use async_trait::async_trait;
 use tokio_postgres::Transaction;
+use uuid::Uuid;
 
-use crate::{
-    error::Result,
-    layers::{
-        add_from_directory::UNSORTED_COLLECTION_ID, storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
-    },
-};
+use crate::error::Result;
 
 use super::database_migration::{DatabaseVersion, Migration};
+
+const INTERNAL_LAYER_DB_ROOT_COLLECTION_ID: Uuid =
+    Uuid::from_u128(0x0510_2bb3_a855_4a37_8a8a_3002_6a91_fef1);
+const UNSORTED_COLLECTION_ID: Uuid = Uuid::from_u128(0xffb2_dd9e_f5ad_427c_b7f1_c9a0_c7a0_ae3f);
 
 pub struct Migration0000Initial;
 
