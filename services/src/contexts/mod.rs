@@ -12,6 +12,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 mod db_types;
+mod migrations;
 mod postgres;
 mod session;
 mod simple_context;
@@ -30,6 +31,10 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
+pub use migrations::{
+    migrate_database, migration_0000_initial::Migration0000Initial, DatabaseVersion, Migration,
+    MigrationResult,
+};
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
 pub use simple_context::SimpleApplicationContext;

@@ -1,3 +1,4 @@
+use super::migrations::{all_migrations, migrate_database, MigrationResult};
 use super::{ExecutionContextImpl, Session, SimpleApplicationContext};
 use crate::api::cli::{add_datasets_from_directory, add_providers_from_directory};
 use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId, SimpleSession};
@@ -6,9 +7,8 @@ use crate::datasets::upload::{Volume, Volumes};
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
 use crate::layers::add_from_directory::{
-    add_layer_collections_from_directory, add_layers_from_directory, UNSORTED_COLLECTION_ID,
+    add_layer_collections_from_directory, add_layers_from_directory,
 };
-use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::projects::{ProjectId, STRectangle};
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
 use crate::util::config;
@@ -23,7 +23,7 @@ use bb8_postgres::{
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::create_rayon_thread_pool;
-use log::{debug, info};
+use log::info;
 use rayon::ThreadPool;
 use snafu::ensure;
 use std::path::PathBuf;
@@ -71,7 +71,7 @@ where
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
-        let created_schema = Self::create_schema(pool.get().await?).await?;
+        let created_schema = Self::create_database(pool.get().await?).await?;
 
         let session = if created_schema {
             let session = SimpleSession::default();
@@ -107,7 +107,7 @@ where
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
-        let created_schema = Self::create_schema(pool.get().await?).await?;
+        let created_schema = Self::create_database(pool.get().await?).await?;
 
         let session = if created_schema {
             let session = SimpleSession::default();
@@ -172,15 +172,12 @@ where
         }
     }
 
-    #[allow(clippy::too_many_lines)]
-    /// Creates the database schema. Returns true if the schema was created, false if it already existed.
-    pub(crate) async fn create_schema(
-        mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<bool> {
+    /// Clears the database if the Settings demand and the database properties allows it.
+    pub(crate) async fn maybe_clear_database(
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<()> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-
-        let database_status = Self::check_schema_status(&conn).await?;
-
+        let database_status = Self::check_schema_status(conn).await?;
         let schema_name = postgres_config.schema;
 
         match database_status {
@@ -194,91 +191,23 @@ where
             DatabaseStatus::InitializedKeepDatabase if postgres_config.clear_database_on_start => {
                 return Err(Error::ClearDatabaseOnStartupNotAllowed)
             }
-            DatabaseStatus::InitializedClearDatabase | DatabaseStatus::InitializedKeepDatabase => {
-                return Ok(false)
-            }
-            DatabaseStatus::Unitialized => (),
+            DatabaseStatus::InitializedClearDatabase
+            | DatabaseStatus::InitializedKeepDatabase
+            | DatabaseStatus::Unitialized => (),
         };
 
-        let tx = conn.build_transaction().start().await?;
+        Ok(())
+    }
 
-        if schema_name != "pg_temp" {
-            tx.batch_execute(&format!("CREATE SCHEMA IF NOT EXISTS {schema_name};",))
-                .await?;
-        }
+    /// Creates the database schema. Returns true if the schema was created, false if it already existed.
+    pub(crate) async fn create_database(
+        mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<bool> {
+        Self::maybe_clear_database(&conn).await?;
 
-        tx.batch_execute(include_str!("schema.sql")).await?;
+        let migration = migrate_database(&mut conn, &all_migrations()).await?;
 
-        let stmt = tx
-            .prepare(
-                "
-            INSERT INTO geoengine (clear_database_on_start) VALUES ($1);",
-            )
-            .await?;
-
-        tx.execute(&stmt, &[&postgres_config.clear_database_on_start])
-            .await?;
-
-        let stmt = tx
-            .prepare(
-                r#"
-            INSERT INTO layer_collections (
-                id,
-                name,
-                description,
-                properties
-            ) VALUES (
-                $1,
-                'Layers',
-                'All available Geo Engine layers',
-                ARRAY[]::"PropertyType"[]
-            );"#,
-            )
-            .await?;
-
-        tx.execute(&stmt, &[&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID])
-            .await?;
-
-        let stmt = tx
-            .prepare(
-                r#"INSERT INTO layer_collections (
-                id,
-                name,
-                description,
-                properties
-            ) VALUES (
-                $1,
-                'Unsorted',
-                'Unsorted Layers',
-                ARRAY[]::"PropertyType"[]
-            );"#,
-            )
-            .await?;
-
-        tx.execute(&stmt, &[&UNSORTED_COLLECTION_ID]).await?;
-
-        let stmt = tx
-            .prepare(
-                r#"
-            INSERT INTO collection_children (parent, child) 
-            VALUES ($1, $2);"#,
-            )
-            .await?;
-
-        tx.execute(
-            &stmt,
-            &[
-                &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
-                &UNSORTED_COLLECTION_ID,
-            ],
-        )
-        .await?;
-
-        tx.commit().await?;
-
-        debug!("Created database schema");
-
-        Ok(true)
+        Ok(migration == MigrationResult::CreatedDatabase)
     }
 
     async fn create_default_session(
@@ -537,6 +466,7 @@ mod tests {
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::datasets::{AddDataset, DatasetIdAndName};
     use crate::ge_context;
+    use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
     use crate::layers::external::TypedDataProviderDefinition;
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
