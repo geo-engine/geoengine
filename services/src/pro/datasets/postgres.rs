@@ -19,7 +19,8 @@ use crate::layers::layer::ProviderLayerId;
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::layers::storage::INTERNAL_PROVIDER_ID;
 use crate::pro::contexts::ProPostgresDb;
-use crate::pro::permissions::{Permission, PermissionDb, RoleId};
+use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
+use crate::pro::permissions::{Permission, RoleId};
 use crate::projects::Symbology;
 use crate::util::operators::source_operator_from_dataset;
 use crate::workflows::workflow::Workflow;
@@ -232,8 +233,19 @@ where
             .internal()
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
 
+        let mut conn = self.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+        let tx = conn.build_transaction().start().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+
         if !self
-            .has_permission(id, Permission::Read)
+            .has_permission_in_tx(id, Permission::Read, &tx)
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
@@ -242,12 +254,7 @@ where
             return Err(geoengine_operators::error::Error::PermissionDenied);
         };
 
-        let conn = self.conn_pool.get().await.map_err(|e| {
-            geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            }
-        })?;
-        let stmt = conn
+        let stmt = tx
             .prepare(
                 "
         SELECT
@@ -263,7 +270,7 @@ where
                 source: Box::new(e),
             })?;
 
-        let row = conn
+        let row = tx
             .query_one(&stmt, &[&id, &self.session.user.id])
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
@@ -280,6 +287,12 @@ where
                 }),
             });
         };
+
+        tx.commit()
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
 
         Ok(Box::new(meta_data))
     }
@@ -304,8 +317,19 @@ where
             .internal()
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
 
+        let mut conn = self.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+        let tx = conn.build_transaction().start().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+
         if !self
-            .has_permission(id, Permission::Read)
+            .has_permission_in_tx(id, Permission::Read, &tx)
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
@@ -314,12 +338,7 @@ where
             return Err(geoengine_operators::error::Error::PermissionDenied);
         };
 
-        let conn = self.conn_pool.get().await.map_err(|e| {
-            geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            }
-        })?;
-        let stmt = conn
+        let stmt = tx
             .prepare(
                 "
             SELECT
@@ -335,7 +354,7 @@ where
                 source: Box::new(e),
             })?;
 
-        let row = conn
+        let row = tx
             .query_one(&stmt, &[&id, &self.session.user.id])
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
@@ -504,14 +523,14 @@ where
     }
 
     async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
         ensure!(
-            self.has_permission(dataset_id, Permission::Owner).await?,
+            self.has_permission_in_tx(dataset_id, Permission::Owner, &tx)
+                .await?,
             error::PermissionDenied
         );
-
-        let mut conn = self.conn_pool.get().await?;
-
-        let tx = conn.build_transaction().start().await?;
 
         let stmt = tx
             .prepare(
@@ -696,14 +715,16 @@ where
     async fn load_dataset_layer(&self, id: &LayerId) -> Result<Layer> {
         let dataset_id = DatasetId::from_str(&id.0)?;
 
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
         ensure!(
-            self.has_permission(dataset_id, Permission::Read).await?,
+            self.has_permission_in_tx(dataset_id, Permission::Read, &tx)
+                .await?,
             error::PermissionDenied
         );
 
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
+        let stmt = tx
             .prepare(
                 "
                 SELECT 
@@ -718,7 +739,7 @@ where
             )
             .await?;
 
-        let row = conn
+        let row = tx
             .query_one(
                 &stmt,
                 &[
@@ -728,6 +749,8 @@ where
                 ],
             )
             .await?;
+
+        tx.commit().await?;
 
         let name: DatasetName = row.get(0);
         let display_name: String = row.get(1);

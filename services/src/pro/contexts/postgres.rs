@@ -2421,6 +2421,8 @@ mod tests {
             .await
             .unwrap();
 
+        db.load_layer(&layer_in_two_collections).await.unwrap();
+
         db.add_layer_to_collection(&layer_in_two_collections, root_collection)
             .await
             .unwrap();

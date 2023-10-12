@@ -114,6 +114,7 @@ impl From<DatasetId> for ResourceId {
     }
 }
 
+/// Management and checking of permissions.
 // TODO: accept references of things that are Into<ResourceId> as well
 #[async_trait]
 pub trait PermissionDb {

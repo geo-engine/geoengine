@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::pro::contexts::ProPostgresDb;
+use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::Permission;
-use crate::pro::permissions::PermissionDb;
 use crate::pro::users::UserId;
 use crate::projects::error::ProjectNotFoundProjectDbError;
 use crate::projects::error::{
@@ -308,15 +308,15 @@ where
     async fn update_project(&self, update: UpdateProject) -> Result<(), ProjectDbError> {
         let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
-        self.ensure_permission(update.id, Permission::Owner)
-            .await
-            .boxed_context(AccessFailedProjectDbError { project: update.id })?;
-
         let trans = conn
             .build_transaction()
             .start()
             .await
             .context(PostgresProjectDbError)?;
+
+        self.ensure_permission_in_tx(update.id, Permission::Owner, &trans)
+            .await
+            .boxed_context(AccessFailedProjectDbError { project: update.id })?;
 
         let project = self.load_project(update.id).await?; // TODO: move inside transaction?
 
@@ -410,21 +410,28 @@ where
     }
 
     async fn delete_project(&self, project: ProjectId) -> Result<(), ProjectDbError> {
-        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
+        let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
+        let trans = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresProjectDbError)?;
 
-        self.ensure_permission(project, Permission::Owner)
+        self.ensure_permission_in_tx(project, Permission::Owner, &trans)
             .await
             .boxed_context(AccessFailedProjectDbError { project })?;
 
-        let stmt = conn
+        let stmt = trans
             .prepare("DELETE FROM projects WHERE id = $1;")
             .await
             .context(PostgresProjectDbError)?;
 
-        let rows_affected = conn
+        let rows_affected = trans
             .execute(&stmt, &[&project])
             .await
             .context(PostgresProjectDbError)?;
+
+        trans.commit().await.context(PostgresProjectDbError)?;
 
         ensure!(
             rows_affected == 1,
@@ -440,14 +447,19 @@ where
         project: ProjectId,
         version: LoadVersion,
     ) -> Result<Project, ProjectDbError> {
-        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
+        let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
+        let trans = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresProjectDbError)?;
 
-        self.ensure_permission(project, Permission::Owner)
+        self.ensure_permission_in_tx(project, Permission::Owner, &trans)
             .await
             .boxed_context(AccessFailedProjectDbError { project })?;
 
         let rows = if let LoadVersion::Version(version) = version {
-            let stmt = conn
+            let stmt = trans
                 .prepare(
                     "
             SELECT 
@@ -466,7 +478,7 @@ where
                 .await
                 .context(PostgresProjectDbError)?;
 
-            let rows = conn
+            let rows = trans
                 .query(&stmt, &[&project, &version])
                 .await
                 .context(PostgresProjectDbError)?;
@@ -477,7 +489,7 @@ where
 
             rows
         } else {
-            let stmt = conn
+            let stmt = trans
                 .prepare(
                     "
             SELECT  
@@ -498,7 +510,7 @@ where
                 .await
                 .context(PostgresProjectDbError)?;
 
-            let rows = conn
+            let rows = trans
                 .query(&stmt, &[&project])
                 .await
                 .context(PostgresProjectDbError)?;
@@ -521,7 +533,7 @@ where
         let changed = row.get(6);
         let _author_id = UserId(row.get(7));
 
-        let stmt = conn
+        let stmt = trans
             .prepare(
                 "
         SELECT  
@@ -533,10 +545,12 @@ where
             .await
             .context(PostgresProjectDbError)?;
 
-        let rows = conn
+        let rows = trans
             .query(&stmt, &[&version_id])
             .await
             .context(PostgresProjectDbError)?;
+
+        trans.commit().await.context(PostgresProjectDbError)?;
 
         let mut layers = vec![];
         for row in rows {
@@ -567,13 +581,18 @@ where
         &self,
         project: ProjectId,
     ) -> Result<Vec<ProjectVersion>, ProjectDbError> {
-        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
+        let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
+        let trans = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresProjectDbError)?;
 
-        self.ensure_permission(project, Permission::Read)
+        self.ensure_permission_in_tx(project, Permission::Read, &trans)
             .await
             .boxed_context(AccessFailedProjectDbError { project })?;
 
-        let stmt = conn
+        let stmt = trans
             .prepare(
                 "
                 SELECT 
@@ -587,10 +606,12 @@ where
             )
             .await.context(PostgresProjectDbError)?;
 
-        let rows = conn
+        let rows = trans
             .query(&stmt, &[&project])
             .await
             .context(PostgresProjectDbError)?;
+
+        trans.commit().await.context(PostgresProjectDbError)?;
 
         Ok(rows
             .iter()
