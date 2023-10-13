@@ -136,7 +136,7 @@ where
 
 impl<D, T, I> GridBounds for GridOrEmpty<D, T>
 where
-    D: GridBounds<IndexArray = I> + GridSpaceToLinearSpace<IndexArray = I>,
+    D: GridBounds<IndexArray = I>,
     T: Clone,
     I: AsRef<[isize]> + Into<GridIdx<I>>,
 {
@@ -201,18 +201,15 @@ where
     }
 }
 
-impl<D, T, I, A> ChangeGridBounds<I> for GridOrEmpty<D, T>
+impl<D, T, I, A> ChangeGridBounds<I, A> for GridOrEmpty<D, T>
 where
-    I: AsRef<[isize]> + Clone,
-    A: AsRef<[usize]> + Into<GridShape<A>>,
-    D: GridBounds<IndexArray = I>
-        + Clone
-        + GridSpaceToLinearSpace<IndexArray = I, ShapeArray = A>
-        + GridShapeAccess<ShapeArray = A>,
-    T: Copy,
-    GridBoundingBox<I>: GridSize,
+    D: GridBounds<IndexArray = I> + GridSize<ShapeArray = A>,
+    I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
+    A: AsRef<[usize]> + Into<GridShape<A>> + Clone,
+    GridBoundingBox<I>: GridSize<ShapeArray = A>,
+    GridShape<A>: GridSize<ShapeArray = A>,
     GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
-    GridShape<A>: GridSize,
+    T: Copy,
 {
     type BoundedOutput = GridOrEmpty<GridBoundingBox<I>, T>;
     type UnboundedOutput = GridOrEmpty<GridShape<A>, T>;

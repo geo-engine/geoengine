@@ -484,16 +484,18 @@ where
     }
 }
 
-impl<D, T, I> ChangeGridBounds<I> for Grid<D, T>
+impl<D, T, I, A> ChangeGridBounds<I, A> for Grid<D, T>
 where
-    I: AsRef<[isize]> + Clone,
-    D: GridBounds<IndexArray = I> + Clone + GridShapeAccess,
-    T: Clone,
-    GridBoundingBox<I>: GridSize,
+    D: GridBounds<IndexArray = I> + GridSize<ShapeArray = A>,
+    I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
+    A: AsRef<[usize]> + Into<GridShape<A>> + Clone,
+    GridBoundingBox<I>: GridSize<ShapeArray = A>,
+    GridShape<A>: GridSize<ShapeArray = A>,
     GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
+    T: Copy,
 {
     type BoundedOutput = Grid<GridBoundingBox<I>, T>;
-    type UnboundedOutput = Grid<GridShape<D::ShapeArray>, T>;
+    type UnboundedOutput = Grid<GridShape<A>, T>;
 
     fn shift_by_offset(self, offset: GridIdx<I>) -> Self::BoundedOutput {
         Grid {
@@ -508,7 +510,7 @@ where
 
     fn unbounded(self) -> Self::UnboundedOutput {
         Grid {
-            shape: self.shape.grid_shape(),
+            shape: self.grid_shape(),
             data: self.data,
         }
     }

@@ -152,10 +152,13 @@ pub trait GridShapeAccess {
 }
 
 /// Change the bounds of gridded data.
-pub trait ChangeGridBounds<I>: BoundedGrid<IndexArray = I>
+pub trait ChangeGridBounds<I, A>:
+    BoundedGrid<IndexArray = I> + GridShapeAccess<ShapeArray = A>
 where
     I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
-    GridBoundingBox<I>: GridSize,
+    A: AsRef<[usize]> + Into<GridShape<A>> + Clone,
+    GridBoundingBox<I>: GridSize<ShapeArray = A>,
+    GridShape<A>: GridSize<ShapeArray = A>,
     GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
 {
     type BoundedOutput;
@@ -213,4 +216,12 @@ where
         let l = l - step;
         self.grid_idx(l)
     }
+}
+
+impl<G, I> GridStep<I> for G
+where
+    G: GridSpaceToLinearSpace<IndexArray = I>,
+    I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
+    GridBoundingBox<I>: GridSize,
+{
 }
