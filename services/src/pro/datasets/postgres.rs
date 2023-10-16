@@ -1,5 +1,6 @@
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
+use crate::datasets::postgres::resolve_dataset_name_to_id;
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
 use crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID;
 use crate::datasets::storage::{
@@ -173,18 +174,7 @@ where
 
     async fn resolve_dataset_name_to_id(&self, dataset_name: &DatasetName) -> Result<DatasetId> {
         let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare(
-                "SELECT id
-                FROM datasets
-                WHERE name = $1::\"DatasetName\"",
-            )
-            .await?;
-
-        let row = conn.query_one(&stmt, &[&dataset_name]).await?;
-
-        Ok(row.get(0))
+        resolve_dataset_name_to_id(&conn, dataset_name).await
     }
 }
 
