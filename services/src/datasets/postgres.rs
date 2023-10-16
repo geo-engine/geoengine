@@ -24,8 +24,10 @@ use crate::projects::Symbology;
 use crate::util::operators::source_operator_from_dataset;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
+use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
+use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::dataset::{DataId, DatasetId, LayerId};
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
@@ -48,6 +50,29 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+}
+
+pub async fn resolve_dataset_name_to_id<Tls>(
+    conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    dataset_name: &DatasetName,
+) -> Result<DatasetId>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let stmt = conn
+        .prepare(
+            "SELECT id
+        FROM datasets
+        WHERE name = $1::\"DatasetName\"",
+        )
+        .await?;
+
+    let row = conn.query_one(&stmt, &[&dataset_name]).await?;
+
+    Ok(row.get(0))
 }
 
 #[async_trait]
@@ -164,18 +189,7 @@ where
 
     async fn resolve_dataset_name_to_id(&self, dataset_name: &DatasetName) -> Result<DatasetId> {
         let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare(
-                "SELECT id
-                FROM datasets
-                WHERE name = $1::\"DatasetName\"",
-            )
-            .await?;
-
-        let row = conn.query_one(&stmt, &[&dataset_name]).await?;
-
-        Ok(row.get(0))
+        resolve_dataset_name_to_id(&conn, dataset_name).await
     }
 }
 
