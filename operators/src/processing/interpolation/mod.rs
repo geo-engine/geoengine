@@ -96,6 +96,7 @@ impl RasterOperator for Interpolation {
             bbox: in_descriptor.bbox,
             time: in_descriptor.time,
             resolution: None, // after interpolation the resolution is uncapped
+            bands: 1,
         };
 
         let initialized_operator = InitializedInterpolation {
@@ -600,6 +601,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: 1,
                 },
             },
         }

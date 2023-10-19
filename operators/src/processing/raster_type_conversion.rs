@@ -55,6 +55,7 @@ impl RasterOperator for RasterTypeConversion {
             bbox: in_desc.bbox,
             time: in_desc.time,
             resolution: in_desc.resolution,
+            bands: 1,
         };
 
         let initialized_operator = InitializedRasterTypeConversionOperator {
@@ -198,6 +199,7 @@ mod tests {
                     bbox: None,
                     time: None,
                     resolution: None,
+                    bands: 1,
                 },
             },
         }

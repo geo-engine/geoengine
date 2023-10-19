@@ -663,6 +663,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             time: None,
             bbox: None,
             resolution: None, // TODO: determine from STAC or data or hardcode it
+            bands: 1,
         })
     }
 
@@ -1265,6 +1266,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: 1,
                 },
                 params,
                 cache_ttl: CacheTtlSeconds::default(),

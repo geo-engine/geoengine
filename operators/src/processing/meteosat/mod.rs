@@ -197,6 +197,7 @@ mod test_util {
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: 1,
                 },
             },
         }
@@ -268,6 +269,7 @@ mod test_util {
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: 1,
             },
             cache_ttl: CacheTtlSeconds::default(),
         };

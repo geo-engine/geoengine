@@ -522,6 +522,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: 1,
             },
             params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
@@ -568,6 +569,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: 1
             }
         );
     }
@@ -805,6 +807,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: 1,
             },
             params: vec![
                 GdalLoadingInfoTemporalSlice {
@@ -873,6 +876,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: 1
             }
         );
 
@@ -919,6 +923,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: 1,
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -986,6 +991,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: 1,
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -1053,6 +1059,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: 1,
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),

@@ -683,6 +683,7 @@ impl EdrCollectionMetaData {
             time: Some(self.get_time_interval()?),
             bbox: Some(bbox),
             resolution: None,
+            bands: 1,
         })
     }
 
@@ -1718,6 +1719,7 @@ mod tests {
                     (359.500_000_000_000_06, -90.).into()
                 )),
                 resolution: None,
+                bands: 1
             }
         );
     }

@@ -144,6 +144,7 @@ impl InitializedRasterReprojection {
             time: in_desc.time,
             bbox: out_bounds,
             resolution: out_res,
+            bands: 1,
         };
 
         let state = match (in_bounds, out_bounds) {
@@ -911,6 +912,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: Some(SpatialResolution::one()),
+                    bands: 1,
                 },
             },
         }
@@ -1117,6 +1119,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: 1,
             },
             cache_ttl: CacheTtlSeconds::default(),
         };
@@ -1250,6 +1253,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: 1,
             },
             cache_ttl: CacheTtlSeconds::default(),
         };

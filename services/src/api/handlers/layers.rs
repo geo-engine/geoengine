@@ -1343,6 +1343,7 @@ mod tests {
                         } else {
                             None
                         },
+                        bands: 1,
                     },
                 },
             }

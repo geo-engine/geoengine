@@ -877,7 +877,8 @@ mod tests {
                     measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
-                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0))
+                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    bands: 1
                 },
                 params: GdalDatasetParameters {
                     file_path: Path::new("foo/%_START_TIME_%.tiff").into(),
@@ -974,6 +975,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    bands: 1
                 },
                 params: GdalDatasetParameters {
                     file_path: tempdir_path.join("1/%_START_TIME_%.tiff"),
@@ -1243,6 +1245,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    bands: 1
                 },
                 params: vec![
                     GdalLoadingInfoTemporalSlice {

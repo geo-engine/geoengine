@@ -124,6 +124,7 @@ impl RasterOperator for XgboostOperator {
             resolution,
             spatial_reference,
             measurement: Measurement::Unitless,
+            bands: 1,
         };
 
         let initialized_operator = InitializedXgboostOperator {
@@ -485,6 +486,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: 1,
                 },
             },
         }

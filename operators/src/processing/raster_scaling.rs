@@ -107,6 +107,7 @@ impl RasterOperator for RasterScaling {
             bbox: in_desc.bbox,
             time: in_desc.time,
             resolution: in_desc.resolution,
+            bands: 1,
         };
 
         let initialized_operator = InitializedRasterScalingOperator {
@@ -310,6 +311,7 @@ mod tests {
                     bbox: None,
                     time: None,
                     resolution: Some(spatial_resolution),
+                    bands: 1,
                 },
             },
         }
@@ -419,6 +421,7 @@ mod tests {
                     bbox: None,
                     time: None,
                     resolution: Some(spatial_resolution),
+                    bands: 1,
                 },
             },
         }

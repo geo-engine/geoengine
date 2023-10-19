@@ -236,6 +236,7 @@ async fn create_dataset<C: SessionContext>(
         time: Some(result_time_interval),
         bbox: Some(query_rectangle.spatial_bounds),
         resolution: Some(query_rectangle.spatial_resolution),
+        bands: 1,
     };
     //TODO: Recognize MetaDataDefinition::GdalMetaDataRegular
     let meta_data = if slice_info.len() == 1 {

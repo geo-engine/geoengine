@@ -317,6 +317,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: 1,
                 },
             },
         }
@@ -390,6 +391,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: 1,
                 },
             },
         };
@@ -475,6 +477,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: 1,
                 },
             },
         };
@@ -553,6 +556,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: 1,
                 },
             },
         };

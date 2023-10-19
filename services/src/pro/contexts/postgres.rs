@@ -1584,6 +1584,7 @@ mod tests {
             time: None,
             bbox: None,
             resolution: None,
+            bands: 1,
         };
 
         let vector_ds = AddDataset {

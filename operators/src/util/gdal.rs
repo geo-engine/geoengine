@@ -94,6 +94,7 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
                 (180., -90.).into(),
             )),
             resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
+            bands: 1,
         },
         cache_ttl,
     }
@@ -240,6 +241,7 @@ pub fn raster_descriptor_from_dataset(
         time: None,
         bbox: None,
         resolution: Some(geo_transfrom.spatial_resolution()),
+        bands: 1,
     })
 }
 
@@ -263,6 +265,7 @@ pub fn raster_descriptor_from_dataset_and_sref(
         time: None,
         bbox: None,
         resolution: Some(geo_transfrom.spatial_resolution()),
+        bands: 1,
     })
 }
 

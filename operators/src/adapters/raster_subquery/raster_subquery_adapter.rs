@@ -674,6 +674,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: 1,
                 },
             },
         }

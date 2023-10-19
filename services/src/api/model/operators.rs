@@ -54,6 +54,7 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
             time: value.time.map(Into::into),
             bbox: value.bbox.map(Into::into),
             resolution: value.resolution.map(Into::into),
+            bands: 1,
         }
     }
 }

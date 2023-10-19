@@ -997,6 +997,7 @@ mod tests {
             time: None,
             bbox: None,
             resolution: None,
+            bands: 1,
         };
 
         let vector_ds = AddDataset {
@@ -2746,6 +2747,7 @@ mod tests {
                     .unwrap(),
                 ),
                 resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
+                bands: 1,
             }],
         )
         .await;
@@ -2791,6 +2793,7 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
+                    bands: 1,
                 }),
                 TypedResultDescriptor::Plot(PlotResultDescriptor {
                     spatial_reference: SpatialReferenceOption::Unreferenced,
@@ -3275,6 +3278,7 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution::zero_point_one()),
+                    bands: 1,
                 },
                 params: GdalDatasetParameters {
                     file_path: "text".into(),
@@ -3343,6 +3347,7 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution::zero_point_one()),
+                    bands: 1,
                 },
                 params: GdalDatasetParameters {
                     file_path: "text".into(),
@@ -3397,6 +3402,7 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution::zero_point_one()),
+                    bands: 1,
                 },
                 params: GdalDatasetParameters {
                     file_path: "text".into(),
@@ -3458,6 +3464,7 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution::zero_point_one()),
+                    bands: 1,
                 },
                 params: vec![GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(0, 1),
@@ -3619,6 +3626,7 @@ mod tests {
                             .unwrap(),
                         ),
                         resolution: Some(SpatialResolution::zero_point_one()),
+                        bands: 1,
                     },
                     params: GdalDatasetParameters {
                         file_path: "text".into(),
@@ -3681,6 +3689,7 @@ mod tests {
                             .unwrap(),
                         ),
                         resolution: Some(SpatialResolution::zero_point_one()),
+                        bands: 1,
                     },
                     params: GdalDatasetParameters {
                         file_path: "text".into(),
@@ -3729,6 +3738,7 @@ mod tests {
                             .unwrap(),
                         ),
                         resolution: Some(SpatialResolution::zero_point_one()),
+                        bands: 1,
                     },
                     params: GdalDatasetParameters {
                         file_path: "text".into(),
@@ -3784,6 +3794,7 @@ mod tests {
                             .unwrap(),
                         ),
                         resolution: Some(SpatialResolution::zero_point_one()),
+                        bands: 1,
                     },
                     params: vec![GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new_unchecked(0, 1),

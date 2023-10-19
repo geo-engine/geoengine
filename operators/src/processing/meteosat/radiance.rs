@@ -111,6 +111,7 @@ impl RasterOperator for Radiance {
             time: in_desc.time,
             bbox: in_desc.bbox,
             resolution: in_desc.resolution,
+            bands: 1,
         };
 
         let initialized_operator = InitializedRadiance {

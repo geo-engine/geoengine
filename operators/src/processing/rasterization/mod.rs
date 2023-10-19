@@ -106,6 +106,7 @@ impl RasterOperator for Rasterization {
             bbox: None,
             time: in_desc.time,
             resolution: None,
+            bands: 1,
         };
 
         match self.params {

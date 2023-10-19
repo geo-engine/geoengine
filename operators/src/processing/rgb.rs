@@ -198,6 +198,7 @@ impl RasterOperator for Rgb {
             time,
             bbox,
             resolution,
+            bands: 1,
         };
 
         let initialized_operator = InitializedRgb {
@@ -612,6 +613,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: 1,
                 },
             },
         }

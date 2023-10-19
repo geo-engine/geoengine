@@ -54,10 +54,12 @@ pub trait ResultDescriptor: Clone + Serialize {
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
-    pub measurement: Measurement,
+    pub measurement: Measurement, // TODO: need one per band now?
     pub time: Option<TimeInterval>,
     pub bbox: Option<SpatialPartition2D>,
     pub resolution: Option<SpatialResolution>,
+    pub bands: i32, // TODO: maybe store more information about the bands like the names
+                    // TODO: use a proper unsigned datatype here. We only use i32 because this type here has to be `FromSql` and `ToSql` and `u32` is not supported by `postgres-types`
 }
 
 impl ResultDescriptor for RasterResultDescriptor {

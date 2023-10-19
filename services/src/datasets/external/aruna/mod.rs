@@ -361,6 +361,7 @@ impl ArunaDataProvider {
                 info.geo_transform.x_pixel_size,
                 info.geo_transform.y_pixel_size,
             ))?),
+            bands: 1,
         })
     }
 

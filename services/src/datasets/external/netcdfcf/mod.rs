@@ -496,6 +496,7 @@ impl NetCdfCfDataProvider {
             time: None,
             bbox: None,
             resolution: None,
+            bands: 1,
         };
 
         let params = GdalDatasetParameters {
@@ -1962,6 +1963,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: 1
             }
         );
 
@@ -2086,6 +2088,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: Some(SpatialResolution::new_unchecked(1000.0, 1000.0)),
+                bands: 1
             }
         );
 
