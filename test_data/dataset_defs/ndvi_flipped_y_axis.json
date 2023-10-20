@@ -299,7 +299,8 @@
       "resolution": {
         "x": 0.1,
         "y": 0.1
-      }
+      },
+      "bands": 1
     },
     "params": {
       "filePath": "test_data/raster/modis_ndvi/flipped_axis_y/MOD13A2_M_NDVI_%_START_TIME_%_flipped_y.tiff",

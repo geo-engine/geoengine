@@ -1031,7 +1031,8 @@ mod tests {
                 },
                 "time": null,
                 "bbox": null,
-                "resolution": null
+                "resolution": null,
+                "bands": 1
             })
         );
     }
@@ -1304,7 +1305,8 @@ mod tests {
                 "resolution": {
                     "x": 0.1,
                     "y": 0.1
-                }
+                },
+                "bands": 1
             })
         );
 

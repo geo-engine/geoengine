@@ -376,7 +376,8 @@ mod tests {
                     },
                     "time": null,
                     "bbox": null,
-                    "resolution": null
+                    "resolution": null,
+                    "bands": 1
                 }
             }
         });

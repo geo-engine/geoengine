@@ -31,7 +31,8 @@
       "resolution": {
         "x": 14052.95025804873876,
         "y": 14057.88111778840539
-      }
+      },
+      "bands": 1
     },
     "params": {
       "filePath": "test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_%_START_TIME_%.TIFF",

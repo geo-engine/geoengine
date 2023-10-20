@@ -298,7 +298,8 @@
       "resolution": {
         "x": 0.1,
         "y": 0.1
-      }
+      },
+      "bands": 1
     },
     "params": [
       {

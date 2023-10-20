@@ -80,7 +80,8 @@
       "resolution": {
         "x": 0.1,
         "y": 0.1
-      }
+      },
+      "bands": 1
     },
     "params": {
       "filePath": "test_data/raster/landcover/landcover.tif",
