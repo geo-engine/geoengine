@@ -184,7 +184,7 @@ mod tests {
     use geoengine_datatypes::collections::{
         ChunksEqualIgnoringCacheHint, FeatureCollectionModifications, MultiPointCollection,
     };
-    use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -281,6 +281,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
+            bands: BandSelection::default(), // TODO
         };
 
         let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());

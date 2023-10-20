@@ -12,10 +12,10 @@ use crate::util::server::{connection_closed, not_implemented_handler, CacheContr
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::{operations::image::Colorizer, primitives::SpatialResolution};
 use geoengine_operators::engine::{
     CanonicOperatorName, ExecutionContext, ResultDescriptor, SingleRasterOrVectorSource,
@@ -353,6 +353,7 @@ async fn wms_map_handler<C: ApplicationContext>(
                 x_query_resolution,
                 y_query_resolution,
             ),
+            bands: BandSelection::default(), // TODO
         };
 
         let query_ctx = ctx.query_context()?;
@@ -491,7 +492,7 @@ mod tests {
     use actix_web::http::Method;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
-    use geoengine_datatypes::primitives::CacheTtlSeconds;
+    use geoengine_datatypes::primitives::{BandSelection, CacheTtlSeconds};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
     use geoengine_operators::source::GdalSourceProcessor;
@@ -639,6 +640,7 @@ mod tests {
                 )
                 .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
+                bands: BandSelection::default(), // TODO
             },
             ctx.query_context().unwrap(),
             360,

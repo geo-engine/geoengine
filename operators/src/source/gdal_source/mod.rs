@@ -1176,7 +1176,9 @@ mod tests {
     use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
+    use geoengine_datatypes::primitives::{
+        AxisAlignedRectangle, BandSelection, SpatialPartition2D, TimeInstance,
+    };
     use geoengine_datatypes::raster::{
         EmptyGrid2D, GridBounds, GridIdx2D, TilesEqualIgnoringCacheHint,
     };
@@ -1218,6 +1220,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
+                    bands: BandSelection::default(), // TODO
                 },
                 query_ctx,
             )

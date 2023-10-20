@@ -597,7 +597,7 @@ mod tests {
     use geoengine_datatypes::collections::IntoGeometryIterator;
     use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::primitives::{
-        AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat,
+        AxisAlignedRectangle, BandSelection, Coordinate2D, DateTimeParseFormat,
     };
     use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::raster::TilesEqualIgnoringCacheHint;
@@ -679,6 +679,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
+            bands: BandSelection::default(), // TODO
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -753,6 +754,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
+            bands: BandSelection::default(), // TODO
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -834,6 +836,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
+            bands: BandSelection::default(), // TODO
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -947,6 +950,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(),
         };
 
         let a = qp.raster_query(query_rect, &query_ctx).await?;
@@ -1012,6 +1016,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
+                    bands: BandSelection::default(), // TODO
                 },
                 &query_ctx,
             )
@@ -1047,6 +1052,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
+            bands: BandSelection::default(), // TODO
         };
 
         let expected = BoundingBox2D::new_unchecked(
@@ -1168,6 +1174,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
+                    bands: BandSelection::default(), // TODO
                 },
                 &query_ctx,
             )
@@ -1304,6 +1311,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
+                    bands: BandSelection::default(), // TODO
                 },
                 &query_ctx,
             )
@@ -1374,6 +1382,7 @@ mod tests {
                     spatial_bounds,
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    bands: BandSelection::default(), // TODO
                 },
                 &query_ctx,
             )
@@ -1451,6 +1460,7 @@ mod tests {
                     spatial_bounds,
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    bands: BandSelection::default(), // TODO
                 },
                 &query_ctx,
             )
@@ -1529,6 +1539,7 @@ mod tests {
                     spatial_bounds,
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    bands: BandSelection::default(), // TODO
                 },
                 &query_ctx,
             )

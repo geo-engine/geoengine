@@ -1,9 +1,10 @@
 use crate::{
     error::{self},
     primitives::{
-        AxisAlignedRectangle, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
-        MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
-        MultiPolygonAccess, MultiPolygonRef, QueryRectangle, SpatialBounded, SpatialResolution,
+        AxisAlignedRectangle, BandSelection, Coordinate2D, Line, MultiLineString,
+        MultiLineStringAccess, MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef,
+        MultiPolygon, MultiPolygonAccess, MultiPolygonRef, QueryRectangle, SpatialBounded,
+        SpatialResolution,
     },
     spatial_reference::SpatialReference,
     util::Result,
@@ -472,6 +473,7 @@ pub fn reproject_query<S: AxisAlignedRectangle>(
         spatial_bounds: p_bbox,
         spatial_resolution: p_spatial_resolution,
         time_interval: query.time_interval,
+        bands: BandSelection::default(), // TODO
     }))
 }
 

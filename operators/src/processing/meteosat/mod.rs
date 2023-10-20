@@ -39,7 +39,7 @@ mod test_util {
 
     use futures::StreamExt;
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::util::test::TestDefault;
     use num_traits::AsPrimitive;
 
@@ -132,6 +132,7 @@ mod test_util {
                 TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 15, 0)),
             ),
             spatial_resolution: sr,
+            bands: BandSelection::default(), // TODO
         }
     }
 
@@ -140,6 +141,7 @@ mod test_util {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         }
     }
 

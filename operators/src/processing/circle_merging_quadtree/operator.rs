@@ -479,6 +479,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
+    use geoengine_datatypes::primitives::BandSelection;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::FeatureData;
     use geoengine_datatypes::primitives::SpatialResolution;
@@ -538,6 +539,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+            bands: BandSelection::default(), // TODO
         };
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();
@@ -619,6 +621,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+            bands: BandSelection::default(), // TODO
         };
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();
@@ -701,6 +704,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+            bands: BandSelection::default(), // TODO
         };
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();
@@ -791,6 +795,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+            bands: BandSelection::default(), // TODO
         };
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();
@@ -896,6 +901,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+            bands: BandSelection::default(), // TODO
         };
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();

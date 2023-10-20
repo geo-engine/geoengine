@@ -4,8 +4,8 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{FutureExt, TryFutureExt};
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartitioned};
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::raster::{
     Blit, EmptyGrid, EmptyGrid2D, FromIndexFnParallel, GeoTransform, GridIdx, GridIdx2D,
     GridIndexAccess, GridOrEmpty, GridSize,
@@ -98,6 +98,7 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
+        band: usize,
     ) -> Result<Option<RasterQueryRectangle>> {
         let spatial_bounds = tile_info.spatial_partition();
 
@@ -115,6 +116,7 @@ where
             spatial_bounds: enlarged_spatial_bounds,
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: query_rect.spatial_resolution,
+            bands: BandSelection::Single(band), // TODO
         }))
     }
 
@@ -362,6 +364,7 @@ mod tests {
             spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInstance::from_millis(0).unwrap().into(),
             spatial_resolution,
+            bands: BandSelection::default(), // TODO
         };
 
         let aggregator = NeighborhoodAggregateTileNeighborhood::<u8, StandardDeviation>::new(
@@ -372,7 +375,7 @@ mod tests {
         );
 
         let tile_query_rectangle = aggregator
-            .tile_query_rectangle(tile_info, qrect, qrect.time_interval.start())
+            .tile_query_rectangle(tile_info, qrect, qrect.time_interval.start(), 0)
             .unwrap()
             .unwrap();
 

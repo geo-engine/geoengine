@@ -17,7 +17,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
-use geoengine_datatypes::primitives::QueryRectangle;
+use geoengine_datatypes::primitives::{BandSelection, QueryRectangle};
 use geoengine_operators::engine::WorkflowOperatorPath;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -626,6 +626,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
                 cause: "is None".to_string(),
             },
         )?,
+        bands: BandSelection::default(), // TODO
     };
 
     let from_workflow = RasterDatasetFromWorkflow {
@@ -910,7 +911,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, TimeGranularity, TimeInterval,
     };
@@ -1379,6 +1380,7 @@ mod tests {
                     1_672_041_600_000 + i64::from(time_shift_millis),
                 ),
                 spatial_resolution: GeoTransform::test_default().spatial_resolution(),
+                bands: BandSelection::default(), // TODO
             };
 
             MockRasterWorkflowLayerDescription {

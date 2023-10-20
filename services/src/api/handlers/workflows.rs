@@ -16,7 +16,7 @@ use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+    BandSelection, BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
     VectorQueryRectangle,
 };
 use geoengine_operators::call_on_typed_operator;
@@ -534,6 +534,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         spatial_bounds: query.spatial_bounds,
         time_interval: query.time_interval.into(),
         spatial_resolution: query.spatial_resolution,
+        bands: BandSelection::default(), // TODO
     };
 
     // this is the only result type for now
@@ -615,6 +616,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         spatial_bounds: query.spatial_bounds,
         time_interval: query.time_interval.into(),
         spatial_resolution: query.spatial_resolution,
+        bands: BandSelection::default(), // TODO
     };
 
     // this is the only result type for now
@@ -1437,6 +1439,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
             spatial_resolution: SpatialResolution::zero_point_one(),
+            bands: BandSelection::default(), // TODO
         };
 
         let processor = o.query_processor().unwrap().get_u8().unwrap();

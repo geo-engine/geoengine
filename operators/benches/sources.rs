@@ -2,7 +2,7 @@ use std::time::Instant;
 use std::{hint::black_box, marker::PhantomData};
 
 use futures::StreamExt;
-use geoengine_datatypes::primitives::CacheHint;
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
     raster::{
@@ -169,6 +169,7 @@ fn bench_no_data_tiles() {
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
+                bands: BandSelection::default(), // TODO
             },
         ),
         (
@@ -179,6 +180,7 @@ fn bench_no_data_tiles() {
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
+                bands: BandSelection::default(), // TODO
             },
         ),
         (
@@ -189,6 +191,7 @@ fn bench_no_data_tiles() {
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
+                bands: BandSelection::default(), // TODO
             },
         ),
         (
@@ -199,6 +202,7 @@ fn bench_no_data_tiles() {
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
+                bands: BandSelection::default(), // TODO
             },
         ),
         (
@@ -209,6 +213,7 @@ fn bench_no_data_tiles() {
                 time_interval: TimeInterval::new(1_000_000_000_000, 1_000_000_000_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
+                bands: BandSelection::default(), // TODO
             },
         ),
     ];
@@ -244,6 +249,7 @@ fn bench_tile_size() {
                 .unwrap(),
             time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
             spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+            bands: BandSelection::default(), // TODO
         },
     )];
 

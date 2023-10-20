@@ -316,7 +316,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::NamedData;
-    use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, DataRef, DateTime, FeatureDataRef, MultiPoint, SpatialResolution,
         TimeInterval, VectorQueryRectangle,
@@ -433,6 +433,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                    bands: BandSelection::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -511,6 +512,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                    bands: BandSelection::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -592,6 +594,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                    bands: BandSelection::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )

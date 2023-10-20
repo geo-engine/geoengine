@@ -6,7 +6,7 @@ use crate::engine::{
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
-use geoengine_datatypes::primitives::CacheHint;
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 
 use crate::error;
 use crate::processing::rasterization::GridOrDensity::Grid;
@@ -300,6 +300,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
                     spatial_bounds: grid_spatial_bounds.as_bbox(),
                     time_interval: query.time_interval,
                     spatial_resolution: grid_resolution,
+                    bands: BandSelection::default(), // TODO
                 };
 
                 let grid_geo_transform = GeoTransform::new(
@@ -422,6 +423,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                     ),
                     time_interval: query.time_interval,
                     spatial_resolution: query.spatial_resolution,
+                    bands: BandSelection::default(), // TODO
                 };
 
                 let tile_geo_transform = tile_info.tile_geo_transform();
@@ -570,7 +572,7 @@ mod tests {
     };
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{
-        Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+        BandSelection, Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
     };
     use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::util::test::TestDefault;
@@ -632,6 +634,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., -2.].into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+            bands: BandSelection::default(), // TODO
         };
 
         let res = get_results(rasterization, query).await;
@@ -681,6 +684,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., -2.].into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+            bands: BandSelection::default(), // TODO
         };
 
         let res = get_results(rasterization, query).await;
@@ -730,6 +734,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new([-3., 3.].into(), [3., -3.].into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+            bands: BandSelection::default(), // TODO
         };
 
         let res = get_results(rasterization, query).await;
@@ -780,6 +785,7 @@ mod tests {
                 .unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 0.5, y: 0.5 },
+            bands: BandSelection::default(), // TODO
         };
 
         let res = get_results(rasterization, query).await;
@@ -830,6 +836,7 @@ mod tests {
                 .unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 0.5, y: 0.5 },
+            bands: BandSelection::default(), // TODO
         };
 
         let res = get_results(rasterization, query).await;
@@ -879,6 +886,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new([-1., 1.].into(), [1., -1.].into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 0.5, y: 0.5 },
+            bands: BandSelection::default(), // TODO
         };
 
         let res = get_results(rasterization, query).await;
@@ -922,6 +930,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., 0.].into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+            bands: BandSelection::default(), // TODO
         };
 
         let res = get_results(rasterization, query).await;
@@ -1001,6 +1010,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., 0.].into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+            bands: BandSelection::default(), // TODO
         };
 
         let res = get_results(rasterization, query).await;

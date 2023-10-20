@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::operations::reproject::Reproject;
-use geoengine_datatypes::primitives::CacheHint;
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
@@ -84,6 +84,7 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
+        band: usize,
     ) -> Result<Option<RasterQueryRectangle>> {
         // this is the spatial partition we are interested in
         let valid_spatial_bounds = self
@@ -99,6 +100,7 @@ where
                     spatial_bounds: pb,
                     time_interval: TimeInterval::new_instant(start_time)?,
                     spatial_resolution: self.in_spatial_res,
+                    bands: BandSelection::Single(band), // TODO
                 })),
                 // In some strange cases the reprojection can return an empty box.
                 // We ignore it since it contains no pixels.
@@ -440,6 +442,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
 
         let query_ctx = MockQueryContext::test_default();

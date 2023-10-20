@@ -1038,7 +1038,7 @@ mod tests {
     use std::marker::PhantomData;
     use std::ops::Add;
 
-    use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
     use geoengine_datatypes::primitives::{DateTime, Duration};
     use geoengine_datatypes::raster::Grid;
     use geoengine_datatypes::{
@@ -1081,6 +1081,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                bands: BandSelection::default(), // TODO
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1137,6 +1138,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                bands: BandSelection::default(), // TODO
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1189,6 +1191,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                bands: BandSelection::default(), // TODO
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1245,6 +1248,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                bands: BandSelection::default(), // TODO
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1304,6 +1308,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                bands: BandSelection::default(), // TODO
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1366,6 +1371,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                bands: BandSelection::default(), // TODO
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1442,6 +1448,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                bands: BandSelection::default(), // TODO
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1488,6 +1495,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                bands: BandSelection::default(), // TODO
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1536,6 +1544,7 @@ mod tests {
                     0.228_716_645_489_199_48,
                     0.226_407_384_987_887_26,
                 ),
+                bands: BandSelection::default(), // TODO
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1613,6 +1622,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(1_596_109_801_000, 1_659_181_801_000),
             spatial_resolution: GeoTransform::test_default().spatial_resolution(),
+            bands: BandSelection::default(), // TODO
         };
 
         let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
@@ -1732,6 +1742,7 @@ mod tests {
                 // 1.1.2014 - 1.4.2014
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_396_306_800_000).unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
+                bands: BandSelection::default(), // TODO
             },
             ctx,
             GdalGeoTiffDatasetMetadata {

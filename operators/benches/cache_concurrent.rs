@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use futures::future::join_all;
-use geoengine_datatypes::primitives::CacheHint;
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{DateTime, SpatialPartition2D, SpatialResolution};
 use geoengine_datatypes::raster::RasterProperties;
 use geoengine_datatypes::{
@@ -119,6 +119,7 @@ fn query_rect() -> RasterQueryRectangle {
         spatial_bounds: SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
         time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
         spatial_resolution: SpatialResolution::one(),
+        bands: BandSelection::default(), // TODO
     }
 }
 

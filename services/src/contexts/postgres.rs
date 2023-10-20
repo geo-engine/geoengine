@@ -493,10 +493,10 @@ mod tests {
     use geoengine_datatypes::dataset::{DataProviderId, LayerId};
     use geoengine_datatypes::operations::image::{Breakpoint, Colorizer, DefaultColors, RgbaColor};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, ClassificationMeasurement, ContinuousMeasurement, Coordinate2D,
-        DateTimeParseFormat, FeatureDataType, MultiLineString, MultiPoint, MultiPolygon,
-        NoGeometry, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeGranularity,
-        TimeInstance, TimeInterval, TimeStep, TypedGeometry, VectorQueryRectangle,
+        BandSelection, BoundingBox2D, ClassificationMeasurement, ContinuousMeasurement,
+        Coordinate2D, DateTimeParseFormat, FeatureDataType, MultiLineString, MultiPoint,
+        MultiPolygon, NoGeometry, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+        TimeGranularity, TimeInstance, TimeInterval, TimeStep, TypedGeometry, VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheTtlSeconds, Measurement};
     use geoengine_datatypes::raster::{
@@ -896,6 +896,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    bands: BandSelection::default(), // TODO
                 })
                 .await
                 .unwrap(),

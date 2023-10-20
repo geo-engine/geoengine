@@ -1,7 +1,8 @@
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
     primitives::{
-        Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        BandSelection, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+        TimeInterval,
     },
     raster::{RasterDataType, RasterTile2D},
     util::test::TestDefault,
@@ -71,6 +72,7 @@ async fn main() {
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+        bands: BandSelection::default(), // TODO
     };
 
     let mut times = NumberStatistics::default();

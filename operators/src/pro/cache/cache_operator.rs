@@ -408,7 +408,7 @@ where
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{BandSelection, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilesEqualIgnoringCacheHint,
         util::test::TestDefault,
     };
@@ -460,6 +460,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    bands: BandSelection::default(), // TODO
                 },
                 &query_ctx,
             )
@@ -481,6 +482,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    bands: BandSelection::default(), // TODO
                 },
                 &query_ctx,
             )

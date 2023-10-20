@@ -402,8 +402,8 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::{
-        CacheHint, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-        TimeInterval,
+        BandSelection, CacheHint, Measurement, RasterQueryRectangle, SpatialPartition2D,
+        SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
         Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, TileInformation,
@@ -516,6 +516,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    bands: BandSelection::default(), // TODO
                 },
                 &ctx,
             )

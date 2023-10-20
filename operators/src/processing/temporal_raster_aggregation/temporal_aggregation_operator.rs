@@ -403,7 +403,7 @@ where
 mod tests {
     use futures::stream::StreamExt;
     use geoengine_datatypes::{
-        primitives::{CacheHint, Measurement, SpatialResolution, TimeInterval},
+        primitives::{BandSelection, CacheHint, Measurement, SpatialResolution, TimeInterval},
         raster::{
             EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterDataType,
             TileInformation, TilesEqualIgnoringCacheHint,
@@ -465,6 +465,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -584,6 +585,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -703,6 +705,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -822,6 +825,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -948,6 +952,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1027,6 +1032,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1126,6 +1132,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1225,6 +1232,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1324,6 +1332,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1423,6 +1432,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1522,6 +1532,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1620,6 +1631,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1736,6 +1748,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1835,6 +1848,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1944,6 +1958,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -2071,6 +2086,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -2187,6 +2203,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -2286,6 +2303,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -2385,6 +2403,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(5, 5),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 

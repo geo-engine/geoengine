@@ -11,7 +11,7 @@ use futures::{
 };
 use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt, TryFutureExt};
-use geoengine_datatypes::primitives::CacheHint;
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
@@ -95,6 +95,10 @@ where
     query_rect_to_answer: RasterQueryRectangle,
     /// The `GridBoundingBox2D` that defines the tile grid space of the query.
     grid_bounds: GridBoundingBox2D,
+    // the selected bands from the source
+    bands: Vec<usize>,
+    // the band being currently processed
+    current_band_index: usize,
 
     /// The `SubQuery` defines what this adapter does.
     sub_query: SubQuery,
@@ -149,7 +153,9 @@ where
             current_tile_spec: first_tile_spec,
             current_time_end: None,
             current_time_start: query_rect_to_answer.time_interval.start(),
+            current_band_index: 0,
             grid_bounds,
+            bands: query_rect_to_answer.bands.bands(),
             query_ctx,
             query_rect_to_answer,
             source_processor,
@@ -255,6 +261,7 @@ where
                 *this.current_tile_spec,
                 *this.query_rect_to_answer,
                 *this.current_time_start,
+                this.bands[*this.current_band_index],
             ) {
                 Ok(Some(tile_query_rectangle)) => {
                     let tile_query_stream_fut = this
@@ -373,15 +380,22 @@ where
         };
 
         // now do progress
-        // move idx by 1
-        // if the grid idx wraps around set the ne query time instance to the end time instance of the last round
-        match (
+
+        let next_tile_pos = if *this.current_band_index + 1 < this.bands.len() {
+            // there is still another band to process for the current tile position
+            *this.current_band_index += 1;
+            Some(this.current_tile_spec.global_tile_position)
+        } else {
+            // all bands for the current tile are processed, we can go to the next tile in space, if there is one
+            *this.current_band_index = 0;
             this.grid_bounds
-                .inc_idx_unchecked(this.current_tile_spec.global_tile_position, 1),
-            *this.current_time_end,
-        ) {
+                .inc_idx_unchecked(this.current_tile_spec.global_tile_position, 1)
+        };
+
+        // if the grid idx wraps around set the ne query time instance to the end time instance of the last round
+        match (next_tile_pos, *this.current_time_end) {
             (Some(idx), _) => {
-                // move the SPATIAL index further to the next tile
+                // update the spatial index
                 this.current_tile_spec.global_tile_position = idx;
             }
             (None, None) => {
@@ -450,6 +464,7 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
+        band: usize,
     ) -> Result<Option<RasterQueryRectangle>>;
 
     /// This method generates the method which combines the accumulator and each tile of the sub-query stream in the `TryFold` stream adapter.
@@ -534,11 +549,13 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
+        band: usize,
     ) -> Result<Option<RasterQueryRectangle>> {
         Ok(Some(RasterQueryRectangle {
             spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: query_rect.spatial_resolution,
+            bands: BandSelection::Single(band), // TODO
         }))
     }
 
@@ -689,6 +706,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
 
         let query_ctx = MockQueryContext::test_default();

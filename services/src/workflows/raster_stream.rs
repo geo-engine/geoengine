@@ -181,7 +181,9 @@ mod tests {
     use bytes::{Bytes, BytesMut};
     use futures::channel::mpsc::UnboundedSender;
     use geoengine_datatypes::{
-        primitives::{DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{
+            BandSelection, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
+        },
         util::arrow::arrow_ipc_file_to_record_batches,
     };
     use tokio_postgres::NoTls;
@@ -211,6 +213,7 @@ mod tests {
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
                 .unwrap(),
             spatial_resolution: SpatialResolution::one(),
+            bands: BandSelection::default(), // TODO
         };
 
         let handler = RasterWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(

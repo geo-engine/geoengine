@@ -12,7 +12,7 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::primitives::{Geometry, TimeInterval};
+use geoengine_datatypes::primitives::{BandSelection, Geometry, TimeInterval};
 use geoengine_datatypes::primitives::{TimeInstance, TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use log::debug;
@@ -239,6 +239,7 @@ fn expand_query_rectangle(
         spatial_bounds: query.spatial_bounds,
         time_interval: expand_time_interval(step, step_reference, query.time_interval)?,
         spatial_resolution: query.spatial_resolution,
+        bands: BandSelection::default(), // TODO
     })
 }
 
@@ -466,6 +467,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
+                    bands: BandSelection::default(), // TODO
                 },
                 &query_context,
             )
@@ -570,6 +572,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
+                    bands: BandSelection::default(), // TODO
                 },
                 &query_context,
             )

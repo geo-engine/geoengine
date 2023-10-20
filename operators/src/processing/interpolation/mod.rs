@@ -14,11 +14,11 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
     SpatialPartitioned, SpatialResolution, TimeInstance, TimeInterval,
 };
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::raster::{
     Bilinear, Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, GridSize, InterpolationAlgorithm,
     NearestNeighbor, Pixel, RasterTile2D, TileInformation, TilingSpecification,
@@ -275,6 +275,7 @@ where
         tile_info: TileInformation,
         _query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
+        band: usize,
     ) -> Result<Option<RasterQueryRectangle>> {
         // enlarge the spatial bounds in order to have the neighbor pixels for the interpolation
         let spatial_bounds = tile_info.spatial_partition();
@@ -288,6 +289,7 @@ where
             spatial_bounds,
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: self.input_resolution,
+            bands: BandSelection::Single(band), // TODO
         }))
     }
 
@@ -480,6 +482,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::zero_point_five(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -635,6 +638,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::zero_point_five(),
+            bands: BandSelection::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 

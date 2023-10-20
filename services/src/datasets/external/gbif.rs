@@ -956,6 +956,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
     use geoengine_datatypes::dataset::ExternalDataId;
+    use geoengine_datatypes::primitives::BandSelection;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, CacheHint, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -1630,6 +1631,7 @@ mod tests {
                         ),
                         time_interval: TimeInterval::default(),
                         spatial_resolution: SpatialResolution::zero_point_one(),
+                        bands: BandSelection::default(), // TODO
                     })
                     .await
                     .map_err(|e| e.to_string())?;
@@ -1767,6 +1769,7 @@ mod tests {
                     .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    bands: BandSelection::default(), // TODO
                 };
                 let ctx = MockQueryContext::test_default();
 

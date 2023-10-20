@@ -429,7 +429,7 @@ struct ParsedRow {
 mod tests {
     use std::io::{Seek, SeekFrom, Write};
 
-    use geoengine_datatypes::primitives::SpatialResolution;
+    use geoengine_datatypes::primitives::{BandSelection, SpatialResolution};
 
     use super::*;
     use crate::engine::MockQueryContext;
@@ -574,6 +574,7 @@ x,y
             ),
             time_interval: TimeInterval::new_unchecked(0, 1),
             spatial_resolution: SpatialResolution::zero_point_one(),
+            bands: BandSelection::default(), // TODO
         };
         let ctx = MockQueryContext::new((10 * 8 * 2).into());
 
