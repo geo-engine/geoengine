@@ -45,6 +45,48 @@ pub type GridShape1D = GridShape<[usize; 1]>;
 pub type GridShape2D = GridShape<[usize; 2]>;
 pub type GridShape3D = GridShape<[usize; 3]>;
 
+impl GridShape1D {
+    pub fn new_1d(x_size: usize) -> Self {
+        Self::new([x_size])
+    }
+
+    pub fn x(&self) -> usize {
+        self.shape_array[0]
+    }
+}
+
+impl GridShape2D {
+    pub fn new_2d(y_size: usize, x_size: usize) -> Self {
+        Self::new([y_size, x_size])
+    }
+
+    pub fn x(&self) -> usize {
+        self.shape_array[1]
+    }
+
+    pub fn y(&self) -> usize {
+        self.shape_array[0]
+    }
+}
+
+impl GridShape3D {
+    pub fn new_3d(z_size: usize, y_size: usize, x_size: usize) -> Self {
+        Self::new([z_size, y_size, x_size])
+    }
+
+    pub fn x(&self) -> usize {
+        self.shape_array[2]
+    }
+
+    pub fn y(&self) -> usize {
+        self.shape_array[1]
+    }
+
+    pub fn z(&self) -> usize {
+        self.shape_array[0]
+    }
+}
+
 impl From<[usize; 1]> for GridShape1D {
     fn from(shape: [usize; 1]) -> Self {
         GridShape1D { shape_array: shape }

@@ -575,7 +575,9 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::CacheHint;
-    use geoengine_datatypes::raster::{EmptyGrid, Grid, RasterDataType, RasterProperties};
+    use geoengine_datatypes::raster::{
+        BoundedGrid, EmptyGrid, GeoTransform, Grid, GridShape2D, RasterDataType, RasterProperties,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
@@ -635,8 +637,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -711,8 +713,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -857,8 +859,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -933,8 +935,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -1079,8 +1081,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -1135,8 +1137,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -1265,8 +1267,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -1321,8 +1323,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -1431,8 +1433,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -1483,8 +1485,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -1588,8 +1590,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -1644,8 +1646,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -1764,8 +1766,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -1816,8 +1818,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -1941,8 +1943,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -1997,8 +1999,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -2121,8 +2123,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }
@@ -2157,8 +2159,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }

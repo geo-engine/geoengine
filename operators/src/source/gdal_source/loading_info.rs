@@ -504,7 +504,7 @@ mod tests {
             Coordinate2D, DateTime, DateTimeParseFormat, Measurement, SpatialPartition2D,
             SpatialResolution, TimeGranularity,
         },
-        raster::RasterDataType,
+        raster::{BoundedGrid, GeoTransform, GridShape2D, RasterDataType},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
@@ -522,8 +522,8 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
             },
             params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
@@ -568,8 +568,8 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
             }
         );
     }
@@ -787,8 +787,8 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
             },
             params: vec![
                 GdalLoadingInfoTemporalSlice {
@@ -855,8 +855,8 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
             }
         );
 
@@ -898,8 +898,8 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform: GeoTransform::new((0., 0.).into(), 1., -1.),
+                pixel_bounds: GridShape2D::new_2d(128, 128).bounding_box(),
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -966,8 +966,8 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -1033,8 +1033,8 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 measurement: Measurement::Unitless,
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),

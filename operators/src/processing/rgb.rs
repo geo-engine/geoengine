@@ -13,11 +13,11 @@ use futures::{stream::BoxStream, try_join, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
-        partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle,
-        RasterSpatialQueryRectangle, SpatialResolution,
+        time_interval_extent, Measurement, RasterQueryRectangle, RasterSpatialQueryRectangle,
     },
     raster::{
-        FromIndexFn, GridIndexAccess, GridOrEmpty, GridShapeAccess, RasterDataType, RasterTile2D,
+        FromIndexFn, GridBoundingBoxExt, GridIndexAccess, GridOrEmpty, GridShapeAccess,
+        RasterDataType, RasterTile2D,
     },
     spatial_reference::SpatialReferenceOption,
 };
@@ -161,7 +161,7 @@ impl RasterOperator for Rgb {
 
         let sources = self.sources.initialize_sources(path, context).await?;
 
-        // TODO: refine checkings
+        // FIXME: refine checkings: 1. what about bands that have matching overviews but not the same resolution?
         let first_result_descriptor = sources.red.result_descriptor();
         for other_source in sources.iter().skip(1) {
             let other_res_desc = other_source.result_descriptor();
@@ -175,6 +175,36 @@ impl RasterOperator for Rgb {
         }
 
         let spatial_reference = sources.red.result_descriptor().spatial_reference;
+        let red_geo_transform = sources.red.result_descriptor().geo_transform;
+
+        let (geo_transform, bounds) = if sources
+            .iter()
+            .all(|source| source.result_descriptor().geo_transform == red_geo_transform)
+        {
+            // if all sources have the same geo transform, we can keep that and compute the bounds
+            let bounds = sources
+                .iter()
+                .map(|op| op.result_descriptor().pixel_bounds)
+                .reduce(|a, b| a.extended(&b));
+
+            (
+                red_geo_transform,
+                bounds.expect("all sources must have bounds"),
+            )
+        } else {
+            // if not all sources have the same geo transform, we need to use the the tiling
+            let geo_transform = red_geo_transform.nearest_pixel_to_zero_based(); // Fixme: generate this from the result descriptor?
+            let bounds = sources
+                .iter()
+                .map(|op| {
+                    op.result_descriptor()
+                        .geo_transform
+                        .shape_to_nearest_to_zero_based(&op.result_descriptor().pixel_bounds)
+                })
+                .reduce(|a, b| a.extended(&b));
+
+            (geo_transform, bounds.expect("all sources must have bounds"))
+        };
 
         ensure!(
             sources
@@ -190,27 +220,14 @@ impl RasterOperator for Rgb {
 
         let time =
             time_interval_extent(sources.iter().map(|source| source.result_descriptor().time));
-        let bbox = partitions_extent(sources.iter().map(|source| source.result_descriptor().bbox));
-
-        let resolution = sources
-            .iter()
-            .map(|source| source.result_descriptor().resolution)
-            .reduce(|a, b| match (a, b) {
-                (Some(a), Some(b)) => {
-                    Some(SpatialResolution::new_unchecked(a.x.min(b.x), a.y.min(b.y)))
-                }
-                // we can only compute the minimum resolution if all sources have a resolution
-                _ => None,
-            })
-            .flatten();
 
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U32,
             spatial_reference,
             measurement: Measurement::Unitless,
             time,
-            bbox,
-            resolution,
+            geo_transform,
+            pixel_bounds: bounds,
         };
 
         let initialized_operator = InitializedRgb {
@@ -414,12 +431,12 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::{
-        CacheHint, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-        TimeInterval,
+        CacheHint, Coordinate2D, Measurement, RasterQueryRectangle, SpatialPartition2D,
+        SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, TileInformation,
-        TilingSpecification,
+        GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, MapElements, MaskedGrid2D,
+        RasterTile2D, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -621,8 +638,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds: GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
                 },
             },
         }

@@ -342,7 +342,7 @@ impl GdalDatasetGeoTransform {
             tile_info.global_geo_transform.y_pixel_size(),
         );
     
-        // check that the tile we are trying to fill is anchored at the tiling origin of the dataset
+        // check that the tile we are trying to fill is anchored at the tiling origin
         // TODO: we should allow that the anchor point of the tile is not zero. However this will not change anything here except the method name.
         debug_assert_eq!(
             tile_info.global_geo_transform.nearest_pixel_to_zero(),
@@ -888,8 +888,7 @@ where
 
         // TODO: we now longer map all origins to the query origin. However, this requires a bit more logic
         let data_geo_transform = result_descriptor
-            .geo_transform()
-            .expect("must know geotransform");
+            .geo_transform();
 
         let pixel_nearest_to_zero = data_geo_transform.nearest_pixel_to_zero(); // TODO: could also be nearest to anchor coordinate?
         let coordinate_nearest_to_zero =
@@ -926,14 +925,13 @@ where
             TilingStrategy::new_with_tiling_spec(tiling_spec, pixel_size_x, pixel_size_y);
 
         let mut empty = false;
-        debug!("result descr bbox: {:?}", result_descriptor.bbox);
+        debug!("result descr shape: {:?}, result_desc geo_transform: {:?}", result_descriptor.pixel_bounds, result_descriptor.geo_transform);
         debug!("query bbox: {:?}", query.spatial_query);
 
-        if let Some(data_spatial_bounds) = result_descriptor.bbox {
-            if !data_spatial_bounds.intersects(&query.spatial_query().spatial_partition()) {
-                debug!("query does not intersect spatial data bounds");
-                empty = true;
-            }
+        
+        if !result_descriptor.spatial_bounds().intersects(&query.spatial_query().spatial_partition()) {
+            debug!("query does not intersect spatial data bounds");
+            empty = true;
         }
 
         // TODO: use the time bounds to early return.

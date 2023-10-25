@@ -360,12 +360,12 @@ mod tests {
     use geoengine_datatypes::collections::{
         ChunksEqualIgnoringCacheHint, MultiPointCollection, MultiPolygonCollection,
     };
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{BoundingBox2D, DateTime, FeatureData, MultiPolygon};
+    use geoengine_datatypes::primitives::{CacheHint, Coordinate2D};
     use geoengine_datatypes::primitives::{Measurement, SpatialResolution};
     use geoengine_datatypes::primitives::{MultiPoint, TimeInterval};
     use geoengine_datatypes::raster::{
-        Grid2D, RasterDataType, TileInformation, TilingSpecification,
+        GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, TileInformation,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -824,6 +824,15 @@ mod tests {
             CacheHint::default(),
         );
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            time: None,
+            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds: GridBoundingBox2D::new_min_max(0, 3, 0, 4).unwrap(),
+        };
+
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![
@@ -832,20 +841,13 @@ mod tests {
                     raster_tile_b_0,
                     raster_tile_b_1,
                 ],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                },
+                result_descriptor: result_descriptor.clone(),
             },
         }
         .boxed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+            result_descriptor.generate_data_tiling_spec([3, 2].into()),
         );
 
         let raster = raster_source
@@ -1010,6 +1012,15 @@ mod tests {
             CacheHint::default(),
         );
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            time: None,
+            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds: GridBoundingBox2D::new_min_max(0, 3, 0, 6).unwrap(),
+        };
+
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![
@@ -1020,20 +1031,13 @@ mod tests {
                     raster_tile_b_1,
                     raster_tile_b_2,
                 ],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U16,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                },
+                result_descriptor: result_descriptor.clone(),
             },
         }
         .boxed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+            result_descriptor.generate_data_tiling_spec([3, 2].into()),
         );
 
         let raster = raster_source

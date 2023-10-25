@@ -258,10 +258,16 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
         source::GdalSourceParameters,
     };
-    use geoengine_datatypes::primitives::{
-        BoundingBox2D, CacheHint, Measurement, SpatialResolution, TimeInterval,
+    use geoengine_datatypes::{
+        dataset::NamedData,
+        plots::PlotMetaData,
+        primitives::DateTime,
+        raster::{BoundedGrid, GridShape2D},
     };
-    use geoengine_datatypes::{dataset::NamedData, plots::PlotMetaData, primitives::DateTime};
+    use geoengine_datatypes::{
+        primitives::{BoundingBox2D, CacheHint, Measurement, SpatialResolution, TimeInterval},
+        raster::GeoTransform,
+    };
     use geoengine_datatypes::{raster::TilingSpecification, spatial_reference::SpatialReference};
     use geoengine_datatypes::{
         raster::{Grid2D, RasterDataType, TileInformation},
@@ -427,8 +433,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 2).bounding_box(),
                 },
             },
         }

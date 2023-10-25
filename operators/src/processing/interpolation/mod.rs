@@ -20,12 +20,13 @@ use geoengine_datatypes::primitives::{
     SpatialPartition2D, SpatialPartitioned, SpatialResolution, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    Bilinear, Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, GridSize, InterpolationAlgorithm,
-    NearestNeighbor, Pixel, RasterTile2D, TileInformation, TilingSpecification, TilingStrategy,
+    Bilinear, Blit, EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridOrEmpty, GridSize,
+    InterpolationAlgorithm, NearestNeighbor, Pixel, RasterTile2D, TileInformation,
+    TilingSpecification, TilingStrategy,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, Snafu};
+use snafu::Snafu;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -38,7 +39,7 @@ pub struct InterpolationParams {
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum InputResolution {
     Value(SpatialResolution),
-    Source,
+    Source, // FIXME: Should be a fraction value?
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -77,25 +78,36 @@ impl RasterOperator for Interpolation {
         let raster_source = initialized_sources.raster;
         let in_descriptor = raster_source.result_descriptor();
 
-        ensure!(
-            matches!(self.params.input_resolution, InputResolution::Value(_))
-                || in_descriptor.resolution.is_some(),
-            error::UnknownInputResolution
-        );
-
         let input_resolution = if let InputResolution::Value(res) = self.params.input_resolution {
             res
         } else {
-            in_descriptor.resolution.expect("checked in ensure")
+            in_descriptor.geo_transform.spatial_resolution() // TODO: should use fraction?
         };
+
+        let geo_transform = GeoTransform::new(
+            in_descriptor.geo_transform.origin_coordinate,
+            input_resolution.x,
+            -input_resolution.y,
+        );
+
+        let y_fract = input_resolution.y as f64 / in_descriptor.geo_transform.y_pixel_size() as f64;
+        let x_fract = input_resolution.x as f64 / in_descriptor.geo_transform.x_pixel_size() as f64;
+
+        let pixel_bounds = GridBoundingBox2D::new_min_max(
+            // TODO: maybe dont use floor and ceil?
+            (in_descriptor.pixel_bounds.y_min() as f64 * y_fract).floor() as isize,
+            (in_descriptor.pixel_bounds.y_max() as f64 * y_fract).ceil() as isize,
+            (in_descriptor.pixel_bounds.x_min() as f64 * x_fract).floor() as isize,
+            (in_descriptor.pixel_bounds.x_max() as f64 * x_fract).ceil() as isize,
+        )?;
 
         let out_descriptor = RasterResultDescriptor {
             spatial_reference: in_descriptor.spatial_reference,
             data_type: in_descriptor.data_type,
             measurement: in_descriptor.measurement.clone(),
-            bbox: in_descriptor.bbox,
             time: in_descriptor.time,
-            resolution: None, // after interpolation the resolution is uncapped
+            geo_transform,
+            pixel_bounds,
         };
 
         let initialized_operator = InitializedInterpolation {
@@ -611,8 +623,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1.0, -1.0),
+                    pixel_bounds: GridBoundingBox2D::new_min_max(-2, 0, 0, 4).unwrap(),
                 },
             },
         }

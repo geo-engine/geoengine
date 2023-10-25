@@ -39,7 +39,7 @@ mod test_util {
 
     use futures::StreamExt;
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds, Coordinate2D};
     use geoengine_datatypes::util::test::TestDefault;
     use num_traits::AsPrimitive;
 
@@ -50,8 +50,9 @@ mod test_util {
         TimeStep,
     };
     use geoengine_datatypes::raster::{
-        Grid2D, GridOrEmpty, GridOrEmpty2D, MaskedGrid2D, Pixel, RasterDataType, RasterProperties,
-        RasterPropertiesEntry, RasterPropertiesEntryType, RasterTile2D, TileInformation,
+        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, GridOrEmpty2D,
+        GridShape2D, MaskedGrid2D, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
+        RasterPropertiesEntryType, RasterTile2D, TileInformation,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
     use geoengine_datatypes::util::Identifier;
@@ -197,8 +198,8 @@ mod test_util {
                         })
                     }),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
+                    pixel_bounds: GridBoundingBox2D::new([-3, 0], [0, 2]).unwrap(),
                 },
             },
         }
@@ -209,6 +210,11 @@ mod test_util {
         let dataset_name = NamedData::with_system_name("gdal-ds");
 
         let no_data_value = Some(0.);
+        let origin_coordinate: Coordinate2D =
+            (-5_570_248.477_339_745, 5_570_248.477_339_745).into();
+        let x_pixel_size = 3_000.403_165_817_261;
+        let y_pixel_size = -3_000.403_165_817_261;
+
         let meta = GdalMetaDataRegular {
             data_time: TimeInterval::new_unchecked(
                 TimeInstance::from_str("2012-12-12T12:00:00.000Z").unwrap(),
@@ -228,9 +234,9 @@ mod test_util {
                 file_path: test_data!("raster/msg/%_START_TIME_%.tif").into(),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
-                    origin_coordinate: (-5_570_248.477_339_745, 5_570_248.477_339_745).into(),
-                    x_pixel_size: 3_000.403_165_817_261,
-                    y_pixel_size: -3_000.403_165_817_261,
+                    origin_coordinate,
+                    x_pixel_size,
+                    y_pixel_size,
                 },
                 width: 3712,
                 height: 3712,
@@ -268,8 +274,8 @@ mod test_util {
                     unit: None,
                 }),
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform: GeoTransform::new(origin_coordinate, x_pixel_size, y_pixel_size),
+                pixel_bounds: GridShape2D::new_2d(3712, 3712).bounding_box(),
             },
             cache_ttl: CacheTtlSeconds::default(),
         };

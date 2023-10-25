@@ -52,9 +52,9 @@ impl RasterOperator for RasterTypeConversion {
             spatial_reference: in_desc.spatial_reference,
             data_type: out_data_type,
             measurement: in_desc.measurement.clone(),
-            bbox: in_desc.bbox,
             time: in_desc.time,
-            resolution: in_desc.resolution,
+            geo_transform: in_desc.geo_transform,
+            pixel_bounds: in_desc.pixel_bounds,
         };
 
         let initialized_operator = InitializedRasterTypeConversionOperator {
@@ -146,10 +146,13 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{CacheHint, Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{
+            CacheHint, Coordinate2D, Measurement, SpatialPartition2D, SpatialResolution,
+            TimeInterval,
+        },
         raster::{
-            Grid2D, GridOrEmpty2D, MaskedGrid2D, RasterDataType, TileInformation,
-            TilingSpecification,
+            BoundedGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShape2D, MaskedGrid2D,
+            RasterDataType, TileInformation,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -165,14 +168,20 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::float_cmp)]
     async fn test_type_conversion() {
-        let grid_shape = [2, 2].into();
-
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels: grid_shape,
+        let tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            time: None,
+            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds: tile_size_in_pixels.bounding_box(),
         };
+        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
 
-        let raster: MaskedGrid2D<u8> = Grid2D::new(grid_shape, vec![7_u8, 7, 7, 6]).unwrap().into();
+        let raster: MaskedGrid2D<u8> = Grid2D::new(tile_size_in_pixels, vec![7_u8, 7, 7, 6])
+            .unwrap()
+            .into();
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_ctx = ctx.mock_query_context(ChunkByteSize::test_default());
@@ -182,7 +191,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 0].into(),
-                tile_size_in_pixels: grid_shape,
+                tile_size_in_pixels,
             },
             raster.into(),
             CacheHint::default(),
@@ -191,14 +200,7 @@ mod tests {
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![raster_tile],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
-                    bbox: None,
-                    time: None,
-                    resolution: None,
-                },
+                result_descriptor,
             },
         }
         .boxed();

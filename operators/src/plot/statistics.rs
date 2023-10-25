@@ -105,7 +105,9 @@ impl PlotOperator for Statistics {
                 }
 
                 let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
-                let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
+                let bbox = partitions_extent(
+                    in_descriptors.iter().map(|d| Some(d.spatial_bounds())), // Fixme: remove Some() when ...
+                );
 
                 let initialized_operator = InitializedStatistics::new(
                     name,
@@ -429,7 +431,8 @@ mod tests {
         BoundingBox2D, FeatureData, Measurement, NoGeometry, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+        BoundedGrid, GeoTransform, Grid2D, GridShape2D, RasterDataType, RasterTile2D,
+        TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -460,7 +463,7 @@ mod tests {
 
     #[tokio::test]
     async fn empty_raster_input() {
-        let tile_size_in_pixels = [3, 2].into();
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
         let tiling_specification = TilingSpecification {
             origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
@@ -500,11 +503,16 @@ mod tests {
 
     #[tokio::test]
     async fn single_raster_implicit_name() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            time: None,
+            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds: tile_size_in_pixels.bounding_box(),
         };
+        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
 
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
@@ -520,14 +528,7 @@ mod tests {
                         .into(),
                     CacheHint::default(),
                 )],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -580,11 +581,16 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn two_rasters_implicit_names() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            time: None,
+            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds: tile_size_in_pixels.bounding_box(),
         };
+        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
 
         let raster_source = vec![
             MockRasterSource {
@@ -601,14 +607,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                    },
+                    result_descriptor: result_descriptor.clone(),
                 },
             }
             .boxed(),
@@ -626,14 +625,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                    },
+                    result_descriptor,
                 },
             }
             .boxed(),
@@ -695,11 +687,16 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn two_rasters_explicit_names() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            time: None,
+            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds: tile_size_in_pixels.bounding_box(),
         };
+        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
 
         let raster_source = vec![
             MockRasterSource {
@@ -716,14 +713,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                    },
+                    result_descriptor: result_descriptor.clone(),
                 },
             }
             .boxed(),
@@ -741,14 +731,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                    },
+                    result_descriptor,
                 },
             }
             .boxed(),
@@ -809,11 +792,16 @@ mod tests {
 
     #[tokio::test]
     async fn two_rasters_explicit_names_incomplete() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            time: None,
+            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds: tile_size_in_pixels.bounding_box(),
         };
+        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
 
         let raster_source = vec![
             MockRasterSource {
@@ -830,14 +818,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                    },
+                    result_descriptor: result_descriptor.clone(),
                 },
             }
             .boxed(),
@@ -855,14 +836,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                    },
+                    result_descriptor,
                 },
             }
             .boxed(),

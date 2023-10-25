@@ -13,10 +13,9 @@ use geoengine_datatypes::{
     hashmap,
     primitives::{
         BoundingBox2D, CacheTtlSeconds, DateTimeParseFormat, FeatureDataType, Measurement,
-        SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
-        TimeStep, VectorQueryRectangle,
+        TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle,
     },
-    raster::{GeoTransform, RasterDataType},
+    raster::{BoundedGrid, GeoTransform, GridShape2D, RasterDataType},
     spatial_reference::SpatialReference,
     util::Identifier,
 };
@@ -89,11 +88,8 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
                 TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
             )),
-            bbox: Some(SpatialPartition2D::new_unchecked(
-                (-180., 90.).into(),
-                (180., -90.).into(),
-            )),
-            resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
+            geo_transform: GeoTransform::new((-180., 90.0).into(), 0.1, -0.1),
+            pixel_bounds: GridShape2D::new([1800, 3600]).bounding_box(),
         },
         cache_ttl,
     }
@@ -231,15 +227,16 @@ pub fn raster_descriptor_from_dataset(
     let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
 
-    let geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+    let data_geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+    let data_shape = GridShape2D::new([dataset.raster_size().1, dataset.raster_size().0]);
 
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
         measurement: measurement_from_rasterband(dataset, band)?,
         time: None,
-        bbox: None,
-        resolution: Some(geo_transfrom.spatial_resolution()),
+        geo_transform: data_geo_transfrom,
+        pixel_bounds: data_shape.bounding_box(),
     })
 }
 
@@ -254,15 +251,16 @@ pub fn raster_descriptor_from_dataset_and_sref(
     let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
 
-    let geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+    let data_geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+    let data_shape = GridShape2D::new([dataset.raster_size().1, dataset.raster_size().0]);
 
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
         measurement: measurement_from_rasterband(dataset, band)?,
         time: None,
-        bbox: None,
-        resolution: Some(geo_transfrom.spatial_resolution()),
+        geo_transform: data_geo_transfrom,
+        pixel_bounds: data_shape.bounding_box(),
     })
 }
 

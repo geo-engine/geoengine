@@ -283,7 +283,9 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D, SpatialResolution};
-    use geoengine_datatypes::raster::{Grid, MaskedGrid, RasterDataType, RasterProperties};
+    use geoengine_datatypes::raster::{
+        BoundedGrid, GeoTransform, Grid, MaskedGrid, RasterDataType, RasterProperties,
+    };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         primitives::TimeInterval,
@@ -316,8 +318,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., 0.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 2).bounding_box(),
                 },
             },
         }
@@ -451,8 +453,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
                 },
             },
         }

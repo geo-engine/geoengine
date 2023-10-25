@@ -360,7 +360,9 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         primitives::Measurement,
-        raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
+        raster::{
+            BoundedGrid, GeoTransform, Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint,
+        },
         util::test::TestDefault,
     };
 
@@ -426,8 +428,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new(Coordinate2D::new(0., -2.), 1., -1.),
+                    pixel_bounds: GridShape::new_2d(2, 4).bounding_box(),
                 },
             },
         }

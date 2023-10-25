@@ -1,8 +1,10 @@
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, FeatureDataType, Measurement,
-    SpatialPartition2D, SpatialResolution, TimeInterval,
+    SpatialPartition2D, TimeInterval,
 };
-use geoengine_datatypes::raster::{GeoTransform, GridShape2D, TilingSpecification};
+use geoengine_datatypes::raster::{
+    GeoTransform, GridBoundingBox2D, GridShape2D, TilingSpecification,
+};
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
 };
@@ -56,8 +58,8 @@ pub struct RasterResultDescriptor {
     pub spatial_reference: SpatialReferenceOption,
     pub measurement: Measurement,
     pub time: Option<TimeInterval>,
-    pub bbox: Option<SpatialPartition2D>,
-    pub resolution: Option<SpatialResolution>,
+    pub geo_transform: GeoTransform,
+    pub pixel_bounds: GridBoundingBox2D,
 }
 
 impl ResultDescriptor for RasterResultDescriptor {
@@ -107,42 +109,53 @@ impl ResultDescriptor for RasterResultDescriptor {
 
 impl RasterResultDescriptor {
     /// Returns the geo transform of the data, i.e. the transformation from pixel coordinates to world coordinates.
-    pub fn geo_transform(&self) -> Option<GeoTransform> {
-        match (self.bbox.as_ref(), self.resolution) {
-            (Some(bbox), Some(res)) => Some(GeoTransform::new(bbox.upper_left(), res.x, -res.y)), // TODO: allow x any y to be negative in resolution
-            _ => None,
-        }
+    pub fn geo_transform(&self) -> GeoTransform {
+        self.geo_transform
     }
 
     /// Returns the tiling origin of the data, i.e. the upper left corner of the pixel nearest to zero.
-    pub fn tiling_origin(&self) -> Option<Coordinate2D> {
-        self.geo_transform()
-            .map(|gt| gt.grid_idx_to_pixel_upper_left_coordinate_2d(gt.nearest_pixel_to_zero()))
+    pub fn tiling_origin(&self) -> Coordinate2D {
+        self.geo_transform
+            .grid_idx_to_pixel_upper_left_coordinate_2d(self.geo_transform.nearest_pixel_to_zero())
+    }
+
+    pub fn tiling_pixel_bounds(&self) -> GridBoundingBox2D {
+        self.geo_transform
+            .shape_to_nearest_to_zero_based(&self.pixel_bounds)
+    }
+
+    pub fn tiling_geo_transform(&self) -> GeoTransform {
+        self.geo_transform.nearest_pixel_to_zero_based()
     }
 
     /// Returns the data tiling specification for the given tile size in pixels.
     pub fn generate_data_tiling_spec(
         &self,
         tile_size_in_pixels: GridShape2D,
-    ) -> Option<TilingSpecification> {
-        self.tiling_origin()
-            .map(|origin_coordinate| TilingSpecification {
-                origin_coordinate,
-                tile_size_in_pixels,
-            })
+    ) -> TilingSpecification {
+        let tiling_origin = self.tiling_origin();
+
+        TilingSpecification {
+            origin_coordinate: tiling_origin,
+            tile_size_in_pixels,
+        }
     }
 
     pub fn spatial_tiling_equals(&self, other: &Self) -> bool {
         self.spatial_reference == other.spatial_reference
             && self.tiling_origin() == other.tiling_origin()
-            && self.resolution == other.resolution
+            && self.geo_transform.x_pixel_size() == other.geo_transform.x_pixel_size()
+            && self.geo_transform.y_pixel_size() == other.geo_transform.y_pixel_size()
     }
 
     /// Returns `true` if the spatial reference, tiling origin and resolution are the same.
     pub fn spatial_tiling_compat(&self, other: &Self) -> bool {
-        self.spatial_reference == other.spatial_reference
-            && self.tiling_origin() == other.tiling_origin() // TODO: maybe allow a very small delta of the origin. Something like 1e-6 * resolution.
-            && self.resolution == other.resolution
+        self.spatial_tiling_equals(other)
+    }
+
+    pub fn spatial_bounds(&self) -> SpatialPartition2D {
+        self.geo_transform
+            .grid_to_spatial_bounds(&self.pixel_bounds)
     }
 }
 
@@ -298,9 +311,7 @@ impl From<RasterResultDescriptor> for PlotResultDescriptor {
             spatial_reference: descriptor.spatial_reference,
             time: descriptor.time,
             // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
-            bbox: descriptor
-                .bbox
-                .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
+            bbox: Some(descriptor.spatial_bounds().as_bbox()),
         }
     }
 }
@@ -335,7 +346,7 @@ impl From<VectorResultDescriptor> for TypedResultDescriptor {
 mod tests {
     use super::*;
     use float_cmp::assert_approx_eq;
-    use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::{raster::BoundedGrid, spatial_reference::SpatialReference};
 
     #[test]
     fn map_vector_descriptor() {
@@ -383,17 +394,14 @@ mod tests {
             spatial_reference: SpatialReferenceOption::Unreferenced,
             measurement: Measurement::Unitless,
             time: None,
-            bbox: Some(SpatialPartition2D::new_unchecked(
-                Coordinate2D::new(-10., 10.),
-                Coordinate2D::new(1., 1.),
-            )),
-            resolution: SpatialResolution::new(0.3, 0.3).ok(),
+            geo_transform: GeoTransform::new(Coordinate2D::new(-10., 10.), -0.3, 0.3),
+            pixel_bounds: GridShape2D::new([36, 30]).bounding_box(),
         };
 
-        let to = descriptor.tiling_origin().unwrap();
+        let to = descriptor.tiling_origin();
 
-        assert_approx_eq!(f64, to.x, -0.09999999999999964);
-        assert_approx_eq!(f64, to.y, 0.09999999999999964);
+        assert_approx_eq!(f64, to.x, -0.09);
+        assert_approx_eq!(f64, to.y, 0.09);
     }
 
     #[test]
@@ -403,11 +411,8 @@ mod tests {
             spatial_reference: SpatialReferenceOption::Unreferenced,
             measurement: Measurement::Unitless,
             time: None,
-            bbox: Some(SpatialPartition2D::new_unchecked(
-                Coordinate2D::new(-15., 15.),
-                Coordinate2D::new(10., -10.),
-            )),
-            resolution: SpatialResolution::new(0.5, 0.5).ok(),
+            geo_transform: GeoTransform::new(Coordinate2D::new(-15., 15.), -0.5, 0.5),
+            pixel_bounds: GridShape2D::new([50, 50]).bounding_box(),
         };
 
         let descriptor2 = RasterResultDescriptor {
@@ -415,11 +420,8 @@ mod tests {
             spatial_reference: SpatialReferenceOption::Unreferenced,
             measurement: Measurement::Unitless,
             time: None,
-            bbox: Some(SpatialPartition2D::new_unchecked(
-                Coordinate2D::new(-10., 10.),
-                Coordinate2D::new(1., 1.),
-            )),
-            resolution: SpatialResolution::new(0.5, 0.5).ok(),
+            geo_transform: GeoTransform::new(Coordinate2D::new(-10., 10.), -0.5, 0.5),
+            pixel_bounds: GridShape2D::new([9, 11]).bounding_box(),
         };
 
         assert!(descriptor.spatial_tiling_equals(&descriptor2));

@@ -495,10 +495,13 @@ mod tests {
         collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection},
         dataset::NamedData,
         primitives::{
-            BoundingBox2D, CacheHint, DateTime, Measurement, MultiPoint, SpatialPartition2D,
-            SpatialResolution, TimeGranularity,
+            BoundingBox2D, CacheHint, Coordinate2D, DateTime, Measurement, MultiPoint,
+            SpatialPartition2D, SpatialResolution, TimeGranularity,
         },
-        raster::{EmptyGrid2D, GridOrEmpty, RasterDataType, TileInformation, TilingSpecification},
+        raster::{
+            BoundedGrid, EmptyGrid2D, GeoTransform, GridOrEmpty, GridShape2D, RasterDataType,
+            TileInformation,
+        },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
@@ -786,7 +789,18 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_absolute_raster_shift() {
-        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new([3, 2].into()));
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            time: None,
+            geo_transform: GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
+            pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
+        };
+        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
+
+        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size_in_pixels));
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -871,14 +885,7 @@ mod tests {
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -895,9 +902,8 @@ mod tests {
             },
         };
 
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-        );
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
         let query_context = MockQueryContext::test_default();
 
         let query_processor = RasterOperator::boxed(time_shift)
@@ -952,7 +958,18 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_relative_raster_shift() {
-        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new([3, 2].into()));
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            time: None,
+            geo_transform: GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
+            pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
+        };
+        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
+
+        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size_in_pixels));
         let raster_tiles = vec![
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(
@@ -1037,14 +1054,7 @@ mod tests {
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -1059,9 +1069,7 @@ mod tests {
             },
         };
 
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-        );
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_context = MockQueryContext::test_default();
 
         let query_processor = RasterOperator::boxed(time_shift)

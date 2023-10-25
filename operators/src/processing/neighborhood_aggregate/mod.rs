@@ -283,12 +283,12 @@ mod tests {
         dataset::NamedData,
         operations::image::{Colorizer, DefaultColors, RgbaColor},
         primitives::{
-            CacheHint, DateTime, Measurement, RasterQueryRectangle, SpatialPartition2D,
-            SpatialResolution, TimeInstance, TimeInterval,
+            CacheHint, Coordinate2D, DateTime, Measurement, RasterQueryRectangle,
+            SpatialPartition2D, SpatialResolution, TimeInstance, TimeInterval,
         },
         raster::{
-            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation,
-            TilesEqualIgnoringCacheHint, TilingSpecification,
+            GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, RasterDataType, RasterTile2D,
+            TileInformation, TilesEqualIgnoringCacheHint, TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -623,8 +623,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds: GridBoundingBox2D::new([-3, 0], [0, 6]).unwrap(),
                 },
             },
         }

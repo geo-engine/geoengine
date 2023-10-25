@@ -14,8 +14,8 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{BarChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, ClassificationMeasurement, Coordinate2D, FeatureDataType,
-    Measurement, PlotQueryRectangle, RasterQueryRectangle,
+    AxisAlignedRectangle, ClassificationMeasurement, Coordinate2D, FeatureDataType, Measurement,
+    PlotQueryRectangle, RasterQueryRectangle,
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -83,9 +83,7 @@ impl PlotOperator for ClassHistogram {
                         spatial_reference: in_desc.spatial_reference,
                         time: in_desc.time,
                         // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
-                        bbox: in_desc
-                            .bbox
-                            .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
+                        bbox: Some(in_desc.spatial_bounds().as_bbox()),
                     },
                     self.params.column_name,
                     source_measurement,
@@ -413,7 +411,8 @@ mod tests {
     };
     use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::raster::{
-        Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+        BoundedGrid, GeoTransform, Grid2D, GridShape2D, RasterDataType, RasterTile2D,
+        TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -508,8 +507,8 @@ mod tests {
                         .collect(),
                     ),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds: GridShape2D::new_2d(3, 2).bounding_box(),
                 },
             },
         }
@@ -856,17 +855,24 @@ mod tests {
 
     #[tokio::test]
     async fn no_data_raster() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
-        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
 
         let measurement = Measurement::classification(
             "foo".to_string(),
             [(1, "A".to_string())].into_iter().collect(),
         );
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement,
+            time: None,
+            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds: tile_size_in_pixels.bounding_box(),
+        };
+        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
+
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = ClassHistogram {
             params: ClassHistogramParams { column_name: None },
@@ -884,14 +890,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement,
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                    },
+                    result_descriptor,
                 },
             }
             .boxed()
@@ -1056,17 +1055,23 @@ mod tests {
 
     #[tokio::test]
     async fn single_value_raster_stream() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
-        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
 
         let measurement = Measurement::classification(
             "foo".to_string(),
             [(4, "D".to_string())].into_iter().collect(),
         );
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement,
+            time: None,
+            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds: tile_size_in_pixels.bounding_box(),
+        };
+        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
+        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = ClassHistogram {
             params: ClassHistogramParams { column_name: None },
@@ -1082,14 +1087,7 @@ mod tests {
                         Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement,
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                    },
+                    result_descriptor,
                 },
             }
             .boxed()

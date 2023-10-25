@@ -223,7 +223,10 @@ impl GeoTransform {
         Ok(unchecked)
     }
 
-    pub fn grid_to_spatial_bounds(&self, grid_bounds: &GridBoundingBox2D) -> SpatialPartition2D {
+    pub fn grid_to_spatial_bounds<S: GridBounds<IndexArray = [isize; 2]>>(
+        &self,
+        grid_bounds: &S,
+    ) -> SpatialPartition2D {
         let ul = self.grid_idx_to_pixel_upper_left_coordinate_2d(grid_bounds.min_index());
         let lr = self.grid_idx_to_pixel_upper_left_coordinate_2d(grid_bounds.max_index() + 1);
 
@@ -235,7 +238,24 @@ impl GeoTransform {
     }
 
     pub fn nearest_pixel_to_zero(&self) -> GridIdx2D {
-        self.coordinate_to_grid_idx_2d(Coordinate2D { x: 0., y: 0. }) // TODO: currently this is the pixel thats starts top left of 0.0, 0.0. Its coordinate is not the nearest to 0.0, 0.0!
+        self.coordinate_to_grid_idx_2d(Coordinate2D { x: 0., y: 0. }) // TODO: currently this is the pixel thats starts top left of 0.0, 0.0. Its coordinate is not the nearest to 0.0, 0.0 if it is more than half a pixel away
+    }
+
+    pub fn nearest_pixel_to_zero_based(&self) -> Self {
+        GeoTransform {
+            origin_coordinate: self
+                .grid_idx_to_pixel_upper_left_coordinate_2d(self.nearest_pixel_to_zero()),
+            x_pixel_size: self.x_pixel_size,
+            y_pixel_size: self.y_pixel_size,
+        }
+    }
+
+    pub fn shape_to_nearest_to_zero_based<S: GridBounds<IndexArray = [isize; 2]>>(
+        &self,
+        shape: &S,
+    ) -> GridBoundingBox2D {
+        let nearest = self.nearest_pixel_to_zero();
+        GridBoundingBox2D::new_unchecked(shape.min_index() - nearest, shape.max_index() - nearest)
     }
 }
 

@@ -12,8 +12,8 @@ use async_trait::async_trait;
 use futures::try_join;
 use geoengine_datatypes::{
     dataset::NamedData,
-    primitives::{partitions_extent, time_interval_extent, Measurement, SpatialResolution},
-    raster::RasterDataType,
+    primitives::{time_interval_extent, Measurement},
+    raster::{GridBoundingBoxExt, RasterDataType},
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -257,7 +257,7 @@ impl RasterOperator for Expression {
             .map(InitializedRasterOperator::result_descriptor)
             .collect::<Vec<_>>();
 
-        // TODO: refine checkings
+        // FIXME: refine checkings
         for &other_descriptor in in_descriptors.iter().skip(1) {
             ensure!(
                 in_descriptors[0].spatial_tiling_compat(other_descriptor),
@@ -279,19 +279,48 @@ impl RasterOperator for Expression {
             );
         }
 
-        let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
-        let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
-
-        let resolution = in_descriptors
-            .iter()
-            .map(|d| d.resolution)
-            .reduce(|a, b| match (a, b) {
-                (Some(a), Some(b)) => {
-                    Some(SpatialResolution::new_unchecked(a.x.min(b.x), a.y.min(b.y)))
+        // FIXME: refine checkings:
+        // 1. what about bands that have matching overviews but not the same resolution?
+        // 2. what about bands that have no interseections?
+        let first_result_descriptor = *in_descriptors.first().unwrap();
+        for &other_res_desc in in_descriptors.iter().skip(1) {
+            ensure!(
+                first_result_descriptor.spatial_tiling_compat(other_res_desc),
+                crate::error::RasterResultsIncompatible {
+                    a: first_result_descriptor.clone(),
+                    b: other_res_desc.clone(),
                 }
-                _ => None,
-            })
-            .flatten();
+            );
+        }
+
+        let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
+
+        let is_same_origin = in_descriptors.iter().skip(1).all(|d| {
+            d.geo_transform.origin_coordinate
+                == first_result_descriptor.geo_transform.origin_coordinate
+        });
+
+        let geo_transform = if is_same_origin {
+            // if all inputs have the same origin, we can use the first one
+            first_result_descriptor.geo_transform
+        } else {
+            // otherwise, we need to calculate the common origin. Since all are tiling compat we can use the tiling one...
+            first_result_descriptor.tiling_geo_transform()
+        };
+
+        let pixel_bounds = if is_same_origin {
+            // if the inputs have the same origin we can use the pixel bounds
+            in_descriptors
+                .iter()
+                .map(|d| d.pixel_bounds)
+                .reduce(|a, b| a.extended(&b))
+        } else {
+            // otherwise we need to calculate the pixel bounds with a common origin and this is the tiling origin
+            in_descriptors
+                .iter()
+                .map(|d| d.tiling_pixel_bounds())
+                .reduce(|a, b| a.extended(&b))
+        };
 
         let result_descriptor = RasterResultDescriptor {
             data_type: self.params.output_type,
@@ -302,8 +331,8 @@ impl RasterOperator for Expression {
                 .as_ref()
                 .map_or(Measurement::Unitless, Measurement::clone),
             time,
-            bbox,
-            resolution,
+            geo_transform,
+            pixel_bounds: pixel_bounds.expect("there must be at least one input with bounds"), // FIXME: what if all inputs have no bounds? Can happen when all are projected and produce no data
         };
 
         let initialized_operator = InitializedExpression {
@@ -544,13 +573,13 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::primitives::{
-        Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        CacheHint, CacheTtlSeconds, Coordinate2D, Measurement, RasterQueryRectangle,
+        SpatialPartition2D, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, TileInformation,
-        TilingSpecification,
+        GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, MapElements, MaskedGrid2D,
+        RasterTile2D, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -1129,8 +1158,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds: GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
                 },
             },
         }

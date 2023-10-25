@@ -23,8 +23,8 @@ use geoengine_datatypes::primitives::{
     SpatialPartition2D, SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{
-    GeoTransform, Grid2D, GridOrEmpty, GridSize, GridSpaceToLinearSpace, RasterDataType,
-    RasterTile2D, TilingSpecification, TilingStrategy,
+    GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, GridSize, GridSpaceToLinearSpace,
+    RasterDataType, RasterTile2D, TilingSpecification, TilingStrategy,
 };
 
 use num_traits::FloatConst;
@@ -99,13 +99,38 @@ impl RasterOperator for Rasterization {
 
         let tiling_specification = context.tiling_specification();
 
+        let resolution = if let Grid(params) = self.params {
+            params.spatial_resolution
+        } else {
+            SpatialResolution { x: 1., y: 1. } // FIXME: should use resolution from parameter also
+        };
+
+        let origin = if let Grid(params) = self.params {
+            params.origin_coordinate
+        } else {
+            [0., 0.].into() // FIXME: should use origin from parameter also or default (0,0 ?)
+        };
+
+        let geo_transform = GeoTransform::new(origin, resolution.x, -resolution.y);
+
+        let pixel_bounds = in_desc
+            .bbox
+            .map(|b| {
+                geo_transform.spatial_to_grid_bounds(
+                    &SpatialPartition2D::new(b.upper_left(), b.lower_right()).unwrap(), // FIXME: how to transform bbox to partition correctly?
+                )
+            })
+            .unwrap_or(
+                GridBoundingBox2D::new_min_max(-90, 90, -180, 180).expect("bounds are fine"),
+            ); // FIXME: should propably use partition from parameter also or default
+
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterDataType::F64,
             measurement: Measurement::default(),
-            bbox: None,
             time: in_desc.time,
-            resolution: None,
+            geo_transform,
+            pixel_bounds,
         };
 
         match self.params {

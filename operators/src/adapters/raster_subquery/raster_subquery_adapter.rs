@@ -613,8 +613,13 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
+        primitives::{
+            Coordinate2D, Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
+        },
+        raster::{
+            BoundedGrid, GeoTransform, Grid, GridShape2D, RasterDataType,
+            TilesEqualIgnoringCacheHint,
+        },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
@@ -668,25 +673,25 @@ mod tests {
             },
         ];
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            measurement: Measurement::Unitless,
+            time: None,
+            geo_transform: GeoTransform::new(Coordinate2D::new(0., -2.), 1., -1.),
+            pixel_bounds: GridShape2D::new_2d(2, 4).bounding_box(),
+        };
+
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                },
+                result_descriptor: result_descriptor.clone(),
             },
         }
         .boxed();
-
-        let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
-            shape_array: [2, 2],
-        };
+        let tiling_specification =
+            result_descriptor.generate_data_tiling_spec(GridShape2D::new_2d(2, 2));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
             SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),

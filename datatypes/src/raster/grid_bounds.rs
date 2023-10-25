@@ -53,6 +53,70 @@ where
     }
 }
 
+impl GridBoundingBox1D {
+    #[inline]
+    pub fn x_min(&self) -> isize {
+        let [x_min] = self.min;
+        x_min
+    }
+
+    #[inline]
+    pub fn x_max(&self) -> isize {
+        let [x_max] = self.max;
+        x_max
+    }
+
+    #[inline]
+    pub fn x_bounds(&self) -> [isize; 2] {
+        [self.x_min(), self.x_max()]
+    }
+
+    #[inline]
+    pub fn new_min_max(x_min: isize, x_max: isize) -> Result<Self> {
+        Self::new([x_min], [x_max])
+    }
+}
+
+impl GridBoundingBox2D {
+    #[inline]
+    pub fn x_min(&self) -> isize {
+        let [_y_min, x_min] = self.min;
+        x_min
+    }
+
+    #[inline]
+    pub fn x_max(&self) -> isize {
+        let [_y_max, x_max] = self.max;
+        x_max
+    }
+
+    #[inline]
+    pub fn x_bounds(&self) -> [isize; 2] {
+        [self.x_min(), self.x_max()]
+    }
+
+    #[inline]
+    pub fn y_min(&self) -> isize {
+        let [y_min, _x_min] = self.min;
+        y_min
+    }
+
+    #[inline]
+    pub fn y_max(&self) -> isize {
+        let [y_max, _x_max] = self.max;
+        y_max
+    }
+
+    #[inline]
+    pub fn y_bounds(&self) -> [isize; 2] {
+        [self.y_min(), self.y_max()]
+    }
+
+    pub fn new_min_max(y_min: isize, y_max: isize, x_min: isize, x_max: isize) -> Result<Self> {
+        Self::new([y_min, x_min], [y_max, x_max])
+    }
+}
+
 impl GridSize for GridBoundingBox<[isize; 1]> {
     type ShapeArray = [usize; 1];
 

@@ -109,8 +109,8 @@ impl RasterOperator for Radiance {
                 unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
             }),
             time: in_desc.time,
-            bbox: in_desc.bbox,
-            resolution: in_desc.resolution,
+            geo_transform: in_desc.geo_transform,
+            pixel_bounds: in_desc.pixel_bounds,
         };
 
         let initialized_operator = InitializedRadiance {
