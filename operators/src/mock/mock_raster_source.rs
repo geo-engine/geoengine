@@ -38,6 +38,7 @@ where
 {
     pub data: Vec<RasterTile2D<T>>,
     pub tiling_specification: TilingSpecification,
+    pub bands: usize,
 }
 
 impl<T> MockRasterSourceProcessor<T>
@@ -47,16 +48,19 @@ where
     fn new_unchecked(
         data: Vec<RasterTile2D<T>>,
         tiling_specification: TilingSpecification,
+        bands: usize,
     ) -> Self {
         Self {
             data,
             tiling_specification,
+            bands,
         }
     }
 
     fn _new(
         data: Vec<RasterTile2D<T>>,
         tiling_specification: TilingSpecification,
+        bands: usize,
     ) -> Result<Self, MockRasterSourceError> {
         if let Some(tile_shape) =
             first_tile_shape_not_matching_tiling_spec(&data, tiling_specification)
@@ -72,6 +76,7 @@ where
         Ok(Self {
             data,
             tiling_specification,
+            bands,
         })
     }
 }
@@ -136,6 +141,7 @@ where
         Ok(SparseTilesFillAdapter::new(
             inner_stream,
             tiling_strategy.tile_grid_box(query.spatial_partition()),
+            self.bands,
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::FixedValue(CacheExpiration::max()), // cache forever because we know all mock data
@@ -263,8 +269,12 @@ where
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let processor = TypedRasterQueryProcessor::from(
-            MockRasterSourceProcessor::new_unchecked(self.data.clone(), self.tiling_specification)
-                .boxed(),
+            MockRasterSourceProcessor::new_unchecked(
+                self.data.clone(),
+                self.tiling_specification,
+                self.result_descriptor.bands as usize,
+            )
+            .boxed(),
         );
 
         Ok(processor)
@@ -306,6 +316,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             raster.into(),
             cache_hint,
         );
@@ -337,6 +348,7 @@ mod tests {
                         "end": 8_210_298_412_799_999_i64
                     },
                     "tilePosition": [0, 0],
+                    "band": 0,
                     "globalGeoTransform": {
                         "originCoordinate": {
                             "x": 0.0,
@@ -377,7 +389,7 @@ mod tests {
                     "time": null,
                     "bbox": null,
                     "resolution": null,
-                    "bands": 1
+                    "bands": 1,
                 }
             }
         });
@@ -405,6 +417,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn zero_length_intervals() {
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams::<u8> {
@@ -412,6 +425,7 @@ mod tests {
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(1, 1),
                         tile_position: [-1, 0].into(),
+                        band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                             .unwrap()
@@ -422,6 +436,7 @@ mod tests {
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(1, 1),
                         tile_position: [-1, 1].into(),
+                        band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
                             .unwrap()
@@ -432,6 +447,7 @@ mod tests {
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 2),
                         tile_position: [-1, 0].into(),
+                        band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![13, 14, 15, 16, 17, 18])
                             .unwrap()
@@ -442,6 +458,7 @@ mod tests {
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 2),
                         tile_position: [-1, 1].into(),
+                        band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![19, 20, 21, 22, 23, 24])
                             .unwrap()

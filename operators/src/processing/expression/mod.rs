@@ -1128,6 +1128,7 @@ mod tests {
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: TestDefault::test_default(),
             },
+            0,
             real_raster,
             cache_hint,
         );

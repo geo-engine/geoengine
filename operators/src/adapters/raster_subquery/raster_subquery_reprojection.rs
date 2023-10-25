@@ -63,6 +63,7 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
+        band: usize,
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
@@ -72,6 +73,7 @@ where
             query_rect,
             pool.clone(),
             tile_info,
+            band,
             self.valid_bounds_out,
             self.out_srs,
             self.in_srs,
@@ -122,6 +124,7 @@ fn build_accu<T: Pixel>(
     query_rect: RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tile_info: TileInformation,
+    band: usize,
     valid_bounds_out: SpatialPartition2D,
     out_srs: SpatialReference,
     in_srs: SpatialReference,
@@ -144,6 +147,7 @@ fn build_accu<T: Pixel>(
             accu_tile: RasterTile2D::new_with_tile_info(
                 query_rect.time_interval,
                 tile_info,
+                band,
                 output_raster.into(),
                 CacheHint::max_duration(),
             ),
@@ -382,6 +386,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
@@ -390,6 +395,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
@@ -398,6 +404,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
@@ -408,6 +415,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()

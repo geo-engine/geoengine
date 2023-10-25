@@ -362,6 +362,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
                 Ok(RasterTile2D::new_with_tile_info(
                     query.time_interval,
                     tile_info,
+                    0, // TODO
                     GridOrEmpty::Grid(tile_grid.into()),
                     cache_hint,
                 ))
@@ -469,6 +470,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                 Ok(RasterTile2D::new_with_tile_info(
                     query.time_interval,
                     tile_info,
+                    0, // TODO
                     GridOrEmpty::Grid(
                         Grid2D::new(tiling_strategy.tile_size_in_pixels, tile_data)
                             .expect(
@@ -506,6 +508,7 @@ fn generate_zeroed_tiles<'a>(
                 Ok(RasterTile2D::new_with_tile_info(
                     query.time_interval,
                     tile_info,
+                    0, // TODO
                     GridOrEmpty::Grid(tile_grid.into()),
                     CacheHint::no_cache(),
                 ))

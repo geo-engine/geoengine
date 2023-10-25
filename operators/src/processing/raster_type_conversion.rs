@@ -188,6 +188,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: grid_shape,
             },
+            0,
             raster.into(),
             CacheHint::default(),
         );

@@ -495,6 +495,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
                 CacheHint::default()
             )
@@ -508,6 +509,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
                 CacheHint::default()
             )
@@ -521,6 +523,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
                 CacheHint::default()
             )
@@ -534,6 +537,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
                 CacheHint::default()
             )
@@ -615,6 +619,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default()
             )
@@ -628,6 +633,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -641,6 +647,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default()
             )
@@ -654,6 +661,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -735,6 +743,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7],).unwrap()),
                 CacheHint::default()
             )
@@ -748,6 +757,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -761,6 +771,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default()
             )
@@ -774,6 +785,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -855,6 +867,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default()
             )
@@ -868,6 +881,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -881,6 +895,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default()
             )
@@ -894,6 +909,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -912,6 +928,7 @@ mod tests {
                         tile_size_in_pixels: [3, 2].into(),
                         global_geo_transform: TestDefault::test_default(),
                     },
+                    0,
                     GridOrEmpty::from(EmptyGrid2D::<u8>::new([3, 2].into())),
                     CacheHint::default(),
                 )],
@@ -982,6 +999,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::Empty(EmptyGrid::new([3, 2].into())),
                 CacheHint::default()
             )
@@ -1062,6 +1080,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 16, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -1075,6 +1094,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
@@ -1162,6 +1182,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![13, 8, 15, 16, 17, 18]).unwrap()),
                 CacheHint::default()
             )
@@ -1175,6 +1196,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
@@ -1262,6 +1284,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap(),
@@ -1282,6 +1305,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default()
             )
@@ -1362,6 +1386,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default()
             )
@@ -1375,6 +1400,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
@@ -1462,6 +1488,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default()
             )
@@ -1475,6 +1502,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
@@ -1562,6 +1590,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![10, 8, 12, 16, 14, 15]).unwrap()),
                 CacheHint::default()
             )
@@ -1575,6 +1604,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
@@ -1660,6 +1690,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
                     .unwrap()
                     .into(),
@@ -1672,6 +1703,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
                     .unwrap()
                     .into(),
@@ -1684,6 +1716,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
                     .unwrap()
                     .into(),
@@ -1696,6 +1729,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
                     .unwrap()
                     .into(),
@@ -1778,6 +1812,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default()
             )
@@ -1791,6 +1826,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
@@ -1878,6 +1914,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![20, 8, 24, 16, 28, 30]).unwrap()),
                 CacheHint::default()
             )
@@ -1891,6 +1928,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
@@ -1987,6 +2025,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new(
                     [3, 2].into(),
                     vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
@@ -2002,6 +2041,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new(
                     [3, 2].into(),
                     vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
@@ -2017,6 +2057,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new(
                     [3, 2].into(),
                     vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
@@ -2032,6 +2073,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new(
                     [3, 2].into(),
                     vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
@@ -2115,6 +2157,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
                     .unwrap()
                     .into(),
@@ -2127,6 +2170,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
                     .unwrap()
                     .into(),
@@ -2139,6 +2183,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
                     .unwrap()
                     .into(),
@@ -2151,6 +2196,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
                     .unwrap()
                     .into(),
@@ -2233,6 +2279,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default()
             )
@@ -2246,6 +2293,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 1, 1, 0, 1, 1]).unwrap(),
@@ -2333,6 +2381,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![2, 1, 2, 1, 2, 2]).unwrap()),
                 CacheHint::default()
             )
@@ -2346,6 +2395,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 1, 1, 0, 1, 1]).unwrap(),
@@ -2432,6 +2482,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
                 CacheHint::default()
             )
@@ -2445,6 +2496,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -2460,6 +2512,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2470,6 +2523,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2480,6 +2534,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2490,6 +2545,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2500,6 +2556,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2510,6 +2567,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2520,6 +2578,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2530,6 +2589,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2546,6 +2606,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default(),
             ),
@@ -2556,6 +2617,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
@@ -2573,6 +2635,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 42, 11, 12]).unwrap(),
@@ -2590,6 +2653,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default(),
             ),
@@ -2600,6 +2664,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap(),
@@ -2617,6 +2682,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default(),
             ),

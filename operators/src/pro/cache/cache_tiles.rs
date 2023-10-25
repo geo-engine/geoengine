@@ -482,6 +482,7 @@ where
             global_geo_transform: tile.global_geo_transform,
             properties: tile.properties,
             tile_position: tile.tile_position,
+            band: tile.band,
         }
     }
 
@@ -501,6 +502,7 @@ where
             global_geo_transform: self.global_geo_transform,
             properties: self.properties.clone(),
             tile_position: self.tile_position,
+            band: self.band,
         })
     }
 
@@ -631,6 +633,7 @@ mod tests {
             global_geo_transform: GeoTransform::test_default(),
             properties: Default::default(),
             tile_position: [0, 0].into(),
+            band: 0,
         }
     }
 

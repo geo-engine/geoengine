@@ -178,6 +178,7 @@ mod tests {
             let tile = RasterTile2D::<u8>::new(
                 TimeInterval::new_unchecked(0, 10),
                 GridIdx2D::new([i, i]),
+                0,
                 GeoTransform::new([0., 0.].into(), 0.5, -0.5),
                 geoengine_datatypes::raster::GridOrEmpty::from(
                     Grid2D::new([2, 2].into(), vec![i as u8; 4]).unwrap(),

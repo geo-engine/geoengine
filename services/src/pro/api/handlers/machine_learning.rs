@@ -140,6 +140,7 @@ mod tests {
                     global_tile_position,
                     tile_size_in_pixels,
                 },
+                0,
                 masked_grid,
                 CacheHint::default(),
             ));

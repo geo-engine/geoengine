@@ -1595,6 +1595,7 @@ mod tests {
             RasterTile2D {
                 time: *time_intervals.get(0).unwrap(),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
@@ -1603,6 +1604,7 @@ mod tests {
             RasterTile2D {
                 time: *time_intervals.get(1).unwrap(),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
@@ -1616,6 +1618,7 @@ mod tests {
         let processor = MockRasterSourceProcessor {
             data,
             tiling_specification,
+            bands: 1,
         }
         .boxed();
         let query_rectangle = RasterQueryRectangle {

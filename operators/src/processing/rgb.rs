@@ -359,6 +359,7 @@ fn compute_tile(
     RasterTile2D::new(
         red.time,
         red.tile_position,
+        0, // TODO
         red.global_geo_transform,
         out_grid,
         red.cache_hint
@@ -600,6 +601,7 @@ mod tests {
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: TestDefault::test_default(),
             },
+            0,
             real_raster,
             CacheHint::no_cache(),
         );

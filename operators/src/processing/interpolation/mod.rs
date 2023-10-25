@@ -258,11 +258,13 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
+        band: usize,
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
         create_accu(
             tile_info,
+            band,
             query_rect,
             pool.clone(),
             self.tiling_specification,
@@ -349,6 +351,7 @@ impl<T: Pixel, I: InterpolationAlgorithm<T>> FoldTileAccuMut for InterpolationAc
 
 pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
     tile_info: TileInformation,
+    band: usize,
     query_rect: RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
@@ -386,6 +389,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
         let input_tile = RasterTile2D::new(
             query_rect.time_interval,
             [0, 0].into(),
+            band,
             geo_transform,
             GridOrEmpty::from(grid),
             CacheHint::max_duration(),
@@ -559,6 +563,7 @@ mod tests {
                     tile_size_in_pixels: [2, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![1, 2, 5, 6]).unwrap()),
                 cache_hint,
             ),
@@ -569,6 +574,7 @@ mod tests {
                     tile_size_in_pixels: [2, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![3, 4, 7, 8]).unwrap()),
                 cache_hint,
             ),
@@ -579,6 +585,7 @@ mod tests {
                     tile_size_in_pixels: [2, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![8, 7, 4, 3]).unwrap()),
                 cache_hint,
             ),
@@ -589,6 +596,7 @@ mod tests {
                     tile_size_in_pixels: [2, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![6, 5, 2, 1]).unwrap()),
                 cache_hint,
             ),

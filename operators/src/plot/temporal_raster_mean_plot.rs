@@ -411,6 +411,7 @@ mod tests {
                     global_tile_position: [0, 0].into(),
                     tile_size_in_pixels: [3, 2].into(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), values).unwrap().into(),
                 CacheHint::default(),
             ));

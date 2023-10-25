@@ -1301,6 +1301,7 @@ mod tests {
                 RasterTile2D {
                     time: TimeInterval::new_unchecked(1_671_868_800_000, 1_671_955_200_000),
                     tile_position: [-1, 0].into(),
+                    band: 0,
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                     properties: Default::default(),
@@ -1309,6 +1310,7 @@ mod tests {
                 RasterTile2D {
                     time: TimeInterval::new_unchecked(1_671_955_200_000, 1_672_041_600_000),
                     tile_position: [-1, 0].into(),
+                    band: 0,
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                     properties: Default::default(),

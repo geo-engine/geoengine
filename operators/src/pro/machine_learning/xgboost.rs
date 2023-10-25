@@ -237,6 +237,7 @@ where
             RasterTile2D::new_with_properties(
                 time,
                 tile_position,
+                0,
                 global_geo_transform,
                 predicted_grid.into(),
                 props.clone(),
@@ -471,6 +472,7 @@ mod tests {
                     global_tile_position,
                     tile_size_in_pixels,
                 },
+                0,
                 masked_grid,
                 CacheHint::default(),
             ));

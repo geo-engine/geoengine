@@ -40,6 +40,7 @@ async fn write_cache(tile_cache: &SharedCache, op_name: CanonicOperatorName) -> 
     let tile = RasterTile2D::<u8> {
         time: TimeInterval::new_unchecked(1, 1),
         tile_position: [-1, 0].into(),
+        band: 0,
         global_geo_transform: TestDefault::test_default(),
         grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
             .unwrap()

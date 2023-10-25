@@ -44,6 +44,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [-1, -1].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -51,6 +52,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [-1, 0].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -58,6 +60,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [-1, 1].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -65,6 +68,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [0, -1].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -72,6 +76,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [0, 0].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -79,6 +84,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [0, 1].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -86,6 +92,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [1, -1].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -93,6 +100,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [1, 0].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -100,12 +108,14 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [1, 1].into(),
+                0,
                 geo_transform,
                 grid,
                 CacheHint::default(),
             ),
         ],
         tiling_specification: tiling_spec,
+        bands: 1,
     }
 }
 

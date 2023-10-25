@@ -176,6 +176,7 @@ where
         let grid_bounds = self.grid_bounds.clone();
         let global_geo_transform = self.current_tile_spec.global_geo_transform;
         let tile_shape = self.current_tile_spec.tile_size_in_pixels;
+        let bands = self.bands.len();
 
         let s = self.filter_map(|x| async move {
             match x {
@@ -188,6 +189,7 @@ where
         let s_filled = SparseTilesFillAdapter::new(
             s,
             grid_bounds,
+            bands,
             global_geo_transform,
             tile_shape,
             cache_expiration,
@@ -270,6 +272,7 @@ where
 
                     let tile_folding_accu_fut = this.sub_query.new_fold_accu(
                         *this.current_tile_spec,
+                        this.bands[*this.current_band_index], // TODO: pass the `current_band_index` instead, because it is the output band?
                         tile_query_rectangle,
                         this.query_ctx.thread_pool(),
                     );
@@ -351,7 +354,10 @@ where
             };
 
             match rf_res {
-                Ok(tile) => {
+                Ok(mut tile) => {
+                    // TODO: set the tile band to the running index, or does the fold method already do that?
+                    // set the tile band to the running index, that is because output bands always start at zero and are consecutive, independent of the input bands
+                    tile.band = *this.current_band_index;
                     this.state.set(StateInner::ReturnResult(Some(tile)));
                 }
                 Err(e) => {
@@ -453,6 +459,7 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
+        band: usize, // TODO: maybe this is not necessary because the accu can just be band 0 and later get the correct band index set?
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture;
@@ -538,10 +545,11 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
+        band: usize,
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        identity_accu(tile_info, query_rect, pool.clone()).boxed()
+        identity_accu(tile_info, band, query_rect, pool.clone()).boxed()
     }
 
     fn tile_query_rectangle(
@@ -566,6 +574,7 @@ where
 
 pub fn identity_accu<T: Pixel>(
     tile_info: TileInformation,
+    band: usize,
     query_rect: RasterQueryRectangle,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<RasterTileAccu2D<T>>> {
@@ -574,6 +583,7 @@ pub fn identity_accu<T: Pixel>(
         let output_tile = RasterTile2D::new_with_tile_info(
             query_rect.time_interval,
             tile_info,
+            band,
             output_raster,
             CacheHint::max_duration(),
         );
@@ -646,6 +656,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
@@ -654,6 +665,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
@@ -662,6 +674,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
@@ -672,6 +685,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()

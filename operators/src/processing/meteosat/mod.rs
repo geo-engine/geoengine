@@ -179,6 +179,7 @@ mod test_util {
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: TestDefault::test_default(),
             },
+            0,
             raster,
             props,
             CacheHint::default(),

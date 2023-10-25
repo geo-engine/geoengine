@@ -73,6 +73,7 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
+        _band: usize, // TODO
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
@@ -198,6 +199,7 @@ where
         return RasterTile2D::new_with_tile_info(
             input.time,
             *info_out,
+            0, // TODO
             EmptyGrid::new(info_out.tile_size_in_pixels).into(),
             CacheHint::max_duration(),
         );
@@ -231,6 +233,7 @@ where
     RasterTile2D::new(
         input.time,
         info_out.global_tile_position,
+        input.band,
         info_out.global_geo_transform,
         out_data,
         input.cache_hint.clone_with_current_datetime(),
@@ -270,6 +273,7 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
     let input_tile = RasterTile2D::new(
         query_rect.time_interval,
         [0, 0].into(),
+        0, // TODO
         geo_transform,
         GridOrEmpty::from(grid),
         CacheHint::max_duration(),

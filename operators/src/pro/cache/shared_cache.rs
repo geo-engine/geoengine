@@ -1064,6 +1064,7 @@ mod tests {
         RasterTile2D::<u8> {
             time: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
             tile_position: [-1, 0].into(),
+            band: 0,
             global_geo_transform: TestDefault::test_default(),
             grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
@@ -1077,6 +1078,7 @@ mod tests {
         CompressedRasterTile2D::<u8> {
             time: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
             tile_position: [-1, 0].into(),
+            band: 0,
             global_geo_transform: TestDefault::test_default(),
             grid_array: CompressedGridOrEmpty::Compressed(CompressedMaskedGrid::new(
                 [3, 2].into(),

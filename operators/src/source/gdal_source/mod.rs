@@ -734,6 +734,7 @@ where
         let filled_stream = SparseTilesFillAdapter::new(
             source_stream,
             tiling_strategy.tile_grid_box(query.spatial_partition()),
+            query.bands.count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
@@ -1077,6 +1078,7 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrim
     Ok(RasterTile2D::new_with_tile_info_and_properties(
         tile_time,
         tile_info,
+        0,
         result_grid,
         properties,
         cache_hint,
@@ -1092,6 +1094,7 @@ fn create_no_data_tile<T: Pixel>(
     RasterTile2D::new_with_tile_info_and_properties(
         tile_time,
         tile_info,
+        0,
         EmptyGrid::new(tile_info.tile_size_in_pixels).into(),
         RasterProperties::default(),
         cache_hint,
@@ -1496,6 +1499,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties,
             cache_hint: _,
@@ -1551,6 +1555,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties: _,
             cache_hint: _,
@@ -1587,6 +1592,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties: _,
             cache_hint: _,
@@ -1804,6 +1810,7 @@ mod tests {
         let expected = RasterTile2D::<f64>::new_with_tile_info(
             time_interval,
             tile_info,
+            0,
             EmptyGrid2D::new(output_shape).into(),
             CacheHint::default(),
         );
@@ -2134,6 +2141,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties,
             cache_hint: _,
@@ -2202,6 +2210,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties,
             cache_hint: _,
@@ -2476,6 +2485,7 @@ mod tests {
         let expected = RasterTile2D::<f64>::new_with_tile_info(
             time_interval,
             tile_info,
+            0,
             EmptyGrid2D::new(output_shape).into(),
             CacheHint::seconds(1234),
         );

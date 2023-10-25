@@ -123,6 +123,7 @@ where
         Ok(RasterTile2D::new(
             time,
             tile_position,
+            0, // TODO
             global_geo_transform,
             F::into_grid(state_grid)?,
             cache_hint,
@@ -162,6 +163,7 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
+        _band: usize, // TODO
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
