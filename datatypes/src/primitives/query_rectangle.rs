@@ -29,6 +29,10 @@ impl Default for BandSelection {
 }
 
 impl BandSelection {
+    pub fn new_range(start: usize, end: usize) -> Self {
+        Self::Range(BandRange { start, end })
+    }
+
     pub fn bands(&self) -> Vec<usize> {
         match self {
             BandSelection::Single(b) => vec![*b],

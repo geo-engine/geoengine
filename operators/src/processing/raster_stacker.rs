@@ -1,3 +1,4 @@
+use crate::adapters::RasterStackerAdapter;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     MultipleRasterSources, Operator, OperatorName, QueryContext, RasterOperator,
@@ -6,13 +7,12 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::join_all;
-use futures::ready;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{
-    partitions_extent, time_interval_extent, RasterQueryRectangle, SpatialResolution,
+    partitions_extent, time_interval_extent, BandRange, BandSelection, RasterQueryRectangle,
+    SpatialResolution,
 };
 use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D};
-use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
 
 // TODO: IF this operator shall perform spatio-temporal alignment automatically: specify the alignment strategy here
@@ -204,6 +204,47 @@ impl<T> RasterStackerProcessor<T> {
     }
 }
 
+/// compute the bands in the input source from the bands in a query that uses multiple sources
+// TODO: adjust this to individual band selection once the query rectangle supports this.
+fn map_query_bands_to_source_bands(
+    query_bands: BandSelection,
+    bands_per_source: &[usize],
+    source_index: usize,
+) -> Option<BandSelection> {
+    let source_start = bands_per_source.iter().take(source_index).sum();
+    let source_bands = bands_per_source[source_index];
+    let source_end = source_start + source_bands;
+
+    Some(match query_bands {
+        BandSelection::Single(b) if b >= source_start && b < source_end => {
+            BandSelection::Single(b - source_start)
+        }
+        BandSelection::Range(BandRange { start, end }) => {
+            if start >= source_end || end < source_start {
+                return None; // source is not included in query
+            }
+
+            let input_start = if start < source_start {
+                0
+            } else {
+                start - source_start
+            };
+
+            let input_end = if end >= source_end {
+                source_bands
+            } else {
+                end - source_start
+            };
+
+            BandSelection::Range(BandRange {
+                start: input_start,
+                end: input_end,
+            })
+        }
+        BandSelection::Single(_) => return None, // source is not included in query
+    })
+}
+
 #[async_trait]
 impl<T> RasterQueryProcessor for RasterStackerProcessor<T>
 where
@@ -215,98 +256,28 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<T>>>> {
-        let source_stream_futures = self
-            .sources
-            .iter()
-            .map(|s| async { s.raster_query(query, ctx).await });
+        let mut source_stream_futures = vec![];
+
+        for (idx, source) in self.sources.iter().enumerate() {
+            let Some(bands) =
+                map_query_bands_to_source_bands(query.bands, &self.bands_per_source, idx)
+            else {
+                continue;
+            };
+
+            let mut source_query = query;
+            source_query.bands = bands;
+            source_stream_futures.push(async move { source.raster_query(source_query, ctx).await });
+        }
 
         let source_streams = join_all(source_stream_futures)
             .await
             .into_iter()
             .collect::<Result<Vec<_>>>()?;
 
-        let output = RoundRobin::new(source_streams, self.bands_per_source.clone());
+        let output = RasterStackerAdapter::new(source_streams, self.bands_per_source.clone());
 
         Ok(Box::pin(output))
-    }
-}
-
-use futures::stream::Stream;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
-/// Return items from the input streams in a round-robin fashion.
-/// For each input stream it returns items according to the batch size.
-/// Then it continues with the next stream and wraps around at the end until all streams are finished.
-#[pin_project(project = RoundRobinProjection)]
-pub struct RoundRobin<S> {
-    #[pin]
-    streams: Vec<S>,
-    batch_size_per_stream: Vec<usize>,
-    current_stream: usize,
-    current_stream_item: usize,
-    finished: bool,
-}
-
-impl<S> RoundRobin<S> {
-    pub fn new(streams: Vec<S>, batch_size_per_stream: Vec<usize>) -> Self {
-        RoundRobin {
-            streams,
-            batch_size_per_stream,
-            current_stream: 0,
-            current_stream_item: 0,
-            finished: false,
-        }
-    }
-}
-
-impl<S, T> Stream for RoundRobin<S>
-where
-    S: Stream<Item = Result<RasterTile2D<T>>> + Unpin,
-    T: Send + Sync,
-{
-    type Item = Result<RasterTile2D<T>>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.finished || self.streams.is_empty() {
-            return Poll::Ready(None);
-        }
-
-        let RoundRobinProjection {
-            mut streams,
-            batch_size_per_stream,
-            current_stream,
-            current_stream_item,
-            finished: _,
-        } = self.as_mut().project();
-
-        let stream = &mut streams[*current_stream];
-
-        let item = ready!(Pin::new(stream).poll_next(cx));
-
-        let Some(mut item) = item else {
-            // if one input stream ends, end the output stream
-            return Poll::Ready(None);
-        };
-
-        if let Ok(tile) = item.as_mut() {
-            // compute output band number from its place among all bands of all inputs
-            let band = batch_size_per_stream
-                .iter()
-                .take(*current_stream)
-                .sum::<usize>()
-                + *current_stream_item;
-            tile.band = band;
-        }
-
-        // next item in stream, or go to next stream
-        *current_stream_item += 1;
-        if *current_stream_item >= batch_size_per_stream[*current_stream] {
-            *current_stream_item = 0;
-            *current_stream = (*current_stream + 1) % streams.len();
-        }
-
-        Poll::Ready(Some(item))
     }
 }
 
@@ -326,6 +297,39 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn it_maps_query_bands_to_source_bands() {
+        assert_eq!(
+            map_query_bands_to_source_bands(BandSelection::Single(0), &[2, 1], 0),
+            Some(BandSelection::Single(0))
+        );
+        assert_eq!(
+            map_query_bands_to_source_bands(BandSelection::Single(0), &[2, 1], 1),
+            None
+        );
+        assert_eq!(
+            map_query_bands_to_source_bands(BandSelection::Single(2), &[2, 1], 1),
+            Some(BandSelection::Single(0))
+        );
+
+        assert_eq!(
+            map_query_bands_to_source_bands(BandSelection::new_range(0, 1), &[2, 1], 0),
+            Some(BandSelection::new_range(0, 1))
+        );
+        assert_eq!(
+            map_query_bands_to_source_bands(BandSelection::new_range(0, 3), &[2, 1], 1),
+            Some(BandSelection::new_range(0, 1))
+        );
+        assert_eq!(
+            map_query_bands_to_source_bands(BandSelection::new_range(0, 3), &[2, 2, 1], 1),
+            Some(BandSelection::new_range(0, 1))
+        );
+        assert_eq!(
+            map_query_bands_to_source_bands(BandSelection::new_range(0, 4), &[2, 2, 1], 1),
+            Some(BandSelection::new_range(0, 2))
+        );
+    }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -467,7 +471,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            bands: BandSelection::new_range(0, 2),
         };
 
         let query_ctx = MockQueryContext::test_default();
@@ -721,7 +725,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            bands: BandSelection::new_range(0, 2),
         };
 
         let query_ctx = MockQueryContext::test_default();
