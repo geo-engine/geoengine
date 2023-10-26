@@ -262,10 +262,10 @@ impl<S> RoundRobin<S> {
 
 impl<S, T> Stream for RoundRobin<S>
 where
-    S: Stream<Item = T> + Unpin,
+    S: Stream<Item = Result<RasterTile2D<T>>> + Unpin,
     T: Send + Sync,
 {
-    type Item = T;
+    type Item = Result<RasterTile2D<T>>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if self.finished || self.streams.is_empty() {
@@ -284,10 +284,20 @@ where
 
         let item = ready!(Pin::new(stream).poll_next(cx));
 
-        let Some(item) = item else {
+        let Some(mut item) = item else {
             // if one input stream ends, end the output stream
             return Poll::Ready(None);
         };
+
+        if let Ok(tile) = item.as_mut() {
+            // compute output band number from its place among all bands of all inputs
+            let band = batch_size_per_stream
+                .iter()
+                .take(*current_stream)
+                .sum::<usize>()
+                + *current_stream_item;
+            tile.band = band;
+        }
 
         // next item in stream, or go to next stream
         *current_stream_item += 1;
@@ -478,8 +488,11 @@ mod tests {
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
         let expected: Vec<_> = data
-            .iter()
-            .zip(data2.iter())
+            .into_iter()
+            .zip(data2.into_iter().map(|mut tile| {
+                tile.band = 1;
+                tile
+            }))
             .flat_map(|(a, b)| vec![a.clone(), b.clone()])
             .collect();
 
@@ -730,7 +743,16 @@ mod tests {
 
         let expected: Vec<_> = data
             .chunks(2)
-            .zip(data2.chunks(2))
+            .zip(
+                data2
+                    .into_iter()
+                    .map(|mut tile| {
+                        tile.band += 2;
+                        tile
+                    })
+                    .collect::<Vec<_>>()
+                    .chunks(2),
+            )
             .flat_map(|(chunk1, chunk2)| chunk1.iter().chain(chunk2.iter()))
             .cloned()
             .collect();

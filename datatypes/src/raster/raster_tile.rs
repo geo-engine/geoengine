@@ -151,6 +151,7 @@ impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I 
                 (Some(a), Some(b)) => {
                     if a.time != b.time
                         || a.tile_position != b.tile_position
+                        || a.band != b.band
                         || a.global_geo_transform != b.global_geo_transform
                         || a.grid_array != b.grid_array
                         || a.properties != b.properties
