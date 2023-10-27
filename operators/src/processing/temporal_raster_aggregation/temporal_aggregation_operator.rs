@@ -413,7 +413,11 @@ where
     ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
         if query.bands.count() == 1 {
             // special case of single band query requires no tile stacking
-            return Ok(self.create_subquery_adapter_stream_for_single_band(query, 0, ctx));
+            return Ok(self.create_subquery_adapter_stream_for_single_band(
+                query,
+                query.bands.bands()[0],
+                ctx,
+            ));
         }
 
         // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
