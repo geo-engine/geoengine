@@ -136,11 +136,16 @@ impl VectorOperator for RasterVectorJoin {
         )
         .await?;
 
+        let source_descriptors = raster_sources
+            .iter()
+            .map(InitializedRasterOperator::result_descriptor)
+            .collect::<Vec<_>>();
+
         let spatial_reference = vector_rd.spatial_reference;
 
-        for other_spatial_reference in raster_sources
+        for other_spatial_reference in source_descriptors
             .iter()
-            .map(|source| source.result_descriptor().spatial_reference)
+            .map(|source_descriptor| source_descriptor.spatial_reference)
         {
             ensure!(
                 spatial_reference == other_spatial_reference,
@@ -150,6 +155,11 @@ impl VectorOperator for RasterVectorJoin {
                 }
             );
         }
+
+        let raster_sources_bands = source_descriptors
+            .iter()
+            .map(|rd| rd.bands as usize)
+            .collect::<Vec<_>>();
 
         let params = self.params;
 
@@ -188,6 +198,7 @@ impl VectorOperator for RasterVectorJoin {
             result_descriptor,
             vector_source,
             raster_sources,
+            raster_sources_bands,
             state: params,
         }
         .boxed())
@@ -201,6 +212,7 @@ pub struct InitializedRasterVectorJoin {
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
+    raster_sources_bands: Vec<usize>,
     state: RasterVectorJoinParams,
 }
 
@@ -223,6 +235,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
                         points,
                         typed_raster_processors,
+                        self.raster_sources_bands.clone(),
                         self.state.names.clone(),
                         self.state.feature_aggregation,
                         self.state.feature_aggregation_ignore_no_data,
@@ -247,6 +260,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
                         polygons,
                         typed_raster_processors,
+                        self.raster_sources_bands.clone(),
                         self.state.names.clone(),
                         self.state.feature_aggregation,
                         self.state.feature_aggregation_ignore_no_data,
