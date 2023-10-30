@@ -1,5 +1,5 @@
-use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
+use crate::datasets::listing::{OrderBy, ProvenanceOutput};
 use crate::datasets::postgres::resolve_dataset_name_to_id;
 use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
 use crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID;
@@ -61,12 +61,23 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn list_datasets(&self, _options: DatasetListOptions) -> Result<Vec<DatasetListing>> {
-        // TODO: use options
-
+    async fn list_datasets(&self, options: DatasetListOptions) -> Result<Vec<DatasetListing>> {
         let conn = self.conn_pool.get().await?;
+
+        let order_sql = if options.order == OrderBy::NameAsc {
+            "name ASC"
+        } else {
+            "name DESC"
+        };
+
+        let filter_sql = if options.filter.is_some() {
+            "AND (name).name ILIKE $4 ESCAPE '\\'"
+        } else {
+            ""
+        };
+
         let stmt = conn
-            .prepare(
+            .prepare(&format!(
                 "
             SELECT 
                 d.id,
@@ -81,11 +92,37 @@ where
                 user_permitted_datasets p JOIN datasets d 
                     ON (p.dataset_id = d.id)
             WHERE 
-                p.user_id = $1",
-            )
+                p.user_id = $1
+                {filter_sql}
+            ORDER BY {order_sql}
+            LIMIT $2
+            OFFSET $3;  
+            ",
+            ))
             .await?;
 
-        let rows = conn.query(&stmt, &[&self.session.user.id]).await?;
+        let rows = if let Some(filter) = options.filter {
+            conn.query(
+                &stmt,
+                &[
+                    &self.session.user.id,
+                    &i64::from(options.limit),
+                    &i64::from(options.offset),
+                    &format!("%{}%", filter.replace('%', "\\%").replace('_', "\\_")),
+                ],
+            )
+            .await?
+        } else {
+            conn.query(
+                &stmt,
+                &[
+                    &self.session.user.id,
+                    &i64::from(options.limit),
+                    &i64::from(options.offset),
+                ],
+            )
+            .await?
+        };
 
         Ok(rows
             .iter()

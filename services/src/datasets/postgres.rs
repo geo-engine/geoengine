@@ -1,4 +1,4 @@
-use super::listing::Provenance;
+use super::listing::{OrderBy, Provenance};
 use super::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::ProvenanceOutput;
@@ -83,12 +83,23 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn list_datasets(&self, _options: DatasetListOptions) -> Result<Vec<DatasetListing>> {
-        // TODO: use options
-
+    async fn list_datasets(&self, options: DatasetListOptions) -> Result<Vec<DatasetListing>> {
         let conn = self.conn_pool.get().await?;
+
+        let order_sql = if options.order == OrderBy::NameAsc {
+            "name ASC"
+        } else {
+            "name DESC"
+        };
+
+        let filter_sql = if options.filter.is_some() {
+            "WHERE (name).name ILIKE $3 ESCAPE '\\'"
+        } else {
+            ""
+        };
+
         let stmt = conn
-            .prepare(
+            .prepare(&format!(
                 "
             SELECT 
                 id,
@@ -100,11 +111,31 @@ where
                 result_descriptor,
                 symbology
             FROM 
-                datasets;",
-            )
+                datasets
+            {filter_sql}
+            ORDER BY {order_sql}
+            LIMIT $1
+            OFFSET $2;"
+            ))
             .await?;
 
-        let rows = conn.query(&stmt, &[]).await?;
+        let rows = if let Some(filter) = options.filter {
+            conn.query(
+                &stmt,
+                &[
+                    &i64::from(options.limit),
+                    &i64::from(options.offset),
+                    &format!("%{}%", filter.replace('%', "\\%").replace('_', "\\_")),
+                ],
+            )
+            .await?
+        } else {
+            conn.query(
+                &stmt,
+                &[&i64::from(options.limit), &i64::from(options.offset)],
+            )
+            .await?
+        };
 
         Ok(rows
             .iter()
