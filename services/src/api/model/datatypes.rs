@@ -377,16 +377,6 @@ impl SpatialReference {
     }
 }
 
-impl<'a> ToSchema<'a> for SpatialReference {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "SpatialReference",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
-        )
-    }
-}
-
 impl From<geoengine_datatypes::spatial_reference::SpatialReference> for SpatialReference {
     fn from(value: geoengine_datatypes::spatial_reference::SpatialReference) -> Self {
         Self {
@@ -479,7 +469,7 @@ impl<'de> Deserialize<'de> for SpatialReference {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ToSchema)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum SpatialReferenceOption {
     SpatialReference(SpatialReference),
     Unreferenced,
@@ -1153,20 +1143,10 @@ impl From<TimeStep> for geoengine_datatypes::primitives::TimeStep {
 }
 
 /// Stores time intervals in ms in close-open semantic [start, end)
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql, ToSchema)]
 pub struct TimeInterval {
     start: TimeInstance,
     end: TimeInstance,
-}
-
-impl<'a> ToSchema<'a> for TimeInterval {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "TimeInterval",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
-        )
-    }
 }
 
 impl From<TimeInterval> for geoengine_datatypes::primitives::TimeInterval {
@@ -1776,6 +1756,9 @@ impl From<MultiPolygon> for geoengine_datatypes::primitives::MultiPolygon {
 #[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
 pub struct StringPair((String, String));
 
+pub type GdalConfigOption = StringPair;
+pub type AxisLabels = StringPair;
+
 impl<'a> ToSchema<'a> for StringPair {
     fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
@@ -1787,6 +1770,16 @@ impl<'a> ToSchema<'a> for StringPair {
                 .max_items(Some(2))
                 .into(),
         )
+    }
+
+    fn aliases() -> Vec<(&'a str, utoipa::openapi::Schema)> {
+        let utoipa::openapi::RefOr::T(unpacked_schema) = Self::schema().1 else {
+            unreachable!()
+        };
+        vec![
+            ("GdalConfigOption", unpacked_schema.clone()),
+            ("AxisLabels", unpacked_schema),
+        ]
     }
 }
 
@@ -1807,4 +1800,64 @@ pub enum PlotOutputFormat {
     JsonPlain,
     JsonVega,
     ImagePng,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, PartialOrd, Deserialize, ToSchema)]
+pub struct CacheTtlSeconds(u32);
+
+const MAX_CACHE_TTL_SECONDS: u32 = 31_536_000; // 1 year
+
+impl CacheTtlSeconds {
+    pub fn new(seconds: u32) -> Self {
+        Self(seconds.min(MAX_CACHE_TTL_SECONDS))
+    }
+
+    pub fn max() -> Self {
+        Self(MAX_CACHE_TTL_SECONDS)
+    }
+
+    pub fn seconds(self) -> u32 {
+        self.0
+    }
+}
+
+impl From<geoengine_datatypes::primitives::CacheTtlSeconds> for CacheTtlSeconds {
+    fn from(value: geoengine_datatypes::primitives::CacheTtlSeconds) -> Self {
+        Self(value.seconds())
+    }
+}
+
+impl From<CacheTtlSeconds> for geoengine_datatypes::primitives::CacheTtlSeconds {
+    fn from(value: CacheTtlSeconds) -> Self {
+        Self::new(value.0)
+    }
+}
+
+impl ToSql for CacheTtlSeconds {
+    fn to_sql(
+        &self,
+        ty: &postgres_types::Type,
+        w: &mut bytes::BytesMut,
+    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        <i32 as ToSql>::to_sql(&(self.0 as i32), ty, w)
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        <i32 as ToSql>::accepts(ty)
+    }
+
+    postgres_types::to_sql_checked!();
+}
+
+impl<'a> FromSql<'a> for CacheTtlSeconds {
+    fn from_sql(
+        ty: &postgres_types::Type,
+        raw: &'a [u8],
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        Ok(Self(<i32 as FromSql>::from_sql(ty, raw)? as u32))
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool {
+        <i32 as FromSql>::accepts(ty)
+    }
 }

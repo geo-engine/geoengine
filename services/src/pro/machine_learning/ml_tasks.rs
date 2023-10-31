@@ -38,10 +38,11 @@ pub struct MLTrainRequest {
 }
 
 /// response of the machine learning model from workflow handler
+/// TODO: move to api -> handler
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MachineLearningModelFromWorkflowResult {
-    pub model_id: MlModelId,
+    pub model_id: crate::pro::api::model::MlModelId,
 }
 
 impl TaskStatusInfo for MachineLearningModelFromWorkflowResult {}
@@ -172,7 +173,7 @@ where
         db.store_ml_model(ml_model).await?;
 
         Ok(MachineLearningModelFromWorkflowResult {
-            model_id: self.model_id,
+            model_id: self.model_id.into(),
         })
     }
 }
