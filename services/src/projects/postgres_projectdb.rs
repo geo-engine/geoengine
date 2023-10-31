@@ -14,26 +14,19 @@ use super::LoadVersion;
 use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
-use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::Transaction;
-use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::{
     tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
 use snafu::ensure;
 use snafu::ResultExt;
+use tokio_postgres::Row;
 
-async fn list_plots<Tls>(
-    conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+pub async fn list_plots(
+    trans: &Transaction<'_>,
     project_version_id: &ProjectVersionId,
-) -> Result<Vec<String>, ProjectDbError>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    let stmt = conn
+) -> Result<Vec<String>, ProjectDbError> {
+    let stmt: tokio_postgres::Statement = trans
         .prepare(
             "
                     SELECT name
@@ -44,7 +37,7 @@ where
         .await
         .context(PostgresProjectDbError)?;
 
-    let plot_rows = conn
+    let plot_rows = trans
         .query(&stmt, &[project_version_id])
         .await
         .context(PostgresProjectDbError)?;
@@ -53,17 +46,11 @@ where
     Ok(plot_names)
 }
 
-async fn load_plots<Tls>(
-    conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+pub async fn load_plots(
+    trans: &Transaction<'_>,
     project_version_id: &ProjectVersionId,
-) -> Result<Vec<Plot>, ProjectDbError>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    let stmt = conn
+) -> Result<Vec<Plot>, ProjectDbError> {
+    let stmt = trans
         .prepare(
             "
                 SELECT  
@@ -76,7 +63,7 @@ where
         .await
         .context(PostgresProjectDbError)?;
 
-    let rows = conn
+    let rows = trans
         .query(&stmt, &[project_version_id])
         .await
         .context(PostgresProjectDbError)?;
@@ -92,7 +79,7 @@ where
     Ok(plots)
 }
 
-async fn update_plots(
+pub async fn update_plots(
     trans: &Transaction<'_>,
     project_id: &ProjectId,
     project_version_id: &ProjectVersionId,
@@ -132,6 +119,172 @@ async fn update_plots(
     Ok(())
 }
 
+pub async fn project_listings_from_rows(
+    tx: &tokio_postgres::Transaction<'_>,
+    project_rows: Vec<Row>,
+) -> Result<Vec<ProjectListing>, ProjectDbError> {
+    let mut project_listings = vec![];
+    for project_row in project_rows {
+        let project_version_id = ProjectVersionId(project_row.get(0));
+        let project_id = ProjectId(project_row.get(1));
+        let name = project_row.get(2);
+        let description = project_row.get(3);
+        let changed = project_row.get(4);
+
+        let stmt = tx
+            .prepare(
+                "
+                SELECT name
+                FROM project_version_layers
+                WHERE project_version_id = $1;",
+            )
+            .await
+            .context(PostgresProjectDbError)?;
+
+        let layer_rows = tx
+            .query(&stmt, &[&project_version_id])
+            .await
+            .context(PostgresProjectDbError)?;
+        let layer_names = layer_rows.iter().map(|row| row.get(0)).collect();
+
+        project_listings.push(ProjectListing {
+            id: project_id,
+            name,
+            description,
+            layer_names,
+            plot_names: list_plots(tx, &project_version_id).await?,
+            changed,
+        });
+    }
+    Ok(project_listings)
+}
+
+pub async fn insert_project(
+    trans: &Transaction<'_>,
+    project: &Project,
+) -> Result<ProjectVersionId, ProjectDbError> {
+    let stmt = trans
+        .prepare("INSERT INTO projects (id) VALUES ($1);")
+        .await
+        .context(PostgresProjectDbError)?;
+
+    trans
+        .execute(&stmt, &[&project.id])
+        .await
+        .context(PostgresProjectDbError)?;
+
+    let stmt = trans
+        .prepare(
+            "INSERT INTO project_versions (
+                    id,
+                    project_id,
+                    name,
+                    description,
+                    bounds,
+                    time_step,
+                    changed)
+                    VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);",
+        )
+        .await
+        .context(PostgresProjectDbError)?;
+
+    let version_id = ProjectVersionId::new();
+
+    trans
+        .execute(
+            &stmt,
+            &[
+                &version_id,
+                &project.id,
+                &project.name,
+                &project.description,
+                &project.bounds,
+                &project.time_step,
+            ],
+        )
+        .await
+        .context(PostgresProjectDbError)?;
+
+    Ok(version_id)
+}
+
+pub async fn update_project(
+    trans: &Transaction<'_>,
+    project: &Project,
+    update: UpdateProject,
+) -> Result<Project, ProjectDbError> {
+    let project = project.update_project(update)?;
+
+    let stmt = trans
+        .prepare(
+            "
+            INSERT INTO project_versions (
+                id,
+                project_id,
+                name,
+                description,
+                bounds,
+                time_step,
+                changed)
+            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);",
+        )
+        .await
+        .context(PostgresProjectDbError)?;
+
+    trans
+        .execute(
+            &stmt,
+            &[
+                &project.version.id,
+                &project.id,
+                &project.name,
+                &project.description,
+                &project.bounds,
+                &project.time_step,
+            ],
+        )
+        .await
+        .context(PostgresProjectDbError)?;
+
+    for (idx, layer) in project.layers.iter().enumerate() {
+        let stmt = trans
+            .prepare(
+                "
+            INSERT INTO project_version_layers (
+                project_id,
+                project_version_id,
+                layer_index,
+                name,
+                workflow_id,
+                symbology,
+                visibility)
+            VALUES ($1, $2, $3, $4, $5, $6, $7);",
+            )
+            .await
+            .context(PostgresProjectDbError)?;
+
+        trans
+            .execute(
+                &stmt,
+                &[
+                    &project.id,
+                    &project.version.id,
+                    &(idx as i32),
+                    &layer.name,
+                    &layer.workflow,
+                    &layer.symbology,
+                    &layer.visibility,
+                ],
+            )
+            .await
+            .context(PostgresProjectDbError)?;
+    }
+
+    update_plots(trans, &project.id, &project.version.id, &project.plots).await?;
+
+    Ok(project)
+}
+
 #[async_trait]
 impl<Tls> ProjectDb for PostgresDb<Tls>
 where
@@ -146,9 +299,14 @@ where
     ) -> Result<Vec<ProjectListing>, ProjectDbError> {
         // TODO: project filters
 
-        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
+        let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
+        let trans = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresProjectDbError)?;
 
-        let stmt = conn
+        let stmt = trans
             .prepare(&format!(
                 "
         SELECT p.id, p.project_id, p.name, p.description, p.changed
@@ -163,7 +321,7 @@ where
             .await
             .context(PostgresProjectDbError)?;
 
-        let project_rows = conn
+        let project_rows = trans
             .query(
                 &stmt,
                 &[&i64::from(options.limit), &i64::from(options.offset)],
@@ -171,39 +329,10 @@ where
             .await
             .context(PostgresProjectDbError)?;
 
-        let mut project_listings = vec![];
-        for project_row in project_rows {
-            let project_version_id = ProjectVersionId(project_row.get(0));
-            let project_id = ProjectId(project_row.get(1));
-            let name = project_row.get(2);
-            let description = project_row.get(3);
-            let changed = project_row.get(4);
+        let project_listings = project_listings_from_rows(&trans, project_rows).await?;
 
-            let stmt = conn
-                .prepare(
-                    "
-                    SELECT name
-                    FROM project_version_layers
-                    WHERE project_version_id = $1;",
-                )
-                .await
-                .context(PostgresProjectDbError)?;
+        trans.commit().await.context(PostgresProjectDbError)?;
 
-            let layer_rows = conn
-                .query(&stmt, &[&project_version_id])
-                .await
-                .context(PostgresProjectDbError)?;
-            let layer_names = layer_rows.iter().map(|row| row.get(0)).collect();
-
-            project_listings.push(ProjectListing {
-                id: project_id,
-                name,
-                description,
-                layer_names,
-                plot_names: list_plots(&conn, &project_version_id).await?,
-                changed,
-            });
-        }
         Ok(project_listings)
     }
 
@@ -218,47 +347,7 @@ where
             .await
             .context(PostgresProjectDbError)?;
 
-        let stmt = trans
-            .prepare("INSERT INTO projects (id) VALUES ($1);")
-            .await
-            .context(PostgresProjectDbError)?;
-
-        trans
-            .execute(&stmt, &[&project.id])
-            .await
-            .context(PostgresProjectDbError)?;
-
-        let stmt = trans
-            .prepare(
-                "INSERT INTO project_versions (
-                    id,
-                    project_id,
-                    name,
-                    description,
-                    bounds,
-                    time_step,
-                    changed)
-                    VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);",
-            )
-            .await
-            .context(PostgresProjectDbError)?;
-
-        let version_id = ProjectVersionId::new();
-
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &version_id,
-                    &project.id,
-                    &project.name,
-                    &project.description,
-                    &project.bounds,
-                    &project.time_step,
-                ],
-            )
-            .await
-            .context(PostgresProjectDbError)?;
+        insert_project(&trans, &project).await?;
 
         trans.commit().await.context(PostgresProjectDbError)?;
 
@@ -284,74 +373,7 @@ where
 
         let project = self.load_project(update.id).await?; // TODO: move inside transaction?
 
-        let project = project.update_project(update)?;
-
-        let stmt = trans
-            .prepare(
-                "
-                INSERT INTO project_versions (
-                    id,
-                    project_id,
-                    name,
-                    description,
-                    bounds,
-                    time_step,
-                    changed)
-                VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);",
-            )
-            .await
-            .context(PostgresProjectDbError)?;
-
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &project.version.id,
-                    &project.id,
-                    &project.name,
-                    &project.description,
-                    &project.bounds,
-                    &project.time_step,
-                ],
-            )
-            .await
-            .context(PostgresProjectDbError)?;
-
-        for (idx, layer) in project.layers.iter().enumerate() {
-            let stmt = trans
-                .prepare(
-                    "
-                INSERT INTO project_version_layers (
-                    project_id,
-                    project_version_id,
-                    layer_index,
-                    name,
-                    workflow_id,
-                    symbology,
-                    visibility)
-                VALUES ($1, $2, $3, $4, $5, $6, $7);",
-                )
-                .await
-                .context(PostgresProjectDbError)?;
-
-            trans
-                .execute(
-                    &stmt,
-                    &[
-                        &project.id,
-                        &project.version.id,
-                        &(idx as i32),
-                        &layer.name,
-                        &layer.workflow,
-                        &layer.symbology,
-                        &layer.visibility,
-                    ],
-                )
-                .await
-                .context(PostgresProjectDbError)?;
-        }
-
-        update_plots(&trans, &project.id, &project.version.id, &project.plots).await?;
+        update_project(&trans, &project, update).await?;
 
         trans.commit().await.context(PostgresProjectDbError)?;
 
@@ -385,10 +407,16 @@ where
         project: ProjectId,
         version: LoadVersion,
     ) -> Result<Project, ProjectDbError> {
-        let conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
+        let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
+
+        let trans = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresProjectDbError)?;
 
         let rows = if let LoadVersion::Version(version) = version {
-            let stmt = conn
+            let stmt = trans
                 .prepare(
                     "
             SELECT 
@@ -406,7 +434,7 @@ where
                 .await
                 .context(PostgresProjectDbError)?;
 
-            let rows = conn
+            let rows = trans
                 .query(&stmt, &[&project, &version])
                 .await
                 .context(PostgresProjectDbError)?;
@@ -417,7 +445,7 @@ where
 
             rows
         } else {
-            let stmt = conn
+            let stmt = trans
                 .prepare(
                     "
             SELECT  
@@ -437,7 +465,7 @@ where
                 .await
                 .context(PostgresProjectDbError)?;
 
-            let rows = conn
+            let rows = trans
                 .query(&stmt, &[&project])
                 .await
                 .context(PostgresProjectDbError)?;
@@ -459,7 +487,7 @@ where
         let time_step = row.get(5);
         let changed = row.get(6);
 
-        let stmt = conn
+        let stmt = trans
             .prepare(
                 "
         SELECT  
@@ -471,7 +499,7 @@ where
             .await
             .context(PostgresProjectDbError)?;
 
-        let rows = conn
+        let rows = trans
             .query(&stmt, &[&version_id])
             .await
             .context(PostgresProjectDbError)?;
@@ -486,7 +514,7 @@ where
             });
         }
 
-        Ok(Project {
+        let project = Project {
             id: project_id,
             version: ProjectVersion {
                 id: version_id,
@@ -495,10 +523,14 @@ where
             name,
             description,
             layers,
-            plots: load_plots(&conn, &version_id).await?,
+            plots: load_plots(&trans, &version_id).await?,
             bounds,
             time_step,
-        })
+        };
+
+        trans.commit().await.context(PostgresProjectDbError)?;
+
+        Ok(project)
     }
 
     async fn list_project_versions(

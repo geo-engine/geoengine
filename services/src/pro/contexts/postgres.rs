@@ -1,25 +1,25 @@
+use super::migrations::pro_migrations;
 use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 use crate::api::cli::add_providers_from_directory;
-use crate::contexts::{ApplicationContext, PostgresContext, QueryContextImpl, SessionId};
+use crate::contexts::{
+    migrate_database, ApplicationContext, MigrationResult, PostgresContext, QueryContextImpl,
+    SessionId,
+};
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::upload::{Volume, Volumes};
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
-use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
-use crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
 use crate::pro::api::cli::add_datasets_from_directory;
 use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
     add_pro_providers_from_directory,
 };
 use crate::pro::machine_learning::ml_model::{MlModel, MlModelDb};
-use crate::pro::permissions::Role;
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::{OidcRequestDb, UserAuth, UserSession};
 use crate::pro::util::config::{Cache, Oidc, Quota};
 use crate::tasks::SimpleTaskManagerContext;
-use crate::util::config::get_config_element;
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -38,8 +38,7 @@ use geoengine_operators::pro::cache::shared_cache::SharedCache;
 use geoengine_operators::pro::machine_learning::{LoadMlModel, MlModelAccess};
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
-use log::{debug, info};
-use pwhash::bcrypt;
+use log::info;
 use rayon::ThreadPool;
 use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
@@ -86,10 +85,7 @@ where
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
-        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
-        if created_schema {
-            Self::create_pro_schema(pool.get().await?).await?;
-        }
+        Self::create_pro_database(pool.get().await?).await?;
 
         let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(
@@ -124,10 +120,7 @@ where
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
-        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
-        if created_schema {
-            Self::create_pro_schema(pool.get().await?).await?;
-        }
+        Self::create_pro_database(pool.get().await?).await?;
 
         let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(
@@ -175,10 +168,7 @@ where
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
-        let created_schema = PostgresContext::create_schema(pool.get().await?).await?;
-        if created_schema {
-            Self::create_pro_schema(pool.get().await?).await?;
-        }
+        let created_schema = Self::create_pro_database(pool.get().await?).await?;
 
         let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(
@@ -226,116 +216,14 @@ where
 
     #[allow(clippy::too_many_lines)]
     /// Creates the database schema. Returns true if the schema was created, false if it already existed.
-    pub(crate) async fn create_pro_schema(
+    pub(crate) async fn create_pro_database(
         mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<()> {
-        let user_config = get_config_element::<crate::pro::util::config::User>()?;
+    ) -> Result<bool> {
+        PostgresContext::maybe_clear_database(&conn).await?;
 
-        let tx = conn.build_transaction().start().await?;
+        let migration = migrate_database(&mut conn, &pro_migrations()).await?;
 
-        tx.batch_execute(include_str!("schema.sql")).await?;
-
-        let stmt = tx
-            .prepare(
-                r#"
-            INSERT INTO roles (id, name) VALUES
-                ($1, 'admin'),
-                ($2, 'user'),
-                ($3, 'anonymous');"#,
-            )
-            .await?;
-
-        tx.execute(
-            &stmt,
-            &[
-                &Role::admin_role_id(),
-                &Role::registered_user_role_id(),
-                &Role::anonymous_role_id(),
-            ],
-        )
-        .await?;
-
-        let stmt = tx
-            .prepare(
-                r#"
-            INSERT INTO users (
-                id, 
-                email,
-                password_hash,
-                real_name,
-                quota_available,
-                active)
-            VALUES (
-                $1, 
-                $2,
-                $3,
-                'admin',
-                $4,
-                true
-            );"#,
-            )
-            .await?;
-
-        let quota_available =
-            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
-                .default_available_quota;
-
-        tx.execute(
-            &stmt,
-            &[
-                &Role::admin_role_id(),
-                &user_config.admin_email,
-                &bcrypt::hash(user_config.admin_password)
-                    .expect("Admin password hash should be valid"),
-                &quota_available,
-            ],
-        )
-        .await?;
-
-        let stmt = tx
-            .prepare(
-                r#"
-            INSERT INTO user_roles 
-                (user_id, role_id)
-            VALUES 
-                ($1, $1);"#,
-            )
-            .await?;
-
-        tx.execute(&stmt, &[&Role::admin_role_id()]).await?;
-
-        let stmt = tx
-            .prepare(
-                r#"
-            INSERT INTO permissions
-             (role_id, layer_collection_id, permission)  
-            VALUES 
-                ($1, $4, 'Owner'),
-                ($2, $4, 'Read'),
-                ($3, $4, 'Read'),
-                ($1, $5, 'Owner'),
-                ($2, $5, 'Read'),
-                ($3, $5, 'Read');"#,
-            )
-            .await?;
-
-        tx.execute(
-            &stmt,
-            &[
-                &Role::admin_role_id(),
-                &Role::registered_user_role_id(),
-                &Role::anonymous_role_id(),
-                &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
-                &UNSORTED_COLLECTION_ID,
-            ],
-        )
-        .await?;
-
-        tx.commit().await?;
-
-        debug!("Created pro database schema");
-
-        Ok(())
+        Ok(migration == MigrationResult::CreatedDatabase)
     }
 
     pub fn oidc_request_db(&self) -> Arc<Option<OidcRequestDb>> {
@@ -623,6 +511,7 @@ mod tests {
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::datasets::{AddDataset, DatasetIdAndName};
+    use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
         LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
@@ -634,7 +523,7 @@ mod tests {
     };
     use crate::pro::ge_context;
     use crate::pro::machine_learning::ml_model::{MlModel, MlModelDb};
-    use crate::pro::permissions::{Permission, PermissionDb, RoleDescription, RoleId};
+    use crate::pro::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
     use crate::pro::users::{
         ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
     };
@@ -2531,6 +2420,8 @@ mod tests {
             )
             .await
             .unwrap();
+
+        db.load_layer(&layer_in_two_collections).await.unwrap();
 
         db.add_layer_to_collection(&layer_in_two_collections, root_collection)
             .await

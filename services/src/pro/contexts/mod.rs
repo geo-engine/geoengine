@@ -1,4 +1,5 @@
 mod db_types;
+mod migrations;
 mod postgres;
 
 use std::str::FromStr;
