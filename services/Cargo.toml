@@ -107,12 +107,12 @@ tracing-subscriber = { version = "0.3", features = [
 ] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
-utoipa = { git = "https://github.com/1lutz/utoipa.git", features = ["actix_extras", "chrono", "uuid", "debug"] }
-utoipa-swagger-ui = { git = "https://github.com/1lutz/utoipa.git", features = ["actix-web"] }
+utoipa = { version = "4.0", features = ["actix_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "4.0", features = ["actix-web"] }
 uuid = { version = "1.1", features = [
   "serde",
   "v4",
-  "v5"
+  "v5",
 ] } # must be compatible with `bb8-postgres`
 validator = { version = "0.16", features = ["derive"] }
 walkdir = "2.3"
