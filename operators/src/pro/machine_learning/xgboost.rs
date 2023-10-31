@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle, SpatialPartition2D,
     SpatialResolution,
 };
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::pro::MlModelId;
 use geoengine_datatypes::raster::{
     BaseTile, Grid2D, GridOrEmpty, GridShape, GridShapeAccess, GridSize, RasterDataType,
@@ -320,11 +320,15 @@ fn process_tile(
 #[async_trait]
 impl<Q> QueryProcessor for XgboostProcessor<Q>
 where
-    Q: QueryProcessor<Output = RasterTile2D<f32>, SpatialBounds = SpatialPartition2D>,
+    Q: QueryProcessor<
+        Output = RasterTile2D<f32>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+    >,
 {
     type Output = RasterTile2D<PixelOut>;
     type SpatialBounds = SpatialPartition2D;
-
+    type Selection = BandSelection;
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -366,7 +370,7 @@ mod tests {
     use geoengine_datatypes::pro::MlModelId;
 
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
@@ -636,7 +640,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let query_ctx = MockQueryContext::test_default();
@@ -975,7 +979,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (5., 0.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let query_ctx = MockQueryContext::test_default();

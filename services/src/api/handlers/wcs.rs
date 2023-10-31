@@ -12,7 +12,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialPartition2D,
+    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
@@ -432,7 +432,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         spatial_bounds: request_partition,
         time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
         spatial_resolution,
-        bands: BandSelection::default(), // TODO
+        selection: Default::default(), // TODO
     };
 
     let query_ctx = ctx.query_context()?;

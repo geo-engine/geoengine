@@ -6,11 +6,11 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, Measurement, MultiPoint,
     MultiPointAccess, VectorQueryRectangle,
 };
+use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -363,6 +363,7 @@ struct GridFoldState {
 impl QueryProcessor for VisualPointClusteringProcessor {
     type Output = MultiPointCollection;
     type SpatialBounds = BoundingBox2D;
+    type Selection = ColumnSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -479,7 +480,6 @@ impl QueryProcessor for VisualPointClusteringProcessor {
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
-    use geoengine_datatypes::primitives::BandSelection;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::FeatureData;
     use geoengine_datatypes::primitives::SpatialResolution;
@@ -539,7 +539,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();
@@ -621,7 +621,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();
@@ -704,7 +704,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();
@@ -795,7 +795,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();
@@ -901,7 +901,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let query = query_processor.query(qrect, &query_context).await.unwrap();

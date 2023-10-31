@@ -191,12 +191,17 @@ where
 #[async_trait]
 impl<Q, P, I> QueryProcessor for InterploationProcessor<Q, P, I>
 where
-    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialBounds = SpatialPartition2D>,
+    Q: QueryProcessor<
+        Output = RasterTile2D<P>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+    >,
     P: Pixel,
     I: InterpolationAlgorithm<P>,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
+    type Selection = BandSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -291,7 +296,7 @@ where
             spatial_bounds,
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: self.input_resolution,
-            bands: BandSelection::Single(band), // TODO
+            selection: BandSelection::Single(band), // TODO
         }))
     }
 
@@ -486,7 +491,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::zero_point_five(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -646,7 +651,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::zero_point_five(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 

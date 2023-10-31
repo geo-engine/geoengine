@@ -292,7 +292,7 @@ mod tests {
     };
     use crate::test_data;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
-    use geoengine_datatypes::primitives::{BandSelection, CacheTtlSeconds};
+    use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, FeatureDataType, NoGeometry, SpatialResolution, TimeInterval,
     };
@@ -400,7 +400,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -477,7 +477,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -624,7 +624,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -673,7 +673,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -754,7 +754,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -819,7 +819,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )

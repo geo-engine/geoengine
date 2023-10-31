@@ -254,7 +254,7 @@ mod tests {
         source::GdalSourceParameters,
     };
     use geoengine_datatypes::primitives::{
-        BandSelection, BoundingBox2D, CacheHint, Measurement, SpatialResolution, TimeInterval,
+        BoundingBox2D, CacheHint, Measurement, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::{dataset::NamedData, plots::PlotMetaData, primitives::DateTime};
     use geoengine_datatypes::{raster::TilingSpecification, spatial_reference::SpatialReference};
@@ -352,7 +352,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -496,7 +496,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )

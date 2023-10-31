@@ -272,7 +272,7 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
@@ -354,7 +354,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -503,7 +503,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -640,7 +640,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )

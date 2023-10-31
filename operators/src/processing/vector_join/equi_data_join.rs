@@ -11,7 +11,7 @@ use geoengine_datatypes::collections::{
     GeometryRandomAccess,
 };
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
+    BoundingBox2D, ColumnSelection, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
@@ -353,6 +353,7 @@ where
 {
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
+    type Selection = ColumnSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -399,7 +400,7 @@ mod tests {
     use futures::executor::block_on_stream;
 
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -444,7 +445,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);

@@ -26,8 +26,8 @@ use geoengine_datatypes::{
         CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
     },
     primitives::{
-        BoundingBox2D, Geometry, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
-        SpatialResolution, VectorQueryRectangle,
+        BandSelection, BoundingBox2D, ColumnSelection, Geometry, RasterQueryRectangle,
+        SpatialPartition2D, SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
     },
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
@@ -245,6 +245,7 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
                     (),
                 )
                 .boxed(),
+                // source,
             )),
             TypedVectorQueryProcessor::MultiPoint(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPoint(
@@ -290,12 +291,17 @@ where
 #[async_trait]
 impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
-    Q: QueryProcessor<Output = FeatureCollection<G>, SpatialBounds = BoundingBox2D>,
+    Q: QueryProcessor<
+        Output = FeatureCollection<G>,
+        SpatialBounds = BoundingBox2D,
+        Selection = ColumnSelection,
+    >,
     FeatureCollection<G>: Reproject<CoordinateProjector, Out = FeatureCollection<G>>,
     G: Geometry + ArrowTyped,
 {
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
+    type Selection = ColumnSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -515,12 +521,16 @@ where
 #[async_trait]
 impl<Q, P> QueryProcessor for RasterReprojectionProcessor<Q, P>
 where
-    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialBounds = SpatialPartition2D>,
+    Q: QueryProcessor<
+        Output = RasterTile2D<P>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+    >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
-
+    type Selection = BandSelection;
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -568,7 +578,7 @@ where
             Ok(Box::pin(SparseTilesFillAdapter::new(
                 stream::empty(),
                 grid_bounds,
-                query.bands.count(),
+                query.selection.count(),
                 tiling_strat.geo_transform,
                 self.tiling_spec.tile_size_in_pixels,
                 FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
@@ -598,7 +608,7 @@ mod tests {
     use geoengine_datatypes::collections::IntoGeometryIterator;
     use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::primitives::{
-        AxisAlignedRectangle, BandSelection, Coordinate2D, DateTimeParseFormat,
+        AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat,
     };
     use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::raster::TilesEqualIgnoringCacheHint;
@@ -680,7 +690,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -755,7 +765,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -837,7 +847,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -955,7 +965,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(),
+            selection: Default::default(),
         };
 
         let a = qp.raster_query(query_rect, &query_ctx).await?;
@@ -1021,7 +1031,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_ctx,
             )
@@ -1057,7 +1067,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let expected = BoundingBox2D::new_unchecked(
@@ -1179,7 +1189,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_ctx,
             )
@@ -1316,7 +1326,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_ctx,
             )
@@ -1387,7 +1397,7 @@ mod tests {
                     spatial_bounds,
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_ctx,
             )
@@ -1465,7 +1475,7 @@ mod tests {
                     spatial_bounds,
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_ctx,
             )
@@ -1544,7 +1554,7 @@ mod tests {
                     spatial_bounds,
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_ctx,
             )

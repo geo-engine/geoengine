@@ -253,9 +253,7 @@ where
 mod tests {
 
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
+        primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
             Grid2D, GridOrEmpty2D, GridShape, MaskedGrid2D, RasterDataType, RasterProperties,
             TileInformation, TilingSpecification,
@@ -351,7 +349,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
             spatial_resolution: SpatialResolution::one(),
             time_interval: TimeInterval::default(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let TypedRasterQueryProcessor::U8(typed_processor) = query_processor else {
@@ -465,7 +463,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
             spatial_resolution: SpatialResolution::one(),
             time_interval: TimeInterval::default(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let TypedRasterQueryProcessor::U8(typed_processor) = query_processor else {

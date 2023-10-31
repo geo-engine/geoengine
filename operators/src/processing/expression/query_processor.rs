@@ -3,7 +3,9 @@ use std::{marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
-    primitives::{CacheHint, RasterQueryRectangle, SpatialPartition2D, TimeInterval},
+    primitives::{
+        BandSelection, CacheHint, RasterQueryRectangle, SpatialPartition2D, TimeInterval,
+    },
     raster::{
         ConvertDataType, FromIndexFnParallel, GeoTransform, GridIdx2D, GridIndexAccess,
         GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess, MapElementsParallel, Pixel,
@@ -53,6 +55,7 @@ where
 {
     type Output = RasterTile2D<TO>;
     type SpatialBounds = SpatialPartition2D;
+    type Selection = BandSelection;
 
     async fn _query<'b>(
         &'b self,

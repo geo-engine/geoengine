@@ -10,8 +10,8 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
-    ClassificationMeasurement, ContinuousMeasurement, Measurement, RasterQueryRectangle,
-    SpatialPartition2D,
+    BandSelection, ClassificationMeasurement, ContinuousMeasurement, Measurement,
+    RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::raster::{
     MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
@@ -222,11 +222,16 @@ where
 #[async_trait]
 impl<Q, P> QueryProcessor for RadianceProcessor<Q, P>
 where
-    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialBounds = SpatialPartition2D>,
+    Q: QueryProcessor<
+        Output = RasterTile2D<P>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+    >,
     P: Pixel,
 {
     type Output = RasterTile2D<PixelOut>;
     type SpatialBounds = SpatialPartition2D;
+    type Selection = BandSelection;
 
     async fn _query<'a>(
         &'a self,

@@ -13,7 +13,7 @@ use futures::{stream::BoxStream, try_join, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
-        partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle,
+        partitions_extent, time_interval_extent, BandSelection, Measurement, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution,
     },
     raster::{
@@ -285,6 +285,7 @@ impl RgbQueryProcessor {
 impl QueryProcessor for RgbQueryProcessor {
     type Output = RasterTile2D<u32>;
     type SpatialBounds = SpatialPartition2D;
+    type Selection = BandSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -403,8 +404,8 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::{
-        BandSelection, CacheHint, Measurement, RasterQueryRectangle, SpatialPartition2D,
-        SpatialResolution, TimeInterval,
+        CacheHint, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+        TimeInterval,
     };
     use geoengine_datatypes::raster::{
         Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, TileInformation,
@@ -517,7 +518,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &ctx,
             )

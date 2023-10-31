@@ -15,8 +15,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    BandSelection, Duration, Geometry, RasterQueryRectangle, TimeGranularity, TimeInstance,
-    TimeInterval,
+    Duration, Geometry, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
@@ -427,7 +426,7 @@ where
             spatial_bounds: query.spatial_bounds,
             time_interval,
             spatial_resolution: query.spatial_resolution,
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let stream = self.processor.vector_query(query, ctx).await?;
 
@@ -473,7 +472,7 @@ where
             spatial_bounds: query.spatial_bounds,
             time_interval,
             spatial_resolution: query.spatial_resolution,
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let stream = self.processor.raster_query(query, ctx).await?;
 
@@ -671,7 +670,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_context,
             )
@@ -760,7 +759,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_context,
             )
@@ -942,7 +941,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_context,
             )
@@ -1116,7 +1115,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_context,
             )
@@ -1201,7 +1200,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_context,
             )
@@ -1268,7 +1267,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_context,
             )

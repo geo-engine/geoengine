@@ -602,7 +602,7 @@ mod tests {
     use std::sync::Arc;
 
     use geoengine_datatypes::{
-        primitives::{BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution},
+        primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution},
         raster::GeoTransform,
         util::test::TestDefault,
     };
@@ -668,7 +668,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let mut lq = RasterLandingQueryEntry::create_empty::<CompressedRasterTile2D<u8>>(query);
         tile.move_element_into_landing_zone(lq.elements_mut())
@@ -687,7 +687,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         assert!(tile.intersects_query(&query));
 
@@ -699,7 +699,7 @@ mod tests {
             ),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         assert!(tile.intersects_query(&query));
 
@@ -711,7 +711,7 @@ mod tests {
             ),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         assert!(!tile.intersects_query(&query));
     }
@@ -722,7 +722,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let cache_query_entry = RasterCacheQueryEntry {
             query: cache_entry_bounds,
@@ -741,7 +741,7 @@ mod tests {
             ),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         assert!(cache_query_entry.query().is_match(&query2));
 
@@ -753,7 +753,7 @@ mod tests {
             ),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         assert!(!cache_query_entry.query().is_match(&query3));
     }

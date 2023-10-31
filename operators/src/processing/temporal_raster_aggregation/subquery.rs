@@ -192,7 +192,7 @@ where
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
             time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
-            bands: BandSelection::Single(band), // TODO
+            selection: BandSelection::Single(band), // TODO
         }))
     }
 

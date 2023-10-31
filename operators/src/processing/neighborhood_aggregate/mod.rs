@@ -12,7 +12,7 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::{
     Grid2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
 };
@@ -236,14 +236,18 @@ where
 #[async_trait]
 impl<Q, P, A> QueryProcessor for NeighborhoodAggregateProcessor<Q, P, A>
 where
-    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialBounds = SpatialPartition2D>,
+    Q: QueryProcessor<
+        Output = RasterTile2D<P>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+    >,
     P: Pixel,
     f64: AsPrimitive<P>,
     A: AggregateFunction + 'static,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
-
+    type Selection = BandSelection;
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -283,8 +287,8 @@ mod tests {
         dataset::NamedData,
         operations::image::{Colorizer, DefaultColors, RgbaColor},
         primitives::{
-            BandSelection, CacheHint, DateTime, Measurement, RasterQueryRectangle,
-            SpatialPartition2D, SpatialResolution, TimeInstance, TimeInterval,
+            CacheHint, DateTime, Measurement, RasterQueryRectangle, SpatialPartition2D,
+            SpatialResolution, TimeInstance, TimeInterval,
         },
         raster::{
             Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation,
@@ -433,7 +437,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 3.).into(), (6., 0.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -487,7 +491,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 3.).into(), (6., 0.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -675,7 +679,7 @@ mod tests {
                 .unwrap(),
             time_interval: TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -746,7 +750,7 @@ mod tests {
                 .unwrap(),
             time_interval: TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let query_ctx = MockQueryContext::test_default();
 

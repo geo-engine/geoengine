@@ -14,7 +14,7 @@ use futures::stream::{BoxStream, FusedStream};
 use futures::{ready, Stream, StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, Geometry, QueryRectangle, VectorQueryRectangle,
+    AxisAlignedRectangle, Geometry, QueryRectangle, QuerySelection, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
@@ -139,19 +139,19 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
 }
 
 /// A cache operator that caches the results of its source operator
-struct CacheQueryProcessor<P, E, Q>
+struct CacheQueryProcessor<P, E, Q, U>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialBounds = Q>,
+    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U>,
 {
     processor: P,
     cache_key: CanonicOperatorName,
 }
 
-impl<P, E, Q> CacheQueryProcessor<P, E, Q>
+impl<P, E, Q, U> CacheQueryProcessor<P, E, Q, U>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialBounds = Q> + Sized,
+    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U> + Sized,
 {
     pub fn new(processor: P, cache_key: CanonicOperatorName) -> Self {
         CacheQueryProcessor {
@@ -162,11 +162,12 @@ where
 }
 
 #[async_trait]
-impl<P, E, S> QueryProcessor for CacheQueryProcessor<P, E, S>
+impl<P, E, S, U> QueryProcessor for CacheQueryProcessor<P, E, S, U>
 where
-    P: QueryProcessor<Output = E, SpatialBounds = S> + Sized,
+    P: QueryProcessor<Output = E, SpatialBounds = S, Selection = U> + Sized,
     S: AxisAlignedRectangle + Send + Sync + 'static,
-    E: CacheElement<Query = QueryRectangle<S>>
+    U: QuerySelection,
+    E: CacheElement<Query = QueryRectangle<S, U>>
         + Send
         + Sync
         + 'static
@@ -177,10 +178,11 @@ where
 {
     type Output = E;
     type SpatialBounds = S;
+    type Selection = U;
 
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialBounds>,
+        query: QueryRectangle<Self::SpatialBounds, Self::Selection>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let shared_cache = ctx
@@ -408,7 +410,7 @@ where
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{BandSelection, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilesEqualIgnoringCacheHint,
         util::test::TestDefault,
     };
@@ -460,7 +462,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_ctx,
             )
@@ -482,7 +484,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &query_ctx,
             )

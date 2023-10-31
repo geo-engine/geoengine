@@ -29,12 +29,12 @@ use geoengine_datatypes::collections::{
     VectorDataType,
 };
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, DateTime, DateTimeParseFormat,
     FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint, MultiPolygon,
     NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry, VectorQueryRectangle,
 };
+use geoengine_datatypes::primitives::{CacheTtlSeconds, ColumnSelection};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use log::debug;
 use pin_project::pin_project;
@@ -512,6 +512,7 @@ where
 {
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
+    type Selection = ColumnSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -1884,7 +1885,7 @@ mod tests {
         MultiPointCollection, MultiPolygonCollection,
     };
     use geoengine_datatypes::dataset::{DataId, DatasetId};
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, Measurement, SpatialResolution, TimeGranularity,
     };
@@ -2074,7 +2075,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -2127,7 +2128,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into()).unwrap(),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -2173,7 +2174,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (5., 5.).into()).unwrap(),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -2224,7 +2225,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -2310,7 +2311,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -2410,7 +2411,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -2513,7 +2514,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -2667,7 +2668,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -2845,7 +2846,7 @@ mod tests {
                     )?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -4029,7 +4030,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -4149,7 +4150,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 2.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -4359,7 +4360,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context1,
             )
@@ -4394,7 +4395,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -4512,7 +4513,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -4602,7 +4603,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -4723,7 +4724,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -4851,7 +4852,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -4977,7 +4978,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -5103,7 +5104,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -5225,7 +5226,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -5360,7 +5361,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -5481,7 +5482,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -5593,7 +5594,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -5720,7 +5721,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -5836,7 +5837,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -5952,7 +5953,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -6072,7 +6073,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -6191,7 +6192,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -6325,7 +6326,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -6441,7 +6442,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -6549,7 +6550,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -6643,7 +6644,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -6734,7 +6735,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -6825,7 +6826,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )
@@ -6916,7 +6917,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &context,
             )

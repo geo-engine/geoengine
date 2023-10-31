@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use geo_rand::{GeoRand, GeoRandParameters};
 use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPolygonCollection};
-use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, MultiPoint, QueryRectangle, SpatialResolution,
 };
@@ -46,7 +46,7 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
         spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
         time_interval: TimeInterval::default(),
         spatial_resolution: SpatialResolution::zero_point_one(),
-        bands: BandSelection::default(), // TODO
+        selection: Default::default(), // TODO
     };
     let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, num_threads);
 

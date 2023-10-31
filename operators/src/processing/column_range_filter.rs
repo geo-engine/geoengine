@@ -14,7 +14,8 @@ use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, FeatureDataType, FeatureDataValue, Geometry, VectorQueryRectangle,
+    BoundingBox2D, ColumnSelection, FeatureDataType, FeatureDataValue, Geometry,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
@@ -117,6 +118,7 @@ where
 {
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
+    type Selection = ColumnSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -184,7 +186,7 @@ mod tests {
     use geoengine_datatypes::collections::{
         ChunksEqualIgnoringCacheHint, FeatureCollectionModifications, MultiPointCollection,
     };
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
@@ -281,7 +283,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());

@@ -540,7 +540,7 @@ mod tests {
     use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::dataset::{DataProviderId, LayerId};
-    use geoengine_datatypes::primitives::{BandSelection, CacheTtlSeconds};
+    use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
         RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
@@ -1168,7 +1168,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 })
                 .await
                 .unwrap(),

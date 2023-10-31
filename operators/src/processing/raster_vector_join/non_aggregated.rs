@@ -3,7 +3,7 @@ use crate::processing::raster_vector_join::create_feature_aggregator;
 use futures::stream::{once as once_stream, BoxStream};
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
-    BandSelection, BoundingBox2D, CacheHint, FeatureDataType, Geometry, RasterQueryRectangle,
+    BoundingBox2D, CacheHint, ColumnSelection, FeatureDataType, Geometry, RasterQueryRectangle,
     VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
@@ -154,7 +154,7 @@ where
             spatial_bounds,
             time_interval,
             spatial_resolution: query.spatial_resolution,
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         }
         .into();
 
@@ -409,6 +409,7 @@ where
 {
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
+    type Selection = ColumnSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -530,7 +531,7 @@ mod tests {
                         .unwrap(),
                     time_interval: time_instant,
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
@@ -626,7 +627,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
@@ -727,7 +728,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
@@ -834,7 +835,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
@@ -1010,7 +1011,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::new_unchecked(0, 20),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
@@ -1210,7 +1211,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::new_unchecked(0, 20),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
@@ -1504,7 +1505,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::new_unchecked(0, 20),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    bands: BandSelection::new_range(0, 2), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )

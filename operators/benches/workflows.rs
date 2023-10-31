@@ -58,7 +58,7 @@ pub trait BenchmarkRunner {
 pub struct WorkflowSingleBenchmark<F, O> {
     bench_id: &'static str,
     query_name: &'static str,
-    query_rect: QueryRectangle<SpatialPartition2D>,
+    query_rect: QueryRectangle<SpatialPartition2D, BandSelection>,
     tiling_spec: TilingSpecification,
     chunk_byte_size: ChunkByteSize,
     num_threads: usize,
@@ -69,7 +69,10 @@ pub struct WorkflowSingleBenchmark<F, O> {
 impl<O, F> WorkflowSingleBenchmark<F, O>
 where
     F: Fn(TilingSpecification, usize) -> MockExecutionContext,
-    O: Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
+    O: Fn(
+        TilingSpecification,
+        QueryRectangle<SpatialPartition2D, BandSelection>,
+    ) -> Box<dyn RasterOperator>,
 {
     #[inline(never)]
     pub fn run_bench(&self) -> WorkflowBenchmarkResult {
@@ -129,7 +132,10 @@ where
 impl<F, O> BenchmarkRunner for WorkflowSingleBenchmark<F, O>
 where
     F: Fn(TilingSpecification, usize) -> MockExecutionContext,
-    O: Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
+    O: Fn(
+        TilingSpecification,
+        QueryRectangle<SpatialPartition2D, BandSelection>,
+    ) -> Box<dyn RasterOperator>,
 {
     fn run_all_benchmarks(self, bencher: &mut BenchmarkCollector) {
         bencher.add_benchmark_result(WorkflowSingleBenchmark::run_bench(&self))
@@ -154,7 +160,10 @@ where
     B: IntoIterator<Item = ChunkByteSize> + Clone,
     F: Clone + Fn(TilingSpecification, usize) -> MockExecutionContext,
     O: Clone
-        + Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
+        + Fn(
+            TilingSpecification,
+            QueryRectangle<SpatialPartition2D, BandSelection>,
+        ) -> Box<dyn RasterOperator>,
 {
     pub fn new(
         bench_id: &'static str,
@@ -235,7 +244,10 @@ where
     B: IntoIterator<Item = ChunkByteSize> + Clone,
     F: Clone + Fn(TilingSpecification, usize) -> MockExecutionContext,
     O: Clone
-        + Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
+        + Fn(
+            TilingSpecification,
+            QueryRectangle<SpatialPartition2D, BandSelection>,
+        ) -> Box<dyn RasterOperator>,
 {
     fn run_all_benchmarks(self, bencher: &mut BenchmarkCollector) {
         self.into_benchmark_iterator()
@@ -275,7 +287,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        bands: BandSelection::default(), // TODO
+        selection: Default::default(), // TODO
     };
     let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
 
@@ -345,7 +357,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(0.005, 0.005).unwrap(),
-        bands: BandSelection::default(), // TODO
+        selection: Default::default(), // TODO
     };
 
     let qrects = vec![("World in 72000x36000 pixels", qrect)];
@@ -434,7 +446,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        bands: BandSelection::default(), // TODO
+        selection: Default::default(), // TODO
     };
 
     let qrects = vec![("World in 36000x18000 pixels", qrect)];
@@ -522,7 +534,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
         .unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(1050., 2100.).unwrap(),
-        bands: BandSelection::default(), // TODO
+        selection: Default::default(), // TODO
     };
     let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
 
@@ -602,7 +614,7 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-                bands: BandSelection::default(), // TODO
+                selection: Default::default(), // TODO
             },
         ),
         (
@@ -613,7 +625,7 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new(0.005, 0.005).unwrap(),
-                bands: BandSelection::default(), // TODO
+                selection: Default::default(), // TODO
             },
         ),
     ];
@@ -666,7 +678,7 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
                 .unwrap(),
             time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
             spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         },
     )];
 
@@ -728,7 +740,7 @@ fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut B
                 .unwrap(),
             time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
             spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         },
     )];
 
@@ -792,7 +804,7 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
             .unwrap(),
             time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
             spatial_resolution: SpatialResolution::new(1050., 2100.).unwrap(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         },
     )];
 

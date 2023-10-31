@@ -123,7 +123,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
-    use geoengine_datatypes::primitives::{BandSelection, BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
     use geoengine_datatypes::util::test::TestDefault;
 
     #[test]
@@ -164,7 +164,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
 

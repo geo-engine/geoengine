@@ -1008,9 +1008,7 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, CacheHint, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
+        primitives::{CacheHint, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{Grid, RasterProperties, RasterTile2D},
     };
     use serde_json::json;
@@ -1099,7 +1097,7 @@ mod tests {
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
                 .unwrap(),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         }
     }
 

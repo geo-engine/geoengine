@@ -155,7 +155,7 @@ where
             current_time_start: query_rect_to_answer.time_interval.start(),
             current_band_index: 0,
             grid_bounds,
-            bands: query_rect_to_answer.bands.bands(),
+            bands: query_rect_to_answer.selection.bands(),
             query_ctx,
             query_rect_to_answer,
             source_processor,
@@ -212,8 +212,11 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> FusedStream
     for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
-    RasterProcessorType:
-        QueryProcessor<Output = RasterTile2D<PixelType>, SpatialBounds = SpatialPartition2D>,
+    RasterProcessorType: QueryProcessor<
+        Output = RasterTile2D<PixelType>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+    >,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {
     fn is_terminated(&self) -> bool {
@@ -225,8 +228,11 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> Stream
     for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
-    RasterProcessorType:
-        QueryProcessor<Output = RasterTile2D<PixelType>, SpatialBounds = SpatialPartition2D>,
+    RasterProcessorType: QueryProcessor<
+        Output = RasterTile2D<PixelType>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+    >,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {
     type Item = Result<Option<RasterTile2D<PixelType>>>;
@@ -563,7 +569,7 @@ where
             spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: query_rect.spatial_resolution,
-            bands: BandSelection::Single(band), // TODO
+            selection: BandSelection::Single(band), // TODO
         }))
     }
 
@@ -720,7 +726,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let query_ctx = MockQueryContext::test_default();

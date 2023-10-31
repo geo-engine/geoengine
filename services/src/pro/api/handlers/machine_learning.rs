@@ -58,7 +58,7 @@ where
 mod tests {
     use super::*;
     use geoengine_datatypes::primitives::{
-        BandSelection, CacheHint, RasterQueryRectangle, SpatialPartition2D,
+        CacheHint, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
     };
     use geoengine_operators::engine::MultipleRasterSources;
     use geoengine_operators::{
@@ -231,11 +231,11 @@ mod tests {
 
         let spatial_resolution = SpatialResolution::one();
 
-        let qry: QueryRectangle<BoundingBox2D> = VectorQueryRectangle {
+        let qry: QueryRectangle<BoundingBox2D, ColumnSelection> = VectorQueryRectangle {
             spatial_bounds,
             time_interval,
             spatial_resolution,
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let xg_train = crate::pro::machine_learning::MLTrainRequest {
@@ -553,11 +553,11 @@ mod tests {
 
         let spatial_resolution = SpatialResolution::one();
 
-        let qry: QueryRectangle<BoundingBox2D> = VectorQueryRectangle {
+        let qry: QueryRectangle<BoundingBox2D, ColumnSelection> = VectorQueryRectangle {
             spatial_bounds,
             time_interval,
             spatial_resolution,
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         // generate a hashmap of xgboost parameters with the corresponding setting values
@@ -760,7 +760,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let query_ctx = ctx.query_context().unwrap();

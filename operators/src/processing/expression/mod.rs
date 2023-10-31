@@ -534,7 +534,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
+    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
@@ -642,7 +642,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &ctx,
             )
@@ -712,7 +712,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &ctx,
             )
@@ -727,7 +727,7 @@ mod tests {
             result[0].as_ref().unwrap().grid_array,
             GridOrEmpty::from(
                 MaskedGrid2D::new(
-                    Grid2D::new([3, 2].into(), vec![2, 4, 0, 8, 10, 12],).unwrap(), // pixels with no data are turned to Default::default wich is 0. And 0 is the out_no_data value.
+                    Grid2D::new([3, 2].into(), vec![2, 4, 0, 8, 10, 12],).unwrap(), // pixels with no data are turned to Default::default() wich is 0. And 0 is the out_no_data value.
                     Grid2D::new([3, 2].into(), vec![true, true, false, true, true, true],).unwrap()
                 )
                 .unwrap()
@@ -783,7 +783,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &ctx,
             )
@@ -857,7 +857,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &ctx,
             )
@@ -932,7 +932,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &ctx,
             )
@@ -1017,7 +1017,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &ctx,
             )
@@ -1084,7 +1084,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &ctx,
             )
@@ -1199,7 +1199,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &ctx,
             )
@@ -1269,7 +1269,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &ctx,
             )
@@ -1341,7 +1341,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 &ctx,
             )

@@ -227,8 +227,8 @@ mod tests {
     };
     use geoengine_datatypes::dataset::{DataId, ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
-        BandSelection, BoundingBox2D, Coordinate2D, MultiPointAccess, SpatialResolution,
-        TimeInterval, VectorQueryRectangle,
+        BoundingBox2D, Coordinate2D, MultiPointAccess, SpatialResolution, TimeInterval,
+        VectorQueryRectangle,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
@@ -468,7 +468,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let ctx = MockQueryContext::test_default();
 
@@ -533,7 +533,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let ctx = MockQueryContext::test_default();
 
@@ -609,7 +609,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let ctx = MockQueryContext::test_default();
 
@@ -680,7 +680,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
         let ctx = MockQueryContext::test_default();
 

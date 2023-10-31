@@ -8,7 +8,7 @@ use crate::api::model::datatypes::{
     TimeInstance, TimeStep, VectorQueryRectangle,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::CacheTtlSeconds;
+use geoengine_datatypes::primitives::{CacheTtlSeconds, ColumnSelection};
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,
@@ -299,6 +299,7 @@ impl
             geoengine_operators::engine::VectorResultDescriptor,
             geoengine_datatypes::primitives::QueryRectangle<
                 geoengine_datatypes::primitives::BoundingBox2D,
+                ColumnSelection,
             >,
         >,
     >
@@ -314,6 +315,7 @@ impl
             geoengine_operators::engine::VectorResultDescriptor,
             geoengine_datatypes::primitives::QueryRectangle<
                 geoengine_datatypes::primitives::BoundingBox2D,
+                ColumnSelection,
             >,
         >,
     ) -> Self {
@@ -332,6 +334,7 @@ impl
             geoengine_operators::engine::VectorResultDescriptor,
             geoengine_datatypes::primitives::QueryRectangle<
                 geoengine_datatypes::primitives::BoundingBox2D,
+                ColumnSelection,
             >,
         >,
     > for StaticMetaData<OgrSourceDataset, VectorResultDescriptor, QueryRectangle<BoundingBox2D>>
@@ -342,6 +345,7 @@ impl
             geoengine_operators::engine::VectorResultDescriptor,
             geoengine_datatypes::primitives::QueryRectangle<
                 geoengine_datatypes::primitives::BoundingBox2D,
+                ColumnSelection,
             >,
         >,
     ) -> Self {
@@ -384,6 +388,7 @@ impl From<MockMetaData>
         geoengine_operators::engine::VectorResultDescriptor,
         geoengine_datatypes::primitives::QueryRectangle<
             geoengine_datatypes::primitives::BoundingBox2D,
+            ColumnSelection,
         >,
     >
 {
@@ -402,6 +407,7 @@ impl From<OgrMetaData>
         geoengine_operators::engine::VectorResultDescriptor,
         geoengine_datatypes::primitives::QueryRectangle<
             geoengine_datatypes::primitives::BoundingBox2D,
+            ColumnSelection,
         >,
     >
 {

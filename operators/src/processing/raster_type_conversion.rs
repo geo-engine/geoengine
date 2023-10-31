@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::{
-    primitives::{RasterQueryRectangle, SpatialPartition2D},
+    primitives::{BandSelection, RasterQueryRectangle, SpatialPartition2D},
     raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
 };
 use serde::{Deserialize, Serialize};
@@ -129,6 +129,7 @@ where
 {
     type Output = RasterTile2D<POut>;
     type SpatialBounds = SpatialPartition2D;
+    type Selection = BandSelection;
 
     async fn _query<'b>(
         &'b self,
@@ -147,10 +148,7 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, CacheHint, Measurement, SpatialPartition2D, SpatialResolution,
-            TimeInterval,
-        },
+        primitives::{CacheHint, Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
             Grid2D, GridOrEmpty2D, MaskedGrid2D, RasterDataType, TileInformation,
             TilingSpecification,
@@ -233,7 +231,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
             spatial_resolution: SpatialResolution::one(),
             time_interval: TimeInterval::default(),
-            bands: BandSelection::default(), // TODO
+            selection: Default::default(), // TODO
         };
 
         let TypedRasterQueryProcessor::F32(typed_processor) = query_processor else {

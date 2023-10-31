@@ -77,7 +77,7 @@ async fn one_band_at_a_time(runs: usize, bands: usize, resolution: SpatialResolu
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: resolution,
-        bands: BandSelection::default(), // TODO
+        selection: Default::default(), // TODO
     };
 
     let mut times = NumberStatistics::default();
@@ -144,7 +144,7 @@ async fn all_bands_at_once(runs: usize, bands: usize, resolution: SpatialResolut
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: resolution,
-        bands: BandSelection::new_range(0, bands), // TODO
+        selection: BandSelection::new_range(0, bands), // TODO
     };
 
     let mut times = NumberStatistics::default();

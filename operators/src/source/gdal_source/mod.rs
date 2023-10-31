@@ -27,11 +27,11 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
     SpatialPartition2D, SpatialPartitioned,
 };
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::raster::TileInformation;
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
@@ -655,6 +655,7 @@ where
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
+    type Selection = BandSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -734,7 +735,7 @@ where
         let filled_stream = SparseTilesFillAdapter::new(
             source_stream,
             tiling_strategy.tile_grid_box(query.spatial_partition()),
-            query.bands.count(),
+            query.selection.count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
@@ -1179,9 +1180,7 @@ mod tests {
     use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{
-        AxisAlignedRectangle, BandSelection, SpatialPartition2D, TimeInstance,
-    };
+    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{
         EmptyGrid2D, GridBounds, GridIdx2D, TilesEqualIgnoringCacheHint,
     };
@@ -1223,7 +1222,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
-                    bands: BandSelection::default(), // TODO
+                    selection: Default::default(), // TODO
                 },
                 query_ctx,
             )
