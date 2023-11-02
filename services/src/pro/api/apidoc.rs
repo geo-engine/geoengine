@@ -1,28 +1,25 @@
 use super::handlers::permissions::{PermissionRequest, Resource};
 use super::handlers::users::AddRole;
+use super::model::MlModelId;
 use crate::api::handlers;
 use crate::api::handlers::plots::WrappedPlotOutput;
-use crate::api::handlers::spatial_references::{
-    AxisLabels, AxisOrder, SpatialReferenceSpecification,
-};
+use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use crate::api::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::api::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
-use crate::api::handlers::wcs::CoverageResponse;
-use crate::api::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
-use crate::api::handlers::wms::MapResponse;
-use crate::api::handlers::workflows::RasterStreamWebsocketResultType;
+use crate::api::handlers::wfs::{CollectionType, GeoJson};
+use crate::api::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
 use crate::api::model::datatypes::{
-    BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-    Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, DateTimeParseFormat, DefaultColors,
-    ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
-    MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, OverUnderColors, Palette,
-    PlotOutputFormat, PlotQueryRectangle, RasterDataType, RasterPropertiesEntryType,
-    RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
-    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
+    AxisLabels, BoundingBox2D, Breakpoint, CacheTtlSeconds, ClassificationMeasurement, Colorizer,
+    ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DateTime,
+    DateTimeParseFormat, DefaultColors, ExternalDataId, FeatureDataType, GdalConfigOption, LayerId,
+    LinearGradient, LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon,
+    NamedData, NoGeometry, OverUnderColors, Palette, PlotOutputFormat, PlotQueryRectangle,
+    RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
+    RgbaColor, SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair,
     TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
-    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
+    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
     GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
     GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
     MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
@@ -32,10 +29,10 @@ use crate::api::model::operators::{
     VectorResultDescriptor,
 };
 use crate::api::model::responses::datasets::DatasetNameResponse;
-use crate::api::model::responses::ErrorResponse;
 use crate::api::model::responses::{
-    BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, UnauthorizedAdminResponse,
-    UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+    BadRequestQueryResponse, ErrorResponse, IdResponse, PayloadTooLargeResponse, PngResponse,
+    UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+    ZipResponse,
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
@@ -53,7 +50,7 @@ use crate::layers::layer::{
 use crate::layers::listing::LayerCollectionId;
 use crate::pro;
 use crate::pro::api::handlers::users::{Quota, UpdateQuota};
-use crate::pro::permissions::{Permission, ResourceId, RoleDescription, RoleId};
+use crate::pro::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
 use crate::pro::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
@@ -62,7 +59,10 @@ use crate::projects::{
     STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
-use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
+use crate::util::{
+    apidoc::{OpenApiServerInfo, TransformSchemasWithTag},
+    server::ServerInfo,
+};
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -102,6 +102,7 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::load_workflow_handler,
         handlers::workflows::raster_stream_websocket,
         handlers::workflows::register_workflow_handler,
+        handlers::workflows::get_workflow_all_metadata_zip_handler,
         pro::api::handlers::users::anonymous_handler,
         pro::api::handlers::users::login_handler,
         pro::api::handlers::users::logout_handler,
@@ -148,7 +149,9 @@ use utoipa::{Modify, OpenApi};
             DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
-            BadRequestQueryResponse
+            BadRequestQueryResponse,
+            PngResponse,
+            ZipResponse
         ),
         schemas(
             ErrorResponse,
@@ -186,8 +189,6 @@ use utoipa::{Modify, OpenApi};
             BoundingBox2D,
             SpatialPartition2D,
             SpatialResolution,
-            SpatialReference,
-            SpatialReferenceOption,
             SpatialReferenceAuthority,
             SpatialReferenceSpecification,
             AxisOrder,
@@ -196,6 +197,7 @@ use utoipa::{Modify, OpenApi};
             ClassificationMeasurement,
             STRectangle,
 
+            ProvenanceEntry,
             ProvenanceOutput,
             Provenance,
 
@@ -255,8 +257,6 @@ use utoipa::{Modify, OpenApi};
             OverUnderColors,
 
             OgcBoundingBox,
-            MapResponse,
-            CoverageResponse,
 
             wcs::request::WcsService,
             wcs::request::WcsVersion,
@@ -284,9 +284,6 @@ use utoipa::{Modify, OpenApi};
 
             GeoJson,
             CollectionType,
-            Feature,
-            FeatureType,
-            Coordinates,
 
             UploadFilesResponse,
             UploadFileLayersResponse,
@@ -354,6 +351,7 @@ use utoipa::{Modify, OpenApi};
             ProjectLayer,
             LayerVisibility,
             RasterStreamWebsocketResultType,
+            CacheTtlSeconds,
 
             PermissionRequest,
             Resource,
@@ -361,9 +359,12 @@ use utoipa::{Modify, OpenApi};
             Permission,
             AddRole,
             RoleDescription,
+            Role,
+
+            MlModelId
         ),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
+    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
 )]
 pub struct ApiDoc;

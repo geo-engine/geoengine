@@ -1,25 +1,23 @@
 use super::handlers;
 use super::handlers::plots::WrappedPlotOutput;
-use super::handlers::spatial_references::{AxisLabels, AxisOrder, SpatialReferenceSpecification};
+use super::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use super::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use super::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
-use super::handlers::wcs::CoverageResponse;
-use super::handlers::wfs::{CollectionType, Coordinates, Feature, FeatureType, GeoJson};
-use super::handlers::wms::MapResponse;
-use super::handlers::workflows::RasterStreamWebsocketResultType;
-use super::model::responses::ErrorResponse;
+use super::handlers::wfs::{CollectionType, GeoJson};
+use super::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
+use super::model::responses::{ErrorResponse, PngResponse, ZipResponse};
 use crate::api::model::datatypes::{
-    BoundingBox2D, Breakpoint, ClassificationMeasurement, Colorizer, ContinuousMeasurement,
-    Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat, DefaultColors,
-    ExternalDataId, FeatureDataType, LayerId, LinearGradient, LogarithmicGradient, Measurement,
-    MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, OverUnderColors, Palette,
-    PlotOutputFormat, PlotQueryRectangle, RasterDataType, RasterPropertiesEntryType,
-    RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReference,
-    SpatialReferenceAuthority, SpatialReferenceOption, SpatialResolution, StringPair,
-    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
+    AxisLabels, BoundingBox2D, Breakpoint, CacheTtlSeconds, ClassificationMeasurement, Colorizer,
+    ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat,
+    DefaultColors, ExternalDataId, FeatureDataType, GdalConfigOption, LayerId, LinearGradient,
+    LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon, NamedData,
+    NoGeometry, OverUnderColors, Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType,
+    RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
+    SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity,
+    TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
-    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalConfigOption, GdalDatasetGeoTransform,
+    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
     GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
     GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
     MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
@@ -54,7 +52,10 @@ use crate::projects::{
     STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
-use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
+use crate::util::{
+    apidoc::{OpenApiServerInfo, TransformSchemasWithTag},
+    server::ServerInfo,
+};
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -97,6 +98,7 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::load_workflow_handler,
         handlers::workflows::raster_stream_websocket,
         handlers::workflows::register_workflow_handler,
+        handlers::workflows::get_workflow_all_metadata_zip_handler,
         handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
@@ -129,7 +131,9 @@ use utoipa::{Modify, OpenApi};
             DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
-            BadRequestQueryResponse
+            BadRequestQueryResponse,
+            PngResponse,
+            ZipResponse
         ),
         schemas(
             ErrorResponse,
@@ -159,8 +163,6 @@ use utoipa::{Modify, OpenApi};
             BoundingBox2D,
             SpatialPartition2D,
             SpatialResolution,
-            SpatialReference,
-            SpatialReferenceOption,
             SpatialReferenceAuthority,
             SpatialReferenceSpecification,
             AxisOrder,
@@ -169,6 +171,7 @@ use utoipa::{Modify, OpenApi};
             ClassificationMeasurement,
             STRectangle,
 
+            ProvenanceEntry,
             ProvenanceOutput,
             Provenance,
 
@@ -229,8 +232,6 @@ use utoipa::{Modify, OpenApi};
 
 
             OgcBoundingBox,
-            MapResponse,
-            CoverageResponse,
 
             wcs::request::WcsService,
             wcs::request::WcsVersion,
@@ -258,9 +259,6 @@ use utoipa::{Modify, OpenApi};
 
             GeoJson,
             CollectionType,
-            Feature,
-            FeatureType,
-            Coordinates,
 
             UploadFilesResponse,
             UploadFileLayersResponse,
@@ -329,10 +327,11 @@ use utoipa::{Modify, OpenApi};
             LayerVisibility,
             Plot,
             ProjectVersion,
-            RasterStreamWebsocketResultType
+            RasterStreamWebsocketResultType,
+            CacheTtlSeconds,
         ),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
+    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
 )]
 pub struct ApiDoc;

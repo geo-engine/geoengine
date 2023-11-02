@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{
-    BoundingBox2D, Coordinate2D, SpatialReference, SpatialReferenceAuthority, StringPair,
+    AxisLabels, BoundingBox2D, Coordinate2D, SpatialReference, SpatialReferenceAuthority,
 };
 use crate::contexts::ApplicationContext;
 use crate::{error, error::Error, error::Result};
@@ -21,14 +21,13 @@ where
     );
 }
 
-pub type AxisLabels = StringPair;
-
 /// The specification of a spatial reference, where extent and axis labels are given
 /// in natural order (x, y) = (east, north)
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SpatialReferenceSpecification {
     pub name: String,
+    #[schema(value_type = String)]
     pub spatial_reference: SpatialReference,
     pub proj_string: String,
     pub extent: BoundingBox2D,

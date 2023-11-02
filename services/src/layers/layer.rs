@@ -255,6 +255,7 @@ pub struct AddLayerCollection {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, IntoParams, Validate)]
+#[into_params(parameter_in = Query)]
 // TODO: validate user input
 pub struct LayerCollectionListOptions {
     #[param(example = 0)]

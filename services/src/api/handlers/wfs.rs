@@ -39,7 +39,6 @@ use serde_json::json;
 use snafu::{ensure, ResultExt};
 use std::str::FromStr;
 use std::time::Duration;
-use utoipa::openapi::ArrayBuilder;
 use utoipa::ToSchema;
 
 pub(crate) fn init_wfs_routes<C>(cfg: &mut web::ServiceConfig)
@@ -553,38 +552,12 @@ async fn wfs_feature_handler<C: ApplicationContext>(
 pub struct GeoJson {
     #[serde(rename = "type")]
     pub collection_type: CollectionType,
-    pub features: Vec<Feature>,
+    pub features: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub enum CollectionType {
     FeatureCollection,
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct Feature {
-    #[serde(rename = "type")]
-    pub feature_type: FeatureType,
-    pub coordinates: Coordinates,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Coordinates;
-
-impl<'a> ToSchema<'a> for Coordinates {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        ("Coordinates", ArrayBuilder::new().into())
-    }
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub enum FeatureType {
-    Point,
-    MulitPoint,
-    LineString,
-    MultiLineString,
-    Polygon,
-    MultiPolygon,
 }
 
 async fn vector_stream_to_geojson<G, C: QueryContext + 'static>(

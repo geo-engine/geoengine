@@ -6,10 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use utoipa::{ToResponse, ToSchema};
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, ToResponse)]
-#[response(description = "Id of generated resource", example = json!({
-    "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
-}))]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct IdResponse<T> {
     pub id: T,
 }
@@ -17,6 +14,41 @@ pub struct IdResponse<T> {
 impl<T> From<T> for IdResponse<T> {
     fn from(id: T) -> Self {
         Self { id }
+    }
+}
+
+// ToResponse needs to be manually implemented, because
+// otherwiese type of T can't be set to string/uuid.
+impl<'a, T> ToResponse<'a> for IdResponse<T> {
+    fn response() -> (
+        &'a str,
+        utoipa::openapi::RefOr<utoipa::openapi::response::Response>,
+    ) {
+        use utoipa::openapi::*;
+        (
+            "IdResponse",
+            ResponseBuilder::new()
+                .description("Id of generated resource")
+                .content(
+                    "application/json",
+                    ContentBuilder::new()
+                        .schema(
+                            ObjectBuilder::new()
+                                .property(
+                                    "id",
+                                    ObjectBuilder::new()
+                                        .schema_type(SchemaType::String)
+                                        .format(Some(SchemaFormat::KnownFormat(KnownFormat::Uuid))),
+                                )
+                                .required("id"),
+                        )
+                        .example(Some(serde_json::json!({
+                            "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
+                        })))
+                        .into(),
+                )
+                .into(),
+        )
     }
 }
 
@@ -153,3 +185,11 @@ pub struct UnauthorizedUserResponse(ErrorResponse);
     })))
 ))]
 pub struct BadRequestQueryResponse(ErrorResponse);
+
+#[derive(ToResponse)]
+#[response(description = "ZIP Archive", content_type = "application/zip", example = json!("zip bytes"))]
+pub struct ZipResponse(Vec<u8>);
+
+#[derive(ToResponse)]
+#[response(description = "PNG Image", content_type = "image/png", example = json!("image bytes"))]
+pub struct PngResponse(Vec<u8>);

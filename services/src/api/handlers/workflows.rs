@@ -241,7 +241,7 @@ async fn workflow_metadata<C: SessionContext>(
     get,
     path = "/workflow/{id}/provenance",
     responses(
-        (status = 200, description = "Provenance of used datasets", body = [ProvenanceOutput],
+        (status = 200, description = "Provenance of used datasets", body = [ProvenanceEntry],
             example = json!([{"dataset": {"type": "internal", "datasetId": "846a823a-6859-4b94-ab0a-c1de80f593d8"}, "provenance": {"citation": "Author, Dataset Tile", "license": "Some license", "uri": "http://example.org/"}}, {"dataset": {"type": "internal", "datasetId": "453cd398-f271-437b-9c3d-7f42213ea30a"}, "provenance": {"citation": "Another Author, Another Dataset Tile", "license": "Some other license", "uri": "http://example.org/"}}])
         )
     ),
@@ -266,8 +266,8 @@ async fn get_workflow_provenance_handler<C: ApplicationContext>(
     Ok(web::Json(provenance))
 }
 
-#[derive(Serialize)]
-struct ProvenanceEntry {
+#[derive(Serialize, ToSchema)]
+pub struct ProvenanceEntry {
     provenance: Provenance,
     data: Vec<DataId>,
 }
@@ -320,16 +320,20 @@ async fn workflow_provenance<C: SessionContext>(
 }
 
 /// Gets a ZIP archive of the worklow, its provenance and the output metadata.
-///
-/// # Example
-///
-/// ```text
-/// GET /workflow/cee25e8c-18a0-5f1b-a504-0bc30de21e06/all_metadata/zip
-/// Authorization: Bearer e9da345c-b1df-464b-901c-0335a0419227
-/// ```
-/// Response:
-/// <zip archive>
-/// ```
+#[utoipa::path(
+    tag = "Workflows",
+    get,
+    path = "/workflow/{id}/allMetadata/zip",
+    responses(
+        (status = 200, response = crate::api::model::responses::ZipResponse)
+    ),
+    params(
+        ("id" = WorkflowId, description = "Workflow id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn get_workflow_all_metadata_zip_handler<C: ApplicationContext>(
     id: web::Path<WorkflowId>,
     session: C::Session,
@@ -475,6 +479,7 @@ pub struct RasterStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_spatial_partition")]
     pub spatial_bounds: SpatialPartition2D,
     #[serde(deserialize_with = "parse_time")]
+    #[param(value_type = String)]
     pub time_interval: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
     pub spatial_resolution: SpatialResolution,
@@ -564,6 +569,7 @@ pub struct VectorStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_bbox")]
     pub spatial_bounds: BoundingBox2D,
     #[serde(deserialize_with = "parse_time")]
+    #[param(value_type = String)]
     pub time_interval: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
     pub spatial_resolution: SpatialResolution,
