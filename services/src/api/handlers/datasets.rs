@@ -1124,7 +1124,7 @@ mod tests {
         };
 
         let ds = AddDataset {
-            name: Some(DatasetName::new(None, "My Dataset")),
+            name: Some(DatasetName::new(None, "My_Dataset")),
             display_name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
@@ -1158,7 +1158,7 @@ mod tests {
             .unwrap();
 
         let ds = AddDataset {
-            name: Some(DatasetName::new(None, "My Dataset2")),
+            name: Some(DatasetName::new(None, "My_Dataset2")),
             display_name: "OgrDataset2".to_string(),
             description: "My Ogr dataset2".to_string(),
             source_operator: "OgrSource".to_string(),
@@ -1210,7 +1210,7 @@ mod tests {
             read_body_json(res).await,
             json!([ {
                 "id": id1,
-                "name": "My Dataset",
+                "name": "My_Dataset",
                 "displayName": "OgrDataset",
                 "description": "My Ogr dataset",
                 "tags": [],
@@ -1226,7 +1226,7 @@ mod tests {
                 "symbology": null
             },{
                 "id": id2,
-                "name": "My Dataset2",
+                "name": "My_Dataset2",
                 "displayName": "OgrDataset2",
                 "description": "My Ogr dataset2",
                 "tags": [],
