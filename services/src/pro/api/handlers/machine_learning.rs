@@ -281,7 +281,10 @@ mod tests {
         // now use the model_id to get the model content for testing
         let exe_ctx = ctx.execution_context().unwrap();
         let ml_model_access = exe_ctx.extensions().get::<MlModelAccess>().unwrap();
-        let model = ml_model_access.load_ml_model_by_id(model_id).await.unwrap();
+        let model = ml_model_access
+            .load_ml_model_by_id(model_id.into())
+            .await
+            .unwrap();
 
         // get the content of the reference model on disk to compare against
         let test_model_path = PathBuf::from(geoengine_datatypes::test_data!(
@@ -301,7 +304,7 @@ mod tests {
 
         // also check, that the model (which was written after training) to disk is as expected
         let model_from_disk = ml_model_access
-            .load_ml_model_by_id(model_id)
+            .load_ml_model_by_id(model_id.into())
             .await
             .expect("Could not read specified ml model from disk");
 
@@ -737,7 +740,7 @@ mod tests {
 
         let xg = XgboostOperator {
             params: XgboostParams {
-                model_id: response.model_id,
+                model_id: response.model_id.into(),
                 no_data_value: -1000.,
             },
             sources: MultipleRasterSources { rasters: srcs },

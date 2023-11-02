@@ -80,7 +80,7 @@ pub struct GetCoverage {
     pub boundingbox: WcsBoundingbox, // TODO: optional?
     #[serde(alias = "GRIDBASECRS", alias = "CRS", alias = "crs")]
     #[serde(deserialize_with = "parse_wcs_crs")]
-    #[param(example = "urn:ogc:def:crs:EPSG::4326")]
+    #[param(example = "urn:ogc:def:crs:EPSG::4326", value_type = String)]
     pub gridbasecrs: SpatialReference,
     #[serde(default)]
     #[serde(alias = "GRIDORIGIN")]
@@ -100,6 +100,7 @@ pub struct GetCoverage {
     #[serde(default)]
     #[serde(deserialize_with = "parse_time_option")]
     #[serde(alias = "timesequence")] // owsLib sends it like this
+    #[param(value_type = String)]
     pub time: Option<TimeInterval>,
 
     // fallback (to support clients using some weird mixture of 1.0 and 1.1)
@@ -152,6 +153,7 @@ impl GetCoverage {
 #[derive(PartialEq, Debug, Deserialize, Serialize, ToSchema)]
 pub struct WcsBoundingbox {
     pub bbox: [f64; 4],
+    #[schema(value_type = Option<String>)]
     pub spatial_reference: Option<SpatialReference>,
 }
 

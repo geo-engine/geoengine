@@ -33,8 +33,6 @@ use serde_json::json;
 use snafu::{ensure, ResultExt};
 use std::str::FromStr;
 use std::time::Duration;
-use utoipa::openapi::{KnownFormat, ObjectBuilder, SchemaFormat, SchemaType};
-use utoipa::ToSchema;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -236,7 +234,7 @@ fn wms_url(workflow: WorkflowId) -> Result<Url> {
     get,
     path = "/wms/{workflow}?request=GetMap",
     responses(
-        (status = 200, description = "OK", content_type= "image/png", body = MapResponse, example = json!("image bytes")),
+        (status = 200, response = crate::api::model::responses::PngResponse),
     ),
     params(
         ("workflow" = WorkflowId, description = "Workflow id"),
@@ -398,20 +396,6 @@ fn handle_wms_error(
         GetMapExceptionFormat::Json => HttpResponse::Ok().json(
             json!({"error": Into::<&str>::into(error).to_string(), "message": error.to_string() }),
         ),
-    }
-}
-
-pub struct MapResponse {}
-
-impl<'a> ToSchema<'a> for MapResponse {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        (
-            "MapResponse",
-            ObjectBuilder::new()
-                .schema_type(SchemaType::String)
-                .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary)))
-                .into(),
-        )
     }
 }
 
