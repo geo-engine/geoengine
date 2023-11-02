@@ -1124,7 +1124,7 @@ mod tests {
         };
 
         let ds = AddDataset {
-            name: Some(DatasetName::new(None, "My Dataset")),
+            name: Some(DatasetName::new(None, "My_Dataset")),
             display_name: "OgrDataset".to_string(),
             description: "My Ogr dataset".to_string(),
             source_operator: "OgrSource".to_string(),
@@ -1194,7 +1194,7 @@ mod tests {
             .uri(&format!(
                 "/datasets?{}",
                 &serde_urlencoded::to_string([
-                    ("order", "NameDesc"),
+                    ("order", "NameAsc"),
                     ("offset", "0"),
                     ("limit", "2"),
                 ])
@@ -1210,7 +1210,7 @@ mod tests {
             read_body_json(res).await,
             json!([ {
                 "id": id1,
-                "name": "My Dataset",
+                "name": "My_Dataset",
                 "displayName": "OgrDataset",
                 "description": "My Ogr dataset",
                 "tags": [],
