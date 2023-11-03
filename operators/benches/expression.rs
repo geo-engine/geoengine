@@ -79,7 +79,7 @@ async fn main() {
     for _ in 0..RUNS {
         let (time, result) = time_it(|| async {
             let native_query = expression_processor
-                .raster_query(qrect, &query_context)
+                .raster_query(qrect.clone(), &query_context)
                 .await
                 .unwrap();
 

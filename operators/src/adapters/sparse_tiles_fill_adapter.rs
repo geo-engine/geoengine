@@ -235,7 +235,7 @@ where
 
     pub fn new_like_subquery(
         stream: S,
-        query_rect_to_answer: RasterQueryRectangle,
+        query_rect_to_answer: &RasterQueryRectangle,
         tiling_spec: TilingSpecification,
         cache_expiration: FillerTileCacheExpirationStrategy,
     ) -> Self {

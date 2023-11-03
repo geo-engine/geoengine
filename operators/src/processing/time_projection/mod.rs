@@ -162,7 +162,7 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let query = self.expand_query_rectangle(query)?;
+        let query = self.expand_query_rectangle(&query)?;
         let stream = self
             .processor
             .vector_query(query, ctx)
@@ -179,7 +179,7 @@ impl<G> VectorTimeProjectionProcessor<G>
 where
     G: Geometry + ArrowTyped + 'static,
 {
-    fn expand_query_rectangle(&self, query: VectorQueryRectangle) -> Result<VectorQueryRectangle> {
+    fn expand_query_rectangle(&self, query: &VectorQueryRectangle) -> Result<VectorQueryRectangle> {
         Ok(expand_query_rectangle(
             self.step,
             self.step_reference,
@@ -233,7 +233,7 @@ where
 fn expand_query_rectangle(
     step: TimeStep,
     step_reference: TimeInstance,
-    query: VectorQueryRectangle,
+    query: &VectorQueryRectangle,
 ) -> Result<VectorQueryRectangle, TimeProjectionError> {
     Ok(VectorQueryRectangle {
         spatial_bounds: query.spatial_bounds,

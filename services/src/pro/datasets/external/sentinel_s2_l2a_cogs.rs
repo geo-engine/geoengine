@@ -349,7 +349,7 @@ impl SentinelS2L2aCogsMetaData {
     async fn create_loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
         // for reference: https://stacspec.org/STAC-ext-api.html#operation/getSearchSTAC
         debug!("create_loading_info with: {:?}", &query);
-        let request_params = self.request_params(query)?;
+        let request_params = self.request_params(&query)?;
 
         if request_params.is_none() {
             log::debug!("Request params are empty -> returning empty loading info");
@@ -507,7 +507,10 @@ impl SentinelS2L2aCogsMetaData {
         })
     }
 
-    fn request_params(&self, query: RasterQueryRectangle) -> Result<Option<Vec<(String, String)>>> {
+    fn request_params(
+        &self,
+        query: &RasterQueryRectangle,
+    ) -> Result<Option<Vec<(String, String)>>> {
         let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
 
         // request all features in zone in order to be able to determine the temporal validity of individual tile

@@ -257,7 +257,7 @@ where
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> futures::stream::BoxStream<'a, Result<RasterTile2D<P>>> {
         let mut query = query_rect_to_answer;
-        query.selection = BandSelection::Single(band);
+        query.selection = band.into();
 
         match self.aggregation_type {
             Aggregation::Min {
@@ -422,8 +422,8 @@ where
         if query.selection.count() == 1 {
             // special case of single band query requires no tile stacking
             return Ok(self.create_subquery_adapter_stream_for_single_band(
-                query,
-                query.selection.bands()[0],
+                query.clone(),
+                query.selection.as_slice()[0],
                 ctx,
             ));
         }
@@ -431,9 +431,11 @@ where
         // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
         let band_streams = query
             .selection
-            .bands()
+            .as_slice()
             .iter()
-            .map(|band| self.create_subquery_adapter_stream_for_single_band(query, *band, ctx))
+            .map(|band| {
+                self.create_subquery_adapter_stream_for_single_band(query.clone(), *band, ctx)
+            })
             .collect::<Vec<_>>();
 
         Ok(Box::pin(RasterStackerAdapter::new(
@@ -447,7 +449,7 @@ where
 mod tests {
     use futures::stream::StreamExt;
     use geoengine_datatypes::{
-        primitives::{BandSelection, CacheHint, Measurement, SpatialResolution, TimeInterval},
+        primitives::{CacheHint, Measurement, SpatialResolution, TimeInterval},
         raster::{
             EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterDataType,
             TileInformation, TilesEqualIgnoringCacheHint,
@@ -2803,7 +2805,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
-            selection: BandSelection::new_range(0, 2),
+            selection: [0, 1].into(),
         };
         let query_ctx = MockQueryContext::test_default();
 

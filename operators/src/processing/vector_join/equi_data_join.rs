@@ -362,29 +362,32 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let result_stream = self
             .left_processor
-            .query(query, ctx)
+            .query(query.clone(), ctx)
             .await?
-            .and_then(move |left_collection| async move {
-                // This implementation is a nested-loop join
-                let left_collection = Arc::new(left_collection);
+            .and_then(move |left_collection| {
+                let query = query.clone();
+                async move {
+                    // This implementation is a nested-loop join
+                    let left_collection = Arc::new(left_collection);
 
-                let data_query = self.right_processor.query(query, ctx).await?;
+                    let data_query = self.right_processor.query(query, ctx).await?;
 
-                let out = data_query
-                    .flat_map(move |right_collection| {
-                        match right_collection.and_then(|right_collection| {
-                            self.join(
-                                left_collection.clone(),
-                                right_collection,
-                                ctx.chunk_byte_size().into(),
-                            )
-                        }) {
-                            Ok(batch_iter) => stream::iter(batch_iter).boxed(),
-                            Err(e) => stream::once(async { Err(e) }).boxed(),
-                        }
-                    })
-                    .boxed();
-                Ok(out)
+                    let out = data_query
+                        .flat_map(move |right_collection| {
+                            match right_collection.and_then(|right_collection| {
+                                self.join(
+                                    left_collection.clone(),
+                                    right_collection,
+                                    ctx.chunk_byte_size().into(),
+                                )
+                            }) {
+                                Ok(batch_iter) => stream::iter(batch_iter).boxed(),
+                                Err(e) => stream::once(async { Err(e) }).boxed(),
+                            }
+                        })
+                        .boxed();
+                    Ok(out)
+                }
             })
             .try_flatten();
 

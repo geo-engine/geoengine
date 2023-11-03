@@ -80,7 +80,7 @@ where
         let exe_ctx = (self.context_builder)(self.tiling_spec, self.num_threads);
         let ctx = exe_ctx.mock_query_context(self.chunk_byte_size);
 
-        let operator = (self.operator_builder)(self.tiling_spec, self.query_rect);
+        let operator = (self.operator_builder)(self.tiling_spec, self.query_rect.clone());
         let init_start = Instant::now();
         let initialized_operator = run_time.block_on(async {
             operator
@@ -95,7 +95,7 @@ where
                 let start_query = Instant::now();
                 // query the operator
                 let query = op
-                    .raster_query(self.query_rect, &ctx)
+                    .raster_query(self.query_rect.clone(), &ctx)
                     .await
                     .unwrap();
                 let query_elapsed = start_query.elapsed();

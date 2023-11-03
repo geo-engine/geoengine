@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::{
     primitives::{
-        BandSelection, CacheHint, QueryRectangle, RasterQueryRectangle, SpatialPartitioned,
-        TimeInstance, TimeInterval, TimeStep,
+        CacheHint, QueryRectangle, RasterQueryRectangle, SpatialPartitioned, TimeInstance,
+        TimeInterval, TimeStep,
     },
     raster::{EmptyGrid2D, Pixel, RasterTile2D, TileInformation},
 };
@@ -144,7 +144,7 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        build_temporal_accu(query_rect, tile_info, band, pool.clone()).boxed()
+        build_temporal_accu(&query_rect, tile_info, band, pool.clone()).boxed()
     }
 
     fn tile_query_rectangle(
@@ -159,7 +159,7 @@ where
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
             time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
-            selection: BandSelection::Single(band), // TODO
+            selection: band.into(),
         }))
     }
 
@@ -169,14 +169,15 @@ where
 }
 
 fn build_temporal_accu<T: Pixel>(
-    query_rect: RasterQueryRectangle,
+    query_rect: &RasterQueryRectangle,
     tile_info: TileInformation,
     band: usize,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
+    let time_interval = query_rect.time_interval;
     crate::util::spawn_blocking(move || TemporalRasterAggregationTileAccu {
         accu_tile: RasterTile2D::new_with_tile_info(
-            query_rect.time_interval,
+            time_interval,
             tile_info,
             band,
             EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
@@ -221,7 +222,7 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        build_temporal_no_data_accu(query_rect, tile_info, band, pool.clone()).boxed()
+        build_temporal_no_data_accu(&query_rect, tile_info, band, pool.clone()).boxed()
     }
 
     fn tile_query_rectangle(
@@ -236,7 +237,7 @@ where
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
             time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
-            selection: BandSelection::Single(band), // TODO
+            selection: band.into(),
         }))
     }
 
@@ -246,17 +247,18 @@ where
 }
 
 fn build_temporal_no_data_accu<T: Pixel>(
-    query_rect: RasterQueryRectangle,
+    query_rect: &RasterQueryRectangle,
     tile_info: TileInformation,
     band: usize,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
+    let time_interval = query_rect.time_interval;
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
 
         TemporalRasterAggregationTileAccu {
             accu_tile: RasterTile2D::new_with_tile_info(
-                query_rect.time_interval,
+                time_interval,
                 tile_info,
                 band,
                 output_raster,

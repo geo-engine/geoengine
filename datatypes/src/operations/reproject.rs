@@ -473,7 +473,7 @@ pub fn reproject_query<S: AxisAlignedRectangle, T: QuerySelection>(
         spatial_bounds: p_bbox,
         spatial_resolution: p_spatial_resolution,
         time_interval: query.time_interval,
-        selection: Default::default(), // TODO
+        selection: query.selection,
     }))
 }
 

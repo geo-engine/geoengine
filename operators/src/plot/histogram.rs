@@ -298,7 +298,7 @@ impl PlotQueryProcessor for HistogramRasterQueryProcessor {
         query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        self.preprocess(query, ctx)
+        self.preprocess(query.clone(), ctx)
             .and_then(move |mut histogram_metadata| async move {
                 histogram_metadata.sanitize();
                 if histogram_metadata.has_invalid_parameters() {
@@ -325,7 +325,7 @@ impl PlotQueryProcessor for HistogramVectorQueryProcessor {
         query: VectorQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        self.preprocess(query, ctx)
+        self.preprocess(query.clone(), ctx)
             .and_then(move |mut histogram_metadata| async move {
                 histogram_metadata.sanitize();
                 if histogram_metadata.has_invalid_parameters() {

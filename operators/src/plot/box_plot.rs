@@ -341,7 +341,7 @@ impl PlotQueryProcessor for BoxPlotRasterQueryProcessor {
             .input
             .iter()
             .zip(self.names.iter())
-            .map(|(proc, name)| Self::process_raster(name.clone(), proc, query, ctx))
+            .map(|(proc, name)| Self::process_raster(name.clone(), proc, query.clone(), ctx))
             .collect();
 
         let results = futures::future::join_all(results)

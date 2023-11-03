@@ -592,7 +592,7 @@ impl GdalRasterLoader {
     /// A stream of futures producing `RasterTile2D` for a single slice in time
     ///
     fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
-        query: RasterQueryRectangle,
+        query: &RasterQueryRectangle,
         info: GdalLoadingInfoTemporalSlice,
         tiling_strategy: TilingStrategy,
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> {
@@ -618,7 +618,7 @@ impl GdalRasterLoader {
     ) -> impl Stream<Item = Result<RasterTile2D<T>>> {
         loading_info_stream
             .map_ok(move |info| {
-                GdalRasterLoader::temporal_slice_tile_future_stream(query, info, tiling_strategy)
+                GdalRasterLoader::temporal_slice_tile_future_stream(&query, info, tiling_strategy)
                     .map(Result::Ok)
             })
             .try_flatten()
@@ -722,14 +722,17 @@ where
                 parts: vec![].into_iter(),
             }
         } else {
-            let loading_info = self.meta_data.loading_info(query).await?;
+            let loading_info = self.meta_data.loading_info(query.clone()).await?;
             loading_info.info
         };
 
         let source_stream = stream::iter(loading_iter);
 
-        let source_stream =
-            GdalRasterLoader::loading_info_to_tile_stream(source_stream, query, tiling_strategy);
+        let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
+            source_stream,
+            query.clone(),
+            tiling_strategy,
+        );
 
         // use SparseTilesFillAdapter to fill all the gaps
         let filled_stream = SparseTilesFillAdapter::new(

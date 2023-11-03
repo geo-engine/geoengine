@@ -388,7 +388,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
             cache_hint: CacheHint::max_duration(),
         });
 
-        let grid_future = self.source.query(query, ctx).await?.fold(
+        let grid_future = self.source.query(query.clone(), ctx).await?.fold(
             initial_grid_fold_state,
             |state, feature_collection| async move {
                 // TODO: worker thread

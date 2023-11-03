@@ -339,7 +339,7 @@ where
         let mut band_buffer = Vec::new();
 
         for band in &self.sources {
-            let stream = band.query(query, ctx).await?;
+            let stream = band.query(query.clone(), ctx).await?;
             band_buffer.push(stream);
         }
 

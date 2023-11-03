@@ -1,8 +1,7 @@
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
     primitives::{
-        BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-        TimeStep,
+        RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval, TimeStep,
     },
     raster::{RasterDataType, RasterTile2D},
     util::test::TestDefault,
@@ -87,7 +86,7 @@ async fn one_band_at_a_time(runs: usize, bands: usize, resolution: SpatialResolu
             let mut last_res = None;
             for _ in 0..bands {
                 let native_query = expression_processor
-                    .raster_query(qrect, &query_context)
+                    .raster_query(qrect.clone(), &query_context)
                     .await
                     .unwrap();
 
@@ -144,7 +143,7 @@ async fn all_bands_at_once(runs: usize, bands: usize, resolution: SpatialResolut
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: resolution,
-        selection: BandSelection::new_range(0, bands), // TODO
+        selection: (0..bands).collect::<Vec<_>>().into(),
     };
 
     let mut times = NumberStatistics::default();
@@ -152,7 +151,7 @@ async fn all_bands_at_once(runs: usize, bands: usize, resolution: SpatialResolut
     for _ in 0..runs {
         let (time, result) = time_it(|| async {
             let native_query = expression_processor
-                .raster_query(qrect, &query_context)
+                .raster_query(qrect.clone(), &query_context)
                 .await
                 .unwrap();
 

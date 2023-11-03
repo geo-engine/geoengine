@@ -225,28 +225,31 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let stream = self
             .collection
-            .query(query, ctx)
+            .query(query.clone(), ctx)
             .await?
-            .and_then(move |mut collection| async move {
-                for (raster, new_column_name) in
-                    self.raster_processors.iter().zip(&self.column_names)
-                {
-                    collection = call_on_generic_raster_processor!(raster, raster => {
-                        Self::extract_raster_values(
-                            &collection,
-                            raster,
-                            new_column_name,
-                            self.feature_aggregation,
-                            self.feature_aggregation_ignore_no_data,
-                            self.temporal_aggregation,
-                            self.temporal_aggregation_ignore_no_data,
-                            query,
-                            ctx
-                        ).await?
-                    });
-                }
+            .and_then(move |mut collection| {
+                let query = query.clone();
+                async move {
+                    for (raster, new_column_name) in
+                        self.raster_processors.iter().zip(&self.column_names)
+                    {
+                        collection = call_on_generic_raster_processor!(raster, raster => {
+                            Self::extract_raster_values(
+                                &collection,
+                                raster,
+                                new_column_name,
+                                self.feature_aggregation,
+                                self.feature_aggregation_ignore_no_data,
+                                self.temporal_aggregation,
+                                self.temporal_aggregation_ignore_no_data,
+                                query.clone(),
+                                ctx
+                            ).await?
+                        });
+                    }
 
-                Ok(collection)
+                    Ok(collection)
+                }
             })
             .boxed();
 

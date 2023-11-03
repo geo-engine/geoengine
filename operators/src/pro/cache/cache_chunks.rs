@@ -568,8 +568,9 @@ mod tests {
             spatial_resolution: SpatialResolution::zero_point_one(),
             selection: Default::default(), // TODO
         };
-        let mut lq =
-            VectorLandingQueryEntry::create_empty::<CompressedFeatureCollection<MultiPoint>>(query);
+        let mut lq = VectorLandingQueryEntry::create_empty::<CompressedFeatureCollection<MultiPoint>>(
+            query.clone(),
+        );
         for c in cols {
             c.move_element_into_landing_zone(lq.elements_mut()).unwrap();
         }
@@ -631,7 +632,7 @@ mod tests {
         };
 
         let cache_query_entry = VectorCacheQueryEntry {
-            query: cache_entry_bounds,
+            query: cache_entry_bounds.clone(),
             elements: CachedFeatures::MultiPoint(Arc::new(cols)),
         };
 

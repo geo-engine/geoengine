@@ -267,53 +267,60 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let filtered_stream =
             self.points
-                .query(query, ctx)
+                .query(query.clone(), ctx)
                 .await?
-                .and_then(move |points| async move {
-                    if points.is_empty() {
-                        return Ok(points);
-                    }
+                .and_then(move |points| {
+                    let query: geoengine_datatypes::primitives::QueryRectangle<
+                        geoengine_datatypes::primitives::BoundingBox2D,
+                        geoengine_datatypes::primitives::ColumnSelection,
+                    > = query.clone();
+                    async move {
+                        if points.is_empty() {
+                            return Ok(points);
+                        }
 
-                    let initial_filter = BooleanArray::from(vec![false; points.len()]);
-                    let arc_points = Arc::new(points);
+                        let initial_filter = BooleanArray::from(vec![false; points.len()]);
+                        let arc_points = Arc::new(points);
 
-                    let (filter, cache_hint) = self
-                        .polygons
-                        .query(query, ctx)
-                        .await?
-                        .try_fold(
-                            (initial_filter, CacheHint::max_duration()),
-                            |acc, polygons| {
-                                let arc_points = arc_points.clone();
-                                async move {
-                                    let (filter, mut cache_hint) = acc;
-                                    let polygons = polygons;
+                        let (filter, cache_hint) = self
+                            .polygons
+                            .query(query.clone(), ctx)
+                            .await?
+                            .try_fold(
+                                (initial_filter, CacheHint::max_duration()),
+                                |acc, polygons| {
+                                    let arc_points = arc_points.clone();
+                                    async move {
+                                        let (filter, mut cache_hint) = acc;
+                                        let polygons = polygons;
 
-                                    cache_hint.merge_with(&polygons.cache_hint);
+                                        cache_hint.merge_with(&polygons.cache_hint);
 
-                                    if polygons.is_empty() {
-                                        return Ok((filter, cache_hint));
+                                        if polygons.is_empty() {
+                                            return Ok((filter, cache_hint));
+                                        }
+
+                                        Ok((
+                                            Self::filter_points(
+                                                ctx,
+                                                arc_points.clone(),
+                                                polygons,
+                                                &filter,
+                                            )
+                                            .await?,
+                                            cache_hint,
+                                        ))
                                     }
+                                },
+                            )
+                            .await?;
 
-                                    Ok((
-                                        Self::filter_points(
-                                            ctx,
-                                            arc_points.clone(),
-                                            polygons,
-                                            &filter,
-                                        )
-                                        .await?,
-                                        cache_hint,
-                                    ))
-                                }
-                            },
-                        )
-                        .await?;
+                        let mut new_points =
+                            arc_points.filter(filter).map_err(Into::<Error>::into)?;
+                        new_points.cache_hint = cache_hint;
 
-                    let mut new_points = arc_points.filter(filter).map_err(Into::<Error>::into)?;
-                    new_points.cache_hint = cache_hint;
-
-                    Ok(new_points)
+                        Ok(new_points)
+                    }
                 });
 
         Ok(
@@ -683,7 +690,7 @@ mod tests {
         let ctx_minimal_chunks = MockQueryContext::new(ChunkByteSize::MIN);
 
         let query = query_processor
-            .query(query_rectangle, &ctx_minimal_chunks)
+            .query(query_rectangle.clone(), &ctx_minimal_chunks)
             .await
             .unwrap();
 

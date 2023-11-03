@@ -51,7 +51,7 @@ where
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
     let tiles = abortable_query_execution(
-        consume_stream_into_vec(processor, query_rect, query_ctx, tile_limit),
+        consume_stream_into_vec(processor, query_rect.clone(), query_ctx, tile_limit),
         conn_closed,
         query_abort_trigger,
     )
@@ -59,7 +59,7 @@ where
 
     let (initial_tile_time, file_path, dataset, writer) = create_multiband_dataset_and_writer(
         &tiles,
-        query_rect,
+        &query_rect,
         tiling_specification,
         gdal_tiff_options,
         gdal_tiff_metadata,
@@ -108,7 +108,7 @@ where
 
 fn create_multiband_dataset_and_writer<T>(
     tiles: &Vec<RasterTile2D<T>>,
-    query_rect: QueryRectangle<SpatialPartition2D, BandSelection>,
+    query_rect: &QueryRectangle<SpatialPartition2D, BandSelection>,
     tiling_specification: TilingSpecification,
     gdal_tiff_options: GdalGeoTiffOptions,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
@@ -349,13 +349,15 @@ where
     let dataset_holder: Result<GdalDatasetHolder<P>> = Ok(GdalDatasetHolder::new_with_tiling_spec(
         tiling_specification,
         &file_path,
-        query_rect,
+        &query_rect,
         gdal_tiff_metadata,
         gdal_tiff_options,
         gdal_config_options,
     ));
 
-    let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
+    let tile_stream = processor
+        .raster_query(query_rect.clone(), &query_ctx)
+        .await?;
 
     let mut dataset_holder = tile_stream
         .enumerate()
@@ -479,7 +481,7 @@ struct GdalDatasetHolder<P: Pixel + GdalType> {
 impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
     fn new(
         file_path: &Path,
-        query_rect: RasterQueryRectangle,
+        query_rect: &RasterQueryRectangle,
         gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
         gdal_tiff_options: GdalGeoTiffOptions,
         gdal_config_options: Option<Vec<(String, String)>>,
@@ -645,7 +647,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
     fn new_with_tiling_spec(
         tiling_specification: TilingSpecification,
         file_path: &Path,
-        query_rect: RasterQueryRectangle,
+        query_rect: &RasterQueryRectangle,
         gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
         gdal_tiff_options: GdalGeoTiffOptions,
         gdal_config_options: Option<Vec<(String, String)>>,

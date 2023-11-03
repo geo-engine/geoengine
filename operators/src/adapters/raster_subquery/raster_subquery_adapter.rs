@@ -155,7 +155,7 @@ where
             current_time_start: query_rect_to_answer.time_interval.start(),
             current_band_index: 0,
             grid_bounds,
-            bands: query_rect_to_answer.selection.bands(),
+            bands: query_rect_to_answer.selection.as_vec(),
             query_ctx,
             query_rect_to_answer,
             source_processor,
@@ -267,14 +267,14 @@ where
         if matches!(*this.state, StateInner::CreateNextQuery) {
             match this.sub_query.tile_query_rectangle(
                 *this.current_tile_spec,
-                *this.query_rect_to_answer,
+                this.query_rect_to_answer.clone(),
                 *this.current_time_start,
                 this.bands[*this.current_band_index],
             ) {
                 Ok(Some(tile_query_rectangle)) => {
                     let tile_query_stream_fut = this
                         .source_processor
-                        .raster_query(tile_query_rectangle, *this.query_ctx);
+                        .raster_query(tile_query_rectangle.clone(), *this.query_ctx);
 
                     let tile_folding_accu_fut = this.sub_query.new_fold_accu(
                         *this.current_tile_spec,
@@ -555,7 +555,7 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        identity_accu(tile_info, band, query_rect, pool.clone()).boxed()
+        identity_accu(tile_info, band, &query_rect, pool.clone()).boxed()
     }
 
     fn tile_query_rectangle(
@@ -569,7 +569,7 @@ where
             spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: query_rect.spatial_resolution,
-            selection: BandSelection::Single(band), // TODO
+            selection: band.into(),
         }))
     }
 
@@ -581,13 +581,14 @@ where
 pub fn identity_accu<T: Pixel>(
     tile_info: TileInformation,
     band: usize,
-    query_rect: RasterQueryRectangle,
+    query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<RasterTileAccu2D<T>>> {
+    let time_interval = query_rect.time_interval;
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
         let output_tile = RasterTile2D::new_with_tile_info(
-            query_rect.time_interval,
+            time_interval,
             tile_info,
             band,
             output_raster,

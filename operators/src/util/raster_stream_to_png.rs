@@ -32,7 +32,7 @@ where
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
-    let tile_stream = processor.query(query_rect, &query_ctx).await?;
+    let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
 
     let x_query_resolution = query_rect.spatial_bounds.size_x() / f64::from(width);
     let y_query_resolution = query_rect.spatial_bounds.size_y() / f64::from(height);

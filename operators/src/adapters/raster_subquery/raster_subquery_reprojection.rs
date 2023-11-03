@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::operations::reproject::Reproject;
-use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
@@ -70,7 +70,7 @@ where
         // println!("new_fold_accu {:?}", &tile_info.global_tile_position);
 
         build_accu(
-            query_rect,
+            &query_rect,
             pool.clone(),
             tile_info,
             band,
@@ -102,7 +102,7 @@ where
                     spatial_bounds: pb,
                     time_interval: TimeInterval::new_instant(start_time)?,
                     spatial_resolution: self.in_spatial_res,
-                    selection: BandSelection::Single(band), // TODO
+                    selection: band.into(),
                 })),
                 // In some strange cases the reprojection can return an empty box.
                 // We ignore it since it contains no pixels.
@@ -121,7 +121,7 @@ where
 }
 
 fn build_accu<T: Pixel>(
-    query_rect: RasterQueryRectangle,
+    query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tile_info: TileInformation,
     band: usize,
@@ -129,6 +129,7 @@ fn build_accu<T: Pixel>(
     out_srs: SpatialReference,
     in_srs: SpatialReference,
 ) -> impl Future<Output = Result<TileWithProjectionCoordinates<T>>> {
+    let time_interval = query_rect.time_interval;
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid::new(tile_info.tile_size_in_pixels);
 
@@ -145,7 +146,7 @@ fn build_accu<T: Pixel>(
 
         Ok(TileWithProjectionCoordinates {
             accu_tile: RasterTile2D::new_with_tile_info(
-                query_rect.time_interval,
+                time_interval,
                 tile_info,
                 band,
                 output_raster.into(),

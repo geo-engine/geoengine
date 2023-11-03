@@ -294,7 +294,7 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let chunks = self.source.query(query, ctx).await?;
+        let chunks = self.source.query(query.clone(), ctx).await?;
 
         let epsilon = self
             .epsilon

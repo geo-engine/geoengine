@@ -4,8 +4,8 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{FutureExt, TryFutureExt};
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartitioned};
-use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::raster::{
     Blit, EmptyGrid, EmptyGrid2D, FromIndexFnParallel, GeoTransform, GridIdx, GridIdx2D,
     GridIndexAccess, GridOrEmpty, GridSize,
@@ -83,7 +83,7 @@ where
         crate::util::spawn_blocking(move || {
             create_enlarged_tile(
                 tile_info,
-                query_rect,
+                &query_rect,
                 pool,
                 tiling_specification,
                 neighborhood,
@@ -117,7 +117,7 @@ where
             spatial_bounds: enlarged_spatial_bounds,
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: query_rect.spatial_resolution,
-            selection: BandSelection::Single(band), // TODO
+            selection: band.into(),
         }))
     }
 
@@ -242,7 +242,7 @@ where
 
 fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
     tile_info: TileInformation,
-    query_rect: RasterQueryRectangle,
+    query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
     neighborhood: Neighborhood,
@@ -379,7 +379,7 @@ mod tests {
         );
 
         let tile_query_rectangle = aggregator
-            .tile_query_rectangle(tile_info, qrect, qrect.time_interval.start(), 0)
+            .tile_query_rectangle(tile_info, qrect.clone(), qrect.time_interval.start(), 0)
             .unwrap()
             .unwrap();
 
@@ -394,7 +394,7 @@ mod tests {
 
         let accu = create_enlarged_tile::<u8, Sum>(
             tile_info,
-            tile_query_rectangle,
+            &tile_query_rectangle,
             execution_context.thread_pool.clone(),
             execution_context.tiling_specification,
             aggregator.neighborhood,

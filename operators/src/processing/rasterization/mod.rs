@@ -369,7 +369,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
             });
             Ok(tiles.boxed())
         } else {
-            Ok(generate_zeroed_tiles(self.tiling_specification, query))
+            Ok(generate_zeroed_tiles(self.tiling_specification, &query))
         }
     }
 }
@@ -484,18 +484,19 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
 
             Ok(tiles.boxed())
         } else {
-            Ok(generate_zeroed_tiles(self.tiling_specification, query))
+            Ok(generate_zeroed_tiles(self.tiling_specification, &query))
         }
     }
 }
 
 fn generate_zeroed_tiles<'a>(
     tiling_specification: TilingSpecification,
-    query: RasterQueryRectangle,
+    query: &RasterQueryRectangle,
 ) -> BoxStream<'a, util::Result<RasterTile2D<f64>>> {
     let tiling_strategy =
         tiling_specification.strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
     let tile_shape = tiling_strategy.tile_size_in_pixels;
+    let time_interval = query.time_interval;
 
     stream::iter(
         tiling_strategy
@@ -506,7 +507,7 @@ fn generate_zeroed_tiles<'a>(
                     .expect("Data vector length should match the number of pixels in the tile");
 
                 Ok(RasterTile2D::new_with_tile_info(
-                    query.time_interval,
+                    time_interval,
                     tile_info,
                     0, // TODO
                     GridOrEmpty::Grid(tile_grid.into()),

@@ -16,7 +16,7 @@ use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, AxisAlignedRectangle, BoundingBox2D,
-    PlotQueryRectangle, VectorQueryRectangle,
+    PlotQueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::ConvertDataTypeParallel;
 use geoengine_datatypes::raster::{GridOrEmpty, GridSize};
@@ -313,11 +313,11 @@ impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let mut queries = Vec::with_capacity(self.rasters.len());
-        let q = query.into();
+        let q: RasterQueryRectangle = query.into();
         for (i, raster_processor) in self.rasters.iter().enumerate() {
             queries.push(
                 call_on_generic_raster_processor!(raster_processor, processor => {
-                    processor.query(q, ctx).await?
+                    processor.query(q.clone(), ctx).await?
                              .and_then(move |tile| crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || (i, tile.convert_data_type_parallel()) ).map_err(Into::into))
                              .boxed()
                 }),

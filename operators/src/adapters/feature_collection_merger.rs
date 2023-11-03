@@ -193,7 +193,7 @@ mod tests {
         let cx = MockQueryContext::new((std::mem::size_of::<Coordinate2D>() * 2).into());
 
         let number_of_source_chunks = processor
-            .query(qrect, &cx)
+            .query(qrect.clone(), &cx)
             .await
             .unwrap()
             .fold(0_usize, |i, _| async move { i + 1 })

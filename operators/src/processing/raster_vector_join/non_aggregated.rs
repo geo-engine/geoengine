@@ -80,7 +80,7 @@ where
                 raster_processor,
                 bands,
                 new_column_name,
-                query,
+                query.clone(),
                 ctx,
                 aggregation_method,
                 ignore_no_data,
@@ -416,7 +416,7 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let mut stream = self.collection.query(query, ctx).await?;
+        let mut stream = self.collection.query(query.clone(), ctx).await?;
 
         // TODO: adjust raster bands to the vector attribute selection in the query once we support it
         for ((raster_processor, new_column_name), bands) in self
@@ -432,7 +432,7 @@ where
                 raster_processor,
                 *bands,
                 new_column_name,
-                query,
+                query.clone(),
                 ctx,
                 self.aggregation_method,
                 self.ignore_no_data,

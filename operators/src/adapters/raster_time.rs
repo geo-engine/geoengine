@@ -248,8 +248,8 @@ where
         loop {
             match state.as_mut().project() {
                 StateProjection::Initial => {
-                    let fut1 = source_a.query(*query_rect);
-                    let fut2 = source_b.query(*query_rect);
+                    let fut1 = source_a.query(query_rect.clone());
+                    let fut2 = source_b.query(query_rect.clone());
                     let join = future::join(fut1, fut2);
 
                     state.set(State::AwaitingQuery {
@@ -370,7 +370,7 @@ where
                 ArrayStateProjection::Initial => {
                     let array_of_futures = sources
                         .iter()
-                        .map(|source| source.query(*query_rect))
+                        .map(|source| source.query(query_rect.clone()))
                         .collect::<Vec<_>>();
 
                     let query_futures = futures::future::join_all(array_of_futures);

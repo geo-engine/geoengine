@@ -89,7 +89,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             .query_processor()
             .context(crate::error::Operator)?;
 
-        let query_rect = self.info.query;
+        let query_rect = self.info.query.clone();
         let query_ctx = self.ctx.query_context()?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
@@ -101,7 +101,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             call_on_generic_raster_processor_gdal_types!(processor, p => raster_stream_to_geotiff(
             &self.file_path,
             p,
-            query_rect,
+            query_rect.clone(),
             query_ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Default::default(), // TODO: decide how to handle the no data here

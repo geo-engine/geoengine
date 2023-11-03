@@ -9,8 +9,7 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{
-    partitions_extent, time_interval_extent, BandRange, BandSelection, RasterQueryRectangle,
-    SpatialResolution,
+    partitions_extent, time_interval_extent, BandSelection, RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
@@ -205,44 +204,27 @@ impl<T> RasterStackerProcessor<T> {
 }
 
 /// compute the bands in the input source from the bands in a query that uses multiple sources
-// TODO: adjust this to individual band selection once the query rectangle supports this.
 fn map_query_bands_to_source_bands(
-    query_bands: BandSelection,
+    query_bands: &BandSelection,
     bands_per_source: &[usize],
     source_index: usize,
 ) -> Option<BandSelection> {
-    let source_start = bands_per_source.iter().take(source_index).sum();
+    let source_start: usize = bands_per_source.iter().take(source_index).sum();
     let source_bands = bands_per_source[source_index];
     let source_end = source_start + source_bands;
 
-    Some(match query_bands {
-        BandSelection::Single(b) if b >= source_start && b < source_end => {
-            BandSelection::Single(b - source_start)
-        }
-        BandSelection::Range(BandRange { start, end }) => {
-            if start >= source_end || end < source_start {
-                return None; // source is not included in query
-            }
+    let bands = query_bands
+        .as_slice()
+        .iter()
+        .filter(|output_band| **output_band >= source_start && **output_band < source_end)
+        .map(|output_band| output_band - source_start)
+        .collect::<Vec<_>>();
 
-            let input_start = if start < source_start {
-                0
-            } else {
-                start - source_start
-            };
+    if bands.is_empty() {
+        return None;
+    }
 
-            let input_end = if end >= source_end {
-                source_bands
-            } else {
-                end - source_start
-            };
-
-            BandSelection::Range(BandRange {
-                start: input_start,
-                end: input_end,
-            })
-        }
-        BandSelection::Single(_) => return None, // source is not included in query
-    })
+    Some(BandSelection::new(bands))
 }
 
 #[async_trait]
@@ -261,13 +243,13 @@ where
 
         for (idx, source) in self.sources.iter().enumerate() {
             let Some(bands) =
-                map_query_bands_to_source_bands(query.selection, &self.bands_per_source, idx)
+                map_query_bands_to_source_bands(&query.selection, &self.bands_per_source, idx)
             else {
                 continue;
             };
 
-            let mut source_query = query;
-            source_query.selection = bands;
+            let mut source_query = query.clone();
+            source_query.selection = bands.clone();
             source_stream_futures.push(async move { source.raster_query(source_query, ctx).await });
             selected_bands_per_source.push(bands.count());
         }
@@ -287,7 +269,7 @@ where
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{BandSelection, CacheHint, Measurement, SpatialPartition2D, TimeInterval},
+        primitives::{CacheHint, Measurement, SpatialPartition2D, TimeInterval},
         raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -303,33 +285,22 @@ mod tests {
     #[test]
     fn it_maps_query_bands_to_source_bands() {
         assert_eq!(
-            map_query_bands_to_source_bands(BandSelection::Single(0), &[2, 1], 0),
-            Some(BandSelection::Single(0))
+            map_query_bands_to_source_bands(&0.into(), &[2, 1], 0),
+            Some(0.into())
         );
+        assert_eq!(map_query_bands_to_source_bands(&0.into(), &[2, 1], 1), None);
         assert_eq!(
-            map_query_bands_to_source_bands(BandSelection::Single(0), &[2, 1], 1),
-            None
-        );
-        assert_eq!(
-            map_query_bands_to_source_bands(BandSelection::Single(2), &[2, 1], 1),
-            Some(BandSelection::Single(0))
+            map_query_bands_to_source_bands(&2.into(), &[2, 1], 1),
+            Some(0.into())
         );
 
         assert_eq!(
-            map_query_bands_to_source_bands(BandSelection::new_range(0, 1), &[2, 1], 0),
-            Some(BandSelection::new_range(0, 1))
+            map_query_bands_to_source_bands(&[1, 2].into(), &[2, 2], 0),
+            Some(1.into())
         );
         assert_eq!(
-            map_query_bands_to_source_bands(BandSelection::new_range(0, 3), &[2, 1], 1),
-            Some(BandSelection::new_range(0, 1))
-        );
-        assert_eq!(
-            map_query_bands_to_source_bands(BandSelection::new_range(0, 3), &[2, 2, 1], 1),
-            Some(BandSelection::new_range(0, 1))
-        );
-        assert_eq!(
-            map_query_bands_to_source_bands(BandSelection::new_range(0, 4), &[2, 2, 1], 1),
-            Some(BandSelection::new_range(0, 2))
+            map_query_bands_to_source_bands(&[1, 2, 3].into(), &[2, 2], 1),
+            Some([0, 1].into())
         );
     }
 
@@ -473,7 +444,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            selection: BandSelection::new_range(0, 2),
+            selection: [0, 1].into(),
         };
 
         let query_ctx = MockQueryContext::test_default();
@@ -727,7 +698,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            selection: BandSelection::new_range(0, 4),
+            selection: [0, 1, 2, 3].into(),
         };
 
         let query_ctx = MockQueryContext::test_default();
@@ -906,7 +877,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            selection: BandSelection::Single(1),
+            selection: 1.into(),
         };
 
         let query_ctx = MockQueryContext::test_default();

@@ -520,7 +520,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         Ok(OgrSourceStream::new(
-            self.dataset_information.loading_info(query).await?,
+            self.dataset_information.loading_info(query.clone()).await?,
             query,
             ctx.chunk_byte_size().into(),
             self.attribute_filters.clone(),
@@ -1288,7 +1288,7 @@ where
                 this.dataset_information.clone(),
                 this.feature_collection_builder.clone(),
                 this.data_types.clone(),
-                *this.query_rectangle,
+                this.query_rectangle.clone(),
                 this.time_extractor.clone(),
                 this.time_attribute_parser.clone(),
                 *this.chunk_byte_size,

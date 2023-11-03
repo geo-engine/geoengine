@@ -36,7 +36,7 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<S::RasterType>>>> {
-        let rewritten_query = (self.query_fn)(query)?;
+        let rewritten_query = (self.query_fn)(query.clone())?;
 
         if let Some(rewritten_query) = rewritten_query {
             self.source.raster_query(rewritten_query, ctx).await
@@ -49,7 +49,7 @@ where
             //       will be persistent and we might as well cache the empty stream.
             Ok(SparseTilesFillAdapter::new_like_subquery(
                 s,
-                query,
+                &query,
                 self.additional_data,
                 FillerTileCacheExpirationStrategy::NoCache,
             )

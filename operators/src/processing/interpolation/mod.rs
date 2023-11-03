@@ -270,7 +270,7 @@ where
         create_accu(
             tile_info,
             band,
-            query_rect,
+            &query_rect,
             pool.clone(),
             self.tiling_specification,
         )
@@ -296,7 +296,7 @@ where
             spatial_bounds,
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: self.input_resolution,
-            selection: BandSelection::Single(band), // TODO
+            selection: band.into(),
         }))
     }
 
@@ -357,19 +357,20 @@ impl<T: Pixel, I: InterpolationAlgorithm<T>> FoldTileAccuMut for InterpolationAc
 pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
     tile_info: TileInformation,
     band: usize,
-    query_rect: RasterQueryRectangle,
+    query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
 ) -> impl Future<Output = Result<InterpolationAccu<T, I>>> {
     // create an accumulator as a single tile that fits all the input tiles
+    let spatial_bounds = query_rect.spatial_bounds;
+    let spatial_resolution = query_rect.spatial_resolution;
+    let time_interval = query_rect.time_interval;
+
     crate::util::spawn_blocking(move || {
-        let tiling = tiling_specification.strategy(
-            query_rect.spatial_resolution.x,
-            -query_rect.spatial_resolution.y,
-        );
+        let tiling = tiling_specification.strategy(spatial_resolution.x, -spatial_resolution.y);
 
         let origin_coordinate = tiling
-            .tile_information_iterator(query_rect.spatial_bounds)
+            .tile_information_iterator(spatial_bounds)
             .next()
             .expect("a query contains at least one tile")
             .spatial_partition()
@@ -377,11 +378,11 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
 
         let geo_transform = GeoTransform::new(
             origin_coordinate,
-            query_rect.spatial_resolution.x,
-            -query_rect.spatial_resolution.y,
+            spatial_resolution.x,
+            -spatial_resolution.y,
         );
 
-        let bbox = tiling.tile_grid_box(query_rect.spatial_bounds);
+        let bbox = tiling.tile_grid_box(spatial_bounds);
 
         let shape = [
             bbox.axis_size_y() * tiling.tile_size_in_pixels.axis_size_y(),
@@ -392,7 +393,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
         let grid = EmptyGrid2D::new(shape.into());
 
         let input_tile = RasterTile2D::new(
-            query_rect.time_interval,
+            time_interval,
             [0, 0].into(),
             band,
             geo_transform,

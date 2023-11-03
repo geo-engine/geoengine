@@ -197,14 +197,14 @@ where
             log::debug!("cache hit for operator {}", self.cache_key);
 
             let wrapped_result_steam =
-                E::wrap_result_stream(cache_result, ctx.chunk_byte_size(), query);
+                E::wrap_result_stream(cache_result, ctx.chunk_byte_size(), query.clone());
 
             return Ok(wrapped_result_steam);
         }
 
         // cache miss
         log::debug!("cache miss for operator {}", self.cache_key);
-        let source_stream = self.processor.query(query, ctx).await?;
+        let source_stream = self.processor.query(query.clone(), ctx).await?;
 
         let query_id = shared_cache.insert_query(&self.cache_key, &query).await;
 
@@ -375,14 +375,17 @@ where
         chunk_byte_size: ChunkByteSize,
         query: Self::Query,
     ) -> BoxStream<'a, Result<Self>> {
-        let filter_stream = stream.filter_map(move |result| async move {
-            result
-                .and_then(|collection| collection.filter_cache_element_entries(&query))
-                .map_err(|source| Error::CacheCantProduceResult {
-                    source: source.into(),
-                })
-                .map(|fc| if fc.is_empty() { None } else { Some(fc) })
-                .transpose()
+        let filter_stream = stream.filter_map(move |result| {
+            let query = query.clone();
+            async move {
+                result
+                    .and_then(|collection| collection.filter_cache_element_entries(&query))
+                    .map_err(|source| Error::CacheCantProduceResult {
+                        source: source.into(),
+                    })
+                    .map(|fc| if fc.is_empty() { None } else { Some(fc) })
+                    .transpose()
+            }
         });
 
         let merger_stream =

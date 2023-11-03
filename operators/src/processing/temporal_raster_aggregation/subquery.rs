@@ -7,8 +7,7 @@ use async_trait::async_trait;
 use futures::TryFuture;
 use geoengine_datatypes::{
     primitives::{
-        BandSelection, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInstance,
-        TimeInterval, TimeStep,
+        CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep,
     },
     raster::{
         EmptyGrid2D, GeoTransform, GridIdx2D, GridIndexAccess, GridOrEmpty, GridOrEmpty2D,
@@ -192,7 +191,7 @@ where
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
             time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
-            selection: BandSelection::Single(band), // TODO
+            selection: band.into(),
         }))
     }
 

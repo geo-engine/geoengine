@@ -115,7 +115,7 @@ where
 
         let typed_query_processors_labels = get_query_processors(label_operators, &exe_ctx).await?;
 
-        let query = self.request.query;
+        let query = self.request.query.clone();
         let query_ctx = self.ctx.query_context()?;
 
         let n_rasters = typed_query_processors_features.len();
@@ -139,7 +139,7 @@ where
         let mut feature_data: Vec<MachineLearningFeature> = accumulate_raster_data(
             feature_names,
             typed_query_processors_features,
-            query,
+            query.clone(),
             &query_ctx,
             &mut aggregator_vec,
         )

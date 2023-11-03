@@ -1540,10 +1540,13 @@ mod tests {
 
         // query the layer
         let workflow_operator = mock_source.workflow.operator.get_raster().unwrap();
-        let workflow_result =
-            raster_operator_to_geotiff_bytes(&ctx, workflow_operator, mock_source.query_rectangle)
-                .await
-                .unwrap();
+        let workflow_result = raster_operator_to_geotiff_bytes(
+            &ctx,
+            workflow_operator,
+            mock_source.query_rectangle.clone(),
+        )
+        .await
+        .unwrap();
 
         // query the newly created dataset
         let dataset_operator = GdalSource {
@@ -1552,10 +1555,13 @@ mod tests {
             },
         }
         .boxed();
-        let dataset_result =
-            raster_operator_to_geotiff_bytes(&ctx, dataset_operator, mock_source.query_rectangle)
-                .await
-                .unwrap();
+        let dataset_result = raster_operator_to_geotiff_bytes(
+            &ctx,
+            dataset_operator,
+            mock_source.query_rectangle.clone(),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(workflow_result.as_slice(), dataset_result.as_slice());
     }

@@ -136,11 +136,11 @@ fn bench_raster_processor<
     for tiling_spec in list_of_tiling_specs {
         let operator = (tile_producing_operator_builderr)(*tiling_spec);
 
-        for &(qrect_name, qrect) in list_of_named_querys {
+        for &(qrect_name, ref qrect) in list_of_named_querys {
             run_time.block_on(async {
                 // query the operator
                 let start_query = Instant::now();
-                let query = operator.raster_query(qrect, ctx).await.unwrap();
+                let query = operator.raster_query(qrect.clone(), ctx).await.unwrap();
                 let query_elapsed = start_query.elapsed();
 
                 let start = Instant::now();
