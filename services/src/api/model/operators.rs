@@ -4,7 +4,7 @@ use crate::api::model::datatypes::{
     TimeInstance, TimeStep, VectorQueryRectangle,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::CacheTtlSeconds;
+use geoengine_datatypes::primitives::{CacheTtlSeconds, AxisAlignedRectangle};
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,
@@ -41,21 +41,38 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
             spatial_reference: value.spatial_reference.into(),
             measurement: value.measurement.into(),
             time: value.time.map(Into::into),
-            bbox: value.bbox.map(Into::into),
-            resolution: value.resolution.map(Into::into),
+            bbox: Some(value.spatial_bounds().into()), // TODO: maybe change the field to GeoTransform and pixel bounds
+            resolution: Some(value.geo_transform.spatial_resolution().into()),
         }
     }
 }
 
 impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultDescriptor {
     fn from(value: RasterResultDescriptor) -> Self {
+
+        // FIXME: this is a hack to get the geo transform from the bbox and resolution
+
+        let bbox: geoengine_datatypes::primitives::SpatialPartition2D = value.bbox.expect("we need the bbox to create a geo transform").into();
+        let resolution: geoengine_datatypes::primitives::SpatialResolution = value.resolution.expect("we need the resolution to create a geo transform").into();
+
+        let geo_transform = geoengine_datatypes::raster::GeoTransform::new(
+            bbox.upper_left(),
+            resolution.x,
+            -resolution.y,
+        );
+
+        let pixel_bounds = geoengine_datatypes::raster::GridBoundingBox2D::new_min_max(
+            0, (bbox.size_y() / resolution.y).ceil() as isize, 0 , (bbox.size_x() / resolution.x).ceil() as isize,
+        ).expect("creating pixel bounds with 0., 0. start should work");
+
+
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
             measurement: value.measurement.into(),
             time: value.time.map(Into::into),
-            bbox: value.bbox.map(Into::into),
-            resolution: value.resolution.map(Into::into),
+            geo_transform,
+            pixel_bounds,
         }
     }
 }

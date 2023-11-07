@@ -3,7 +3,7 @@ use geoengine_datatypes::primitives::{
     SpatialPartition2D, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    GeoTransform, GridBoundingBox2D, GridShape2D, TilingSpecification,
+    GeoTransform, GridBoundingBox2D, GridShape2D, TilingSpecification, TilingStrategy,
 };
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
@@ -137,6 +137,17 @@ impl RasterResultDescriptor {
 
         TilingSpecification {
             origin_coordinate: tiling_origin,
+            tile_size_in_pixels,
+        }
+    }
+
+    /// Returns the data tiling strategy for the given tile size in pixels.
+    pub fn generate_data_tiling_strategy(
+        &self,
+        tile_size_in_pixels: GridShape2D,
+    ) -> TilingStrategy {
+        TilingStrategy {
+            geo_transform: self.geo_transform.nearest_pixel_to_zero_based(),
             tile_size_in_pixels,
         }
     }
@@ -394,14 +405,14 @@ mod tests {
             spatial_reference: SpatialReferenceOption::Unreferenced,
             measurement: Measurement::Unitless,
             time: None,
-            geo_transform: GeoTransform::new(Coordinate2D::new(-10., 10.), -0.3, 0.3),
+            geo_transform: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.3, -0.3),
             pixel_bounds: GridShape2D::new([36, 30]).bounding_box(),
         };
 
         let to = descriptor.tiling_origin();
 
-        assert_approx_eq!(f64, to.x, -0.09);
-        assert_approx_eq!(f64, to.y, 0.09);
+        assert_approx_eq!(f64, to.x, -0.09999, epsilon = 0.00001); // we are only interested in a number thats smaller then the pixel size
+        assert_approx_eq!(f64, to.y, 0.09999, epsilon = 0.00001);
     }
 
     #[test]
@@ -411,7 +422,7 @@ mod tests {
             spatial_reference: SpatialReferenceOption::Unreferenced,
             measurement: Measurement::Unitless,
             time: None,
-            geo_transform: GeoTransform::new(Coordinate2D::new(-15., 15.), -0.5, 0.5),
+            geo_transform: GeoTransform::new(Coordinate2D::new(-15., 15.), 0.5, -0.5),
             pixel_bounds: GridShape2D::new([50, 50]).bounding_box(),
         };
 
@@ -420,7 +431,7 @@ mod tests {
             spatial_reference: SpatialReferenceOption::Unreferenced,
             measurement: Measurement::Unitless,
             time: None,
-            geo_transform: GeoTransform::new(Coordinate2D::new(-10., 10.), -0.5, 0.5),
+            geo_transform: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.5, -0.5),
             pixel_bounds: GridShape2D::new([9, 11]).bounding_box(),
         };
 

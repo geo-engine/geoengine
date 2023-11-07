@@ -214,15 +214,26 @@ impl TileInformation {
         }
     }
 
+    
     pub fn with_partition_and_shape(partition: SpatialPartition2D, shape: GridShape2D) -> Self {
+    // FIXME: this method makes no sense, as the tile position is always [0, 0]
+
+        let real_geotransform = GeoTransform::new(
+            partition.upper_left(),
+            partition.size_x() / shape.axis_size_x() as f64,
+            -partition.size_y() / shape.axis_size_y() as f64,
+        );
+
+        let tiling_geotransform = real_geotransform.nearest_pixel_to_zero_based();
+
+        let _tiling_bounds = real_geotransform.shape_to_nearest_to_zero_based(&shape);
+
+        dbg!(tiling_geotransform);
+
         Self {
             tile_size_in_pixels: shape,
             global_tile_position: [0, 0].into(),
-            global_geo_transform: GeoTransform::new(
-                partition.upper_left(),
-                partition.size_x() / shape.axis_size_x() as f64,
-                -partition.size_y() / shape.axis_size_y() as f64,
-            ),
+            global_geo_transform: real_geotransform,
         }
     }
 
