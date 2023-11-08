@@ -90,7 +90,7 @@ where
                 spatial_bounds: query.spatial_bounds,
                 time_interval: time_span.time_interval,
                 spatial_resolution: query.spatial_resolution,
-                selection: Default::default(), // TODO
+                selection: Default::default(),
             };
 
             let mut rasters = raster_processor.raster_query(query.into(), ctx).await?;
@@ -348,7 +348,7 @@ mod tests {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                selection: Default::default(), // TODO
+                selection: Default::default(),
             },
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
@@ -445,7 +445,7 @@ mod tests {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                selection: Default::default(), // TODO
+                selection: Default::default(),
             },
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
@@ -569,7 +569,7 @@ mod tests {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                selection: Default::default(), // TODO
+                selection: Default::default(),
             },
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
@@ -727,7 +727,7 @@ mod tests {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                selection: Default::default(), // TODO
+                selection: Default::default(),
             },
             &MockQueryContext::new(ChunkByteSize::MIN),
         )

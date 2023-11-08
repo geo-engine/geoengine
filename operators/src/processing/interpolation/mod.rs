@@ -500,7 +500,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::zero_point_five(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -660,7 +660,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::zero_point_five(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         let query_ctx = MockQueryContext::test_default();
 

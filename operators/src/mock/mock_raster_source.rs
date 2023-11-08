@@ -501,7 +501,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(1, 3),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();
@@ -524,7 +524,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(2, 3),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();

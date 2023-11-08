@@ -287,7 +287,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        selection: Default::default(), // TODO
+        selection: Default::default(),
     };
     let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
 
@@ -357,7 +357,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(0.005, 0.005).unwrap(),
-        selection: Default::default(), // TODO
+        selection: Default::default(),
     };
 
     let qrects = vec![("World in 72000x36000 pixels", qrect)];
@@ -446,7 +446,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        selection: Default::default(), // TODO
+        selection: Default::default(),
     };
 
     let qrects = vec![("World in 36000x18000 pixels", qrect)];
@@ -534,7 +534,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
         .unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(1050., 2100.).unwrap(),
-        selection: Default::default(), // TODO
+        selection: Default::default(),
     };
     let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
 
@@ -614,7 +614,7 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-                selection: Default::default(), // TODO
+                selection: Default::default(),
             },
         ),
         (
@@ -625,7 +625,7 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new(0.005, 0.005).unwrap(),
-                selection: Default::default(), // TODO
+                selection: Default::default(),
             },
         ),
     ];
@@ -678,7 +678,7 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
                 .unwrap(),
             time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
             spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         },
     )];
 
@@ -740,7 +740,7 @@ fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut B
                 .unwrap(),
             time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
             spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         },
     )];
 
@@ -804,7 +804,7 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
             .unwrap(),
             time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
             spatial_resolution: SpatialResolution::new(1050., 2100.).unwrap(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         },
     )];
 

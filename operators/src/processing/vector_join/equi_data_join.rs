@@ -448,7 +448,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);

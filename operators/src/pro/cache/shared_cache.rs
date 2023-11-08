@@ -1098,7 +1098,7 @@ mod tests {
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
                 .unwrap(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         }
     }
 

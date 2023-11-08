@@ -2075,7 +2075,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -2128,7 +2128,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into()).unwrap(),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -2174,7 +2174,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (5., 5.).into()).unwrap(),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -2225,7 +2225,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -2311,7 +2311,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -2411,7 +2411,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -2514,7 +2514,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -2668,7 +2668,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -2846,7 +2846,7 @@ mod tests {
                     )?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -4030,7 +4030,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -4150,7 +4150,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 2.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -4360,7 +4360,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context1,
             )
@@ -4395,7 +4395,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -4513,7 +4513,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -4603,7 +4603,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -4724,7 +4724,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -4852,7 +4852,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -4978,7 +4978,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -5104,7 +5104,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -5226,7 +5226,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -5361,7 +5361,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -5482,7 +5482,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -5594,7 +5594,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -5721,7 +5721,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -5837,7 +5837,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -5953,7 +5953,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -6073,7 +6073,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -6192,7 +6192,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -6326,7 +6326,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -6442,7 +6442,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -6550,7 +6550,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -6644,7 +6644,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -6735,7 +6735,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -6826,7 +6826,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )
@@ -6917,7 +6917,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &context,
             )

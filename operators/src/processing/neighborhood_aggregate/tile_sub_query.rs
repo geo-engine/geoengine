@@ -368,7 +368,7 @@ mod tests {
             spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInstance::from_millis(0).unwrap().into(),
             spatial_resolution,
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let aggregator = NeighborhoodAggregateTileNeighborhood::<u8, StandardDeviation>::new(

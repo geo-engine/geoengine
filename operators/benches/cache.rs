@@ -73,7 +73,7 @@ async fn main() {
                 ),
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
-                selection: Default::default(), // TODO
+                selection: Default::default(),
             },
             &query_ctx,
         )
@@ -97,7 +97,7 @@ async fn main() {
                 ),
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
-                selection: Default::default(), // TODO
+                selection: Default::default(),
             },
             &query_ctx,
         )

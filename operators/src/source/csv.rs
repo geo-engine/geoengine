@@ -575,7 +575,7 @@ x,y
             ),
             time_interval: TimeInterval::new_unchecked(0, 1),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         let ctx = MockQueryContext::new((10 * 8 * 2).into());
 

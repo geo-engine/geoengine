@@ -668,7 +668,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         let mut lq =
             RasterLandingQueryEntry::create_empty::<CompressedRasterTile2D<u8>>(query.clone());
@@ -688,7 +688,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         assert!(tile.intersects_query(&query));
 
@@ -700,7 +700,7 @@ mod tests {
             ),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         assert!(tile.intersects_query(&query));
 
@@ -712,7 +712,7 @@ mod tests {
             ),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         assert!(!tile.intersects_query(&query));
     }
@@ -723,7 +723,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         let cache_query_entry = RasterCacheQueryEntry {
             query: cache_entry_bounds.clone(),
@@ -742,7 +742,7 @@ mod tests {
             ),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         assert!(cache_query_entry.query().is_match(&query2));
 
@@ -754,7 +754,7 @@ mod tests {
             ),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         assert!(!cache_query_entry.query().is_match(&query3));
     }

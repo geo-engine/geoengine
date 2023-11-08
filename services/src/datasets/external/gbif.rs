@@ -1630,7 +1630,7 @@ mod tests {
                         ),
                         time_interval: TimeInterval::default(),
                         spatial_resolution: SpatialResolution::zero_point_one(),
-                        selection: Default::default(), // TODO
+                        selection: Default::default(),
                     })
                     .await
                     .map_err(|e| e.to_string())?;
@@ -1768,7 +1768,7 @@ mod tests {
                     .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 };
                 let ctx = MockQueryContext::test_default();
 

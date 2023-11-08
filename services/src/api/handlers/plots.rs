@@ -133,7 +133,7 @@ async fn get_plot_handler<C: ApplicationContext>(
         spatial_bounds: params.bbox,
         time_interval: params.time.into(),
         spatial_resolution: params.spatial_resolution,
-        selection: Default::default(), // TODO
+        selection: Default::default(),
     };
 
     let query_rect = if request_spatial_ref == workflow_spatial_ref {

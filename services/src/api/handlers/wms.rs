@@ -624,7 +624,7 @@ mod tests {
                 )
                 .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
-                selection: Default::default(), // TODO
+                selection: Default::default(),
             },
             ctx.query_context().unwrap(),
             360,

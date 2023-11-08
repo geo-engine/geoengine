@@ -699,7 +699,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -774,7 +774,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -856,7 +856,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -1040,7 +1040,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &query_ctx,
             )
@@ -1076,7 +1076,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let expected = BoundingBox2D::new_unchecked(
@@ -1198,7 +1198,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &query_ctx,
             )
@@ -1335,7 +1335,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &query_ctx,
             )
@@ -1406,7 +1406,7 @@ mod tests {
                     spatial_bounds,
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &query_ctx,
             )
@@ -1484,7 +1484,7 @@ mod tests {
                     spatial_bounds,
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &query_ctx,
             )
@@ -1563,7 +1563,7 @@ mod tests {
                     spatial_bounds,
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &query_ctx,
             )

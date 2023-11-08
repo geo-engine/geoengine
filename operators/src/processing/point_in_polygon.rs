@@ -466,7 +466,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -524,7 +524,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -593,7 +593,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -683,7 +683,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let ctx_one_chunk = MockQueryContext::new(ChunkByteSize::MAX);
@@ -767,7 +767,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-10., -10.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();

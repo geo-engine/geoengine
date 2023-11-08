@@ -358,7 +358,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
             spatial_resolution: SpatialResolution::one(),
             time_interval: TimeInterval::default(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let TypedRasterQueryProcessor::U8(typed_processor) = query_processor else {
@@ -472,7 +472,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
             spatial_resolution: SpatialResolution::one(),
             time_interval: TimeInterval::default(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let TypedRasterQueryProcessor::U8(typed_processor) = query_processor else {

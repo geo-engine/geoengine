@@ -239,7 +239,7 @@ fn expand_query_rectangle(
         spatial_bounds: query.spatial_bounds,
         time_interval: expand_time_interval(step, step_reference, query.time_interval)?,
         spatial_resolution: query.spatial_resolution,
-        selection: Default::default(), // TODO
+        selection: Default::default(),
     })
 }
 
@@ -467,7 +467,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &query_context,
             )
@@ -572,7 +572,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &query_context,
             )

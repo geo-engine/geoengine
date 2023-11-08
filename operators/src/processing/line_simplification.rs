@@ -504,7 +504,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let query_ctx = MockQueryContext::test_default();
@@ -623,7 +623,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 &query_context,
             )

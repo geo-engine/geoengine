@@ -71,7 +71,7 @@ async fn main() {
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        selection: Default::default(), // TODO
+        selection: Default::default(),
     };
 
     let mut times = NumberStatistics::default();

@@ -1225,7 +1225,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 },
                 query_ctx,
             )

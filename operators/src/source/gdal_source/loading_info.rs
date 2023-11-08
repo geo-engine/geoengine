@@ -587,7 +587,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::new_unchecked(0, 30),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 })
                 .await
                 .unwrap()
@@ -630,7 +630,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 })
                 .await
                 .unwrap()
@@ -675,7 +675,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::new_unchecked(-10, -5),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 })
                 .await
                 .unwrap()
@@ -705,7 +705,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::new_unchecked(50, 55),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 })
                 .await
                 .unwrap()
@@ -735,7 +735,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::new_unchecked(0, 22),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 })
                 .await
                 .unwrap()
@@ -774,7 +774,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::new_unchecked(0, 20),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 })
                 .await
                 .unwrap()
@@ -895,7 +895,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::new_unchecked(0, 3),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(), // TODO
+                    selection: Default::default(),
                 })
                 .await
                 .unwrap()
@@ -961,7 +961,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
             time_interval: TimeInterval::new(time_start, time_end).unwrap(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let loading_info = metadata.loading_info(query).await.unwrap();
@@ -1030,7 +1030,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
             time_interval: TimeInterval::new(time_start, time_end).unwrap(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let loading_info = metadata.loading_info(query).await.unwrap();
@@ -1102,7 +1102,7 @@ mod tests {
                 TimeInstance::from(DateTime::new_utc(2013, 3, 1, 0, 0, 0)),
             ),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            selection: Default::default(),
         };
 
         let loading_info = metadata.loading_info(query).await.unwrap();
