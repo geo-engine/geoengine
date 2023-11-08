@@ -77,6 +77,14 @@ impl RasterOperator for Interpolation {
         let raster_source = initialized_sources.raster;
         let in_descriptor = raster_source.result_descriptor();
 
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_descriptor.bands == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: Interpolation::TYPE_NAME
+            }
+        );
+
         ensure!(
             matches!(self.params.input_resolution, InputResolution::Value(_))
                 || in_descriptor.resolution.is_some(),

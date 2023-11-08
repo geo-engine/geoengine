@@ -47,6 +47,7 @@ pub struct BoxPlotParams {
 
 #[typetag::serde]
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl PlotOperator for BoxPlot {
     async fn _initialize(
         self: Box<Self>,
@@ -77,6 +78,16 @@ impl PlotOperator for BoxPlot {
                         .map(|(i, op)| op.initialize(path.clone_and_append(i as u8), context)),
                 )
                 .await?;
+
+                // TODO: implement multi-band functionality and remove this check
+                ensure!(
+                    raster_sources
+                        .iter()
+                        .all(|s| s.result_descriptor().bands == 1),
+                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                        operator: BoxPlot::TYPE_NAME
+                    }
+                );
 
                 let output_names = if self.params.column_names.is_empty() {
                     (1..=raster_sources.len())

@@ -841,6 +841,7 @@ pub trait CacheQueryMatch<RHS = Self> {
 
 impl CacheQueryMatch for RasterQueryRectangle {
     fn is_match(&self, query: &RasterQueryRectangle) -> bool {
+        // TODO: also check for bands
         self.spatial_bounds.contains(&query.spatial_bounds)
             && self.time_interval.contains(&query.time_interval)
             && self.spatial_resolution == query.spatial_resolution

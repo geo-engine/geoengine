@@ -34,6 +34,7 @@ use geoengine_datatypes::{
     util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -215,12 +216,12 @@ impl VectorOperator for Reprojection {
                     found: "Raster".to_owned(),
                 })?;
 
-        let initilaized_source = vector_source.initialize_sources(path, context).await?;
+        let initialized_source = vector_source.initialize_sources(path, context).await?;
 
         let initialized_operator = InitializedVectorReprojection::try_new_with_input(
             name,
             self.params,
-            initilaized_source.vector,
+            initialized_source.vector,
         )?;
 
         Ok(initialized_operator.boxed())
@@ -349,6 +350,14 @@ impl RasterOperator for Reprojection {
                 })?;
 
         let initialized_source = raster_source.initialize_sources(path, context).await?;
+
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            initialized_source.raster.result_descriptor().bands == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: Reprojection::TYPE_NAME
+            }
+        );
 
         let initialized_operator = InitializedRasterReprojection::try_new_with_input(
             name,

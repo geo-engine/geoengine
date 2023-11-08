@@ -15,6 +15,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use std::collections::BTreeMap;
 
 pub const MEAN_RASTER_PIXEL_VALUES_OVER_TIME_NAME: &str = "Mean Raster Pixel Values over Time";
@@ -66,6 +67,14 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
         let raster = initalized_sources.raster;
 
         let in_desc = raster.result_descriptor().clone();
+
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_desc.bands == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: MeanRasterPixelValuesOverTime::TYPE_NAME
+            }
+        );
 
         let initialized_operator = InitializedMeanRasterPixelValuesOverTime {
             name,

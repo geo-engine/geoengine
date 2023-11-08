@@ -1,12 +1,17 @@
+use crate::error::{AtLeastOneStreamRequired, Error, MissingBandsForStream};
 use crate::util::Result;
 use futures::ready;
 use futures::stream::Stream;
+use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::raster::RasterTile2D;
 use pin_project::pin_project;
+use snafu::ensure;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 /// Stacks the bands of the input raster streams to create a single raster stream with all the combined bands.
+///
+/// TODO: align the input streams temporally, currently the adapter will throw an error if the input streams are not aligned
 #[pin_project(project = RasterStackerAdapterProjection)]
 pub struct RasterStackerAdapter<S> {
     #[pin]
@@ -14,18 +19,30 @@ pub struct RasterStackerAdapter<S> {
     batch_size_per_stream: Vec<usize>,
     current_stream: usize,
     current_stream_item: usize,
+    current_time: Option<TimeInterval>,
     finished: bool,
 }
 
 impl<S> RasterStackerAdapter<S> {
-    pub fn new(streams: Vec<S>, bands_per_stream: Vec<usize>) -> Self {
-        RasterStackerAdapter {
+    pub fn new(streams: Vec<S>, bands_per_stream: Vec<usize>) -> Result<Self> {
+        ensure!(
+            streams.len() == bands_per_stream.len(),
+            MissingBandsForStream {
+                streams: streams.len(),
+                bands: bands_per_stream.len()
+            }
+        );
+
+        ensure!(!streams.is_empty(), AtLeastOneStreamRequired);
+
+        Ok(RasterStackerAdapter {
             streams,
             batch_size_per_stream: bands_per_stream,
             current_stream: 0,
             current_stream_item: 0,
+            current_time: None,
             finished: false,
-        }
+        })
     }
 }
 
@@ -46,6 +63,7 @@ where
             batch_size_per_stream,
             current_stream,
             current_stream_item,
+            current_time,
             finished: _,
         } = self.as_mut().project();
 
@@ -66,6 +84,28 @@ where
                 .sum::<usize>()
                 + *current_stream_item;
             tile.band = band;
+
+            // TODO: replace time check with temporal alignment
+            if let Some(time) = current_time {
+                if band == 0 {
+                    // save the first bands time
+                    *current_time = Some(tile.time);
+                } else {
+                    // all other bands must have the same time as the first band
+                    if tile.time != *time {
+                        return Poll::Ready(Some(Err(
+                            Error::InputStreamsMustBeTemporallyAligned {
+                                stream_index: *current_stream,
+                                expected: *time,
+                                found: tile.time,
+                            },
+                        )));
+                    }
+                }
+            } else {
+                // first tile ever, set time
+                *current_time = Some(tile.time);
+            }
         }
 
         // next item in stream, or go to next stream
@@ -184,7 +224,7 @@ mod tests {
         let stream = stream::iter(data.clone().into_iter().map(Result::Ok)).boxed();
         let stream2 = stream::iter(data2.clone().into_iter().map(Result::Ok)).boxed();
 
-        let stacker = RasterStackerAdapter::new(vec![stream, stream2], vec![1, 1]);
+        let stacker = RasterStackerAdapter::new(vec![stream, stream2], vec![1, 1]).unwrap();
 
         let result = stacker.collect::<Vec<_>>().await;
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
@@ -377,7 +417,7 @@ mod tests {
         let stream = stream::iter(data.clone().into_iter().map(Result::Ok)).boxed();
         let stream2 = stream::iter(data2.clone().into_iter().map(Result::Ok)).boxed();
 
-        let stacker = RasterStackerAdapter::new(vec![stream, stream2], vec![2, 2]);
+        let stacker = RasterStackerAdapter::new(vec![stream, stream2], vec![2, 2]).unwrap();
 
         let result = stacker.collect::<Vec<_>>().await;
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
@@ -399,5 +439,43 @@ mod tests {
             .collect();
 
         assert!(expected.tiles_equal_ignoring_cache_hint(&result));
+    }
+
+    #[tokio::test]
+    async fn it_checks_temporal_alignment() {
+        let data: Vec<RasterTile2D<u8>> = vec![RasterTile2D {
+            time: TimeInterval::new_unchecked(0, 5),
+            tile_position: [-1, 0].into(),
+            band: 0,
+            global_geo_transform: TestDefault::test_default(),
+            grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
+            properties: Default::default(),
+            cache_hint: CacheHint::default(),
+        }];
+
+        let data2: Vec<RasterTile2D<u8>> = vec![RasterTile2D {
+            time: TimeInterval::new_unchecked(1, 6),
+            tile_position: [-1, 0].into(),
+            band: 0,
+            global_geo_transform: TestDefault::test_default(),
+            grid_array: Grid::new([2, 2].into(), vec![16, 17, 18, 19])
+                .unwrap()
+                .into(),
+            properties: Default::default(),
+            cache_hint: CacheHint::default(),
+        }];
+
+        let stream = stream::iter(data.clone().into_iter().map(Result::Ok)).boxed();
+        let stream2 = stream::iter(data2.clone().into_iter().map(Result::Ok)).boxed();
+
+        let stacker = RasterStackerAdapter::new(vec![stream, stream2], vec![1, 1]).unwrap();
+
+        let result = stacker.collect::<Vec<_>>().await;
+
+        assert!(result[0].is_ok());
+        assert!(matches!(
+            result[1],
+            Err(Error::InputStreamsMustBeTemporallyAligned { .. })
+        ));
     }
 }

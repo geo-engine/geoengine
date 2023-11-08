@@ -257,6 +257,14 @@ impl RasterOperator for Expression {
             .map(InitializedRasterOperator::result_descriptor)
             .collect::<Vec<_>>();
 
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_descriptors.iter().all(|r| r.bands == 1),
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: Expression::TYPE_NAME
+            }
+        );
+
         for other_spatial_reference in in_descriptors.iter().skip(1).map(|rd| rd.spatial_reference)
         {
             ensure!(

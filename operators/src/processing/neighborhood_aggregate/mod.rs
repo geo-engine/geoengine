@@ -150,6 +150,14 @@ impl RasterOperator for NeighborhoodAggregate {
         let initialized_source = self.sources.initialize_sources(path, context).await?;
         let raster_source = initialized_source.raster;
 
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            raster_source.result_descriptor().bands == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: NeighborhoodAggregate::TYPE_NAME
+            }
+        );
+
         let initialized_operator = InitializedNeighborhoodAggregate {
             name,
             result_descriptor: raster_source.result_descriptor().clone(),

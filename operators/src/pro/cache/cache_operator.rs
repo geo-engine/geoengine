@@ -19,6 +19,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use pin_project::{pin_project, pinned_drop};
+use snafu::ensure;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -41,6 +42,14 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            self.source.result_descriptor().bands == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: "RasterVectorAggregateJoin"
+            }
+        );
+
         let processor_result = self.source.query_processor();
         match processor_result {
             Ok(p) => {

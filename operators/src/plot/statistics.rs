@@ -48,6 +48,7 @@ pub struct StatisticsParams {
 
 #[typetag::serde]
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl PlotOperator for Statistics {
     async fn _initialize(
         self: Box<Self>,
@@ -84,6 +85,14 @@ impl PlotOperator for Statistics {
                     .iter()
                     .map(InitializedRasterOperator::result_descriptor)
                     .collect::<Vec<_>>();
+
+                // TODO: implement multi-band functionality and remove this check
+                ensure!(
+                    in_descriptors.iter().all(|r| r.bands == 1),
+                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                        operator: Statistics::TYPE_NAME,
+                    }
+                );
 
                 if rasters.len() > 1 {
                     let srs = in_descriptors[0].spatial_reference;

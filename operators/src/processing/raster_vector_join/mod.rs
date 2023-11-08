@@ -142,6 +142,17 @@ impl VectorOperator for RasterVectorJoin {
             .map(InitializedRasterOperator::result_descriptor)
             .collect::<Vec<_>>();
 
+        // TODO: implement multi-band functionality for aggregated join and remove this check
+        ensure!(
+            matches!(
+                self.params.temporal_aggregation,
+                TemporalAggregationMethod::None
+            ) || source_descriptors.iter().all(|rd| rd.bands == 1),
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: "RasterVectorAggregateJoin"
+            }
+        );
+
         let spatial_reference = vector_rd.spatial_reference;
 
         for other_spatial_reference in source_descriptors
@@ -752,7 +763,7 @@ mod tests {
                 names: vec!["s0".to_string(), "s1".to_string()],
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
-                temporal_aggregation: TemporalAggregationMethod::Mean,
+                temporal_aggregation: TemporalAggregationMethod::None,
                 temporal_aggregation_ignore_no_data: false,
             },
             sources: SingleVectorMultipleRasterSources {
@@ -774,35 +785,35 @@ mod tests {
                     (
                         "s0".to_string(),
                         VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
+                            data_type: FeatureDataType::Int,
                             measurement: Measurement::Unitless
                         }
                     ),
                     (
                         "s0_1".to_string(),
                         VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
+                            data_type: FeatureDataType::Int,
                             measurement: Measurement::Unitless
                         }
                     ),
                     (
                         "s1".to_string(),
                         VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
+                            data_type: FeatureDataType::Int,
                             measurement: Measurement::Unitless
                         }
                     ),
                     (
                         "s1_1".to_string(),
                         VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
+                            data_type: FeatureDataType::Int,
                             measurement: Measurement::Unitless
                         }
                     ),
                     (
                         "s1_2".to_string(),
                         VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
+                            data_type: FeatureDataType::Int,
                             measurement: Measurement::Unitless
                         }
                     )

@@ -108,6 +108,15 @@ impl PlotOperator for Histogram {
                     .await?;
 
                 let in_desc = raster_source.result_descriptor();
+
+                // TODO: implement multi-band functionality and remove this check
+                ensure!(
+                    in_desc.bands == 1,
+                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                        operator: Histogram::TYPE_NAME
+                    }
+                );
+
                 InitializedHistogram::new(
                     name,
                     PlotResultDescriptor {

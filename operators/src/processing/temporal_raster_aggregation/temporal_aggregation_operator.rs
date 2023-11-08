@@ -441,7 +441,7 @@ where
         Ok(Box::pin(RasterStackerAdapter::new(
             band_streams,
             vec![1; query.selection.count()],
-        )))
+        )?))
     }
 }
 

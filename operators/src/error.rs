@@ -1,7 +1,7 @@
 use crate::util::statistics::StatisticsError;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
-use geoengine_datatypes::primitives::FeatureDataType;
+use geoengine_datatypes::primitives::{FeatureDataType, TimeInterval};
 use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::ops::Range;
@@ -416,6 +416,26 @@ pub enum Error {
     #[snafu(display("Cache can't produce the promissed result error: {source}"))]
     CacheCantProduceResult {
         source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[snafu(display("Input stream {stream_index} is not temporally aligned. Expected {expected:?}, found {found:?}."))]
+    InputStreamsMustBeTemporallyAligned {
+        stream_index: usize,
+        expected: TimeInterval,
+        found: TimeInterval,
+    },
+
+    #[snafu(display("Not all streams have their number of bands specified. Expected {streams:?}, found {bands:?} specifications."))]
+    MissingBandsForStream {
+        streams: usize,
+        bands: usize,
+    },
+
+    AtLeastOneStreamRequired,
+
+    #[snafu(display("Operator {operator:?} does not support sources with multiple bands."))]
+    OperatorDoesNotSupportMultiBandsSourcesYet {
+        operator: &'static str,
     },
 }
 

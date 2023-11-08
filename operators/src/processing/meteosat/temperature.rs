@@ -9,6 +9,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use rayon::ThreadPool;
 
+use snafu::ensure;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
@@ -68,6 +69,14 @@ impl RasterOperator for Temperature {
         let input = initialized_sources.raster;
 
         let in_desc = input.result_descriptor();
+
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_desc.bands == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: Temperature::TYPE_NAME
+            }
+        );
 
         match &in_desc.measurement {
             Measurement::Continuous(ContinuousMeasurement {

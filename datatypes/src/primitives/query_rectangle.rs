@@ -19,7 +19,7 @@ pub trait QuerySelection: Clone + Send + Sync + Default /* TOOD: remove */ {}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 // TODO: custom deserializer that checks for duplicates(?)
-pub struct BandSelection(Vec<usize>);
+pub struct BandSelection(Vec<usize>); // TODO: use a large enough Bitmap for a sufficiently large number of bands. Then the `QueryRectangle` can be `Copy` again
 
 impl Default for BandSelection {
     fn default() -> Self {
@@ -37,7 +37,7 @@ impl BandSelection {
         debug_assert!(has_no_duplicates(&bands), "Input bands have duplicates");
         debug_assert!(!bands.is_empty(), "Input bands empty");
 
-        bands.sort_unstable();
+        bands.sort_unstable(); // TODO: should order of bands matter? Or: introduce a restacking operation?
         Self(bands)
     }
 

@@ -18,6 +18,7 @@ use geoengine_datatypes::raster::{
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 // Output type is always f32
 type PixelOut = f32;
@@ -68,6 +69,14 @@ impl RasterOperator for Radiance {
         let input = initialized_sources.raster;
 
         let in_desc = input.result_descriptor();
+
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_desc.bands == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: Radiance::TYPE_NAME
+            }
+        );
 
         match &in_desc.measurement {
             Measurement::Continuous(ContinuousMeasurement {

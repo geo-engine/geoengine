@@ -9,6 +9,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use num_traits::AsPrimitive;
 use rayon::ThreadPool;
+use snafu::ensure;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
@@ -73,6 +74,14 @@ impl RasterOperator for Reflectance {
         let input = initialized_source.raster;
 
         let in_desc = input.result_descriptor();
+
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_desc.bands == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: Reflectance::TYPE_NAME
+            }
+        );
 
         match &in_desc.measurement {
             Measurement::Continuous(ContinuousMeasurement {

@@ -21,7 +21,7 @@ use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+use snafu::{ensure, Snafu};
 
 /// Project the query rectangle to a new time interval.
 pub type TimeShift = Operator<TimeShiftParams, SingleRasterOrVectorSource>;
@@ -265,6 +265,14 @@ impl RasterOperator for TimeShift {
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
+                // TODO: implement multi-band functionality and remove this check
+                ensure!(
+                    result_descriptor.bands == 1,
+                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                        operator: TimeShift::TYPE_NAME
+                    }
+                );
+
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
                     source,
@@ -285,6 +293,14 @@ impl RasterOperator for TimeShift {
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
+                // TODO: implement multi-band functionality and remove this check
+                ensure!(
+                    result_descriptor.bands == 1,
+                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                        operator: TimeShift::TYPE_NAME
+                    }
+                );
+
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
                     source,
@@ -299,6 +315,14 @@ impl RasterOperator for TimeShift {
                 let shift = AbsoluteShift { time_interval };
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
+
+                // TODO: implement multi-band functionality and remove this check
+                ensure!(
+                    result_descriptor.bands == 1,
+                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                        operator: TimeShift::TYPE_NAME
+                    }
+                );
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,

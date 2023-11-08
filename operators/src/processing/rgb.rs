@@ -161,6 +161,14 @@ impl RasterOperator for Rgb {
 
         let sources = self.sources.initialize_sources(path, context).await?;
 
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            sources.iter().all(|r| r.result_descriptor().bands == 1),
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: "RasterVectorAggregateJoin"
+            }
+        );
+
         let spatial_reference = sources.red.result_descriptor().spatial_reference;
 
         ensure!(

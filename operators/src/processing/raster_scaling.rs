@@ -19,6 +19,7 @@ use num::FromPrimitive;
 use num_traits::AsPrimitive;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -96,6 +97,14 @@ impl RasterOperator for RasterScaling {
 
         let input = self.sources.initialize_sources(path, context).await?;
         let in_desc = input.raster.result_descriptor();
+
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_desc.bands == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: RasterScaling::TYPE_NAME
+            }
+        );
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,

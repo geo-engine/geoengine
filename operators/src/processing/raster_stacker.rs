@@ -22,7 +22,7 @@ pub struct RasterStackerParams {}
 /// It does so by querying all of it's inputs outputting them by band, space and then time.
 ///
 /// All inputs must have the same data type and spatial reference.
-// TODO: spatio-temporal alignment(?) or do that beforehand?
+// TODO: temporal alignment or do that beforehand?
 //     if we explicitly align beforehand using custom operators we have the problem that we need to hardcode the alignment params(?) and if the dataset changes the workflow no longer works
 //      we have no way of aligning indepentently of each other before putting them into the `RasterStacker`` as we cannot access other operators in the workflow
 pub type RasterStacker = Operator<RasterStackerParams, MultipleRasterSources>;
@@ -259,7 +259,7 @@ where
             .into_iter()
             .collect::<Result<Vec<_>>>()?;
 
-        let output = RasterStackerAdapter::new(source_streams, selected_bands_per_source);
+        let output = RasterStackerAdapter::new(source_streams, selected_bands_per_source)?;
 
         Ok(Box::pin(output))
     }
