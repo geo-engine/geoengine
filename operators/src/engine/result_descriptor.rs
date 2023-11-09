@@ -58,8 +58,13 @@ pub struct RasterResultDescriptor {
     pub time: Option<TimeInterval>,
     pub bbox: Option<SpatialPartition2D>,
     pub resolution: Option<SpatialResolution>,
-    pub bands: i32, // TODO: maybe store more information about the bands like the names
+    #[serde(default = "default_bands")]
+    pub bands: i32, // TODO: maybe store more information about the bands like the names and unit
                     // TODO: use a proper unsigned datatype here. We only use i32 because this type here has to be `FromSql` and `ToSql` and `u32` is not supported by `postgres-types`
+}
+
+fn default_bands() -> i32 {
+    1
 }
 
 impl ResultDescriptor for RasterResultDescriptor {
