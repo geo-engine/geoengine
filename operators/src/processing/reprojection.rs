@@ -246,7 +246,6 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
                     (),
                 )
                 .boxed(),
-                // source,
             )),
             TypedVectorQueryProcessor::MultiPoint(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPoint(

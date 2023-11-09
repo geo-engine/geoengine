@@ -100,7 +100,7 @@ pub trait MetaData<L, R, Q>: Debug + Send + Sync
 where
     R: ResultDescriptor,
 {
-    async fn loading_info(&self, query: Q) -> Result<L>; // TODO: query by reference
+    async fn loading_info(&self, query: Q) -> Result<L>;
     async fn result_descriptor(&self) -> Result<R>;
 
     fn box_clone(&self) -> Box<dyn MetaData<L, R, Q>>;

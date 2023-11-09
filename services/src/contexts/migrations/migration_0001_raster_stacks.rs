@@ -78,3 +78,5 @@ impl Migration for Migration0001RasterStacks {
         Ok(())
     }
 }
+
+// TODO: add tests once the `ResultDescriptor` has the desired format (including name and units)

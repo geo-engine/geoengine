@@ -62,7 +62,7 @@ async fn one_band_at_a_time(runs: usize, bands: usize, resolution: SpatialResolu
 
     let aggregation = aggregation_on_source(ndvi_source);
 
-    let expression_processor = aggregation
+    let eprocessor = aggregation
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap()
@@ -71,7 +71,6 @@ async fn one_band_at_a_time(runs: usize, bands: usize, resolution: SpatialResolu
         .get_u64()
         .unwrap();
 
-    // World in 36000x18000 pixels",
     let qrect = RasterQueryRectangle {
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
@@ -85,7 +84,7 @@ async fn one_band_at_a_time(runs: usize, bands: usize, resolution: SpatialResolu
         let (time, result) = time_it(|| async {
             let mut last_res = None;
             for _ in 0..bands {
-                let native_query = expression_processor
+                let native_query = eprocessor
                     .raster_query(qrect.clone(), &query_context)
                     .await
                     .unwrap();
@@ -129,7 +128,7 @@ async fn all_bands_at_once(runs: usize, bands: usize, resolution: SpatialResolut
 
     let aggregation = aggregation_on_source(stacker);
 
-    let expression_processor = aggregation
+    let processor = aggregation
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap()
@@ -138,7 +137,6 @@ async fn all_bands_at_once(runs: usize, bands: usize, resolution: SpatialResolut
         .get_u64()
         .unwrap();
 
-    // World in 36000x18000 pixels",
     let qrect = RasterQueryRectangle {
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
@@ -150,7 +148,7 @@ async fn all_bands_at_once(runs: usize, bands: usize, resolution: SpatialResolut
 
     for _ in 0..runs {
         let (time, result) = time_it(|| async {
-            let native_query = expression_processor
+            let native_query = processor
                 .raster_query(qrect.clone(), &query_context)
                 .await
                 .unwrap();
@@ -210,8 +208,6 @@ where
     let result = f().await;
     let end = start.elapsed();
     let secs = end.as_secs() as f64 + end.subsec_nanos() as f64 / 1_000_000_000.0;
-
-    // println!("{} took {} seconds", name, secs);
 
     (secs, result)
 }

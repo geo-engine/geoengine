@@ -14,7 +14,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
 
-// TODO: IF this operator shall perform spatio-temporal alignment automatically: specify the alignment strategy here
+// TODO: IF this operator shall perform temporal alignment automatically: specify the alignment strategy here(?)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RasterStackerParams {}
 

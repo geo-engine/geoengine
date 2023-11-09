@@ -523,7 +523,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
         spatial_resolution: request
             .query_resolution
             .map_or_else(SpatialResolution::zero_point_one, |r| r.0),
-        selection: Default::default(), // TODO
+        selection: Default::default(),
     };
     let query_ctx = ctx.query_context()?;
 

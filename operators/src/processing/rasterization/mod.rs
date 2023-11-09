@@ -509,7 +509,7 @@ fn generate_zeroed_tiles<'a>(
                 Ok(RasterTile2D::new_with_tile_info(
                     time_interval,
                     tile_info,
-                    0, // TODO
+                    0,
                     GridOrEmpty::Grid(tile_grid.into()),
                     CacheHint::no_cache(),
                 ))
