@@ -2,7 +2,7 @@ use crate::contexts::SessionId;
 use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
-use config::{Config, Environment, File};
+use config::{Config, Environment, File, FileFormat};
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
@@ -15,26 +15,33 @@ use url::Url;
 
 static SETTINGS: OnceLock<RwLock<Config>> = OnceLock::new();
 
+const SETTINGS_FILE_PATH_OVERRIDE_ENV_VAR: &str = "GEOENGINE_SETTINGS_FILE_PATH";
+
 // TODO: change to `LazyLock' once stable
 fn init_settings() -> RwLock<Config> {
     let mut settings = Config::builder();
 
     let dir: PathBuf = retrieve_settings_dir().expect("settings directory should exist");
 
-    #[cfg(test)]
-    let files = ["Settings-default.toml", "Settings-test.toml"];
+    // include the default settings in the binary
+    let default_settings = include_str!("../../../Settings-default.toml");
 
-    #[cfg(not(test))]
-    let files = ["Settings-default.toml", "Settings.toml"];
+    settings = settings.add_source(File::from_str(default_settings, FileFormat::Toml));
 
-    let files: Vec<File<_, _>> = files
-        .iter()
-        .map(|f| dir.join(f))
-        .filter(|p| p.exists())
-        .map(File::from)
-        .collect();
-
-    settings = settings.add_source(files);
+    if let Ok(settings_file_path) = std::env::var(SETTINGS_FILE_PATH_OVERRIDE_ENV_VAR) {
+        // override the settings file path
+        settings = settings.add_source(File::with_name(&settings_file_path));
+    } else {
+        // use the default settings file path
+        #[cfg(test)]
+        {
+            settings = settings.add_source(File::from(dir.join("Settings-test.toml")));
+        }
+        #[cfg(not(test))]
+        {
+            settings = settings.add_source(File::from(dir.join("Settings.toml")));
+        }
+    }
 
     // Override config with environment variables that start with `GEOENGINE_`,
     // e.g. `GEOENGINE_WEB__EXTERNAL_ADDRESS=https://path.to.geoengine.io`

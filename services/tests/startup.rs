@@ -20,7 +20,7 @@ impl DroppingServer {
     fn new(schema_name: &str) -> Self {
         let process = Command::cargo_bin("main")
             .unwrap()
-            .env("GEOENGINE_WEB__BACKEND", "postgres")
+            .env("GEOENGINE_SETTINGS_FILE_PATH", "Settings-test.toml")
             .env("GEOENGINE_POSTGRES__SCHEMA", schema_name)
             .stderr(Stdio::piped())
             .spawn()
