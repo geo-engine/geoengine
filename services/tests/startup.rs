@@ -18,9 +18,14 @@ impl Drop for DroppingServer {
 
 impl DroppingServer {
     fn new(schema_name: &str) -> Self {
+        let dir = geoengine_services::util::config::retrieve_settings_dir().unwrap();
+
         let process = Command::cargo_bin("main")
             .unwrap()
-            .env("GEOENGINE_SETTINGS_FILE_PATH", "Settings-test.toml")
+            .env(
+                "GEOENGINE_SETTINGS_FILE_PATH",
+                dir.join("Settings-test.toml"),
+            )
             .env("GEOENGINE_POSTGRES__SCHEMA", schema_name)
             .stderr(Stdio::piped())
             .spawn()

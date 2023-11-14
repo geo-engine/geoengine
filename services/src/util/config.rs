@@ -53,8 +53,7 @@ fn init_settings() -> RwLock<Config> {
 }
 
 /// test may run in subdirectory
-#[cfg(test)]
-fn retrieve_settings_dir() -> Result<PathBuf> {
+pub fn retrieve_settings_dir() -> Result<PathBuf> {
     use crate::error::Error;
 
     const MAX_PARENT_DIRS: usize = 1;
@@ -73,11 +72,6 @@ fn retrieve_settings_dir() -> Result<PathBuf> {
     }
 
     Err(Error::MissingSettingsDirectory)
-}
-
-#[cfg(not(test))]
-fn retrieve_settings_dir() -> Result<PathBuf> {
-    std::env::current_dir().context(error::MissingWorkingDirectory)
 }
 
 #[cfg(test)]
