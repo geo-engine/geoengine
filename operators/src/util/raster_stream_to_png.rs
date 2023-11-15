@@ -5,6 +5,7 @@ use geoengine_datatypes::{
     raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
+use snafu::ensure;
 use std::convert::TryInto;
 use tracing::{span, Level};
 
@@ -27,6 +28,14 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
 where
     T: Pixel,
 {
+    // TODO: support multi band colorizers
+    ensure!(
+        query_rect.selection.count() == 1,
+        crate::error::OperationDoesNotSupportMultiBandsSourcesYet {
+            operation: "raster_stream_to_png_bytes"
+        }
+    );
+
     let span = span!(Level::TRACE, "raster_stream_to_png_bytes");
     let _enter = span.enter();
 

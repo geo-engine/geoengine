@@ -432,6 +432,11 @@ pub enum Error {
         operator: &'static str,
     },
 
+    #[snafu(display("Operation {operation:?} does not support queries with multiple bands."))]
+    OperationDoesNotSupportMultiBandQueriesYet {
+        operation: &'static str,
+    },
+
     RasterInputsMustHaveSameSpatialReferenceAndDatatype,
 
     GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet,

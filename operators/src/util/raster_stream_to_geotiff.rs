@@ -25,6 +25,7 @@ use geoengine_datatypes::raster::{
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use log::debug;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
@@ -330,6 +331,14 @@ pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
 where
     P: Pixel + GdalType,
 {
+    // TODO: support multi band geotiffs
+    ensure!(
+        query_rect.selection.count() == 1,
+        crate::error::OperationDoesNotSupportMultiBandsSourcesYet {
+            operation: "raster_stream_to_geotiff"
+        }
+    );
+
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
     // TODO: create file path if it doesn't exist
