@@ -662,6 +662,11 @@ where
         query: RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
+        ensure!(
+            query.selection.as_slice() == [0],
+            crate::error::GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet
+        );
+
         let start = Instant::now();
         debug!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",

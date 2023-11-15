@@ -433,6 +433,8 @@ pub enum Error {
     },
 
     RasterInputsMustHaveSameSpatialReferenceAndDatatype,
+
+    GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
