@@ -431,6 +431,8 @@ pub enum Error {
     OperatorDoesNotSupportMultiBandsSourcesYet {
         operator: &'static str,
     },
+
+    RasterInputsMustHaveSameSpatialReferenceAndDatatype,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

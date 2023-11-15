@@ -4,6 +4,7 @@ use crate::engine::{
     MultipleRasterSources, Operator, OperatorName, QueryContext, RasterOperator,
     RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
+use crate::error::RasterInputsMustHaveSameSpatialReferenceAndDatatype;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::join_all;
@@ -13,6 +14,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 // TODO: IF this operator shall perform temporal alignment automatically: specify the alignment strategy here(?)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,10 +47,6 @@ impl RasterOperator for RasterStacker {
 
         // TODO: verify all inputs have same data type and spatial reference
 
-        // TODO: add sparse fill adapter on top of sources? Or do we guarantee gap-free already?
-
-        // TODO: inject operators ontop of the sources to align them spatio-temporally
-
         let raster_sources = self
             .sources
             .initialize_sources(path, context)
@@ -59,6 +57,13 @@ impl RasterOperator for RasterStacker {
             .iter()
             .map(InitializedRasterOperator::result_descriptor)
             .collect::<Vec<_>>();
+
+        ensure!(
+            in_descriptors.iter().all(|d| d.spatial_reference
+                == in_descriptors[0].spatial_reference
+                && d.data_type == in_descriptors[0].data_type),
+            RasterInputsMustHaveSameSpatialReferenceAndDatatype
+        );
 
         let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
         let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
