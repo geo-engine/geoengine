@@ -351,7 +351,7 @@ async fn wms_map_handler<C: ApplicationContext>(
                 x_query_resolution,
                 y_query_resolution,
             ),
-            selection: Default::default(), // TODO
+            selection: Default::default(), // TODO: support multi bands in API (via colorizer) and set the selection here
         };
 
         let query_ctx = ctx.query_context()?;

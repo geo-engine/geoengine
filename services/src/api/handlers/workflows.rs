@@ -539,7 +539,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         spatial_bounds: query.spatial_bounds,
         time_interval: query.time_interval.into(),
         spatial_resolution: query.spatial_resolution,
-        selection: Default::default(), // TODO
+        selection: Default::default(), // TODO: support multi bands in API and set the selection here
     };
 
     // this is the only result type for now
@@ -622,7 +622,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         spatial_bounds: query.spatial_bounds,
         time_interval: query.time_interval.into(),
         spatial_resolution: query.spatial_resolution,
-        selection: Default::default(), // TODO
+        selection: Default::default(), // TODO: support multi bands in API and set the selection here
     };
 
     // this is the only result type for now
