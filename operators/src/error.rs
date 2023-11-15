@@ -425,12 +425,6 @@ pub enum Error {
         found: TimeInterval,
     },
 
-    #[snafu(display("Not all streams have their number of bands specified. Expected {streams:?}, found {bands:?} specifications."))]
-    MissingBandsForStream {
-        streams: usize,
-        bands: usize,
-    },
-
     AtLeastOneStreamRequired,
 
     #[snafu(display("Operator {operator:?} does not support sources with multiple bands."))]

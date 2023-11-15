@@ -8,7 +8,7 @@ use super::aggregators::{
 use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
-use crate::adapters::RasterStackerAdapter;
+use crate::adapters::{RasterStackerAdapter, StreamBundle};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
     RasterOperator, SingleRasterSource, WorkflowOperatorPath,
@@ -433,15 +433,17 @@ where
             .selection
             .as_slice()
             .iter()
-            .map(|band| {
-                self.create_subquery_adapter_stream_for_single_band(query.clone(), *band, ctx)
+            .map(|band| StreamBundle {
+                stream: self.create_subquery_adapter_stream_for_single_band(
+                    query.clone(),
+                    *band,
+                    ctx,
+                ),
+                bands: 1,
             })
             .collect::<Vec<_>>();
 
-        Ok(Box::pin(RasterStackerAdapter::new(
-            band_streams,
-            vec![1; query.selection.count()],
-        )?))
+        Ok(Box::pin(RasterStackerAdapter::new(band_streams)?))
     }
 }
 

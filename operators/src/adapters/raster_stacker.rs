@@ -1,4 +1,4 @@
-use crate::error::{AtLeastOneStreamRequired, Error, MissingBandsForStream};
+use crate::error::{AtLeastOneStreamRequired, Error};
 use crate::util::Result;
 use futures::ready;
 use futures::stream::Stream;
@@ -23,21 +23,28 @@ pub struct RasterStackerAdapter<S> {
     finished: bool,
 }
 
-impl<S> RasterStackerAdapter<S> {
-    pub fn new(streams: Vec<S>, bands_per_stream: Vec<usize>) -> Result<Self> {
-        ensure!(
-            streams.len() == bands_per_stream.len(),
-            MissingBandsForStream {
-                streams: streams.len(),
-                bands: bands_per_stream.len()
-            }
-        );
+pub struct StreamBundle<S> {
+    pub stream: S,
+    pub bands: usize,
+}
 
+impl<S> From<(S, usize)> for StreamBundle<S> {
+    fn from(value: (S, usize)) -> Self {
+        debug_assert!(value.1 > 0, "At least one band required");
+        Self {
+            stream: value.0,
+            bands: value.1,
+        }
+    }
+}
+
+impl<S> RasterStackerAdapter<S> {
+    pub fn new(streams: Vec<StreamBundle<S>>) -> Result<Self> {
         ensure!(!streams.is_empty(), AtLeastOneStreamRequired);
 
         Ok(RasterStackerAdapter {
-            streams,
-            batch_size_per_stream: bands_per_stream,
+            batch_size_per_stream: streams.iter().map(|s| s.bands).collect(),
+            streams: streams.into_iter().map(|s| s.stream).collect(),
             current_stream: 0,
             current_stream_item: 0,
             current_time: None,
@@ -224,7 +231,8 @@ mod tests {
         let stream = stream::iter(data.clone().into_iter().map(Result::Ok)).boxed();
         let stream2 = stream::iter(data2.clone().into_iter().map(Result::Ok)).boxed();
 
-        let stacker = RasterStackerAdapter::new(vec![stream, stream2], vec![1, 1]).unwrap();
+        let stacker =
+            RasterStackerAdapter::new(vec![(stream, 1).into(), (stream2, 1).into()]).unwrap();
 
         let result = stacker.collect::<Vec<_>>().await;
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
@@ -417,7 +425,8 @@ mod tests {
         let stream = stream::iter(data.clone().into_iter().map(Result::Ok)).boxed();
         let stream2 = stream::iter(data2.clone().into_iter().map(Result::Ok)).boxed();
 
-        let stacker = RasterStackerAdapter::new(vec![stream, stream2], vec![2, 2]).unwrap();
+        let stacker =
+            RasterStackerAdapter::new(vec![(stream, 2).into(), (stream2, 2).into()]).unwrap();
 
         let result = stacker.collect::<Vec<_>>().await;
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
@@ -468,7 +477,8 @@ mod tests {
         let stream = stream::iter(data.clone().into_iter().map(Result::Ok)).boxed();
         let stream2 = stream::iter(data2.clone().into_iter().map(Result::Ok)).boxed();
 
-        let stacker = RasterStackerAdapter::new(vec![stream, stream2], vec![1, 1]).unwrap();
+        let stacker =
+            RasterStackerAdapter::new(vec![(stream, 1).into(), (stream2, 1).into()]).unwrap();
 
         let result = stacker.collect::<Vec<_>>().await;
 
