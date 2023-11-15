@@ -96,7 +96,7 @@ impl RasterOperator for XgboostOperator {
         ensure!(
             in_descriptors.iter().all(|r| r.bands == 1),
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: "RasterVectorAggregateJoin"
+                operator: XgboostOperator::TYPE_NAME
             }
         );
 

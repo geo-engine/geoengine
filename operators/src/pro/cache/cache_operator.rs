@@ -46,7 +46,7 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
         ensure!(
             self.source.result_descriptor().bands == 1,
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: "RasterVectorAggregateJoin"
+                operator: "CacheOperator"
             }
         );
 

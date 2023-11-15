@@ -165,7 +165,7 @@ impl RasterOperator for Rgb {
         ensure!(
             sources.iter().all(|r| r.result_descriptor().bands == 1),
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: "RasterVectorAggregateJoin"
+                operator: Rgb::TYPE_NAME
             }
         );
 

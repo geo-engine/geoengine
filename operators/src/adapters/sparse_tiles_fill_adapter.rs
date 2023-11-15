@@ -392,7 +392,7 @@ where
                                     tile
                                 } else {
                                     // save the tile and go to fill mode.
-                                    this.sc.current_time = tile.time; // <<----
+                                    this.sc.current_time = tile.time;
                                     this.sc.next_tile = Some(tile);
                                     this.sc.state = State::FillAndProduceNextTile;
                                     this.sc.current_no_data_tile()
@@ -1870,7 +1870,7 @@ mod tests {
                 cache_hint: cache_hint1,
             },
             // GAP t [0,5) pos [0, 0] b 1
-            // GAP t [5,10) pos [-1, 0] b 0 <<<-------
+            // GAP t [5,10) pos [-1, 0] b 0
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),

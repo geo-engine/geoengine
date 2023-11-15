@@ -91,7 +91,7 @@ where
                 Ok(RasterTile2D::new(
                     out_time,
                     out_tile_position,
-                    0, // TODO
+                    0,
                     out_global_geo_transform,
                     out,
                     cache_hint,
