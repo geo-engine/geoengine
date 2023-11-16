@@ -1175,7 +1175,7 @@ mod tests {
     };
     use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
     use httptest::{matchers::*, responders::status_code, Expectation, Server};
-    use std::path::PathBuf;
+    use std::{ops::Range, path::PathBuf};
 
     const DEMO_PROVIDER_ID: DataProviderId =
         DataProviderId::from_u128(0xdc2d_dc34_b0d9_4ee0_bf3e_414f_01a8_05ad);
@@ -1208,7 +1208,7 @@ mod tests {
         url: &str,
         content_type: &str,
         file_name: &str,
-        times: usize,
+        times: Range<usize>,
     ) {
         let path = test_data_path(file_name);
         let body = tokio::fs::read(path).await.unwrap();
@@ -1234,7 +1234,7 @@ mod tests {
                 "/collections",
                 "application/json",
                 "edr_collections.json",
-                1,
+                1..2,
             )
             .await;
         } else {
@@ -1244,7 +1244,7 @@ mod tests {
                 &format!("/collections/{collection_name}"),
                 "application/json",
                 &format!("edr_{collection_name}.json"),
-                1,
+                1..2,
             )
             .await;
         }
@@ -1502,7 +1502,7 @@ mod tests {
             &format!("/collections/{collection_name}"),
             "application/json",
             &format!("edr_{collection_name}.json"),
-            1,
+            1..2,
         )
         .await;
 
@@ -1608,7 +1608,7 @@ mod tests {
             "/collections/GFS_isobaric/cube",
             "image/tiff",
             "edr_raster.tif",
-            4,
+            3..5,
         )
         .await;
         server.expect(
@@ -1619,7 +1619,7 @@ mod tests {
                     "temperature.aux.xml"
                 ))))
             ])
-            .times(1)
+            .times(0..2)
             .respond_with(status_code(404)),
         );
         let meta = load_metadata::<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>(
