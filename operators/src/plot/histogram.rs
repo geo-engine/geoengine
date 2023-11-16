@@ -111,7 +111,7 @@ impl PlotOperator for Histogram {
 
                 // TODO: implement multi-band functionality and remove this check
                 ensure!(
-                    in_desc.bands == 1,
+                    in_desc.bands.len() == 1,
                     crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                         operator: Histogram::TYPE_NAME
                     }
@@ -233,7 +233,7 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterO
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let processor = HistogramRasterQueryProcessor {
             input: self.source.query_processor()?,
-            measurement: self.source.result_descriptor().measurement.clone(),
+            measurement: self.source.result_descriptor().bands[0].measurement.clone(), // TODO: adjust for multibands
             metadata: self.metadata,
             interactive: self.interactive,
         };
@@ -817,11 +817,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }
@@ -1227,11 +1226,10 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: 1,
+                        bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                     },
                 },
             }
@@ -1437,11 +1435,10 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: 1,
+                        bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                     },
                 },
             }

@@ -81,19 +81,22 @@ impl RasterOperator for RasterStacker {
 
         let bands_per_source = in_descriptors
             .iter()
-            .map(|d| d.bands as usize)
+            .map(|d| d.bands.len())
             .collect::<Vec<_>>();
 
-        let bands: usize = bands_per_source.iter().sum();
+        // TODO: resolve duplicate names
+        let output_band_descriptors = in_descriptors
+            .iter()
+            .flat_map(|d| d.bands.clone())
+            .collect::<Vec<_>>();
 
         let result_descriptor = RasterResultDescriptor {
             data_type: in_descriptors[0].data_type,
             spatial_reference: in_descriptors[0].spatial_reference,
-            measurement: in_descriptors[0].measurement.clone(),
             time,
             bbox,
             resolution,
-            bands: bands as i32,
+            bands: output_band_descriptors,
         };
 
         Ok(Box::new(InitializedRasterStacker {
@@ -280,14 +283,14 @@ where
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{CacheHint, Measurement, SpatialPartition2D, TimeInterval},
+        primitives::{CacheHint, SpatialPartition2D, TimeInterval},
         raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext},
+        engine::{MockExecutionContext, MockQueryContext, RasterBandDescriptor},
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -412,11 +415,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }
@@ -428,11 +430,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }
@@ -666,11 +667,13 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 2,
+                    bands: vec![
+                        RasterBandDescriptor::new_unitless("band_0".into()),
+                        RasterBandDescriptor::new_unitless("band_1".into()),
+                    ],
                 },
             },
         }
@@ -682,11 +685,13 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 2,
+                    bands: vec![
+                        RasterBandDescriptor::new_unitless("band_0".into()),
+                        RasterBandDescriptor::new_unitless("band_1".into()),
+                    ],
                 },
             },
         }
@@ -845,11 +850,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }
@@ -861,11 +865,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }

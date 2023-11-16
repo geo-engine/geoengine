@@ -18,14 +18,14 @@ use geoengine_datatypes::operations::reproject::{
 };
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, Measurement, RasterQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, RasterQueryRectangle,
     SpatialPartitioned, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, OperatorName, RasterOperator, RasterResultDescriptor,
-    TypedOperator, VectorResultDescriptor,
+    MetaData, MetaDataProvider, OperatorName, RasterBandDescriptor, RasterOperator,
+    RasterResultDescriptor, TypedOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -662,11 +662,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                 self.zone.epsg,
             )
             .into(),
-            measurement: Measurement::Unitless,
             time: None,
             bbox: None,
             resolution: None, // TODO: determine from STAC or data or hardcode it
-            bands: 1,
+            bands: vec![RasterBandDescriptor::singleton_band()],
         })
     }
 
@@ -1268,11 +1267,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U16,
                     spatial_reference: SpatialReference::from_str("EPSG:32736").unwrap().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![RasterBandDescriptor::singleton_band()],
                 },
                 params,
                 cache_ttl: CacheTtlSeconds::default(),

@@ -363,7 +363,6 @@ impl<T: Pixel> FoldTileAccuMut for TileWithProjectionCoordinates<T> {
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::Measurement,
         raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
         util::test::TestDefault,
     };
@@ -432,11 +431,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }

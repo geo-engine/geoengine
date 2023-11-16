@@ -54,17 +54,37 @@ pub trait ResultDescriptor: Clone + Serialize {
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
-    pub measurement: Measurement, // TODO: need one per band now?
     pub time: Option<TimeInterval>,
     pub bbox: Option<SpatialPartition2D>,
     pub resolution: Option<SpatialResolution>,
-    #[serde(default = "default_bands")]
-    pub bands: i32, // TODO: maybe store more information about the bands like the names and unit
-                    // TODO: use a proper unsigned datatype here. We only use i32 because this type here has to be `FromSql` and `ToSql` and `u32` is not supported by `postgres-types`
+    pub bands: Vec<RasterBandDescriptor>, // TODO: validate that there are no duplicate names
 }
 
-fn default_bands() -> i32 {
-    1
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSql, FromSql)]
+pub struct RasterBandDescriptor {
+    pub name: String,
+    pub measurement: Measurement,
+}
+
+impl RasterBandDescriptor {
+    pub fn new(name: String, measurement: Measurement) -> Self {
+        Self { name, measurement }
+    }
+
+    pub fn new_unitless(name: String) -> Self {
+        Self {
+            name,
+            measurement: Measurement::Unitless,
+        }
+    }
+
+    /// Convenience method to crate a band result descriptor with no specific name and a unitless measurement for single band rasters
+    pub fn singleton_band() -> Self {
+        Self {
+            name: "band".into(),
+            measurement: Measurement::Unitless,
+        }
+    }
 }
 
 impl ResultDescriptor for RasterResultDescriptor {
@@ -84,7 +104,7 @@ impl ResultDescriptor for RasterResultDescriptor {
     {
         Self {
             data_type: f(&self.data_type),
-            measurement: self.measurement.clone(),
+            bands: self.bands.clone(),
             ..*self
         }
     }
@@ -95,7 +115,7 @@ impl ResultDescriptor for RasterResultDescriptor {
     {
         Self {
             spatial_reference: f(&self.spatial_reference),
-            measurement: self.measurement.clone(),
+            bands: self.bands.clone(),
             ..*self
         }
     }
@@ -106,7 +126,7 @@ impl ResultDescriptor for RasterResultDescriptor {
     {
         Self {
             time: f(&self.time),
-            measurement: self.measurement.clone(),
+            bands: self.bands.clone(),
             ..*self
         }
     }

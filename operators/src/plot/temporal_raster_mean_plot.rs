@@ -70,7 +70,7 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
 
         // TODO: implement multi-band functionality and remove this check
         ensure!(
-            in_desc.bands == 1,
+            in_desc.bands.len() == 1,
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                 operator: MeanRasterPixelValuesOverTime::TYPE_NAME
             }
@@ -101,7 +101,7 @@ impl InitializedPlotOperator for InitializedMeanRasterPixelValuesOverTime {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let input_processor = self.raster.query_processor()?;
         let time_position = self.state.time_position;
-        let measurement = self.raster.result_descriptor().measurement.clone();
+        let measurement = self.raster.result_descriptor().bands[0].measurement.clone(); // TODO: adjust for multibands
         let draw_area = self.state.area;
 
         let processor = call_on_generic_raster_processor!(input_processor, raster => {
@@ -432,11 +432,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }

@@ -49,7 +49,7 @@ impl RasterOperator for RasterTypeConversion {
 
         // TODO: implement multi-band functionality and remove this check
         ensure!(
-            in_desc.bands == 1,
+            in_desc.bands.len() == 1,
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                 operator: RasterTypeConversion::TYPE_NAME
             }
@@ -60,11 +60,10 @@ impl RasterOperator for RasterTypeConversion {
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: out_data_type,
-            measurement: in_desc.measurement.clone(),
             bbox: in_desc.bbox,
             time: in_desc.time,
             resolution: in_desc.resolution,
-            bands: 1,
+            bands: in_desc.bands.clone(),
         };
 
         let initialized_operator = InitializedRasterTypeConversionOperator {
@@ -206,11 +205,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     bbox: None,
                     time: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }
@@ -232,7 +230,10 @@ mod tests {
         let result_descriptor = initialized_op.result_descriptor();
 
         assert_eq!(result_descriptor.data_type, RasterDataType::F32);
-        assert_eq!(result_descriptor.measurement, Measurement::Unitless);
+        assert_eq!(
+            result_descriptor.bands[0].measurement,
+            Measurement::Unitless
+        );
 
         let query_processor = initialized_op.query_processor().unwrap();
 

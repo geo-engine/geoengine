@@ -499,15 +499,17 @@ mod tests {
     use geoengine_datatypes::{
         hashmap,
         primitives::{
-            DateTime, DateTimeParseFormat, Measurement, SpatialPartition2D, SpatialResolution,
-            TimeGranularity,
+            DateTime, DateTimeParseFormat, SpatialPartition2D, SpatialResolution, TimeGranularity,
         },
         raster::RasterDataType,
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
 
-    use crate::source::{FileNotFoundHandling, GdalDatasetGeoTransform, TimeReference};
+    use crate::{
+        engine::RasterBandDescriptor,
+        source::{FileNotFoundHandling, GdalDatasetGeoTransform, TimeReference},
+    };
 
     use super::*;
 
@@ -518,11 +520,10 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: 1,
+                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
             },
             params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
@@ -565,11 +566,10 @@ mod tests {
             RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: 1
+                bands: vec![RasterBandDescriptor::singleton_band()]
             }
         );
     }
@@ -809,11 +809,10 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: 1,
+                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
             },
             params: vec![
                 GdalLoadingInfoTemporalSlice {
@@ -878,11 +877,10 @@ mod tests {
             RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: 1
+                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()]
             }
         );
 
@@ -926,11 +924,10 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: 1,
+                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -995,11 +992,10 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: 1,
+                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -1064,11 +1060,10 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: 1,
+                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),

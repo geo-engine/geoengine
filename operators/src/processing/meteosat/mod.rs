@@ -191,16 +191,18 @@ mod test_util {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: measurement.unwrap_or_else(|| {
-                        Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "raw".to_string(),
-                            unit: None,
-                        })
-                    }),
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::new(
+                        "band".into(),
+                        measurement.unwrap_or_else(|| {
+                            Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "raw".to_string(),
+                                unit: None,
+                            })
+                        }),
+                    )],
                 },
             },
         }
@@ -265,14 +267,16 @@ mod test_util {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81)
                     .into(),
-                measurement: Measurement::Continuous(ContinuousMeasurement {
-                    measurement: "raw".to_string(),
-                    unit: None,
-                }),
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: 1,
+                bands: vec![crate::engine::RasterBandDescriptor::new(
+                    "band".into(),
+                    Measurement::Continuous(ContinuousMeasurement {
+                        measurement: "raw".to_string(),
+                        unit: None,
+                    }),
+                )],
             },
             cache_ttl: CacheTtlSeconds::default(),
         };

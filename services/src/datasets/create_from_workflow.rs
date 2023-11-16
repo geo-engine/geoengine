@@ -232,11 +232,10 @@ async fn create_dataset<C: SessionContext>(
     let result_descriptor = RasterResultDescriptor {
         data_type: origin_result_descriptor.data_type,
         spatial_reference: origin_result_descriptor.spatial_reference,
-        measurement: origin_result_descriptor.measurement.clone(),
         time: Some(result_time_interval),
         bbox: Some(query_rectangle.spatial_bounds),
         resolution: Some(query_rectangle.spatial_resolution),
-        bands: 1,
+        bands: origin_result_descriptor.bands.clone(),
     };
     //TODO: Recognize MetaDataDefinition::GdalMetaDataRegular
     let meta_data = if slice_info.len() == 1 {

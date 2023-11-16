@@ -19,8 +19,8 @@ use futures::{stream, StreamExt};
 use geoengine_datatypes::collections::GeometryCollection;
 
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, Measurement, RasterQueryRectangle,
-    SpatialPartition2D, SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
+    SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{
     GeoTransform, Grid2D, GridOrEmpty, GridSize, GridSpaceToLinearSpace, RasterDataType,
@@ -102,11 +102,10 @@ impl RasterOperator for Rasterization {
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterDataType::F64,
-            measurement: Measurement::default(),
             bbox: None,
             time: in_desc.time,
             resolution: None,
-            bands: 1,
+            bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
         };
 
         match self.params {

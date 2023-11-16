@@ -4,7 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{
-    partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle, SpatialPartition2D,
+    partitions_extent, time_interval_extent, RasterQueryRectangle, SpatialPartition2D,
     SpatialResolution,
 };
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
@@ -94,7 +94,7 @@ impl RasterOperator for XgboostOperator {
 
         // TODO: implement multi-band functionality and remove this check
         ensure!(
-            in_descriptors.iter().all(|r| r.bands == 1),
+            in_descriptors.iter().all(|r| r.bands.len() == 1),
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                 operator: XgboostOperator::TYPE_NAME
             }
@@ -131,8 +131,7 @@ impl RasterOperator for XgboostOperator {
             bbox,
             resolution,
             spatial_reference,
-            measurement: Measurement::Unitless,
-            bands: 1,
+            bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
         };
 
         let initialized_operator = InitializedXgboostOperator {
@@ -380,7 +379,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
-        Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
 
     use geoengine_datatypes::raster::{
@@ -496,11 +495,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }

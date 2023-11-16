@@ -72,13 +72,13 @@ impl RasterOperator for Radiance {
 
         // TODO: implement multi-band functionality and remove this check
         ensure!(
-            in_desc.bands == 1,
+            in_desc.bands.len() == 1,
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                 operator: Radiance::TYPE_NAME
             }
         );
 
-        match &in_desc.measurement {
+        match &in_desc.bands[0].measurement {
             Measurement::Continuous(ContinuousMeasurement {
                 measurement: m,
                 unit: _,
@@ -113,14 +113,16 @@ impl RasterOperator for Radiance {
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
-            measurement: Measurement::Continuous(ContinuousMeasurement {
-                measurement: "radiance".into(),
-                unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
-            }),
             time: in_desc.time,
             bbox: in_desc.bbox,
             resolution: in_desc.resolution,
-            bands: 1,
+            bands: vec![crate::engine::RasterBandDescriptor::new(
+                in_desc.bands[0].name.clone(),
+                Measurement::Continuous(ContinuousMeasurement {
+                    measurement: "radiance".into(),
+                    unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
+                }),
+            )],
         };
 
         let initialized_operator = InitializedRadiance {

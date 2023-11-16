@@ -44,7 +44,7 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         // TODO: implement multi-band functionality and remove this check
         ensure!(
-            self.source.result_descriptor().bands == 1,
+            self.source.result_descriptor().bands.len() == 1,
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                 operator: "CacheOperator"
             }

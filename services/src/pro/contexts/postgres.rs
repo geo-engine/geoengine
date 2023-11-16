@@ -553,8 +553,8 @@ mod tests {
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
-        RasterResultDescriptor, StaticMetaData, TypedOperator, TypedResultDescriptor,
-        VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+        RasterBandDescriptor, RasterResultDescriptor, StaticMetaData, TypedOperator,
+        TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
@@ -1581,11 +1581,10 @@ mod tests {
         let raster_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
-            measurement: Default::default(),
             time: None,
             bbox: None,
             resolution: None,
-            bands: 1,
+            bands: vec![RasterBandDescriptor::singleton_band()],
         };
 
         let vector_ds = AddDataset {

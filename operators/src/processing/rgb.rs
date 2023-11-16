@@ -13,7 +13,7 @@ use futures::{stream::BoxStream, try_join, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
-        partitions_extent, time_interval_extent, BandSelection, Measurement, RasterQueryRectangle,
+        partitions_extent, time_interval_extent, BandSelection, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution,
     },
     raster::{
@@ -163,7 +163,9 @@ impl RasterOperator for Rgb {
 
         // TODO: implement multi-band functionality and remove this check
         ensure!(
-            sources.iter().all(|r| r.result_descriptor().bands == 1),
+            sources
+                .iter()
+                .all(|r| r.result_descriptor().bands.len() == 1),
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                 operator: Rgb::TYPE_NAME
             }
@@ -202,11 +204,10 @@ impl RasterOperator for Rgb {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U32,
             spatial_reference,
-            measurement: Measurement::Unitless,
             time,
             bbox,
             resolution,
-            bands: 1,
+            bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
         };
 
         let initialized_operator = InitializedRgb {
@@ -412,8 +413,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::{
-        CacheHint, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-        TimeInterval,
+        CacheHint, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
         Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, TileInformation,
@@ -621,11 +621,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }

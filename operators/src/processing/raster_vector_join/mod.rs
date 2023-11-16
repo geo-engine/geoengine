@@ -147,7 +147,7 @@ impl VectorOperator for RasterVectorJoin {
             matches!(
                 self.params.temporal_aggregation,
                 TemporalAggregationMethod::None
-            ) || source_descriptors.iter().all(|rd| rd.bands == 1),
+            ) || source_descriptors.iter().all(|rd| rd.bands.len() == 1),
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                 operator: "RasterVectorAggregateJoin"
             }
@@ -170,15 +170,15 @@ impl VectorOperator for RasterVectorJoin {
 
         let raster_sources_bands = source_descriptors
             .iter()
-            .map(|rd| rd.bands as usize)
+            .map(|rd| rd.bands.len())
             .collect::<Vec<_>>();
 
         let params = self.params;
 
         let result_descriptor = vector_rd.map_columns(|columns| {
             let mut columns = columns.clone();
-            for ((i, new_column_name), bands) in
-                params.names.iter().enumerate().zip(&raster_sources_bands)
+            for ((i, new_column_name), source_descriptor) in
+                params.names.iter().enumerate().zip(&source_descriptors)
             {
                 let feature_data_type = match params.temporal_aggregation {
                     TemporalAggregationMethod::First | TemporalAggregationMethod::None => {
@@ -197,18 +197,18 @@ impl VectorOperator for RasterVectorJoin {
                     TemporalAggregationMethod::Mean => FeatureDataType::Float,
                 };
 
-                for band in 0..*bands {
-                    let column_name = if band == 0 {
+                for (i, band) in source_descriptor.bands.iter().enumerate() {
+                    let column_name = if i == 0 {
                         new_column_name.clone()
                     } else {
-                        format!("{new_column_name}_{band}")
+                        format!("{new_column_name}_{i}")
                     };
 
                     columns.insert(
                         column_name,
                         VectorColumnInfo {
                             data_type: feature_data_type,
-                            measurement: raster_sources[i].result_descriptor().measurement.clone(),
+                            measurement: band.measurement.clone(),
                         },
                     );
                 }
@@ -345,8 +345,8 @@ mod tests {
     use std::str::FromStr;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterResultDescriptor,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor,
+        RasterBandDescriptor, RasterOperator, RasterResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -730,11 +730,13 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 2,
+                    bands: vec![
+                        RasterBandDescriptor::new_unitless("band_0".into()),
+                        RasterBandDescriptor::new_unitless("band_1".into()),
+                    ],
                 },
             },
         }
@@ -746,11 +748,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 3,
+                    bands: vec![
+                        RasterBandDescriptor::new_unitless("band_0".into()),
+                        RasterBandDescriptor::new_unitless("band_1".into()),
+                        RasterBandDescriptor::new_unitless("band_2".into()),
+                    ],
                 },
             },
         }

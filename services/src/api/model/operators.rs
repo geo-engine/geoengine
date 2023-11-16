@@ -27,10 +27,34 @@ pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
-    pub measurement: Measurement,
     pub time: Option<TimeInterval>,
     pub bbox: Option<SpatialPartition2D>,
     pub resolution: Option<SpatialResolution>,
+    pub bands: Vec<RasterBandDescriptor>, // TODO: validate that there are no duplicate names
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+pub struct RasterBandDescriptor {
+    pub name: String,
+    pub measurement: Measurement,
+}
+
+impl From<geoengine_operators::engine::RasterBandDescriptor> for RasterBandDescriptor {
+    fn from(value: geoengine_operators::engine::RasterBandDescriptor) -> Self {
+        Self {
+            name: value.name,
+            measurement: value.measurement.into(),
+        }
+    }
+}
+
+impl From<RasterBandDescriptor> for geoengine_operators::engine::RasterBandDescriptor {
+    fn from(value: RasterBandDescriptor) -> Self {
+        Self {
+            name: value.name,
+            measurement: value.measurement.into(),
+        }
+    }
 }
 
 impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultDescriptor {
@@ -38,10 +62,10 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
-            measurement: value.measurement.into(),
             time: value.time.map(Into::into),
             bbox: value.bbox.map(Into::into),
             resolution: value.resolution.map(Into::into),
+            bands: value.bands.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -51,11 +75,10 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
-            measurement: value.measurement.into(),
             time: value.time.map(Into::into),
             bbox: value.bbox.map(Into::into),
             resolution: value.resolution.map(Into::into),
-            bands: 1,
+            bands: value.bands.into_iter().map(Into::into).collect(),
         }
     }
 }

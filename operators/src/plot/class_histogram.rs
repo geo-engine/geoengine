@@ -68,7 +68,14 @@ impl PlotOperator for ClassHistogram {
 
                 let in_desc = raster_source.result_descriptor();
 
-                let source_measurement = match &in_desc.measurement {
+                ensure!(
+                    in_desc.bands.len() == 1,
+                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                        operator: ClassHistogram::TYPE_NAME
+                    }
+                );
+
+                let source_measurement = match &in_desc.bands[0].measurement {
                     Measurement::Classification(measurement) => measurement.clone(),
                     _ => {
                         return Err(Error::InvalidOperatorSpec {
@@ -489,23 +496,25 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::classification(
-                        "test-class".to_string(),
-                        [
-                            (1, "A".to_string()),
-                            (2, "B".to_string()),
-                            (3, "C".to_string()),
-                            (4, "D".to_string()),
-                            (5, "E".to_string()),
-                            (6, "F".to_string()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                    ),
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::new(
+                        "bands".into(),
+                        Measurement::classification(
+                            "test-class".to_string(),
+                            [
+                                (1, "A".to_string()),
+                                (2, "B".to_string()),
+                                (3, "C".to_string()),
+                                (4, "D".to_string()),
+                                (5, "E".to_string()),
+                                (6, "F".to_string()),
+                            ]
+                            .into_iter()
+                            .collect(),
+                        ),
+                    )],
                 },
             },
         }
@@ -889,11 +898,13 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement,
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: 1,
+                        bands: vec![crate::engine::RasterBandDescriptor::new(
+                            "band".into(),
+                            measurement,
+                        )],
                     },
                 },
             }
@@ -1094,11 +1105,13 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement,
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: 1,
+                        bands: vec![crate::engine::RasterBandDescriptor::new(
+                            "band".into(),
+                            measurement,
+                        )],
                     },
                 },
             }

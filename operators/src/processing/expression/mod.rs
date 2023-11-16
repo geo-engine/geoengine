@@ -259,7 +259,7 @@ impl RasterOperator for Expression {
 
         // TODO: implement multi-band functionality and remove this check
         ensure!(
-            in_descriptors.iter().all(|r| r.bands == 1),
+            in_descriptors.iter().all(|r| r.bands.len() == 1),
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                 operator: Expression::TYPE_NAME
             }
@@ -293,15 +293,16 @@ impl RasterOperator for Expression {
         let result_descriptor = RasterResultDescriptor {
             data_type: self.params.output_type,
             spatial_reference,
-            measurement: self
-                .params
-                .output_measurement
-                .as_ref()
-                .map_or(Measurement::Unitless, Measurement::clone),
             time,
             bbox,
             resolution,
-            bands: 1,
+            bands: vec![crate::engine::RasterBandDescriptor::new(
+                "band".into(), // TODO: how to name the band?
+                self.params
+                    .output_measurement
+                    .as_ref()
+                    .map_or(Measurement::Unitless, Measurement::clone),
+            )],
         };
 
         let initialized_operator = InitializedExpression {
@@ -1147,11 +1148,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }

@@ -448,8 +448,9 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterResultDescriptor, VectorOperator, WorkflowOperatorPath,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor,
+        RasterBandDescriptor, RasterOperator, RasterResultDescriptor, VectorOperator,
+        WorkflowOperatorPath,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -458,8 +459,8 @@ mod tests {
         ChunksEqualIgnoringCacheHint, MultiPointCollection, MultiPolygonCollection,
     };
     use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::{BoundingBox2D, DateTime, FeatureData, MultiPolygon};
-    use geoengine_datatypes::primitives::{Measurement, SpatialResolution};
     use geoengine_datatypes::primitives::{MultiPoint, TimeInterval};
     use geoengine_datatypes::raster::{
         Grid2D, RasterDataType, TileInformation, TilingSpecification,
@@ -951,11 +952,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }
@@ -1149,11 +1149,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }
@@ -1443,11 +1442,13 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 2,
+                    bands: vec![
+                        RasterBandDescriptor::new_unitless("band_0".into()),
+                        RasterBandDescriptor::new_unitless("band_1".into()),
+                    ],
                 },
             },
         }

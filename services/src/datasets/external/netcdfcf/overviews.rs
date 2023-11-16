@@ -817,14 +817,14 @@ mod tests {
     use geoengine_datatypes::{
         hashmap,
         operations::image::{Colorizer, DefaultColors, RgbaColor},
-        primitives::{DateTime, Measurement, SpatialResolution, TimeGranularity, TimeStep},
+        primitives::{DateTime, SpatialResolution, TimeGranularity, TimeStep},
         raster::RasterDataType,
         spatial_reference::SpatialReference,
         test_data,
         util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::{
-        engine::RasterResultDescriptor,
+        engine::{RasterBandDescriptor, RasterResultDescriptor},
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular,
@@ -874,11 +874,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
-                    bands: 1
+                    bands: vec![RasterBandDescriptor::singleton_band()],
                 },
                 params: GdalDatasetParameters {
                     file_path: Path::new("foo/%_START_TIME_%.tiff").into(),
@@ -971,11 +970,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
-                    bands: 1
+                    bands: vec![RasterBandDescriptor::singleton_band()],
                 },
                 params: GdalDatasetParameters {
                     file_path: tempdir_path.join("1/%_START_TIME_%.tiff"),
@@ -1241,11 +1239,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
-                    bands: 1
+                    bands: vec![RasterBandDescriptor::singleton_band()],
                 },
                 params: vec![
                     GdalLoadingInfoTemporalSlice {

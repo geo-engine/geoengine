@@ -77,13 +77,13 @@ impl RasterOperator for Reflectance {
 
         // TODO: implement multi-band functionality and remove this check
         ensure!(
-            in_desc.bands == 1,
+            in_desc.bands.len() == 1,
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                 operator: Reflectance::TYPE_NAME
             }
         );
 
-        match &in_desc.measurement {
+        match &in_desc.bands[0].measurement {
             Measurement::Continuous(ContinuousMeasurement {
                 measurement: m,
                 unit: _,
@@ -118,14 +118,16 @@ impl RasterOperator for Reflectance {
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
-            measurement: Measurement::Continuous(ContinuousMeasurement {
-                measurement: "reflectance".into(),
-                unit: Some("fraction".into()),
-            }),
             time: in_desc.time,
             bbox: in_desc.bbox,
             resolution: in_desc.resolution,
-            bands: 1,
+            bands: vec![crate::engine::RasterBandDescriptor::new(
+                in_desc.bands[0].name.clone(),
+                Measurement::Continuous(ContinuousMeasurement {
+                    measurement: "reflectance".into(),
+                    unit: Some("fraction".into()),
+                }),
+            )],
         };
 
         let initialized_operator = InitializedReflectance {

@@ -913,7 +913,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
-        Measurement, RasterQueryRectangle, SpatialPartition2D, TimeGranularity, TimeInterval,
+        RasterQueryRectangle, SpatialPartition2D, TimeGranularity, TimeInterval,
     };
     use geoengine_datatypes::raster::{
         GeoTransform, Grid, GridShape, RasterDataType, RasterTile2D, TilingSpecification,
@@ -921,8 +921,8 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        ExecutionContext, InitializedRasterOperator, RasterOperator, RasterResultDescriptor,
-        SingleRasterOrVectorSource, TypedOperator,
+        ExecutionContext, InitializedRasterOperator, RasterBandDescriptor, RasterOperator,
+        RasterResultDescriptor, SingleRasterOrVectorSource, TypedOperator,
     };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::processing::{TimeShift, TimeShiftParams};
@@ -1324,7 +1324,6 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
                         time: if has_time {
                             Some(TimeInterval::new_unchecked(
                                 1_671_868_800_000,
@@ -1346,7 +1345,7 @@ mod tests {
                         } else {
                             None
                         },
-                        bands: 1,
+                        bands: vec![RasterBandDescriptor::singleton_band()],
                     },
                 },
             }

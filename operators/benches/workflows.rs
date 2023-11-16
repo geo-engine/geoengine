@@ -17,7 +17,8 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{
-    MetaData, RasterResultDescriptor, SingleRasterOrVectorSource, WorkflowOperatorPath,
+    MetaData, RasterBandDescriptor, RasterResultDescriptor, SingleRasterOrVectorSource,
+    WorkflowOperatorPath,
 };
 use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
 use geoengine_operators::processing::{
@@ -327,11 +328,10 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![RasterBandDescriptor::singleton_band()],
                 },
             },
         }
@@ -403,11 +403,10 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![RasterBandDescriptor::singleton_band()],
                 },
             },
         };
@@ -491,11 +490,10 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![RasterBandDescriptor::singleton_band()],
                 },
             },
         };
@@ -572,11 +570,10 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![RasterBandDescriptor::singleton_band()],
                 },
             },
         };

@@ -267,7 +267,7 @@ impl RasterOperator for TimeShift {
 
                 // TODO: implement multi-band functionality and remove this check
                 ensure!(
-                    result_descriptor.bands == 1,
+                    result_descriptor.bands.len() == 1,
                     crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                         operator: TimeShift::TYPE_NAME
                     }
@@ -295,7 +295,7 @@ impl RasterOperator for TimeShift {
 
                 // TODO: implement multi-band functionality and remove this check
                 ensure!(
-                    result_descriptor.bands == 1,
+                    result_descriptor.bands.len() == 1,
                     crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                         operator: TimeShift::TYPE_NAME
                     }
@@ -318,7 +318,7 @@ impl RasterOperator for TimeShift {
 
                 // TODO: implement multi-band functionality and remove this check
                 ensure!(
-                    result_descriptor.bands == 1,
+                    result_descriptor.bands.len() == 1,
                     crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                         operator: TimeShift::TYPE_NAME
                     }
@@ -529,8 +529,8 @@ mod tests {
         collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection},
         dataset::NamedData,
         primitives::{
-            BoundingBox2D, CacheHint, DateTime, Measurement, MultiPoint, SpatialPartition2D,
-            SpatialResolution, TimeGranularity,
+            BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialPartition2D, SpatialResolution,
+            TimeGranularity,
         },
         raster::{EmptyGrid2D, GridOrEmpty, RasterDataType, TileInformation, TilingSpecification},
         spatial_reference::SpatialReference,
@@ -916,11 +916,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }
@@ -1092,11 +1091,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }

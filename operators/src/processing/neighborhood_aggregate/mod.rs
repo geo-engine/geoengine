@@ -152,7 +152,7 @@ impl RasterOperator for NeighborhoodAggregate {
 
         // TODO: implement multi-band functionality and remove this check
         ensure!(
-            raster_source.result_descriptor().bands == 1,
+            raster_source.result_descriptor().bands.len() == 1,
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                 operator: NeighborhoodAggregate::TYPE_NAME
             }
@@ -295,8 +295,8 @@ mod tests {
         dataset::NamedData,
         operations::image::{Colorizer, DefaultColors, RgbaColor},
         primitives::{
-            CacheHint, DateTime, Measurement, RasterQueryRectangle, SpatialPartition2D,
-            SpatialResolution, TimeInstance, TimeInterval,
+            CacheHint, DateTime, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+            TimeInstance, TimeInterval,
         },
         raster::{
             Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation,
@@ -641,11 +641,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }

@@ -79,7 +79,7 @@ impl RasterOperator for Interpolation {
 
         // TODO: implement multi-band functionality and remove this check
         ensure!(
-            in_descriptor.bands == 1,
+            in_descriptor.bands.len() == 1,
             crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
                 operator: Interpolation::TYPE_NAME
             }
@@ -100,11 +100,10 @@ impl RasterOperator for Interpolation {
         let out_descriptor = RasterResultDescriptor {
             spatial_reference: in_descriptor.spatial_reference,
             data_type: in_descriptor.data_type,
-            measurement: in_descriptor.measurement.clone(),
             bbox: in_descriptor.bbox,
             time: in_descriptor.time,
             resolution: None, // after interpolation the resolution is uncapped
-            bands: 1,
+            bands: in_descriptor.bands.clone(),
         };
 
         let initialized_operator = InitializedInterpolation {
@@ -459,9 +458,7 @@ mod tests {
     use super::*;
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{
-            Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
+        primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
             Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
         },
@@ -622,11 +619,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }

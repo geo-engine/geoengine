@@ -21,8 +21,8 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterOperator, RasterResultDescriptor, StaticMetaData,
-    TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterBandDescriptor, RasterOperator, RasterResultDescriptor,
+    StaticMetaData, TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -679,11 +679,10 @@ impl EdrCollectionMetaData {
         Ok(RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: Some(self.get_time_interval()?),
             bbox: Some(bbox),
             resolution: None,
-            bands: 1,
+            bands: vec![RasterBandDescriptor::singleton_band()],
         })
     }
 
@@ -1711,7 +1710,6 @@ mod tests {
             RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: Some(TimeInterval::new_unchecked(
                     1_692_144_000_000,
                     1_692_500_400_000
@@ -1721,7 +1719,7 @@ mod tests {
                     (359.500_000_000_000_06, -90.).into()
                 )),
                 resolution: None,
-                bands: 1
+                bands: vec![RasterBandDescriptor::singleton_band()],
             }
         );
     }

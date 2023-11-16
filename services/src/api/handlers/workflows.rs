@@ -691,7 +691,8 @@ mod tests {
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_operators::engine::{
-        ExecutionContext, MultipleRasterOrSingleVectorSource, PlotOperator, TypedOperator,
+        ExecutionContext, MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
+        TypedOperator,
     };
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
@@ -1000,14 +1001,16 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "radiation".to_string(),
-                            unit: None,
-                        }),
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: 1,
+                        bands: vec![RasterBandDescriptor::new(
+                            "band".into(),
+                            Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "radiation".to_string(),
+                                unit: None,
+                            }),
+                        )],
                     },
                 },
             }

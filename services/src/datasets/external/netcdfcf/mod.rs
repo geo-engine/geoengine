@@ -39,8 +39,8 @@ use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::util::gdal::ResamplingMethod;
-use geoengine_operators::engine::RasterOperator;
 use geoengine_operators::engine::TypedOperator;
+use geoengine_operators::engine::{RasterBandDescriptor, RasterOperator};
 use geoengine_operators::source::GdalSource;
 use geoengine_operators::source::GdalSourceParameters;
 use geoengine_operators::source::{
@@ -492,11 +492,13 @@ impl NetCdfCfDataProvider {
             )
             .context(error::CannotParseCrs)?
             .into(),
-            measurement: derive_measurement(data_array.unit()),
             time: None,
             bbox: None,
             resolution: None,
-            bands: 1,
+            bands: vec![RasterBandDescriptor::new(
+                "band".into(),
+                derive_measurement(data_array.unit()),
+            )],
         };
 
         let params = GdalDatasetParameters {
@@ -1552,6 +1554,7 @@ mod tests {
         test_data,
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
+    use geoengine_operators::engine::RasterBandDescriptor;
     use geoengine_operators::{
         engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath},
         plot::{
@@ -1959,11 +1962,10 @@ mod tests {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: 1
+                bands: vec![RasterBandDescriptor::singleton_band()],
             }
         );
 
@@ -2085,11 +2087,10 @@ mod tests {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
                 resolution: Some(SpatialResolution::new_unchecked(1000.0, 1000.0)),
-                bands: 1
+                bands: vec![RasterBandDescriptor::singleton_band()],
             }
         );
 

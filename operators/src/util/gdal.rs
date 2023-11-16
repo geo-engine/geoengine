@@ -84,7 +84,6 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
         result_descriptor: RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: Some(TimeInterval::new_unchecked(
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
                 TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
@@ -94,7 +93,7 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
                 (180., -90.).into(),
             )),
             resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
-            bands: 1,
+            bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
         },
         cache_ttl,
     }
@@ -237,11 +236,13 @@ pub fn raster_descriptor_from_dataset(
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
-        measurement: measurement_from_rasterband(dataset, band)?,
         time: None,
         bbox: None,
         resolution: Some(geo_transfrom.spatial_resolution()),
-        bands: 1,
+        bands: vec![crate::engine::RasterBandDescriptor::new(
+            "band".into(), // TODO: derive better name?
+            measurement_from_rasterband(dataset, band)?,
+        )],
     })
 }
 
@@ -261,11 +262,13 @@ pub fn raster_descriptor_from_dataset_and_sref(
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
-        measurement: measurement_from_rasterband(dataset, band)?,
         time: None,
         bbox: None,
         resolution: Some(geo_transfrom.spatial_resolution()),
-        bands: 1,
+        bands: vec![crate::engine::RasterBandDescriptor::new(
+            "band".into(), // TODO derive better name?
+            measurement_from_rasterband(dataset, band)?,
+        )],
     })
 }
 

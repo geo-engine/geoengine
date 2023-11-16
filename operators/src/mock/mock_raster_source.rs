@@ -272,7 +272,7 @@ where
             MockRasterSourceProcessor::new_unchecked(
                 self.data.clone(),
                 self.tiling_specification,
-                self.result_descriptor.bands as usize,
+                self.result_descriptor.bands.len(),
             )
             .boxed(),
         );
@@ -294,7 +294,7 @@ mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
     use geoengine_datatypes::primitives::CacheHint;
-    use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D, SpatialResolution};
+    use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
     use geoengine_datatypes::raster::{Grid, MaskedGrid, RasterDataType, RasterProperties};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
@@ -304,6 +304,7 @@ mod tests {
     };
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn serde() {
         let raster =
             MaskedGrid::from(Grid2D::new([3, 2].into(), vec![1_u8, 2, 3, 4, 5, 6]).unwrap());
@@ -327,11 +328,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }
@@ -383,13 +383,17 @@ mod tests {
                 "resultDescriptor": {
                     "dataType": "U8",
                     "spatialReference": "EPSG:4326",
-                    "measurement": {
-                        "type": "unitless"
-                    },
                     "time": null,
                     "bbox": null,
                     "resolution": null,
-                    "bands": 1,
+                    "bands": [
+                        {
+                            "name": "band",
+                            "measurement":  {
+                                "type": "unitless"
+                            }
+                        }
+                    ],
                 }
             }
         });
@@ -470,11 +474,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
                 },
             },
         }

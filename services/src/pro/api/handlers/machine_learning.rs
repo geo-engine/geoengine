@@ -60,7 +60,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         CacheHint, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
     };
-    use geoengine_operators::engine::MultipleRasterSources;
+    use geoengine_operators::engine::{MultipleRasterSources, RasterBandDescriptor};
     use geoengine_operators::{
         engine::QueryProcessor,
         pro::machine_learning::xgboost::{XgboostOperator, XgboostParams},
@@ -80,7 +80,7 @@ mod tests {
     use crate::workflows::workflow::Workflow;
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::primitives::{Measurement, SpatialResolution, TimeInterval};
+    use geoengine_datatypes::primitives::{SpatialResolution, TimeInterval};
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -152,11 +152,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: 1,
+                    bands: vec![RasterBandDescriptor::singleton_band()],
                 },
             },
         }
