@@ -17,9 +17,6 @@
     "resultDescriptor": {
       "dataType": "U8",
       "spatialReference": "EPSG:3857",
-      "measurement": {
-        "type": "unitless"
-      },
       "time": {
         "start": "2014-01-01T00:00:00.000Z",
         "end": "2014-07-01T00:00:00.000Z"
@@ -32,7 +29,14 @@
         "x": 14052.95025804873876,
         "y": 14057.88111778840539
       },
-      "bands": 1
+      "bands": [
+        {
+          "name": "ndvi",
+          "measurement": {
+            "type": "unitless"
+          }
+        }
+      ]
     },
     "params": {
       "filePath": "test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_%_START_TIME_%.TIFF",

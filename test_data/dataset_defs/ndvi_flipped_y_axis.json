@@ -284,10 +284,6 @@
     "resultDescriptor": {
       "dataType": "U8",
       "spatialReference": "EPSG:4326",
-      "measurement": {
-        "type": "continuous",
-        "measurement": "vegetation"
-      },
       "time": {
         "start": "2014-01-01T00:00:00.000Z",
         "end": "2014-07-01T00:00:00.000Z"
@@ -300,7 +296,15 @@
         "x": 0.1,
         "y": 0.1
       },
-      "bands": 1
+      "bands": [
+        {
+          "name": "ndvi",
+          "measurement": {
+            "type": "continuous",
+            "measurement": "vegetation"
+          }
+        }
+      ]
     },
     "params": {
       "filePath": "test_data/raster/modis_ndvi/flipped_axis_y/MOD13A2_M_NDVI_%_START_TIME_%_flipped_y.tiff",

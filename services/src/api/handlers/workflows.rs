@@ -1035,15 +1035,17 @@ mod tests {
                 "type": "raster",
                 "dataType": "U8",
                 "spatialReference": "EPSG:4326",
-                "measurement": {
-                    "type": "continuous",
-                    "measurement": "radiation",
-                    "unit": null
-                },
                 "time": null,
                 "bbox": null,
                 "resolution": null,
-                "bands": 1
+                "bands": [{
+                    "name": "band",
+                    "measurement": {
+                        "type": "continuous",
+                        "measurement": "radiation",
+                        "unit": null
+                    }
+                }]
             })
         );
     }
@@ -1296,9 +1298,6 @@ mod tests {
                 "type": "raster",
                 "dataType": "U8",
                 "spatialReference": "EPSG:4326",
-                "measurement": {
-                    "type": "unitless"
-                },
                 "time": {
                     "start": 1_388_534_400_000_i64,
                     "end": 1_404_172_800_000_i64,
@@ -1317,7 +1316,12 @@ mod tests {
                     "x": 0.1,
                     "y": 0.1
                 },
-                "bands": 1
+                "bands": [{
+                        "name": "band",
+                        "measurement": {
+                            "type": "unitless"
+                        }
+                    }]
             })
         );
 

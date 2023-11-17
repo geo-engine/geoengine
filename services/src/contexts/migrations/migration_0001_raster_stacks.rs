@@ -18,11 +18,17 @@ impl Migration for Migration0001RasterStacks {
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
-        let stmt = tx
-            .prepare(r#"ALTER TYPE "RasterResultDescriptor" ADD ATTRIBUTE bands INTEGER;"#)
-            .await?;
+        tx.batch_execute(
+            r#"
+            CREATE TYPE "RasterBandDescriptor" AS (
+                "name" text,
+                measurement "Measurement"
+            );
 
-        tx.execute(&stmt, &[]).await?;
+            ALTER TYPE "RasterResultDescriptor" ADD ATTRIBUTE bands "RasterBandDescriptor"[];
+        "#,
+        )
+        .await?;
 
         // as ALTER TYPE ADD ATTRIBUTE does not support default values we manually have to
         // update the `bands` in all `RasterResultDescriptor`s
@@ -30,23 +36,20 @@ impl Migration for Migration0001RasterStacks {
         // we use a common table expression because we cannot access nested fields in UPDATE statements
         // and only want to update the rows that actually are a raster
 
-        // update the result descriptor of the datasets
-        let stmt = tx
-            .prepare(
-                r#"
+        tx.batch_execute(
+            r#"
             WITH raster_datasets AS (
-                SELECT id 
+                SELECT id, (result_descriptor).raster.measurement measurement
                 FROM datasets
                 WHERE (result_descriptor).raster IS NOT NULL
             )
             UPDATE datasets
-            SET result_descriptor.raster.bands = 1
+            SET result_descriptor.raster.bands = 
+                ARRAY[('band', raster_datasets.measurement)]::"RasterBandDescriptor"[]
             FROM raster_datasets
             WHERE datasets.id = raster_datasets.id;"#,
-            )
-            .await?;
-
-        tx.execute(&stmt, &[]).await?;
+        )
+        .await?;
 
         // update the result descriptor of the meta data
         let raster_meta_data_types = [
@@ -57,23 +60,30 @@ impl Migration for Migration0001RasterStacks {
         ];
 
         for raster_meta_data_type in raster_meta_data_types {
-            let stmt = tx
-                .prepare(&format!(
-                    r#"
+            tx.batch_execute(&format!(
+                r#"
             WITH cte AS (
-                SELECT id 
+                SELECT 
+                    id, 
+                    (meta_data).{raster_meta_data_type}.result_descriptor.measurement measurement
                 FROM datasets
                 WHERE (meta_data).{raster_meta_data_type} IS NOT NULL
             )
             UPDATE datasets
-            SET meta_data.{raster_meta_data_type}.result_descriptor.bands = 1
+            SET meta_data.{raster_meta_data_type}.result_descriptor.bands =
+                ARRAY[('band', cte.measurement)]::"RasterBandDescriptor"[]
             FROM cte
             WHERE datasets.id = cte.id;"#
-                ))
-                .await?;
-
-            tx.execute(&stmt, &[]).await?;
+            ))
+            .await?;
         }
+
+        tx.batch_execute(
+            r#"
+        ALTER TYPE "RasterResultDescriptor" DROP ATTRIBUTE measurement;
+        "#,
+        )
+        .await?;
 
         Ok(())
     }
