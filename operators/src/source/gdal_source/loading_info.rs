@@ -507,7 +507,7 @@ mod tests {
     };
 
     use crate::{
-        engine::RasterBandDescriptor,
+        engine::RasterBandDescriptors,
         source::{FileNotFoundHandling, GdalDatasetGeoTransform, TimeReference},
     };
 
@@ -523,7 +523,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
@@ -569,7 +569,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: vec![RasterBandDescriptor::singleton_band()]
+                bands: RasterBandDescriptors::new_single_band()
             }
         );
     }
@@ -812,7 +812,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                bands: RasterBandDescriptors::new_single_band(),
             },
             params: vec![
                 GdalLoadingInfoTemporalSlice {
@@ -880,7 +880,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()]
+                bands: RasterBandDescriptors::new_single_band()
             }
         );
 
@@ -927,7 +927,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -995,7 +995,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -1063,7 +1063,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),

@@ -24,7 +24,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, OperatorName, RasterBandDescriptor, RasterOperator,
+    MetaData, MetaDataProvider, OperatorName, RasterBandDescriptors, RasterOperator,
     RasterResultDescriptor, TypedOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
@@ -665,7 +665,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             time: None,
             bbox: None,
             resolution: None, // TODO: determine from STAC or data or hardcode it
-            bands: vec![RasterBandDescriptor::singleton_band()],
+            bands: RasterBandDescriptors::new_single_band(),
         })
     }
 
@@ -1270,7 +1270,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
                 params,
                 cache_ttl: CacheTtlSeconds::default(),

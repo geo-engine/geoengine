@@ -412,11 +412,11 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::engine::VectorOperator;
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
         RasterResultDescriptor,
     };
+    use crate::engine::{RasterBandDescriptors, VectorOperator};
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::util::input::MultiRasterOrVectorOperator::Raster;
     use geoengine_datatypes::primitives::{
@@ -523,7 +523,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -607,7 +607,7 @@ mod tests {
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                        bands: RasterBandDescriptors::new_single_band(),
                     },
                 },
             }
@@ -633,7 +633,7 @@ mod tests {
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                        bands: RasterBandDescriptors::new_single_band(),
                     },
                 },
             }
@@ -726,7 +726,7 @@ mod tests {
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                        bands: RasterBandDescriptors::new_single_band(),
                     },
                 },
             }
@@ -752,7 +752,7 @@ mod tests {
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                        bands: RasterBandDescriptors::new_single_band(),
                     },
                 },
             }
@@ -844,7 +844,7 @@ mod tests {
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                        bands: RasterBandDescriptors::new_single_band(),
                     },
                 },
             }
@@ -870,7 +870,7 @@ mod tests {
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                        bands: RasterBandDescriptors::new_single_band(),
                     },
                 },
             }

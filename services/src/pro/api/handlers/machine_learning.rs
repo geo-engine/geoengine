@@ -60,7 +60,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         CacheHint, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
     };
-    use geoengine_operators::engine::{MultipleRasterSources, RasterBandDescriptor};
+    use geoengine_operators::engine::{MultipleRasterSources, RasterBandDescriptors};
     use geoengine_operators::{
         engine::QueryProcessor,
         pro::machine_learning::xgboost::{XgboostOperator, XgboostParams},
@@ -155,7 +155,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }

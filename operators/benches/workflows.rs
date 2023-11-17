@@ -17,8 +17,8 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{
-    MetaData, RasterBandDescriptor, RasterResultDescriptor, SingleRasterOrVectorSource,
-    WorkflowOperatorPath,
+    MetaData, RasterBandDescriptors, RasterResultDescriptor,
+    SingleRasterOrVectorSource, WorkflowOperatorPath,
 };
 use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
 use geoengine_operators::processing::{
@@ -331,7 +331,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -406,7 +406,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         };
@@ -493,7 +493,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         };
@@ -573,7 +573,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         };

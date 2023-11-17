@@ -21,8 +21,9 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterBandDescriptor, RasterOperator, RasterResultDescriptor,
-    StaticMetaData, TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterBandDescriptors, RasterOperator,
+    RasterResultDescriptor, StaticMetaData, TypedOperator, VectorColumnInfo, VectorOperator,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -682,7 +683,7 @@ impl EdrCollectionMetaData {
             time: Some(self.get_time_interval()?),
             bbox: Some(bbox),
             resolution: None,
-            bands: vec![RasterBandDescriptor::singleton_band()],
+            bands: RasterBandDescriptors::new_single_band(),
         })
     }
 
@@ -1719,7 +1720,7 @@ mod tests {
                     (359.500_000_000_000_06, -90.).into()
                 )),
                 resolution: None,
-                bands: vec![RasterBandDescriptor::singleton_band()],
+                bands: RasterBandDescriptors::new_single_band(),
             }
         );
     }

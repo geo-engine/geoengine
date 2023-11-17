@@ -285,7 +285,10 @@ mod tests {
     use super::*;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor},
+        engine::{
+            MockExecutionContext, MockQueryContext, RasterBandDescriptors,
+            RasterOperator, RasterResultDescriptor,
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
         source::{GdalSource, GdalSourceParameters},
         util::{gdal::add_ndvi_dataset, raster_stream_to_png::raster_stream_to_png_bytes},
@@ -644,7 +647,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }

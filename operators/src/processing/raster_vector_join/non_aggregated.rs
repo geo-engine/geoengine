@@ -449,8 +449,8 @@ mod tests {
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor,
-        RasterBandDescriptor, RasterOperator, RasterResultDescriptor, VectorOperator,
-        WorkflowOperatorPath,
+        RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+        VectorOperator, WorkflowOperatorPath,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -955,7 +955,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1152,7 +1152,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1445,10 +1445,11 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![
+                    bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
                         RasterBandDescriptor::new_unitless("band_1".into()),
-                    ],
+                    ])
+                    .unwrap(),
                 },
             },
         }

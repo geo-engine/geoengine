@@ -23,8 +23,9 @@ use xgboost_rs::{Booster, DMatrix, XGBError};
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    MultipleRasterSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    MultipleRasterSources, Operator, OperatorName, QueryContext, QueryProcessor,
+    RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::pro::xg_error::error as XgModuleError;
 use crate::util::stream_zip::StreamVectorZip;
@@ -131,7 +132,7 @@ impl RasterOperator for XgboostOperator {
             bbox,
             resolution,
             spatial_reference,
-            bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         let initialized_operator = InitializedXgboostOperator {
@@ -368,7 +369,8 @@ where
 mod tests {
     use crate::engine::{
         MockExecutionContext, MockQueryContext, MultipleRasterSources, QueryProcessor,
-        RasterOperator, RasterResultDescriptor, SourceOperator, WorkflowOperatorPath,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SourceOperator,
+        WorkflowOperatorPath,
     };
     use crate::error::Error;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
@@ -498,7 +500,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }

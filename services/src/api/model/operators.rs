@@ -7,14 +7,16 @@ use crate::api::model::datatypes::{
     MultiPoint, MultiPolygon, NoGeometry, QueryRectangle, RasterPropertiesEntryType,
     RasterPropertiesKey, SpatialResolution, TimeInstance, TimeStep, VectorQueryRectangle,
 };
+use crate::error::{RasterBandNamesMustBeUnique, Result};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::ColumnSelection;
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde::{Deserialize, Deserializer, Serialize};
+use snafu::ensure;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -30,7 +32,51 @@ pub struct RasterResultDescriptor {
     pub time: Option<TimeInterval>,
     pub bbox: Option<SpatialPartition2D>,
     pub resolution: Option<SpatialResolution>,
-    pub bands: Vec<RasterBandDescriptor>, // TODO: validate that there are no duplicate names
+    pub bands: RasterBandDescriptors,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct RasterBandDescriptors(Vec<RasterBandDescriptor>);
+
+impl RasterBandDescriptors {
+    pub fn new(bands: Vec<RasterBandDescriptor>) -> Result<Self> {
+        let mut names = HashSet::new();
+        for value in &bands {
+            ensure!(
+                names.insert(&value.name),
+                RasterBandNamesMustBeUnique {
+                    duplicate_key: value.name.clone()
+                }
+            );
+        }
+
+        Ok(Self(bands))
+    }
+}
+
+impl<'de> Deserialize<'de> for RasterBandDescriptors {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let vec = Vec::deserialize(deserializer)?;
+        RasterBandDescriptors::new(vec).map_err(serde::de::Error::custom)
+    }
+}
+
+impl From<geoengine_operators::engine::RasterBandDescriptors> for RasterBandDescriptors {
+    fn from(value: geoengine_operators::engine::RasterBandDescriptors) -> Self {
+        Self(value.into_vec().into_iter().map(Into::into).collect())
+    }
+}
+
+impl From<RasterBandDescriptors> for geoengine_operators::engine::RasterBandDescriptors {
+    fn from(value: RasterBandDescriptors) -> Self {
+        geoengine_operators::engine::RasterBandDescriptors::new(
+            value.0.into_iter().map(Into::into).collect(),
+        )
+        .expect("RasterBandDescriptors should be valid, because the API descriptors are valid")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -65,7 +111,7 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
             time: value.time.map(Into::into),
             bbox: value.bbox.map(Into::into),
             resolution: value.resolution.map(Into::into),
-            bands: value.bands.into_iter().map(Into::into).collect(),
+            bands: value.bands.into(),
         }
     }
 }
@@ -78,7 +124,7 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
             time: value.time.map(Into::into),
             bbox: value.bbox.map(Into::into),
             resolution: value.resolution.map(Into::into),
-            bands: value.bands.into_iter().map(Into::into).collect(),
+            bands: value.bands.into(),
         }
     }
 }
@@ -1267,5 +1313,54 @@ impl From<FormatSpecifics> for geoengine_operators::source::FormatSpecifics {
                 header: header.into(),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn it_checks_duplicates_while_deserializing_band_descriptors() {
+        assert_eq!(
+            serde_json::from_value::<RasterBandDescriptors>(json!([{
+                "name": "foo",
+                "measurement": {
+                    "type": "unitless"
+                }
+            },{
+                "name": "bar",
+                "measurement": {
+                    "type": "unitless"
+                }
+            }]))
+            .unwrap(),
+            RasterBandDescriptors::new(vec![
+                RasterBandDescriptor {
+                    name: "foo".into(),
+                    measurement: Measurement::Unitless
+                },
+                RasterBandDescriptor {
+                    name: "bar".into(),
+                    measurement: Measurement::Unitless
+                },
+            ])
+            .unwrap()
+        );
+
+        assert!(serde_json::from_value::<RasterBandDescriptors>(json!([{
+            "name": "foo",
+            "measurement": {
+                "type": "unitless"
+            }
+        },{
+            "name": "foo",
+            "measurement": {
+                "type": "unitless"
+            }
+        }]))
+        .is_err());
     }
 }

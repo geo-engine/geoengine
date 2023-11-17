@@ -659,9 +659,9 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-        RasterResultDescriptor, StaticMetaData, VectorColumnInfo, VectorOperator,
-        VectorResultDescriptor,
+        ChunkByteSize, MockExecutionContext, MockQueryContext,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, StaticMetaData,
+        VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -820,7 +820,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1229,7 +1229,7 @@ mod tests {
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                        bands: RasterBandDescriptors::new_single_band(),
                     },
                 },
             }
@@ -1438,7 +1438,7 @@ mod tests {
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                        bands: RasterBandDescriptors::new_single_band(),
                     },
                 },
             }

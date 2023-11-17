@@ -2,9 +2,8 @@ use crate::{
     adapters::{QueryWrapper, RasterArrayTimeAdapter},
     engine::{
         BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
-        InitializedSources, Operator, OperatorData, OperatorName, QueryContext, QueryProcessor,
-        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
-        WorkflowOperatorPath,
+        InitializedSources, Operator, OperatorData, OperatorName, QueryContext, QueryProcessor, RasterBandDescriptors, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
     },
     util::Result,
 };
@@ -207,7 +206,7 @@ impl RasterOperator for Rgb {
             time,
             bbox,
             resolution,
-            bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         let initialized_operator = InitializedRgb {
@@ -624,7 +623,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }

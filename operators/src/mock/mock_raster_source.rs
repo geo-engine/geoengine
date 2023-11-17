@@ -292,7 +292,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
+    use crate::engine::{
+        MockExecutionContext, MockQueryContext, QueryProcessor,
+        RasterBandDescriptors,
+    };
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
     use geoengine_datatypes::raster::{Grid, MaskedGrid, RasterDataType, RasterProperties};
@@ -331,7 +334,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -477,7 +480,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }

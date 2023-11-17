@@ -399,9 +399,9 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-        RasterResultDescriptor, StaticMetaData, VectorColumnInfo, VectorOperator,
-        VectorResultDescriptor,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterBandDescriptor,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, StaticMetaData,
+        VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -499,7 +499,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::new(
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "bands".into(),
                         Measurement::classification(
                             "test-class".to_string(),
@@ -514,7 +514,8 @@ mod tests {
                             .into_iter()
                             .collect(),
                         ),
-                    )],
+                    )])
+                    .unwrap(),
                 },
             },
         }
@@ -901,10 +902,11 @@ mod tests {
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: vec![crate::engine::RasterBandDescriptor::new(
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             measurement,
-                        )],
+                        )])
+                        .unwrap(),
                     },
                 },
             }
@@ -1108,10 +1110,11 @@ mod tests {
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: vec![crate::engine::RasterBandDescriptor::new(
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             measurement,
-                        )],
+                        )])
+                        .unwrap(),
                     },
                 },
             }

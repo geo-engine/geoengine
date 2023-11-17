@@ -461,7 +461,10 @@ mod tests {
     };
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, MultipleRasterSources},
+        engine::{
+            MockExecutionContext, MockQueryContext, MultipleRasterSources,
+            RasterBandDescriptors,
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{
             raster_stacker::{RasterStacker, RasterStackerParams},
@@ -485,7 +488,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -608,7 +611,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -731,7 +734,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -854,7 +857,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -985,7 +988,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1065,7 +1068,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1166,7 +1169,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1267,7 +1270,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1368,7 +1371,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1469,7 +1472,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1570,7 +1573,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1683,7 +1686,7 @@ mod tests {
                             time: None,
                             bbox: None,
                             resolution: None,
-                            bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                            bands: RasterBandDescriptors::new_single_band(),
                         },
                     },
                 }
@@ -1790,7 +1793,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1891,7 +1894,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -2012,9 +2015,7 @@ mod tests {
                                     time: None,
                                     bbox: None,
                                     resolution: None,
-                                    bands: vec![
-                                        crate::engine::RasterBandDescriptor::singleton_band(),
-                                    ],
+                                    bands: RasterBandDescriptors::new_single_band(),
                                 },
                             },
                         }
@@ -2148,7 +2149,7 @@ mod tests {
                             time: None,
                             bbox: None,
                             resolution: None,
-                            bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                            bands: RasterBandDescriptors::new_single_band(),
                         },
                     },
                 }
@@ -2255,7 +2256,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -2356,7 +2357,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -2457,7 +2458,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -2753,9 +2754,7 @@ mod tests {
                                         time: None,
                                         bbox: None,
                                         resolution: None,
-                                        bands: vec![
-                                            crate::engine::RasterBandDescriptor::singleton_band(),
-                                        ],
+                                        bands: RasterBandDescriptors::new_single_band(),
                                     },
                                 },
                             }
@@ -2769,9 +2768,7 @@ mod tests {
                                         time: None,
                                         bbox: None,
                                         resolution: None,
-                                        bands: vec![
-                                            crate::engine::RasterBandDescriptor::singleton_band(),
-                                        ],
+                                        bands: RasterBandDescriptors::new_single_band(),
                                     },
                                 },
                             }

@@ -1,9 +1,9 @@
 use crate::engine::TypedVectorQueryProcessor::MultiPoint;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleVectorSource,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
+    InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor, RasterBandDescriptors, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SingleVectorSource, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
 use geoengine_datatypes::primitives::CacheHint;
@@ -105,7 +105,7 @@ impl RasterOperator for Rasterization {
             bbox: None,
             time: in_desc.time,
             resolution: None,
-            bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         match self.params {

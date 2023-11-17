@@ -39,8 +39,8 @@ use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::util::gdal::ResamplingMethod;
-use geoengine_operators::engine::TypedOperator;
 use geoengine_operators::engine::{RasterBandDescriptor, RasterOperator};
+use geoengine_operators::engine::{RasterBandDescriptors, TypedOperator};
 use geoengine_operators::source::GdalSource;
 use geoengine_operators::source::GdalSourceParameters;
 use geoengine_operators::source::{
@@ -495,10 +495,11 @@ impl NetCdfCfDataProvider {
             time: None,
             bbox: None,
             resolution: None,
-            bands: vec![RasterBandDescriptor::new(
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "band".into(),
                 derive_measurement(data_array.unit()),
-            )],
+            )])
+            .unwrap(),
         };
 
         let params = GdalDatasetParameters {
@@ -1554,7 +1555,7 @@ mod tests {
         test_data,
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
-    use geoengine_operators::engine::RasterBandDescriptor;
+    use geoengine_operators::engine::{RasterBandDescriptors};
     use geoengine_operators::{
         engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath},
         plot::{
@@ -1965,7 +1966,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: vec![RasterBandDescriptor::singleton_band()],
+                bands: RasterBandDescriptors::new_single_band(),
             }
         );
 
@@ -2090,7 +2091,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: Some(SpatialResolution::new_unchecked(1000.0, 1000.0)),
-                bands: vec![RasterBandDescriptor::singleton_band()],
+                bands: RasterBandDescriptors::new_single_band(),
             }
         );
 

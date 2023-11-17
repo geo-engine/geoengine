@@ -467,7 +467,10 @@ mod tests {
     };
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor},
+        engine::{
+            MockExecutionContext, MockQueryContext, RasterBandDescriptors,
+            RasterOperator, RasterResultDescriptor,
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -622,7 +625,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }

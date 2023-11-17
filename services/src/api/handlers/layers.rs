@@ -921,8 +921,8 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        ExecutionContext, InitializedRasterOperator, RasterBandDescriptor, RasterOperator,
-        RasterResultDescriptor, SingleRasterOrVectorSource, TypedOperator,
+        ExecutionContext, InitializedRasterOperator, RasterBandDescriptors,
+        RasterOperator, RasterResultDescriptor, SingleRasterOrVectorSource, TypedOperator,
     };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::processing::{TimeShift, TimeShiftParams};
@@ -1345,7 +1345,7 @@ mod tests {
                         } else {
                             None
                         },
-                        bands: vec![RasterBandDescriptor::singleton_band()],
+                        bands: RasterBandDescriptors::new_single_band(),
                     },
                 },
             }

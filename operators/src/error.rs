@@ -440,6 +440,13 @@ pub enum Error {
     RasterInputsMustHaveSameSpatialReferenceAndDatatype,
 
     GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet,
+
+    #[snafu(display("Raster band names must be unique. Found {duplicate_key} more than once.",))]
+    RasterBandNamesMustBeUnique {
+        duplicate_key: String,
+    },
+
+    AtLeastOneRasterBandDescriptorRequired,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

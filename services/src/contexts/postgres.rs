@@ -507,8 +507,8 @@ mod tests {
     use geoengine_datatypes::util::{NotNanF64, StringPair};
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
-        PlotResultDescriptor, RasterBandDescriptor, RasterResultDescriptor, StaticMetaData,
-        TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator,
+        PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
+        StaticMetaData, TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator,
         VectorResultDescriptor,
     };
     use geoengine_operators::mock::{
@@ -998,7 +998,7 @@ mod tests {
             time: None,
             bbox: None,
             resolution: None,
-            bands: vec![RasterBandDescriptor::singleton_band()],
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         let vector_ds = AddDataset {
@@ -2747,7 +2747,7 @@ mod tests {
                     .unwrap(),
                 ),
                 resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
-                bands: vec![RasterBandDescriptor::singleton_band()],
+                bands: RasterBandDescriptors::new_single_band(),
             }],
         )
         .await;
@@ -2792,7 +2792,7 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
-                    bands: vec![RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 }),
                 TypedResultDescriptor::Plot(PlotResultDescriptor {
                     spatial_reference: SpatialReferenceOption::Unreferenced,
@@ -3273,13 +3273,14 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution::zero_point_one()),
-                    bands: vec![RasterBandDescriptor::new(
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         Measurement::Continuous(ContinuousMeasurement {
                             measurement: "Temperature".to_string(),
                             unit: Some("°C".to_string()),
                         }),
-                    )],
+                    )])
+                    .unwrap(),
                 },
                 params: GdalDatasetParameters {
                     file_path: "text".into(),
@@ -3344,13 +3345,14 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution::zero_point_one()),
-                    bands: vec![RasterBandDescriptor::new(
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         Measurement::Continuous(ContinuousMeasurement {
                             measurement: "Temperature".to_string(),
                             unit: Some("°C".to_string()),
                         }),
-                    )],
+                    )])
+                    .unwrap(),
                 },
                 params: GdalDatasetParameters {
                     file_path: "text".into(),
@@ -3401,13 +3403,14 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution::zero_point_one()),
-                    bands: vec![RasterBandDescriptor::new(
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         Measurement::Continuous(ContinuousMeasurement {
                             measurement: "Temperature".to_string(),
                             unit: Some("°C".to_string()),
                         }),
-                    )],
+                    )])
+                    .unwrap(),
                 },
                 params: GdalDatasetParameters {
                     file_path: "text".into(),
@@ -3465,13 +3468,14 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution::zero_point_one()),
-                    bands: vec![RasterBandDescriptor::new(
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         Measurement::Continuous(ContinuousMeasurement {
                             measurement: "Temperature".to_string(),
                             unit: Some("°C".to_string()),
                         }),
-                    )],
+                    )])
+                    .unwrap(),
                 },
                 params: vec![GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(0, 1),
@@ -3629,13 +3633,14 @@ mod tests {
                             .unwrap(),
                         ),
                         resolution: Some(SpatialResolution::zero_point_one()),
-                        bands: vec![RasterBandDescriptor::new(
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
                                 measurement: "Temperature".to_string(),
                                 unit: Some("°C".to_string()),
                             }),
-                        )],
+                        )])
+                        .unwrap(),
                     },
                     params: GdalDatasetParameters {
                         file_path: "text".into(),
@@ -3694,13 +3699,14 @@ mod tests {
                             .unwrap(),
                         ),
                         resolution: Some(SpatialResolution::zero_point_one()),
-                        bands: vec![RasterBandDescriptor::new(
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
                                 measurement: "Temperature".to_string(),
                                 unit: Some("°C".to_string()),
                             }),
-                        )],
+                        )])
+                        .unwrap(),
                     },
                     params: GdalDatasetParameters {
                         file_path: "text".into(),
@@ -3745,13 +3751,14 @@ mod tests {
                             .unwrap(),
                         ),
                         resolution: Some(SpatialResolution::zero_point_one()),
-                        bands: vec![RasterBandDescriptor::new(
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
                                 measurement: "Temperature".to_string(),
                                 unit: Some("°C".to_string()),
                             }),
-                        )],
+                        )])
+                        .unwrap(),
                     },
                     params: GdalDatasetParameters {
                         file_path: "text".into(),
@@ -3803,13 +3810,14 @@ mod tests {
                             .unwrap(),
                         ),
                         resolution: Some(SpatialResolution::zero_point_one()),
-                        bands: vec![RasterBandDescriptor::new(
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
                                 measurement: "Temperature".to_string(),
                                 unit: Some("°C".to_string()),
                             }),
-                        )],
+                        )])
+                        .unwrap(),
                     },
                     params: vec![GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new_unchecked(0, 1),

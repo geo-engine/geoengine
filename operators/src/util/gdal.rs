@@ -27,8 +27,8 @@ use snafu::ResultExt;
 
 use crate::{
     engine::{
-        MockExecutionContext, RasterResultDescriptor, StaticMetaData, VectorColumnInfo,
-        VectorResultDescriptor,
+        MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
+        StaticMetaData, VectorColumnInfo, VectorResultDescriptor,
     },
     error::{self, Error},
     source::{
@@ -93,7 +93,7 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
                 (180., -90.).into(),
             )),
             resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
-            bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+            bands: RasterBandDescriptors::new_single_band(),
         },
         cache_ttl,
     }
@@ -239,10 +239,10 @@ pub fn raster_descriptor_from_dataset(
         time: None,
         bbox: None,
         resolution: Some(geo_transfrom.spatial_resolution()),
-        bands: vec![crate::engine::RasterBandDescriptor::new(
+        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO: derive better name?
             measurement_from_rasterband(dataset, band)?,
-        )],
+        )])?,
     })
 }
 
@@ -265,10 +265,10 @@ pub fn raster_descriptor_from_dataset_and_sref(
         time: None,
         bbox: None,
         resolution: Some(geo_transfrom.spatial_resolution()),
-        bands: vec![crate::engine::RasterBandDescriptor::new(
+        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO derive better name?
             measurement_from_rasterband(dataset, band)?,
-        )],
+        )])?,
     })
 }
 

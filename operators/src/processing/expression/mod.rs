@@ -2,8 +2,9 @@ use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::Expressio
 use crate::{
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-        Operator, OperatorData, OperatorName, RasterOperator, RasterQueryProcessor,
-        RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
+        Operator, OperatorData, OperatorName, RasterBandDescriptor, RasterBandDescriptors,
+        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+        WorkflowOperatorPath,
     },
     processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::Result,
@@ -296,13 +297,14 @@ impl RasterOperator for Expression {
             time,
             bbox,
             resolution,
-            bands: vec![crate::engine::RasterBandDescriptor::new(
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "band".into(), // TODO: how to name the band?
                 self.params
                     .output_measurement
                     .as_ref()
                     .map_or(Measurement::Unitless, Measurement::clone),
-            )],
+            )])
+            .unwrap(),
         };
 
         let initialized_operator = InitializedExpression {
@@ -1151,7 +1153,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }

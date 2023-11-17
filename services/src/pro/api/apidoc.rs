@@ -24,9 +24,9 @@ use crate::api::model::operators::{
     GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
     MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
     OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
-    OgrSourceTimeFormat, PlotResultDescriptor, RasterBandDescriptor, RasterResultDescriptor,
-    TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType,
-    VectorColumnInfo, VectorResultDescriptor,
+    OgrSourceTimeFormat, PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors,
+    RasterResultDescriptor, TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor,
+    UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
 };
 use crate::api::model::responses::datasets::DatasetNameResponse;
 use crate::api::model::responses::{
@@ -214,6 +214,7 @@ use utoipa::{Modify, OpenApi};
             PlotResultDescriptor,
             RasterResultDescriptor,
             RasterBandDescriptor,
+            RasterBandDescriptors,
             VectorResultDescriptor,
             VectorColumnInfo,
             RasterDatasetFromWorkflow,

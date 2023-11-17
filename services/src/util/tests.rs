@@ -42,6 +42,7 @@ use geoengine_datatypes::test_data;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::engine::RasterBandDescriptor;
+use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::engine::RasterResultDescriptor;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::FileNotFoundHandling;
@@ -263,7 +264,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                 resolution: Some(SpatialResolution {
                     x: 0.1, y: 0.1,
                 }),
-                bands: vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
+                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
                 [
                     (0_u8, "Water Bodies".to_string()),
                     (1, "Evergreen Needleleaf Forests".to_string()),
@@ -282,7 +283,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                     (14, "Cropland-Natural Vegetation Mosaics".to_string()),
                     (15, "Snow and Ice".to_string()),
                     (16, "Barren or Sparsely Vegetated".to_string()),
-                ].into()))],
+                ].into()))]).unwrap(),
             },
             cache_ttl: CacheTtlSeconds::default(),
         }),

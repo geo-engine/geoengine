@@ -1,8 +1,9 @@
 use crate::adapters::{RasterStackerAdapter, StreamBundle};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    MultipleRasterSources, Operator, OperatorName, QueryContext, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptors,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::error::RasterInputsMustHaveSameSpatialReferenceAndDatatype;
 use crate::util::Result;
@@ -84,11 +85,10 @@ impl RasterOperator for RasterStacker {
             .map(|d| d.bands.len())
             .collect::<Vec<_>>();
 
-        // TODO: resolve duplicate names
-        let output_band_descriptors = in_descriptors
-            .iter()
-            .flat_map(|d| d.bands.clone())
-            .collect::<Vec<_>>();
+        let output_band_descriptors = RasterBandDescriptors::merge_all_with_suffix(
+            in_descriptors.iter().map(|d| &d.bands),
+            "(duplicate)",
+        )?; // TODO: make renaming of duplicate bands configurable
 
         let result_descriptor = RasterResultDescriptor {
             data_type: in_descriptors[0].data_type,
@@ -290,7 +290,9 @@ mod tests {
     };
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterBandDescriptor},
+        engine::{
+            MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -418,7 +420,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -433,7 +435,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -670,10 +672,11 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![
+                    bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
                         RasterBandDescriptor::new_unitless("band_1".into()),
-                    ],
+                    ])
+                    .unwrap(),
                 },
             },
         }
@@ -688,10 +691,11 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![
+                    bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
                         RasterBandDescriptor::new_unitless("band_1".into()),
-                    ],
+                    ])
+                    .unwrap(),
                 },
             },
         }
@@ -853,7 +857,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -868,7 +872,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }

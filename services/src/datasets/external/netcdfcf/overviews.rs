@@ -824,7 +824,7 @@ mod tests {
         util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::{
-        engine::{RasterBandDescriptor, RasterResultDescriptor},
+        engine::{RasterBandDescriptors, RasterResultDescriptor},
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular,
@@ -877,7 +877,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
-                    bands: vec![RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: GdalDatasetParameters {
                     file_path: Path::new("foo/%_START_TIME_%.tiff").into(),
@@ -973,7 +973,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
-                    bands: vec![RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: GdalDatasetParameters {
                     file_path: tempdir_path.join("1/%_START_TIME_%.tiff"),
@@ -1242,7 +1242,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
-                    bands: vec![RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: vec![
                     GdalLoadingInfoTemporalSlice {

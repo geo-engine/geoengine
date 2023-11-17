@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -116,13 +117,14 @@ impl RasterOperator for Radiance {
             time: in_desc.time,
             bbox: in_desc.bbox,
             resolution: in_desc.resolution,
-            bands: vec![crate::engine::RasterBandDescriptor::new(
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 in_desc.bands[0].name.clone(),
                 Measurement::Continuous(ContinuousMeasurement {
                     measurement: "radiance".into(),
                     unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
                 }),
-            )],
+            )])
+            .unwrap(),
         };
 
         let initialized_operator = InitializedRadiance {

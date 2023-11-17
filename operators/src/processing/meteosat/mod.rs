@@ -57,8 +57,8 @@ mod test_util {
     use geoengine_datatypes::util::Identifier;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterResultDescriptor, WorkflowOperatorPath,
+        MockExecutionContext, MockQueryContext, QueryProcessor, RasterBandDescriptor,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::meteosat::{
@@ -194,7 +194,7 @@ mod test_util {
                     time: None,
                     bbox: None,
                     resolution: None,
-                    bands: vec![crate::engine::RasterBandDescriptor::new(
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         measurement.unwrap_or_else(|| {
                             Measurement::Continuous(ContinuousMeasurement {
@@ -202,7 +202,8 @@ mod test_util {
                                 unit: None,
                             })
                         }),
-                    )],
+                    )])
+                    .unwrap(),
                 },
             },
         }
@@ -270,13 +271,14 @@ mod test_util {
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: vec![crate::engine::RasterBandDescriptor::new(
+                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                     "band".into(),
                     Measurement::Continuous(ContinuousMeasurement {
                         measurement: "raw".to_string(),
                         unit: None,
                     }),
-                )],
+                )])
+                .unwrap(),
             },
             cache_ttl: CacheTtlSeconds::default(),
         };

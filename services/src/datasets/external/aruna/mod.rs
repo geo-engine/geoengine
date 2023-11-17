@@ -26,8 +26,9 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterBandDescriptor, RasterOperator, RasterResultDescriptor,
-    ResultDescriptor, TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
+    RasterResultDescriptor, ResultDescriptor, TypedOperator, VectorColumnInfo, VectorOperator,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -358,12 +359,13 @@ impl ArunaDataProvider {
                 info.geo_transform.x_pixel_size,
                 info.geo_transform.y_pixel_size,
             ))?),
-            bands: vec![RasterBandDescriptor::new(
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "band".into(),
                 info.measurement
                     .as_ref()
                     .map_or(Measurement::Unitless, Clone::clone),
-            )],
+            )])
+            .unwrap(),
         })
     }
 

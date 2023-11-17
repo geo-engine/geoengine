@@ -1,7 +1,8 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    OperatorName, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -113,12 +114,12 @@ impl RasterOperator for RasterScaling {
             bbox: in_desc.bbox,
             time: in_desc.time,
             resolution: in_desc.resolution,
-            bands: vec![crate::engine::RasterBandDescriptor::new(
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 in_desc.bands[0].name.clone(),
                 self.params
                     .output_measurement
                     .unwrap_or_else(|| in_desc.bands[0].measurement.clone()),
-            )],
+            )])?,
         };
 
         let initialized_operator = InitializedRasterScalingOperator {
@@ -322,7 +323,7 @@ mod tests {
                     bbox: None,
                     time: None,
                     resolution: Some(spatial_resolution),
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -436,7 +437,7 @@ mod tests {
                     bbox: None,
                     time: None,
                     resolution: Some(spatial_resolution),
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }

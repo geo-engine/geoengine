@@ -692,7 +692,7 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_operators::engine::{
         ExecutionContext, MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
-        TypedOperator,
+        TypedOperator, RasterBandDescriptors,
     };
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
@@ -1004,13 +1004,14 @@ mod tests {
                         time: None,
                         bbox: None,
                         resolution: None,
-                        bands: vec![RasterBandDescriptor::new(
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
                                 measurement: "radiation".to_string(),
                                 unit: None,
                             }),
-                        )],
+                        )])
+                        .unwrap(),
                     },
                 },
             }

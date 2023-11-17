@@ -597,7 +597,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::engine::{
+        MockExecutionContext, MockQueryContext, RasterBandDescriptors,
+    };
     use crate::mock::MockFeatureCollectionSource;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::{
@@ -936,7 +938,7 @@ mod tests {
                     time: None,
                     bbox: None,
                     resolution: Some(SpatialResolution::one()),
-                    bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1145,7 +1147,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                bands: RasterBandDescriptors::new_single_band(),
             },
             cache_ttl: CacheTtlSeconds::default(),
         };
@@ -1279,7 +1281,7 @@ mod tests {
                 time: None,
                 bbox: None,
                 resolution: None,
-                bands: vec![crate::engine::RasterBandDescriptor::singleton_band()],
+                bands: RasterBandDescriptors::new_single_band(),
             },
             cache_ttl: CacheTtlSeconds::default(),
         };
