@@ -518,9 +518,7 @@ mod tests {
     use super::*;
 
     use crate::{
-        engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptors,
-        },
+        engine::{MockExecutionContext, MockQueryContext, RasterBandDescriptors},
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams, ExpressionSources},
         source::{GdalSource, GdalSourceParameters},

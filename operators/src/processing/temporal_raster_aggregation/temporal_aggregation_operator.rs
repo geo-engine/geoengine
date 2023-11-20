@@ -462,8 +462,7 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources,
-            RasterBandDescriptors,
+            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{

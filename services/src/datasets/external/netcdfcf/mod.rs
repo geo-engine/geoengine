@@ -1555,7 +1555,7 @@ mod tests {
         test_data,
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
-    use geoengine_operators::engine::{RasterBandDescriptors};
+    use geoengine_operators::engine::RasterBandDescriptors;
     use geoengine_operators::{
         engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath},
         plot::{

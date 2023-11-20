@@ -2,8 +2,9 @@ use crate::{
     adapters::{QueryWrapper, RasterArrayTimeAdapter},
     engine::{
         BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
-        InitializedSources, Operator, OperatorData, OperatorName, QueryContext, QueryProcessor, RasterBandDescriptors, RasterOperator, RasterQueryProcessor,
-        RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
+        InitializedSources, Operator, OperatorData, OperatorName, QueryContext, QueryProcessor,
+        RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        TypedRasterQueryProcessor, WorkflowOperatorPath,
     },
     util::Result,
 };

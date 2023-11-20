@@ -21,9 +21,8 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterBandDescriptors, RasterOperator,
-    RasterResultDescriptor, StaticMetaData, TypedOperator, VectorColumnInfo, VectorOperator,
-    VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+    StaticMetaData, TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{

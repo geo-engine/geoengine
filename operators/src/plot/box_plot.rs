@@ -504,8 +504,8 @@ mod tests {
     use geoengine_datatypes::{collections::DataCollection, primitives::MultiPoint};
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext,
-        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, VectorOperator,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterBandDescriptors,
+        RasterOperator, RasterResultDescriptor, VectorOperator,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
 

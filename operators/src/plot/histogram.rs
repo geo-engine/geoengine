@@ -659,9 +659,9 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext,
-        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, StaticMetaData,
-        VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterBandDescriptors,
+        RasterOperator, RasterResultDescriptor, StaticMetaData, VectorColumnInfo, VectorOperator,
+        VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{

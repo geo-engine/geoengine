@@ -227,8 +227,7 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        PlotOperator, RasterBandDescriptors, RasterOperator,
-        RasterResultDescriptor,
+        PlotOperator, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
     };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::plot::{

@@ -286,8 +286,8 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptors,
-            RasterOperator, RasterResultDescriptor,
+            MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
+            RasterResultDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         source::{GdalSource, GdalSourceParameters},

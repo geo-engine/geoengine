@@ -262,8 +262,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, RasterBandDescriptors,
-        RasterResultDescriptor, WorkflowOperatorPath,
+        ChunkByteSize, MockExecutionContext, RasterBandDescriptors, RasterResultDescriptor,
+        WorkflowOperatorPath,
     };
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};

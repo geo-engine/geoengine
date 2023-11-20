@@ -166,9 +166,7 @@ mod tests {
     };
 
     use crate::{
-        engine::{
-            ChunkByteSize, MockExecutionContext, RasterBandDescriptors,
-        },
+        engine::{ChunkByteSize, MockExecutionContext, RasterBandDescriptors},
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 

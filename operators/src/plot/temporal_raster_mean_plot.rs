@@ -253,8 +253,8 @@ mod tests {
 
     use crate::{
         engine::{
-            ChunkByteSize, MockExecutionContext, MockQueryContext,
-            RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+            ChunkByteSize, MockExecutionContext, MockQueryContext, RasterBandDescriptors,
+            RasterOperator, RasterResultDescriptor,
         },
         source::GdalSource,
     };

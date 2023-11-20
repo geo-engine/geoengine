@@ -17,8 +17,8 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{
-    MetaData, RasterBandDescriptors, RasterResultDescriptor,
-    SingleRasterOrVectorSource, WorkflowOperatorPath,
+    MetaData, RasterBandDescriptors, RasterResultDescriptor, SingleRasterOrVectorSource,
+    WorkflowOperatorPath,
 };
 use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
 use geoengine_operators::processing::{

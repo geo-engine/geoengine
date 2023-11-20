@@ -370,8 +370,8 @@ mod tests {
     use crate::{
         adapters::RasterSubQueryAdapter,
         engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptors,
-            RasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
+            MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
+            RasterResultDescriptor, WorkflowOperatorPath,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };

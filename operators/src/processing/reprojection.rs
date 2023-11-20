@@ -597,9 +597,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterBandDescriptors,
-    };
+    use crate::engine::{MockExecutionContext, MockQueryContext, RasterBandDescriptors};
     use crate::mock::MockFeatureCollectionSource;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::{

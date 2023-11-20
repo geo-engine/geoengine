@@ -651,8 +651,8 @@ mod tests {
 
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterBandDescriptors,
-        RasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
+        MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
+        RasterResultDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;

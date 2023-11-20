@@ -293,8 +293,7 @@ where
 mod tests {
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor,
-        RasterBandDescriptors,
+        MockExecutionContext, MockQueryContext, QueryProcessor, RasterBandDescriptors,
     };
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
