@@ -30,3 +30,74 @@ INSERT INTO workflows (id, workflow) VALUES (
     }
 }'
 );
+
+INSERT INTO datasets (
+    id,
+    name,
+    display_name,
+    description,
+    source_operator,
+    result_descriptor,
+    meta_data
+) VALUES (
+    '6cc80129-eea4-4140-b09c-6bcfbd76ad5f',
+    (NULL, 'test')::"DatasetName",
+    'Test Dataset',
+    'Test Dataset Description',
+    'GdalSource',
+    (
+        (
+            'U8'::"RasterDataType", -- noqa: PRS
+            ('Epsg'::"SpatialReferenceAuthority", 4326)::"SpatialReference",
+            (NULL, NULL)::"Measurement",
+            (0, 0)::"TimeInterval",
+            (
+                (-180.0, -90.0)::"Coordinate2D",
+                (180.0, 90.0)::"Coordinate2D"
+            )::"SpatialPartition2D",
+            (0.1, 0.1)::"SpatialResolution"
+        )::"RasterResultDescriptor", -- noqa: PRS
+        NULL, 
+        NULL
+    )::"ResultDescriptor",
+    (
+        NULL,
+        NULL,
+        NULL, -- noqa: PRS
+        (
+            (0, 0)::"TimeInterval",
+             (
+                'foo/bar.tiff',
+                0,
+                (
+                    (0.0, 0.0)::"Coordinate2D",
+                    0.1,
+                    0.1
+                )::"GdalDatasetGeoTransform",
+                3600,
+                1800,
+                'Error'::"FileNotFoundHandling",
+                0.0,
+                array[]::"GdalMetadataMapping"[],
+                array[]::text[],
+                array[]::"StringPair"[],
+                false,
+                ROW(0)::"GdalRetryOptions"
+            )::"GdalDatasetParameters",
+            (
+                'U8'::"RasterDataType",
+                ('Epsg'::"SpatialReferenceAuthority", 4326)::"SpatialReference",
+                (NULL, NULL)::"Measurement",
+                (0, 0)::"TimeInterval",
+                (
+                    (-180.0, -90.0)::"Coordinate2D",
+                    (180.0, 90.0)::"Coordinate2D"
+                )::"SpatialPartition2D",
+                (0.1, 0.1)::"SpatialResolution"
+            )::"RasterResultDescriptor",
+            0   
+        )::"GdalMetaDataStatic",        
+        NULL,
+        NULL
+    )::"MetaDataDefinition"
+);
