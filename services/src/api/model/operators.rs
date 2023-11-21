@@ -7,9 +7,12 @@ use crate::api::model::datatypes::{
     MultiPoint, MultiPolygon, NoGeometry, QueryRectangle, RasterPropertiesEntryType,
     RasterPropertiesKey, SpatialResolution, TimeInstance, TimeStep, VectorQueryRectangle,
 };
-use crate::error::{RasterBandNamesMustBeUnique, Result};
+use crate::error::{
+    RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique, Result,
+};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::ColumnSelection;
+use geoengine_datatypes::util::ByteSize;
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,
@@ -42,6 +45,8 @@ impl RasterBandDescriptors {
     pub fn new(bands: Vec<RasterBandDescriptor>) -> Result<Self> {
         let mut names = HashSet::new();
         for value in &bands {
+            ensure!(!value.name.is_empty(), RasterBandNameMustNotBeEmpty);
+            ensure!(value.name.byte_size() <= 256, RasterBandNameTooLong);
             ensure!(
                 names.insert(&value.name),
                 RasterBandNamesMustBeUnique {

@@ -2,6 +2,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, FeatureDataType, Measurement, SpatialPartition2D,
     SpatialResolution, TimeInterval,
 };
+use geoengine_datatypes::util::ByteSize;
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
 };
@@ -11,7 +12,9 @@ use snafu::ensure;
 use std::collections::{HashMap, HashSet};
 use std::ops::Index;
 
-use crate::error::{Error, RasterBandNamesMustBeUnique};
+use crate::error::{
+    Error, RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique,
+};
 use crate::util::Result;
 
 /// A descriptor that contains information about the query result, for instance, the data type
@@ -72,6 +75,8 @@ impl RasterBandDescriptors {
     pub fn new(bands: Vec<RasterBandDescriptor>) -> Result<Self> {
         let mut names = HashSet::new();
         for value in &bands {
+            ensure!(!value.name.is_empty(), RasterBandNameMustNotBeEmpty);
+            ensure!(value.name.byte_size() <= 256, RasterBandNameTooLong);
             ensure!(
                 names.insert(&value.name),
                 RasterBandNamesMustBeUnique {

@@ -445,6 +445,10 @@ pub enum Error {
     RasterBandNamesMustBeUnique {
         duplicate_key: String,
     },
+    #[snafu(display("Raster band names must not be empty"))]
+    RasterBandNameMustNotBeEmpty,
+    #[snafu(display("Raster band names must not be longer than 256 bytes"))]
+    RasterBandNameTooLong,
 
     AtLeastOneRasterBandDescriptorRequired,
 }
