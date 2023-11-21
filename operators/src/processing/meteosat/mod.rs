@@ -132,7 +132,7 @@ mod test_util {
                 TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 15, 0)),
             ),
             spatial_resolution: sr,
-            selection: Default::default(),
+            attributes: Default::default(),
         }
     }
 
@@ -141,7 +141,7 @@ mod test_util {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(),
+            attributes: Default::default(),
         }
     }
 

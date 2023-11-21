@@ -450,7 +450,7 @@ where
             spatial_bounds: query.spatial_bounds,
             time_interval,
             spatial_resolution: query.spatial_resolution,
-            selection: Default::default(),
+            attributes: Default::default(),
         };
         let stream = self.processor.vector_query(query, ctx).await?;
 
@@ -496,7 +496,7 @@ where
             spatial_bounds: query.spatial_bounds,
             time_interval,
             spatial_resolution: query.spatial_resolution,
-            selection: Default::default(),
+            attributes: Default::default(),
         };
         let stream = self.processor.raster_query(query, ctx).await?;
 
@@ -694,7 +694,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &query_context,
             )
@@ -783,7 +783,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &query_context,
             )
@@ -964,7 +964,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &query_context,
             )
@@ -1137,7 +1137,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &query_context,
             )
@@ -1222,7 +1222,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &query_context,
             )
@@ -1289,7 +1289,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &query_context,
             )

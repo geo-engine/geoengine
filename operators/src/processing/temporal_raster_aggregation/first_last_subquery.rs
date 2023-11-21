@@ -159,7 +159,7 @@ where
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
             time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
-            selection: band.into(),
+            attributes: band.into(),
         }))
     }
 
@@ -237,7 +237,7 @@ where
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
             time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
-            selection: band.into(),
+            attributes: band.into(),
         }))
     }
 

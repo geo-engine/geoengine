@@ -251,13 +251,13 @@ where
 
         for (idx, source) in self.sources.iter().enumerate() {
             let Some(bands) =
-                map_query_bands_to_source_bands(&query.selection, &self.bands_per_source, idx)
+                map_query_bands_to_source_bands(&query.attributes, &self.bands_per_source, idx)
             else {
                 continue;
             };
 
             let mut source_query = query.clone();
-            source_query.selection = bands.clone();
+            source_query.attributes = bands.clone();
             source_stream_futures.push(async move { source.raster_query(source_query, ctx).await });
             selected_bands_per_source.push(bands.count());
         }
@@ -458,7 +458,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            selection: [0, 1].into(),
+            attributes: [0, 1].into(),
         };
 
         let query_ctx = MockQueryContext::test_default();
@@ -718,7 +718,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            selection: [0, 1, 2, 3].into(),
+            attributes: [0, 1, 2, 3].into(),
         };
 
         let query_ctx = MockQueryContext::test_default();
@@ -895,7 +895,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            selection: 1.into(),
+            attributes: 1.into(),
         };
 
         let query_ctx = MockQueryContext::test_default();

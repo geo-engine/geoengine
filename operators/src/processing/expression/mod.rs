@@ -653,7 +653,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &ctx,
             )
@@ -723,7 +723,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &ctx,
             )
@@ -794,7 +794,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &ctx,
             )
@@ -868,7 +868,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &ctx,
             )
@@ -943,7 +943,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &ctx,
             )
@@ -1028,7 +1028,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &ctx,
             )
@@ -1095,7 +1095,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &ctx,
             )
@@ -1209,7 +1209,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &ctx,
             )
@@ -1279,7 +1279,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &ctx,
             )
@@ -1351,7 +1351,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &ctx,
             )

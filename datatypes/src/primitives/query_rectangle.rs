@@ -7,19 +7,22 @@ use serde::{Deserialize, Serialize};
 /// A spatio-temporal rectangle with a specified resolution and the selected bands
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct QueryRectangle<SpatialBounds: AxisAlignedRectangle, Selection: QuerySelection> {
+pub struct QueryRectangle<
+    SpatialBounds: AxisAlignedRectangle,
+    AttributeSelection: QueryAttributeSelection,
+> {
     pub spatial_bounds: SpatialBounds,
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
     #[serde(default)] // TODO: remove once all clients send this
-    pub selection: Selection,
+    pub attributes: AttributeSelection,
 }
 
-pub trait QuerySelection: Clone + Send + Sync + Default /* TOOD: remove */ {}
+pub trait QueryAttributeSelection: Clone + Send + Sync + Default /* TOOD: remove */ {}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 // TODO: custom deserializer that checks for duplicates(?)
-pub struct BandSelection(Vec<usize>); // TODO: use a large enough Bitmap for a sufficiently large number of bands. Then the `QueryRectangle` can be `Copy` again
+pub struct BandSelection(Vec<usize>);
 
 impl Default for BandSelection {
     fn default() -> Self {
@@ -76,18 +79,29 @@ impl<const N: usize> From<[usize; N]> for BandSelection {
     }
 }
 
-impl QuerySelection for BandSelection {}
+impl QueryAttributeSelection for BandSelection {}
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct ColumnSelection {}
 
-impl QuerySelection for ColumnSelection {}
+impl QueryAttributeSelection for ColumnSelection {}
+
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+pub struct PlotSeriesSelection {}
+
+impl QueryAttributeSelection for PlotSeriesSelection {}
 
 pub type VectorQueryRectangle = QueryRectangle<BoundingBox2D, ColumnSelection>;
 pub type RasterQueryRectangle = QueryRectangle<SpatialPartition2D, BandSelection>;
-pub type PlotQueryRectangle = QueryRectangle<BoundingBox2D, ColumnSelection>;
+pub type PlotQueryRectangle = QueryRectangle<BoundingBox2D, PlotSeriesSelection>;
 
 impl SpatialPartitioned for QueryRectangle<BoundingBox2D, ColumnSelection> {
+    fn spatial_partition(&self) -> SpatialPartition2D {
+        SpatialPartition2D::with_bbox_and_resolution(self.spatial_bounds, self.spatial_resolution)
+    }
+}
+
+impl SpatialPartitioned for QueryRectangle<BoundingBox2D, PlotSeriesSelection> {
     fn spatial_partition(&self) -> SpatialPartition2D {
         SpatialPartition2D::with_bbox_and_resolution(self.spatial_bounds, self.spatial_resolution)
     }
@@ -107,7 +121,58 @@ impl From<QueryRectangle<BoundingBox2D, ColumnSelection>>
             spatial_bounds: value.spatial_partition(),
             time_interval: value.time_interval,
             spatial_resolution: value.spatial_resolution,
-            selection: Default::default(), // TODO: how to do this automatically? maybe we have to remove this From implementation
+            attributes: Default::default(), // TODO: how to do this automatically? maybe we have to remove this From implementation
         }
+    }
+}
+
+impl From<QueryRectangle<BoundingBox2D, PlotSeriesSelection>>
+    for QueryRectangle<SpatialPartition2D, BandSelection>
+{
+    fn from(value: QueryRectangle<BoundingBox2D, PlotSeriesSelection>) -> Self {
+        Self {
+            spatial_bounds: value.spatial_partition(),
+            time_interval: value.time_interval,
+            spatial_resolution: value.spatial_resolution,
+            attributes: Default::default(), // TODO: how to do this automatically? maybe we have to remove this From implementation
+        }
+    }
+}
+
+impl From<QueryRectangle<BoundingBox2D, ColumnSelection>>
+    for QueryRectangle<BoundingBox2D, PlotSeriesSelection>
+{
+    fn from(value: QueryRectangle<BoundingBox2D, ColumnSelection>) -> Self {
+        Self {
+            spatial_bounds: value.spatial_bounds,
+            time_interval: value.time_interval,
+            spatial_resolution: value.spatial_resolution,
+            attributes: value.attributes.into(),
+        }
+    }
+}
+
+impl From<QueryRectangle<BoundingBox2D, PlotSeriesSelection>>
+    for QueryRectangle<BoundingBox2D, ColumnSelection>
+{
+    fn from(value: QueryRectangle<BoundingBox2D, PlotSeriesSelection>) -> Self {
+        Self {
+            spatial_bounds: value.spatial_bounds,
+            time_interval: value.time_interval,
+            spatial_resolution: value.spatial_resolution,
+            attributes: value.attributes.into(),
+        }
+    }
+}
+
+impl From<ColumnSelection> for PlotSeriesSelection {
+    fn from(_: ColumnSelection) -> Self {
+        Self {}
+    }
+}
+
+impl From<PlotSeriesSelection> for ColumnSelection {
+    fn from(_: PlotSeriesSelection) -> Self {
+        Self {}
     }
 }

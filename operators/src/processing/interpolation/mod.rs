@@ -303,7 +303,7 @@ where
             spatial_bounds,
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: self.input_resolution,
-            selection: band.into(),
+            attributes: band.into(),
         }))
     }
 
@@ -500,7 +500,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::zero_point_five(),
-            selection: Default::default(),
+            attributes: Default::default(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -659,7 +659,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::zero_point_five(),
-            selection: Default::default(),
+            attributes: Default::default(),
         };
         let query_ctx = MockQueryContext::test_default();
 

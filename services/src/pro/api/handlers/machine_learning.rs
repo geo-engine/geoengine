@@ -234,7 +234,7 @@ mod tests {
             spatial_bounds,
             time_interval,
             spatial_resolution,
-            selection: Default::default(),
+            attributes: Default::default(),
         };
 
         let xg_train = crate::pro::machine_learning::MLTrainRequest {
@@ -559,7 +559,7 @@ mod tests {
             spatial_bounds,
             time_interval,
             spatial_resolution,
-            selection: Default::default(),
+            attributes: Default::default(),
         };
 
         // generate a hashmap of xgboost parameters with the corresponding setting values
@@ -762,7 +762,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(),
+            attributes: Default::default(),
         };
 
         let query_ctx = ctx.query_context().unwrap();

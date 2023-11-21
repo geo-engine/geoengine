@@ -1168,7 +1168,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 })
                 .await
                 .unwrap(),

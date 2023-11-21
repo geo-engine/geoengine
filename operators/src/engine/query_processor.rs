@@ -13,7 +13,8 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
-    QueryRectangle, QuerySelection, RasterQueryRectangle, SpatialPartition2D, VectorQueryRectangle,
+    QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, SpatialPartition2D,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel};
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
@@ -24,7 +25,7 @@ use ouroboros::self_referencing;
 pub trait QueryProcessor: Send + Sync {
     type Output;
     type SpatialBounds: AxisAlignedRectangle + Send + Sync;
-    type Selection: QuerySelection;
+    type Selection: QueryAttributeSelection;
 
     /// inner logic of the processor
     async fn _query<'a>(
@@ -175,7 +176,7 @@ impl<T, S, U> QueryProcessor
     for Box<dyn QueryProcessor<Output = T, SpatialBounds = S, Selection = U>>
 where
     S: AxisAlignedRectangle + Send + Sync,
-    U: QuerySelection,
+    U: QueryAttributeSelection,
 {
     type Output = T;
     type SpatialBounds = S;

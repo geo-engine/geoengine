@@ -648,7 +648,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(), // TODO
+            attributes: Default::default(), // TODO
         };
 
         let query_ctx = MockQueryContext::test_default();
@@ -987,7 +987,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (5., 0.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(),
+            attributes: Default::default(),
         };
 
         let query_ctx = MockQueryContext::test_default();

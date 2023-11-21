@@ -1982,7 +1982,7 @@ mod tests {
                     0.000_343_322_7, // 256 pixel
                     0.000_343_322_7, // 256 pixel
                 ),
-                selection: Default::default(),
+                attributes: Default::default(),
             })
             .await
             .unwrap();
@@ -2107,7 +2107,7 @@ mod tests {
                     0.000_343_322_7, // 256 pixel
                     0.000_343_322_7, // 256 pixel
                 ),
-                selection: Default::default(),
+                attributes: Default::default(),
             })
             .await
             .unwrap();
@@ -2326,7 +2326,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &query_context,
             )

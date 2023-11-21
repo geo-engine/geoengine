@@ -626,7 +626,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
                 cause: "is None".to_string(),
             },
         )?,
-        selection: Default::default(),
+        attributes: Default::default(),
     };
 
     let from_workflow = RasterDatasetFromWorkflow {
@@ -1381,7 +1381,7 @@ mod tests {
                     1_672_041_600_000 + i64::from(time_shift_millis),
                 ),
                 spatial_resolution: GeoTransform::test_default().spatial_resolution(),
-                selection: Default::default(),
+                attributes: Default::default(),
             };
 
             MockRasterWorkflowLayerDescription {

@@ -351,7 +351,7 @@ async fn wms_map_handler<C: ApplicationContext>(
                 x_query_resolution,
                 y_query_resolution,
             ),
-            selection: Default::default(), // TODO: support multi bands in API (via colorizer) and set the selection here
+            attributes: Default::default(), // TODO: support multi bands in API (via colorizer) and set the selection here
         };
 
         let query_ctx = ctx.query_context()?;
@@ -624,7 +624,7 @@ mod tests {
                 )
                 .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
-                selection: Default::default(),
+                attributes: Default::default(),
             },
             ctx.query_context().unwrap(),
             360,

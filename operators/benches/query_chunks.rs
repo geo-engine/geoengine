@@ -111,7 +111,7 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                 ),
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
-                selection: Default::default(),
+                attributes: Default::default(),
             },
         },
         Benchmark::Vector {
@@ -147,7 +147,7 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                 ),
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
-                selection: Default::default(),
+                attributes: Default::default(),
             },
         },
     ]

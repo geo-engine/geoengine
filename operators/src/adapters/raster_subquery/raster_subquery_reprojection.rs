@@ -102,7 +102,7 @@ where
                     spatial_bounds: pb,
                     time_interval: TimeInterval::new_instant(start_time)?,
                     spatial_resolution: self.in_spatial_res,
-                    selection: band.into(),
+                    attributes: band.into(),
                 })),
                 // In some strange cases the reprojection can return an empty box.
                 // We ignore it since it contains no pixels.
@@ -449,7 +449,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(),
+            attributes: Default::default(),
         };
 
         let query_ctx = MockQueryContext::test_default();

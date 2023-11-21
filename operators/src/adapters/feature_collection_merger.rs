@@ -188,7 +188,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(),
+            attributes: Default::default(),
         };
         let cx = MockQueryContext::new((std::mem::size_of::<Coordinate2D>() * 2).into());
 
@@ -262,7 +262,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(),
+            attributes: Default::default(),
         };
         let cx = MockQueryContext::new((0).into());
 

@@ -339,7 +339,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    selection: Default::default(), // TODO: support multi bands in API and set the selection here
+                    attributes: Default::default(), // TODO: support multi bands in API and set the selection here
                 },
                 &query_ctx,
             )

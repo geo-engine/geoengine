@@ -120,7 +120,7 @@ fn query_rect() -> RasterQueryRectangle {
         spatial_bounds: SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
         time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
         spatial_resolution: SpatialResolution::one(),
-        selection: Default::default(),
+        attributes: Default::default(),
     }
 }
 

@@ -250,7 +250,7 @@ where
         Self::new(
             stream,
             grid_bounds,
-            query_rect_to_answer.selection.count(),
+            query_rect_to_answer.attributes.count(),
             tiling_strat.geo_transform,
             tiling_spec.tile_size_in_pixels,
             cache_expiration,

@@ -117,7 +117,7 @@ where
             spatial_bounds: enlarged_spatial_bounds,
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: query_rect.spatial_resolution,
-            selection: band.into(),
+            attributes: band.into(),
         }))
     }
 
@@ -368,7 +368,7 @@ mod tests {
             spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInstance::from_millis(0).unwrap().into(),
             spatial_resolution,
-            selection: Default::default(),
+            attributes: Default::default(),
         };
 
         let aggregator = NeighborhoodAggregateTileNeighborhood::<u8, StandardDeviation>::new(

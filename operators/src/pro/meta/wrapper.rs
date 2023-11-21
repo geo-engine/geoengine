@@ -11,7 +11,9 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, QueryRectangle, QuerySelection};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, QueryAttributeSelection, QueryRectangle,
+};
 use tracing::{span, Level};
 
 // A wrapper around an initialized operator that adds statistics and quota tracking
@@ -154,7 +156,7 @@ impl<Q, T, S, U> QueryProcessor for QueryProcessorWrapper<Q, T>
 where
     Q: QueryProcessor<Output = T, SpatialBounds = S, Selection = U>,
     S: AxisAlignedRectangle + Send + Sync + 'static,
-    U: QuerySelection + 'static,
+    U: QueryAttributeSelection + 'static,
     T: Send,
 {
     type Output = T;

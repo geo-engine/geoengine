@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, AxisAlignedRectangle, BoundingBox2D,
-    PlotQueryRectangle, VectorQueryRectangle,
+    PlotQueryRectangle,
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -265,7 +265,7 @@ impl PlotQueryProcessor for BoxPlotVectorQueryProcessor {
 
     async fn plot_query<'p>(
         &'p self,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let mut accums: Vec<BoxPlotAccum> = self
@@ -275,7 +275,7 @@ impl PlotQueryProcessor for BoxPlotVectorQueryProcessor {
             .collect();
 
         call_on_generic_vector_processor!(&self.input, processor => {
-            let mut query = processor.query(query, ctx).await?;
+            let mut query = processor.query(query.into(), ctx).await?;
             while let Some(collection) = query.next().await {
                 let collection = collection?;
 
@@ -623,12 +623,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -690,12 +690,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -800,12 +800,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -852,12 +852,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -906,12 +906,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -987,12 +987,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1058,11 +1058,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1129,12 +1129,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1197,7 +1197,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::new_instant(DateTime::new_utc(
@@ -1205,7 +1205,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::test_default(),
             )
@@ -1281,14 +1281,14 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., -4.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::new_instant(DateTime::new_utc(
                         2013, 12, 1, 12, 0, 0,
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::test_default(),
             )
@@ -1357,14 +1357,14 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., -4.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::new_instant(DateTime::new_utc(
                         2013, 12, 1, 12, 0, 0,
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::test_default(),
             )
@@ -1445,7 +1445,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::new_instant(DateTime::new_utc(
@@ -1453,7 +1453,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::test_default(),
             )

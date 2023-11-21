@@ -815,7 +815,7 @@ mod tests {
                 .unwrap(),
                 time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
                 spatial_resolution: SpatialResolution::one(),
-                selection: Default::default(),
+                attributes: Default::default(),
             })
             .await
             .unwrap();
@@ -924,7 +924,7 @@ mod tests {
             spatial_bounds,
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
             spatial_resolution,
-            selection: Default::default(),
+            attributes: Default::default(),
         };
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
@@ -1194,7 +1194,7 @@ mod tests {
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44))
                 .unwrap(),
             spatial_resolution: SpatialResolution::new_unchecked(10., 10.),
-            selection: Default::default(),
+            attributes: Default::default(),
         };
 
         let loading_info = meta.loading_info(query).await.unwrap();
@@ -1303,7 +1303,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(10., 10.).unwrap(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &query_context,
             )

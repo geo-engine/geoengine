@@ -430,7 +430,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         spatial_bounds: request_partition,
         time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
         spatial_resolution,
-        selection: Default::default(), // TODO: support multi bands in API and set the selection here
+        attributes: Default::default(), // TODO: support multi bands in API and set the selection here
     };
 
     let query_ctx = ctx.query_context()?;

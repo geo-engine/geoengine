@@ -663,7 +663,7 @@ where
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
         ensure!(
-            query.selection.as_slice() == [0],
+            query.attributes.as_slice() == [0],
             crate::error::GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet
         );
 
@@ -743,7 +743,7 @@ where
         let filled_stream = SparseTilesFillAdapter::new(
             source_stream,
             tiling_strategy.tile_grid_box(query.spatial_partition()),
-            query.selection.count(),
+            query.attributes.count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
@@ -1230,7 +1230,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 query_ctx,
             )

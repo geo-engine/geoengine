@@ -228,7 +228,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((2., -2.).into(), (8., -8.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::zero_point_five(),
-            selection: Default::default(),
+            attributes: Default::default(),
         };
 
         let mut res = Vec::new();
@@ -249,7 +249,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new_unchecked((2.1, 2.1).into(), (7.9, 7.9).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::zero_point_five(),
-            selection: Default::default(),
+            attributes: Default::default(),
         };
 
         let mut res = Vec::new();

@@ -679,7 +679,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 })
                 .await
                 .map_err(|e| e.to_string())?;
@@ -813,7 +813,7 @@ mod tests {
                 spatial_bounds: BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
-                selection: Default::default(),
+                attributes: Default::default(),
             };
             let ctx = MockQueryContext::test_default();
 

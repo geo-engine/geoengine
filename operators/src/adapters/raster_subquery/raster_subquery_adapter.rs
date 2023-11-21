@@ -155,7 +155,7 @@ where
             current_time_start: query_rect_to_answer.time_interval.start(),
             current_band_index: 0,
             grid_bounds,
-            bands: query_rect_to_answer.selection.as_vec(),
+            bands: query_rect_to_answer.attributes.as_vec(),
             query_ctx,
             query_rect_to_answer,
             source_processor,
@@ -569,7 +569,7 @@ where
             spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: query_rect.spatial_resolution,
-            selection: band.into(),
+            attributes: band.into(),
         }))
     }
 
@@ -726,7 +726,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            selection: Default::default(),
+            attributes: Default::default(),
         };
 
         let query_ctx = MockQueryContext::test_default();

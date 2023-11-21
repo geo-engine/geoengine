@@ -11,7 +11,7 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::plots::{AreaLineChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    Measurement, TimeInstance, TimeInterval, VectorQueryRectangle,
+    Measurement, PlotQueryRectangle, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
@@ -138,7 +138,7 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
 
     async fn plot_query<'a>(
         &'a self,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let means = Self::calculate_means(
@@ -356,12 +356,12 @@ mod tests {
 
         let result = processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -499,12 +499,12 @@ mod tests {
 
         let result = processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )

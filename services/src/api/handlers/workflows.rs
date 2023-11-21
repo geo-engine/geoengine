@@ -539,7 +539,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         spatial_bounds: query.spatial_bounds,
         time_interval: query.time_interval.into(),
         spatial_resolution: query.spatial_resolution,
-        selection: Default::default(), // TODO: support multi bands in API and set the selection here
+        attributes: Default::default(), // TODO: support multi bands in API and set the selection here
     };
 
     // this is the only result type for now
@@ -622,7 +622,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         spatial_bounds: query.spatial_bounds,
         time_interval: query.time_interval.into(),
         spatial_resolution: query.spatial_resolution,
-        selection: Default::default(), // TODO: support multi bands in API and set the selection here
+        attributes: Default::default(), // TODO: support multi bands in API and set the selection here
     };
 
     // this is the only result type for now
@@ -1453,7 +1453,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            selection: Default::default(),
+            attributes: Default::default(),
         };
 
         let processor = o.query_processor().unwrap().get_u8().unwrap();

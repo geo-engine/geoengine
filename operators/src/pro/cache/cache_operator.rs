@@ -14,7 +14,7 @@ use futures::stream::{BoxStream, FusedStream};
 use futures::{ready, Stream, StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, Geometry, QueryRectangle, QuerySelection, VectorQueryRectangle,
+    AxisAlignedRectangle, Geometry, QueryAttributeSelection, QueryRectangle, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
@@ -175,7 +175,7 @@ impl<P, E, S, U> QueryProcessor for CacheQueryProcessor<P, E, S, U>
 where
     P: QueryProcessor<Output = E, SpatialBounds = S, Selection = U> + Sized,
     S: AxisAlignedRectangle + Send + Sync + 'static,
-    U: QuerySelection,
+    U: QueryAttributeSelection,
     E: CacheElement<Query = QueryRectangle<S, U>>
         + Send
         + Sync
@@ -474,7 +474,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &query_ctx,
             )
@@ -496,7 +496,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    selection: Default::default(),
+                    attributes: Default::default(),
                 },
                 &query_ctx,
             )

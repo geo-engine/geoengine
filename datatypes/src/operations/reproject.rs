@@ -3,8 +3,8 @@ use crate::{
     primitives::{
         AxisAlignedRectangle, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
         MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
-        MultiPolygonAccess, MultiPolygonRef, QueryRectangle, QuerySelection, SpatialBounded,
-        SpatialResolution,
+        MultiPolygonAccess, MultiPolygonRef, QueryAttributeSelection, QueryRectangle,
+        SpatialBounded, SpatialResolution,
     },
     spatial_reference::SpatialReference,
     util::Result,
@@ -456,7 +456,7 @@ pub fn project_coordinates_fail_tolerant<P: CoordinateProjection>(
 
 /// this method performs the transformation of a query rectangle in `target` projection
 /// to a new query rectangle with coordinates in the `source` projection
-pub fn reproject_query<S: AxisAlignedRectangle, T: QuerySelection>(
+pub fn reproject_query<S: AxisAlignedRectangle, T: QueryAttributeSelection>(
     query: QueryRectangle<S, T>,
     source: SpatialReference,
     target: SpatialReference,
@@ -473,7 +473,7 @@ pub fn reproject_query<S: AxisAlignedRectangle, T: QuerySelection>(
         spatial_bounds: p_bbox,
         spatial_resolution: p_spatial_resolution,
         time_interval: query.time_interval,
-        selection: query.selection,
+        attributes: query.attributes,
     }))
 }
 
