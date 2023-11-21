@@ -14,21 +14,14 @@ pub struct QueryRectangle<
     pub spatial_bounds: SpatialBounds,
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
-    #[serde(default)] // TODO: remove once all clients send this
     pub attributes: AttributeSelection,
 }
 
-pub trait QueryAttributeSelection: Clone + Send + Sync + Default /* TOOD: remove */ {}
+pub trait QueryAttributeSelection: Clone + Send + Sync {}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-// TODO: custom deserializer that checks for duplicates(?)
+// TODO: custom deserializer that checks for duplicates (at least in API)
 pub struct BandSelection(Vec<usize>);
-
-impl Default for BandSelection {
-    fn default() -> Self {
-        Self(vec![0]) // TODO: default should maybe be all bands? But that would require knowledge of all AVAILABLE bands
-    }
-}
 
 impl BandSelection {
     pub fn new(mut bands: Vec<usize>) -> Self {
@@ -42,6 +35,10 @@ impl BandSelection {
 
         bands.sort_unstable(); // TODO: should order of bands matter? Or: introduce a restacking operation?
         Self(bands)
+    }
+
+    pub fn first() -> Self {
+        Self(vec![0])
     }
 
     pub fn new_single(band: usize) -> Self {
@@ -81,13 +78,25 @@ impl<const N: usize> From<[usize; N]> for BandSelection {
 
 impl QueryAttributeSelection for BandSelection {}
 
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ColumnSelection {}
+
+impl ColumnSelection {
+    pub fn all() -> Self {
+        Self {}
+    }
+}
 
 impl QueryAttributeSelection for ColumnSelection {}
 
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PlotSeriesSelection {}
+
+impl PlotSeriesSelection {
+    pub fn all() -> Self {
+        Self {}
+    }
+}
 
 impl QueryAttributeSelection for PlotSeriesSelection {}
 
@@ -121,7 +130,7 @@ impl From<QueryRectangle<BoundingBox2D, ColumnSelection>>
             spatial_bounds: value.spatial_partition(),
             time_interval: value.time_interval,
             spatial_resolution: value.spatial_resolution,
-            attributes: Default::default(), // TODO: how to do this automatically? maybe we have to remove this From implementation
+            attributes: BandSelection::first(), // TODO: how to do this automatically? maybe we have to remove this From implementation
         }
     }
 }
@@ -134,7 +143,7 @@ impl From<QueryRectangle<BoundingBox2D, PlotSeriesSelection>>
             spatial_bounds: value.spatial_partition(),
             time_interval: value.time_interval,
             spatial_resolution: value.spatial_resolution,
-            attributes: Default::default(), // TODO: how to do this automatically? maybe we have to remove this From implementation
+            attributes: BandSelection::first(), // TODO: how to do this automatically? maybe we have to remove this From implementation
         }
     }
 }

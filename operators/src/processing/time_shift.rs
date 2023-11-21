@@ -15,7 +15,8 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    Duration, Geometry, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval,
+    BandSelection, ColumnSelection, Duration, Geometry, RasterQueryRectangle, TimeGranularity,
+    TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
@@ -450,7 +451,7 @@ where
             spatial_bounds: query.spatial_bounds,
             time_interval,
             spatial_resolution: query.spatial_resolution,
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
         let stream = self.processor.vector_query(query, ctx).await?;
 
@@ -496,7 +497,7 @@ where
             spatial_bounds: query.spatial_bounds,
             time_interval,
             spatial_resolution: query.spatial_resolution,
-            attributes: Default::default(),
+            attributes: BandSelection::first(),
         };
         let stream = self.processor.raster_query(query, ctx).await?;
 
@@ -694,7 +695,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &query_context,
             )
@@ -783,7 +784,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &query_context,
             )
@@ -964,7 +965,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &query_context,
             )
@@ -1137,7 +1138,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &query_context,
             )
@@ -1222,7 +1223,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &query_context,
             )
@@ -1289,7 +1290,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &query_context,
             )

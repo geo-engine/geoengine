@@ -355,8 +355,8 @@ mod tests {
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, DataRef, DateTime, FeatureDataRef, MultiPoint, SpatialResolution,
-        TimeInterval, VectorQueryRectangle,
+        BoundingBox2D, ColumnSelection, DataRef, DateTime, FeatureDataRef, MultiPoint,
+        SpatialResolution, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheHint, Measurement};
     use geoengine_datatypes::raster::RasterTile2D;
@@ -472,7 +472,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -551,7 +551,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -633,7 +633,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )

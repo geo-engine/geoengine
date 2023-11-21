@@ -497,8 +497,8 @@ mod tests {
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         primitives::{
-            BoundingBox2D, CacheHint, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
-            VectorQueryRectangle,
+            BoundingBox2D, CacheHint, ColumnSelection, FeatureData, MultiPoint, SpatialResolution,
+            TimeInterval, VectorQueryRectangle,
         },
     };
     use std::{collections::HashMap, sync::Arc};
@@ -566,7 +566,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
         let mut lq = VectorLandingQueryEntry::create_empty::<CompressedFeatureCollection<MultiPoint>>(
             query.clone(),
@@ -589,7 +589,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new_unchecked((0., 0.).into(), (12., 12.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
 
         for c in &cols {
@@ -601,7 +601,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
         assert!(!cols[0].intersects_query(&query));
         for c in &cols[1..] {
@@ -613,7 +613,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new_unchecked((13., 13.).into(), (26., 26.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
         for col in &cols {
             assert!(!col.intersects_query(&query));
@@ -628,7 +628,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new_unchecked((1., 1.).into(), (11., 11.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
 
         let cache_query_entry = VectorCacheQueryEntry {
@@ -645,7 +645,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
         assert!(cache_query_entry.query().is_match(&query2));
 
@@ -654,7 +654,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new_unchecked((0., 0.).into(), (8., 8.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
         assert!(!cache_query_entry.query().is_match(&query3));
     }

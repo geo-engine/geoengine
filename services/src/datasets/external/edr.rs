@@ -1171,7 +1171,9 @@ pub enum EdrProviderError {
 mod tests {
     use super::*;
     use geoengine_datatypes::{
-        dataset::ExternalDataId, primitives::SpatialResolution, util::gdal::hide_gdal_errors,
+        dataset::ExternalDataId,
+        primitives::{BandSelection, ColumnSelection, SpatialResolution},
+        util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
     use httptest::{matchers::*, responders::status_code, Expectation, Server};
@@ -1535,7 +1537,7 @@ mod tests {
                 ),
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: Default::default(),
+                attributes: ColumnSelection::all(),
             })
             .await
             .unwrap();
@@ -1637,7 +1639,7 @@ mod tests {
                 ),
                 time_interval: TimeInterval::new_unchecked(1_692_144_000_000, 1_692_500_400_000),
                 spatial_resolution: SpatialResolution::new_unchecked(1., 1.),
-                attributes: Default::default(),
+                attributes: BandSelection::first(),
             })
             .await
             .unwrap()

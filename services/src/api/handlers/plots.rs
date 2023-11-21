@@ -12,7 +12,9 @@ use actix_web::{web, FromRequest, HttpRequest, Responder};
 use base64::Engine;
 use geoengine_datatypes::operations::reproject::reproject_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
-use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, ColumnSelection, SpatialResolution, VectorQueryRectangle,
+};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
     QueryContext, ResultDescriptor, TypedPlotQueryProcessor, WorkflowOperatorPath,
@@ -133,7 +135,7 @@ async fn get_plot_handler<C: ApplicationContext>(
         spatial_bounds: params.bbox,
         time_interval: params.time.into(),
         spatial_resolution: params.spatial_resolution,
-        attributes: Default::default(),
+        attributes: ColumnSelection::all(),
     };
 
     let query_rect = if request_spatial_ref == workflow_spatial_ref {

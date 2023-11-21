@@ -343,7 +343,9 @@ mod tests {
         },
     };
     use geoengine_datatypes::{
-        primitives::SpatialResolution, raster::TilingStrategy, util::test::TestDefault,
+        primitives::{BandSelection, SpatialResolution},
+        raster::TilingStrategy,
+        util::test::TestDefault,
     };
 
     #[test]
@@ -368,7 +370,7 @@ mod tests {
             spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInstance::from_millis(0).unwrap().into(),
             spatial_resolution,
-            attributes: Default::default(),
+            attributes: BandSelection::first(),
         };
 
         let aggregator = NeighborhoodAggregateTileNeighborhood::<u8, StandardDeviation>::new(

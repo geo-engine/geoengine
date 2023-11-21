@@ -1547,6 +1547,7 @@ mod tests {
     use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
+    use geoengine_datatypes::primitives::{BandSelection, PlotSeriesSelection};
     use geoengine_datatypes::{
         primitives::{
             BoundingBox2D, PlotQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
@@ -1982,7 +1983,7 @@ mod tests {
                     0.000_343_322_7, // 256 pixel
                     0.000_343_322_7, // 256 pixel
                 ),
-                attributes: Default::default(),
+                attributes: BandSelection::first(),
             })
             .await
             .unwrap();
@@ -2107,7 +2108,7 @@ mod tests {
                     0.000_343_322_7, // 256 pixel
                     0.000_343_322_7, // 256 pixel
                 ),
-                attributes: Default::default(),
+                attributes: BandSelection::first(),
             })
             .await
             .unwrap();
@@ -2326,7 +2327,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
-                    attributes: Default::default(),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &query_context,
             )

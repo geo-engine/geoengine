@@ -154,7 +154,7 @@ where
             spatial_bounds,
             time_interval,
             spatial_resolution: query.spatial_resolution,
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         }
         .into();
 
@@ -532,7 +532,7 @@ mod tests {
                         .unwrap(),
                     time_interval: time_instant,
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
@@ -628,7 +628,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
@@ -729,7 +729,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
@@ -836,7 +836,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
@@ -1011,7 +1011,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::new_unchecked(0, 20),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
@@ -1210,7 +1210,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::new_unchecked(0, 20),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )
@@ -1507,7 +1507,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::new_unchecked(0, 20),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MAX),
             )

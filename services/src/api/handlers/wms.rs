@@ -12,10 +12,10 @@ use crate::util::server::{connection_closed, not_implemented_handler, CacheContr
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::{operations::image::Colorizer, primitives::SpatialResolution};
 use geoengine_operators::engine::{
     CanonicOperatorName, ExecutionContext, ResultDescriptor, SingleRasterOrVectorSource,
@@ -351,7 +351,7 @@ async fn wms_map_handler<C: ApplicationContext>(
                 x_query_resolution,
                 y_query_resolution,
             ),
-            attributes: Default::default(), // TODO: support multi bands in API (via colorizer) and set the selection here
+            attributes: BandSelection::first(), // TODO: support multi bands in API (via colorizer) and set the selection here
         };
 
         let query_ctx = ctx.query_context()?;
@@ -624,7 +624,7 @@ mod tests {
                 )
                 .unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
-                attributes: Default::default(),
+                attributes: BandSelection::first(),
             },
             ctx.query_context().unwrap(),
             360,

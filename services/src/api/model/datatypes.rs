@@ -1,7 +1,8 @@
 use crate::error::{self, Result};
 use crate::identifier;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
+    AxisAlignedRectangle, BandSelection, MultiLineStringAccess, MultiPointAccess,
+    MultiPolygonAccess,
 };
 use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
@@ -959,6 +960,41 @@ pub struct QueryRectangle<SpatialBounds> {
     pub spatial_bounds: SpatialBounds,
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
+}
+
+impl
+    From<
+        geoengine_datatypes::primitives::QueryRectangle<
+            geoengine_datatypes::primitives::SpatialPartition2D,
+            geoengine_datatypes::primitives::BandSelection,
+        >,
+    > for RasterQueryRectangle
+{
+    fn from(
+        value: geoengine_datatypes::primitives::QueryRectangle<
+            geoengine_datatypes::primitives::SpatialPartition2D,
+            geoengine_datatypes::primitives::BandSelection,
+        >,
+    ) -> Self {
+        Self {
+            spatial_bounds: value.spatial_bounds.into(),
+            time_interval: value.time_interval.into(),
+            spatial_resolution: value.spatial_resolution.into(),
+        }
+    }
+}
+
+impl From<QueryRectangle<SpatialPartition2D>>
+    for geoengine_datatypes::primitives::RasterQueryRectangle
+{
+    fn from(value: QueryRectangle<SpatialPartition2D>) -> Self {
+        Self {
+            spatial_bounds: value.spatial_bounds.into(),
+            time_interval: value.time_interval.into(),
+            spatial_resolution: value.spatial_resolution.into(),
+            attributes: BandSelection::first(), // TODO: adjust once API supports attribute selection
+        }
+    }
 }
 
 /// The spatial resolution in SRS units

@@ -697,7 +697,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -772,7 +772,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -854,7 +854,7 @@ mod tests {
             .unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -971,7 +971,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            attributes: Default::default(),
+            attributes: BandSelection::first(),
         };
 
         let a = qp.raster_query(query_rect, &query_ctx).await?;
@@ -1037,7 +1037,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &query_ctx,
             )
@@ -1073,7 +1073,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
 
         let expected = BoundingBox2D::new_unchecked(
@@ -1194,7 +1194,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &query_ctx,
             )
@@ -1330,7 +1330,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &query_ctx,
             )
@@ -1401,7 +1401,7 @@ mod tests {
                     spatial_bounds,
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &query_ctx,
             )
@@ -1479,7 +1479,7 @@ mod tests {
                     spatial_bounds,
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &query_ctx,
             )
@@ -1558,7 +1558,7 @@ mod tests {
                     spatial_bounds,
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: Default::default(),
+                    attributes: ColumnSelection::all(),
                 },
                 &query_ctx,
             )

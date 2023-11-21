@@ -58,7 +58,7 @@ where
 mod tests {
     use super::*;
     use geoengine_datatypes::primitives::{
-        CacheHint, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
+        BandSelection, CacheHint, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
     };
     use geoengine_operators::engine::{MultipleRasterSources, RasterBandDescriptors};
     use geoengine_operators::{
@@ -234,7 +234,7 @@ mod tests {
             spatial_bounds,
             time_interval,
             spatial_resolution,
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
 
         let xg_train = crate::pro::machine_learning::MLTrainRequest {
@@ -559,7 +559,7 @@ mod tests {
             spatial_bounds,
             time_interval,
             spatial_resolution,
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
 
         // generate a hashmap of xgboost parameters with the corresponding setting values
@@ -762,7 +762,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
-            attributes: Default::default(),
+            attributes: BandSelection::first(),
         };
 
         let query_ctx = ctx.query_context().unwrap();

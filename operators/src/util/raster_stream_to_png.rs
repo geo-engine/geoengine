@@ -118,7 +118,7 @@ mod tests {
     use std::marker::PhantomData;
 
     use geoengine_datatypes::{
-        primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
+        primitives::{BandSelection, Coordinate2D, SpatialPartition2D, SpatialResolution},
         raster::TilingSpecification,
         util::test::TestDefault,
     };
@@ -151,7 +151,7 @@ mod tests {
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: Default::default(),
+                attributes: BandSelection::first(),
             },
             ctx,
             600,

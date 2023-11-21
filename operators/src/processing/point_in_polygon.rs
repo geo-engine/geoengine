@@ -353,10 +353,10 @@ mod tests {
     use std::str::FromStr;
 
     use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -466,7 +466,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -524,7 +524,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -593,7 +593,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -683,7 +683,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
 
         let ctx_one_chunk = MockQueryContext::new(ChunkByteSize::MAX);
@@ -767,7 +767,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-10., -10.).into(), (10., 10.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: Default::default(),
+            attributes: ColumnSelection::all(),
         };
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();

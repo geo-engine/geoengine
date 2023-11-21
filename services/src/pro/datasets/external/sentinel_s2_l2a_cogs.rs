@@ -763,7 +763,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         dataset::{DatasetId, ExternalDataId},
-        primitives::{SpatialPartition2D, SpatialResolution},
+        primitives::{BandSelection, SpatialPartition2D, SpatialResolution},
         util::{gdal::hide_gdal_errors, test::TestDefault, Identifier},
     };
     use geoengine_operators::{
@@ -815,7 +815,7 @@ mod tests {
                 .unwrap(),
                 time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
                 spatial_resolution: SpatialResolution::one(),
-                attributes: Default::default(),
+                attributes: BandSelection::first(),
             })
             .await
             .unwrap();
@@ -924,7 +924,7 @@ mod tests {
             spatial_bounds,
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
             spatial_resolution,
-            attributes: Default::default(),
+            attributes: BandSelection::first(),
         };
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
@@ -1194,7 +1194,7 @@ mod tests {
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44))
                 .unwrap(),
             spatial_resolution: SpatialResolution::new_unchecked(10., 10.),
-            attributes: Default::default(),
+            attributes: BandSelection::first(),
         };
 
         let loading_info = meta.loading_info(query).await.unwrap();
@@ -1303,7 +1303,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(10., 10.).unwrap(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &query_context,
             )

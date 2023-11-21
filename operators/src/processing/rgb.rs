@@ -526,7 +526,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )

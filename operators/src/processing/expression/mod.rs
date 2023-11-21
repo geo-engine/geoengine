@@ -545,7 +545,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
@@ -653,7 +653,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -723,7 +723,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -794,7 +794,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -868,7 +868,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -943,7 +943,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -1028,7 +1028,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -1095,7 +1095,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -1209,7 +1209,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -1279,7 +1279,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -1351,7 +1351,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
-                    attributes: Default::default(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )

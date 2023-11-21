@@ -150,6 +150,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::TryStreamExt;
     use geoengine_datatypes::dataset::NamedData;
+    use geoengine_datatypes::primitives::ColumnSelection;
     use geoengine_datatypes::{
         collections::{GeometryCollection, MultiPointCollection},
         primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle},
@@ -339,7 +340,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: Default::default(), // TODO: support multi bands in API and set the selection here
+                    attributes: ColumnSelection::all(),
                 },
                 &query_ctx,
             )

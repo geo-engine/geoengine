@@ -1,3 +1,4 @@
+use crate::api::model::datatypes::RasterQueryRectangle;
 use crate::contexts::SessionContext;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
@@ -6,7 +7,7 @@ use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
 use crate::workflows::workflow::Workflow;
 use geoengine_datatypes::error::ErrorSource;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
+use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
@@ -89,7 +90,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             .query_processor()
             .context(crate::error::Operator)?;
 
-        let query_rect = self.info.query.clone();
+        let query_rect = self.info.query;
         let query_ctx = self.ctx.query_context()?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
@@ -101,7 +102,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             call_on_generic_raster_processor_gdal_types!(processor, p => raster_stream_to_geotiff(
             &self.file_path,
             p,
-            query_rect.clone(),
+            query_rect.into(),
             query_ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Default::default(), // TODO: decide how to handle the no data here
@@ -233,8 +234,8 @@ async fn create_dataset<C: SessionContext>(
         data_type: origin_result_descriptor.data_type,
         spatial_reference: origin_result_descriptor.spatial_reference,
         time: Some(result_time_interval),
-        bbox: Some(query_rectangle.spatial_bounds),
-        resolution: Some(query_rectangle.spatial_resolution),
+        bbox: Some(query_rectangle.spatial_bounds.into()),
+        resolution: Some(query_rectangle.spatial_resolution.into()),
         bands: origin_result_descriptor.bands.clone(),
     };
     //TODO: Recognize MetaDataDefinition::GdalMetaDataRegular
