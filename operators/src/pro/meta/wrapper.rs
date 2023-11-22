@@ -152,16 +152,16 @@ where
 }
 
 #[async_trait]
-impl<Q, T, S, U> QueryProcessor for QueryProcessorWrapper<Q, T>
+impl<Q, T, S, A> QueryProcessor for QueryProcessorWrapper<Q, T>
 where
-    Q: QueryProcessor<Output = T, SpatialBounds = S, Selection = U>,
+    Q: QueryProcessor<Output = T, SpatialBounds = S, Selection = A>,
     S: AxisAlignedRectangle + Send + Sync + 'static,
-    U: QueryAttributeSelection + 'static,
+    A: QueryAttributeSelection + 'static,
     T: Send,
 {
     type Output = T;
     type SpatialBounds = S;
-    type Selection = U;
+    type Selection = A;
 
     async fn _query<'a>(
         &'a self,
