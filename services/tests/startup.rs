@@ -17,8 +17,10 @@ impl Drop for DroppingServer {
 }
 
 impl DroppingServer {
+    #[allow(clippy::dbg_macro)]
     fn new(schema_name: &str) -> Self {
         let dir = geoengine_services::util::config::retrieve_settings_dir().unwrap();
+        dbg!("Settings dir: {:?}", &dir);
 
         let process = Command::cargo_bin("main")
             .unwrap()
@@ -62,7 +64,7 @@ async fn it_starts_without_warnings_and_accepts_connections() {
         // read log output and check for warnings
         let mut startup_succesful = false;
         for line in server.stderr_lines().take(100) {
-            // eprintln!("Line: {line}");
+            eprintln!("Line: {line}");
 
             assert!(!line.contains("WARN"), "Warning in log output: {line}");
 

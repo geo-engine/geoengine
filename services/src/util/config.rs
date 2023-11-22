@@ -18,6 +18,7 @@ static SETTINGS: OnceLock<RwLock<Config>> = OnceLock::new();
 const SETTINGS_FILE_PATH_OVERRIDE_ENV_VAR: &str = "GEOENGINE_SETTINGS_FILE_PATH";
 
 // TODO: change to `LazyLock' once stable
+#[allow(clippy::dbg_macro)]
 fn init_settings() -> RwLock<Config> {
     let mut settings = Config::builder();
 
@@ -28,17 +29,27 @@ fn init_settings() -> RwLock<Config> {
 
     settings = settings.add_source(File::from_str(default_settings, FileFormat::Toml));
 
+    std::env::vars().for_each(|(key, value)| {
+        dbg!((&key, &value));
+    });
+
     if let Ok(settings_file_path) = std::env::var(SETTINGS_FILE_PATH_OVERRIDE_ENV_VAR) {
+        dbg!(
+            "Settings file path: {} (set by environment variable)",
+            &settings_file_path
+        );
         // override the settings file path
         settings = settings.add_source(File::with_name(&settings_file_path));
     } else {
         // use the default settings file path
         #[cfg(test)]
         {
+            dbg!("Settings file path: Settings-test.toml");
             settings = settings.add_source(File::from(dir.join("Settings-test.toml")));
         }
         #[cfg(not(test))]
         {
+            dbg!("Settings file path: Settings.toml");
             settings = settings.add_source(File::from(dir.join("Settings.toml")));
         }
     }
