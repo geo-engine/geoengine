@@ -278,7 +278,6 @@ where
 
                     let tile_folding_accu_fut = this.sub_query.new_fold_accu(
                         *this.current_tile_spec,
-                        this.bands[*this.current_band_index], // TODO: pass the `current_band_index` instead, because it is the output band?
                         tile_query_rectangle,
                         this.query_ctx.thread_pool(),
                     );
@@ -361,7 +360,6 @@ where
 
             match rf_res {
                 Ok(mut tile) => {
-                    // TODO: set the tile band to the running index, or does the fold method already do that?
                     // set the tile band to the running index, that is because output bands always start at zero and are consecutive, independent of the input bands
                     tile.band = *this.current_band_index;
                     this.state.set(StateInner::ReturnResult(Some(tile)));
@@ -465,7 +463,6 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        band: usize, // TODO: maybe this is not necessary because the accu can just be band 0 and later get the correct band index set?
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture;
@@ -551,11 +548,10 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        band: usize,
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        identity_accu(tile_info, band, &query_rect, pool.clone()).boxed()
+        identity_accu(tile_info, &query_rect, pool.clone()).boxed()
     }
 
     fn tile_query_rectangle(
@@ -580,7 +576,6 @@ where
 
 pub fn identity_accu<T: Pixel>(
     tile_info: TileInformation,
-    band: usize,
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<RasterTileAccu2D<T>>> {
@@ -590,7 +585,7 @@ pub fn identity_accu<T: Pixel>(
         let output_tile = RasterTile2D::new_with_tile_info(
             time_interval,
             tile_info,
-            band,
+            0,
             output_raster,
             CacheHint::max_duration(),
         );

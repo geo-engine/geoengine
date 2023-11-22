@@ -73,7 +73,6 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        _band: usize, // TODO
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {

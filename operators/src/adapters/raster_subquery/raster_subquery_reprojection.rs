@@ -63,7 +63,6 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        band: usize,
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
@@ -73,7 +72,6 @@ where
             &query_rect,
             pool.clone(),
             tile_info,
-            band,
             self.valid_bounds_out,
             self.out_srs,
             self.in_srs,
@@ -124,7 +122,6 @@ fn build_accu<T: Pixel>(
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tile_info: TileInformation,
-    band: usize,
     valid_bounds_out: SpatialPartition2D,
     out_srs: SpatialReference,
     in_srs: SpatialReference,
@@ -148,7 +145,7 @@ fn build_accu<T: Pixel>(
             accu_tile: RasterTile2D::new_with_tile_info(
                 time_interval,
                 tile_info,
-                band,
+                0,
                 output_raster.into(),
                 CacheHint::max_duration(),
             ),

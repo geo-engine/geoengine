@@ -140,11 +140,10 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        band: usize,
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        build_temporal_accu(&query_rect, tile_info, band, pool.clone()).boxed()
+        build_temporal_accu(&query_rect, tile_info, pool.clone()).boxed()
     }
 
     fn tile_query_rectangle(
@@ -171,7 +170,6 @@ where
 fn build_temporal_accu<T: Pixel>(
     query_rect: &RasterQueryRectangle,
     tile_info: TileInformation,
-    band: usize,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
     let time_interval = query_rect.time_interval;
@@ -179,7 +177,7 @@ fn build_temporal_accu<T: Pixel>(
         accu_tile: RasterTile2D::new_with_tile_info(
             time_interval,
             tile_info,
-            band,
+            0,
             EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
             CacheHint::max_duration(),
         ),
@@ -218,11 +216,10 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        band: usize,
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        build_temporal_no_data_accu(&query_rect, tile_info, band, pool.clone()).boxed()
+        build_temporal_no_data_accu(&query_rect, tile_info, pool.clone()).boxed()
     }
 
     fn tile_query_rectangle(
@@ -249,7 +246,6 @@ where
 fn build_temporal_no_data_accu<T: Pixel>(
     query_rect: &RasterQueryRectangle,
     tile_info: TileInformation,
-    band: usize,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
     let time_interval = query_rect.time_interval;
@@ -260,7 +256,7 @@ fn build_temporal_no_data_accu<T: Pixel>(
             accu_tile: RasterTile2D::new_with_tile_info(
                 time_interval,
                 tile_info,
-                band,
+                0,
                 output_raster,
                 CacheHint::max_duration(),
             ),

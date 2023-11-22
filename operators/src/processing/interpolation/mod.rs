@@ -270,13 +270,11 @@ where
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        band: usize,
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
         create_accu(
             tile_info,
-            band,
             &query_rect,
             pool.clone(),
             self.tiling_specification,
@@ -363,7 +361,6 @@ impl<T: Pixel, I: InterpolationAlgorithm<T>> FoldTileAccuMut for InterpolationAc
 
 pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
     tile_info: TileInformation,
-    band: usize,
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
@@ -402,7 +399,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
         let input_tile = RasterTile2D::new(
             time_interval,
             [0, 0].into(),
-            band,
+            0,
             geo_transform,
             GridOrEmpty::from(grid),
             CacheHint::max_duration(),
