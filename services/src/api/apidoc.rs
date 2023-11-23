@@ -227,9 +227,6 @@ use utoipa::{Modify, OpenApi};
             TextSymbology,
             LinearGradient,
             LogarithmicGradient,
-            DefaultColors,
-            OverUnderColors,
-
 
             OgcBoundingBox,
 

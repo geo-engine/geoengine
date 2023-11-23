@@ -68,14 +68,6 @@ CREATE TYPE "Breakpoint" AS (
     color "RgbaColor"
 );
 
-CREATE TYPE "DefaultColors" AS (
-    -- default
-    default_color "RgbaColor",
-    -- over/under
-    over_color "RgbaColor",
-    under_color "RgbaColor"
-);
-
 CREATE TYPE "ColorizerType" AS ENUM (
     'LinearGradient', 'LogarithmicGradient', 'Palette', 'Rgba'
 );
@@ -85,7 +77,8 @@ CREATE TYPE "Colorizer" AS (
     -- linear/logarithmic gradient
     breakpoints "Breakpoint" [],
     no_data_color "RgbaColor",
-    color_fields "DefaultColors",
+    over_color "RgbaColor",
+    under_color "RgbaColor",
     -- palette
     -- (colors --> breakpoints)
     default_color "RgbaColor"

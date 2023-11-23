@@ -12,7 +12,7 @@ use crate::util::operators::source_operator_from_dataset;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
-use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
+use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
@@ -219,10 +219,8 @@ impl SentinelS2L2aCogsDataProvider {
                                             .expect("valid breakpoint"),
                                     ],
                                     RgbaColor::transparent(),
-                                    DefaultColors::OverUnder {
-                                        over_color: RgbaColor::white(),
-                                        under_color: RgbaColor::black(),
-                                    },
+                                    RgbaColor::white(),
+                                    RgbaColor::black(),
                                 )
                                 .expect("valid colorizer"),
                         })), // TODO: individual colorizer per band
