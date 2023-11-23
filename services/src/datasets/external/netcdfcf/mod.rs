@@ -29,7 +29,9 @@ use gdal::raster::{Dimension, GdalDataType, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::error::BoxedResultExt;
-use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
+use geoengine_datatypes::operations::image::{
+    Colorizer, DefaultColors, RasterColorizer, RgbaColor,
+};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
@@ -1245,7 +1247,7 @@ pub fn layer_from_netcdf_overview(
         },
         symbology: Some(Symbology::Raster(RasterSymbology {
             opacity: 1.0,
-            colorizer,
+            colorizer: RasterColorizer::SingleBandColorizer { band: 0, colorizer },
         })),
         properties: [(
             "author".to_string(),

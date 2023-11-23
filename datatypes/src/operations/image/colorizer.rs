@@ -10,6 +10,18 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
 
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum RasterColorizer {
+    SingleBandColorizer { band: u32, colorizer: Colorizer },
+    // TODO: multiband colorizer, e.g.
+    // MultiBandColorizer {
+    //     red: ...,
+    //     green: ...,
+    //     blue: ..,
+    // },
+}
+
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 #[serde(untagged)]

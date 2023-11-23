@@ -5,7 +5,7 @@ use super::{
 use crate::{
     delegate_from_to_sql,
     error::Error,
-    operations::image::{Breakpoint, Colorizer, DefaultColors, RgbaColor},
+    operations::image::{Breakpoint, Colorizer, DefaultColors, RasterColorizer, RgbaColor},
     util::NotNanF64,
 };
 use postgres_types::{FromSql, ToSql};
@@ -238,6 +238,53 @@ impl TryFrom<DefaultColorsDbType> for DefaultColors {
         }
     }
 }
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "RasterColorizer")]
+pub struct RasterColorizerDbType {
+    r#type: RasterColorizerDbTypeType,
+    band: i64,
+    colorizer: ColorizerDbType,
+}
+
+#[derive(Debug, PartialEq, ToSql, FromSql)]
+// TODO: use #[postgres(rename_all = "camelCase")]
+#[postgres(name = "RasterColorizerType")]
+pub enum RasterColorizerDbTypeType {
+    SingleBandColorizer,
+    // MultiBandColorizer
+}
+
+impl From<&RasterColorizer> for RasterColorizerDbType {
+    fn from(value: &RasterColorizer) -> Self {
+        match value {
+            RasterColorizer::SingleBandColorizer { band, colorizer } => Self {
+                r#type: RasterColorizerDbTypeType::SingleBandColorizer,
+                band: i64::from(*band),
+                colorizer: colorizer.into(),
+            },
+        }
+    }
+}
+
+impl TryFrom<RasterColorizerDbType> for RasterColorizer {
+    type Error = Error;
+
+    fn try_from(value: RasterColorizerDbType) -> Result<Self, Self::Error> {
+        match value {
+            RasterColorizerDbType {
+                r#type: RasterColorizerDbTypeType::SingleBandColorizer,
+                band,
+                colorizer,
+            } => Ok(Self::SingleBandColorizer {
+                band: u32::try_from(band).map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,
+                colorizer: colorizer.try_into()?,
+            }),
+        }
+    }
+}
+
+delegate_from_to_sql!(RasterColorizer, RasterColorizerDbType);
 
 #[derive(Debug, ToSql, FromSql)]
 #[postgres(name = "Colorizer")]

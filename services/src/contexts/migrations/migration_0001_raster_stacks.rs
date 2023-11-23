@@ -5,6 +5,7 @@ use crate::error::Result;
 
 use super::database_migration::{DatabaseVersion, Migration};
 
+/// This migration adds multi band support for result descriptors and symbologies
 pub struct Migration0001RasterStacks;
 
 #[async_trait]
@@ -26,6 +27,23 @@ impl Migration for Migration0001RasterStacks {
             );
 
             ALTER TYPE "RasterResultDescriptor" ADD ATTRIBUTE bands "RasterBandDescriptor"[];
+
+            CREATE TYPE "RasterColorizerType" AS ENUM (
+                'SingleBandColorizer'
+                -- TODO: 'MultiBandColorizer'
+            );
+
+            CREATE TYPE "RasterColorizer" AS (
+                "type" "RasterColorizerType",
+                -- single band colorizer
+                band bigint,
+                colorizer "Colorizer"
+                -- TODO: multi band colorizer
+            );
+
+
+            ALTER TYPE "RasterSymbology" RENAME ATTRIBUTE colorizer TO colorizer_old;
+            ALTER TYPE "RasterSymbology" ADD ATTRIBUTE colorizer "RasterColorizer";
         "#,
         )
         .await?;
@@ -39,13 +57,16 @@ impl Migration for Migration0001RasterStacks {
         tx.batch_execute(
             r#"
             WITH raster_datasets AS (
-                SELECT id, (result_descriptor).raster.measurement measurement
+                SELECT 
+                    id, 
+                    (result_descriptor).raster.measurement measurement
                 FROM datasets
                 WHERE (result_descriptor).raster.data_type IS NOT NULL
             )
             UPDATE datasets
-            SET result_descriptor.raster.bands = 
-                ARRAY[('band', raster_datasets.measurement)]::"RasterBandDescriptor"[]
+            SET 
+                result_descriptor.raster.bands = 
+                    ARRAY[('band', raster_datasets.measurement)]::"RasterBandDescriptor"[]
             FROM raster_datasets
             WHERE datasets.id = raster_datasets.id;"#,
         )
@@ -78,9 +99,35 @@ impl Migration for Migration0001RasterStacks {
             .await?;
         }
 
+        // update symbology in project layers and collection layers
+        for (layer_table, id_column) in [
+            ("datasets", "id"),
+            ("project_version_layers", "project_version_id"),
+            ("layers", "id"),
+        ] {
+            tx.batch_execute(&format!(
+                r#"
+            WITH raster_layers AS (
+                SELECT {id_column}, (symbology).raster.colorizer_old colorizer_old
+                FROM {layer_table}
+                WHERE symbology IS NOT NULL AND (symbology).raster.colorizer_old IS NOT NULL
+            )
+            UPDATE {layer_table}
+            SET
+                symbology.raster.colorizer.band = 0,
+                symbology.raster.colorizer.colorizer = colorizer_old
+            FROM raster_layers
+            WHERE {layer_table}.{id_column} = raster_layers.{id_column};"#,
+            ))
+            .await?;
+        }
+
+        // complete new definitions of types by dropping redundant attributes
         tx.batch_execute(
             r#"
         ALTER TYPE "RasterResultDescriptor" DROP ATTRIBUTE measurement;
+
+        ALTER TYPE "RasterSymbology" DROP ATTRIBUTE colorizer_old;
         "#,
         )
         .await?;

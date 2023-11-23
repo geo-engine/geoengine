@@ -1561,6 +1561,31 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum RasterColorizer {
+    SingleBandColorizer { band: u32, colorizer: Colorizer },
+    // TODO: multiband colorizer, e.g.
+    // MultiBandColorizer {
+    //     red: ...,
+    //     green: ...,
+    //     blue: ..,
+    // },
+}
+
+impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterColorizer {
+    fn from(v: geoengine_datatypes::operations::image::RasterColorizer) -> Self {
+        match v {
+            geoengine_datatypes::operations::image::RasterColorizer::SingleBandColorizer {
+                band,
+                colorizer,
+            } => Self::SingleBandColorizer {
+                band,
+                colorizer: colorizer.into(),
+            },
+        }
+    }
+}
 /// A map from value to color
 ///
 /// It is assumed that is has at least one and at most 256 entries.
