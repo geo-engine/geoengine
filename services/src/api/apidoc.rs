@@ -11,7 +11,7 @@ use crate::api::model::datatypes::{
     ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat,
     ExternalDataId, FeatureDataType, GdalConfigOption, LayerId, LinearGradient,
     LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon, NamedData,
-    NoGeometry, OverUnderColors, Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType,
+    NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType,
     RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
     SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity,
     TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
