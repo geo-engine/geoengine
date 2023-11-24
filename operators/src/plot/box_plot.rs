@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{
-    partitions_extent, time_interval_extent, AxisAlignedRectangle, BoundingBox2D,
-    PlotQueryRectangle,
+    partitions_extent, time_interval_extent, AxisAlignedRectangle, BandSelection, BoundingBox2D,
+    PlotQueryRectangle, RasterQueryRectangle,
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -316,7 +316,7 @@ impl BoxPlotRasterQueryProcessor {
         call_on_generic_raster_processor!(input, processor => {
 
 
-            let mut stream = processor.query(query.into(), ctx).await?;
+            let mut stream = processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first()), ctx).await?;
             let mut accum = BoxPlotAccum::new(name);
 
             while let Some(tile) = stream.next().await {

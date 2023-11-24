@@ -14,8 +14,8 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{BarChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, ClassificationMeasurement, FeatureDataType, Measurement,
-    PlotQueryRectangle,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, ClassificationMeasurement, FeatureDataType,
+    Measurement, PlotQueryRectangle, RasterQueryRectangle,
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -291,7 +291,7 @@ impl ClassHistogramRasterQueryProcessor {
             .collect();
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            let mut query = processor.query(query.into(), ctx).await?;
+            let mut query = processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first()), ctx).await?;
 
             while let Some(tile) = query.next().await {
                 match tile?.grid_array {

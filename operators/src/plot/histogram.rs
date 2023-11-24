@@ -16,8 +16,8 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryFutureExt};
 use geoengine_datatypes::plots::{Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, DataRef, FeatureDataRef, FeatureDataType, Geometry,
-    Measurement, PlotQueryRectangle,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, DataRef, FeatureDataRef, FeatureDataType,
+    Geometry, Measurement, PlotQueryRectangle, RasterQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::{
@@ -379,7 +379,7 @@ impl HistogramRasterQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            process_metadata(processor.query(query.into(), ctx).await?, self.metadata).await
+            process_metadata(processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first()), ctx).await?, self.metadata).await
         })
     }
 
@@ -399,7 +399,7 @@ impl HistogramRasterQueryProcessor {
         .map_err(Error::from)?;
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            let mut query = processor.query(query.into(), ctx).await?;
+            let mut query = processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first()), ctx).await?;
 
             while let Some(tile) = query.next().await {
 

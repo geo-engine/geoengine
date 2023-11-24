@@ -4,7 +4,7 @@ use crate::{
 };
 use futures::{stream::select_all, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::{
-    primitives::{RasterQueryRectangle, VectorQueryRectangle},
+    primitives::{BandSelection, RasterQueryRectangle, VectorQueryRectangle},
     raster::{BaseTile, ConvertDataTypeParallel, GridOrEmpty, GridShape},
 };
 use geoengine_operators::{
@@ -77,7 +77,7 @@ where
     A: Aggregatable<Data = f32>,
 {
     let mut queries = Vec::with_capacity(processors.len());
-    let q: RasterQueryRectangle = query.into();
+    let q = RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first());
     for (i, raster_processor) in processors.iter().enumerate() {
         queries.push(
             call_on_generic_raster_processor!(raster_processor, processor => {
