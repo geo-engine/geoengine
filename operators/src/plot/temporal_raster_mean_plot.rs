@@ -11,7 +11,8 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::plots::{AreaLineChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    Measurement, PlotQueryRectangle, TimeInstance, TimeInterval,
+    BandSelection, Measurement, PlotQueryRectangle, RasterQueryRectangle, TimeInstance,
+    TimeInterval,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
@@ -142,7 +143,12 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let means = Self::calculate_means(
-            self.raster.query(query.into(), ctx).await?,
+            self.raster
+                .query(
+                    RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first()),
+                    ctx,
+                )
+                .await?,
             self.time_position,
         )
         .await?;

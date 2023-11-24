@@ -4,7 +4,9 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
+use geoengine_datatypes::primitives::{
+    BandSelection, CacheHint, ColumnSelection, RasterQueryRectangle,
+};
 use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
@@ -93,7 +95,12 @@ where
                 attributes: ColumnSelection::all(),
             };
 
-            let mut rasters = raster_processor.raster_query(query.into(), ctx).await?;
+            let mut rasters = raster_processor
+                .raster_query(
+                    RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first()),
+                    ctx,
+                )
+                .await?;
 
             // TODO: optimize geo access (only specific tiles, etc.)
 

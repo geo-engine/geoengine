@@ -41,6 +41,10 @@ impl BandSelection {
         Self(vec![0])
     }
 
+    pub fn first_n(n: usize) -> Self {
+        Self((0..n).collect())
+    }
+
     pub fn new_single(band: usize) -> Self {
         Self(vec![band])
     }
@@ -104,6 +108,24 @@ pub type VectorQueryRectangle = QueryRectangle<BoundingBox2D, ColumnSelection>;
 pub type RasterQueryRectangle = QueryRectangle<SpatialPartition2D, BandSelection>;
 pub type PlotQueryRectangle = QueryRectangle<BoundingBox2D, PlotSeriesSelection>;
 
+impl RasterQueryRectangle {
+    pub fn from_qrect_and_bands<A>(
+        query: &QueryRectangle<BoundingBox2D, A>,
+        bands: BandSelection,
+    ) -> Self
+    where
+        A: QueryAttributeSelection,
+        QueryRectangle<BoundingBox2D, A>: SpatialPartitioned,
+    {
+        Self {
+            spatial_bounds: query.spatial_partition(),
+            time_interval: query.time_interval,
+            spatial_resolution: query.spatial_resolution,
+            attributes: bands,
+        }
+    }
+}
+
 impl SpatialPartitioned for QueryRectangle<BoundingBox2D, ColumnSelection> {
     fn spatial_partition(&self) -> SpatialPartition2D {
         SpatialPartition2D::with_bbox_and_resolution(self.spatial_bounds, self.spatial_resolution)
@@ -119,32 +141,6 @@ impl SpatialPartitioned for QueryRectangle<BoundingBox2D, PlotSeriesSelection> {
 impl SpatialPartitioned for QueryRectangle<SpatialPartition2D, BandSelection> {
     fn spatial_partition(&self) -> SpatialPartition2D {
         self.spatial_bounds
-    }
-}
-
-impl From<QueryRectangle<BoundingBox2D, ColumnSelection>>
-    for QueryRectangle<SpatialPartition2D, BandSelection>
-{
-    fn from(value: QueryRectangle<BoundingBox2D, ColumnSelection>) -> Self {
-        Self {
-            spatial_bounds: value.spatial_partition(),
-            time_interval: value.time_interval,
-            spatial_resolution: value.spatial_resolution,
-            attributes: BandSelection::first(), // TODO: how to do this automatically? maybe we have to remove this From implementation
-        }
-    }
-}
-
-impl From<QueryRectangle<BoundingBox2D, PlotSeriesSelection>>
-    for QueryRectangle<SpatialPartition2D, BandSelection>
-{
-    fn from(value: QueryRectangle<BoundingBox2D, PlotSeriesSelection>) -> Self {
-        Self {
-            spatial_bounds: value.spatial_partition(),
-            time_interval: value.time_interval,
-            spatial_resolution: value.spatial_resolution,
-            attributes: BandSelection::first(), // TODO: how to do this automatically? maybe we have to remove this From implementation
-        }
     }
 }
 

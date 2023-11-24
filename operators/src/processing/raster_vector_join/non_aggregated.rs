@@ -3,8 +3,8 @@ use crate::processing::raster_vector_join::create_feature_aggregator;
 use futures::stream::{once as once_stream, BoxStream};
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, CacheHint, ColumnSelection, FeatureDataType, Geometry, RasterQueryRectangle,
-    VectorQueryRectangle,
+    BandSelection, BoundingBox2D, CacheHint, ColumnSelection, FeatureDataType, Geometry,
+    RasterQueryRectangle, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use std::marker::PhantomData;
@@ -137,7 +137,7 @@ where
 
         // TODO: also intersect with raster spatial / time bounds
 
-        let (Some(spatial_bounds), Some(time_interval)) = (bbox, time) else {
+        let (Some(_spatial_bounds), Some(_time_interval)) = (bbox, time) else {
             log::debug!(
                 "spatial or temporal intersection is empty, returning the same collection, skipping raster query"
             );
@@ -150,13 +150,8 @@ where
             );
         };
 
-        let query = VectorQueryRectangle {
-            spatial_bounds,
-            time_interval,
-            spatial_resolution: query.spatial_resolution,
-            attributes: ColumnSelection::all(),
-        }
-        .into();
+        let query =
+            RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first_n(bands));
 
         call_on_generic_raster_processor!(raster_processor, raster_processor => {
             Self::process_typed_collection_chunk(
