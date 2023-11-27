@@ -55,7 +55,7 @@ fn ndvi_source(execution_context: &mut MockExecutionContext) -> Box<dyn RasterOp
     gdal_operator.boxed()
 }
 
-async fn one_band_at_a_time(runs: usize, bands: usize, resolution: SpatialResolution) {
+async fn one_band_at_a_time(runs: usize, bands: u32, resolution: SpatialResolution) {
     let mut execution_context = MockExecutionContext::test_default();
     let query_context = MockQueryContext::test_default();
 
@@ -113,7 +113,7 @@ async fn one_band_at_a_time(runs: usize, bands: usize, resolution: SpatialResolu
     .unwrap();
 }
 
-async fn all_bands_at_once(runs: usize, bands: usize, resolution: SpatialResolution) {
+async fn all_bands_at_once(runs: usize, bands: u32, resolution: SpatialResolution) {
     let mut execution_context = MockExecutionContext::test_default();
     let query_context = MockQueryContext::test_default();
 
@@ -178,7 +178,7 @@ async fn all_bands_at_once(runs: usize, bands: usize, resolution: SpatialResolut
 #[tokio::main]
 async fn main() {
     const RUNS: usize = 5;
-    const BANDS: usize = 8;
+    const BANDS: u32 = 8;
     const RESOLUTION: f64 = 0.1;
 
     println!("one band at a time");

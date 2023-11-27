@@ -56,12 +56,12 @@ enum State {
 #[derive(Debug, PartialEq, Clone)]
 struct StateContainer<T> {
     current_idx: GridIdx2D,
-    current_band: usize,
+    current_band: u32,
     current_time: TimeInterval,
     next_tile: Option<RasterTile2D<T>>,
     no_data_grid: EmptyGrid2D<T>,
     grid_bounds: GridBoundingBox2D,
-    bands: usize,
+    bands: u32,
     global_geo_transform: GeoTransform,
     state: State,
     cache_hint: FillerTileCacheHintProvider,
@@ -69,7 +69,7 @@ struct StateContainer<T> {
 
 struct GridIdxAndBand {
     idx: GridIdx2D,
-    band: usize,
+    band: u32,
 }
 
 impl<T: Pixel> StateContainer<T> {
@@ -171,7 +171,7 @@ impl<T: Pixel> StateContainer<T> {
     }
 
     /// Check if a `GridIdx` is the next to produce i.e. the current state `GridIdx`.
-    fn grid_idx_and_band_is_the_next_to_produce(&self, tile_idx: GridIdx2D, band: usize) -> bool {
+    fn grid_idx_and_band_is_the_next_to_produce(&self, tile_idx: GridIdx2D, band: u32) -> bool {
         tile_idx == self.current_idx && band == self.current_band
     }
 
@@ -211,7 +211,7 @@ where
     pub fn new(
         stream: S,
         tile_grid_bounds: GridBoundingBox2D,
-        bands: usize,
+        bands: u32,
         global_geo_transform: GeoTransform,
         tile_shape: GridShape2D,
         cache_expiration: FillerTileCacheExpirationStrategy, // Specifies the cache expiration for the produced filler tiles. Set this to unlimited if the filler tiles will always be empty

@@ -616,6 +616,10 @@ pub type Breakpoints = Vec<Breakpoint>;
 pub struct Palette(HashMap<NotNan<f64>, RgbaColor>);
 
 impl Palette {
+    pub fn new(map: HashMap<NotNan<f64>, RgbaColor>) -> Self {
+        Self(map)
+    }
+
     pub fn into_inner(self) -> HashMap<NotNan<f64>, RgbaColor> {
         self.0
     }

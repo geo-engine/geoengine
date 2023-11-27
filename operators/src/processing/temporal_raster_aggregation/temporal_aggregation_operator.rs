@@ -253,7 +253,7 @@ where
     fn create_subquery_adapter_stream_for_single_band<'a>(
         &'a self,
         query_rect_to_answer: RasterQueryRectangle,
-        band: usize,
+        band: u32,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> futures::stream::BoxStream<'a, Result<RasterTile2D<P>>> {
         let mut query = query_rect_to_answer;

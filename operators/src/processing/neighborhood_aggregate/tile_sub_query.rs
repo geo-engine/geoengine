@@ -98,7 +98,7 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-        band: usize,
+        band: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         let spatial_bounds = tile_info.spatial_partition();
 

@@ -84,7 +84,7 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-        band: usize,
+        band: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         // this is the spatial partition we are interested in
         let valid_spatial_bounds = self

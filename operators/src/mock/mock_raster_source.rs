@@ -38,7 +38,7 @@ where
 {
     pub data: Vec<RasterTile2D<T>>,
     pub tiling_specification: TilingSpecification,
-    pub bands: usize,
+    pub bands: u32,
 }
 
 impl<T> MockRasterSourceProcessor<T>
@@ -48,7 +48,7 @@ where
     fn new_unchecked(
         data: Vec<RasterTile2D<T>>,
         tiling_specification: TilingSpecification,
-        bands: usize,
+        bands: u32,
     ) -> Self {
         Self {
             data,
@@ -60,7 +60,7 @@ where
     fn _new(
         data: Vec<RasterTile2D<T>>,
         tiling_specification: TilingSpecification,
-        bands: usize,
+        bands: u32,
     ) -> Result<Self, MockRasterSourceError> {
         if let Some(tile_shape) =
             first_tile_shape_not_matching_tiling_spec(&data, tiling_specification)
@@ -272,7 +272,7 @@ where
             MockRasterSourceProcessor::new_unchecked(
                 self.data.clone(),
                 self.tiling_specification,
-                self.result_descriptor.bands.len(),
+                self.result_descriptor.bands.count(),
             )
             .boxed(),
         );

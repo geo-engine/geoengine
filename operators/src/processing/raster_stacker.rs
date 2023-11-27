@@ -82,7 +82,7 @@ impl RasterOperator for RasterStacker {
 
         let bands_per_source = in_descriptors
             .iter()
-            .map(|d| d.bands.len())
+            .map(|d| d.bands.count())
             .collect::<Vec<_>>();
 
         let output_band_descriptors = RasterBandDescriptors::merge_all_with_suffix(
@@ -114,7 +114,7 @@ pub struct InitializedRasterStacker {
     name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
-    bands_per_source: Vec<usize>,
+    bands_per_source: Vec<u32>,
 }
 
 impl InitializedRasterOperator for InitializedRasterStacker {
@@ -196,13 +196,13 @@ impl InitializedRasterOperator for InitializedRasterStacker {
 
 pub(crate) struct RasterStackerProcessor<T> {
     sources: Vec<Box<dyn RasterQueryProcessor<RasterType = T>>>,
-    bands_per_source: Vec<usize>,
+    bands_per_source: Vec<u32>,
 }
 
 impl<T> RasterStackerProcessor<T> {
     pub fn new(
         sources: Vec<Box<dyn RasterQueryProcessor<RasterType = T>>>,
-        bands_per_source: Vec<usize>,
+        bands_per_source: Vec<u32>,
     ) -> Self {
         Self {
             sources,
@@ -214,10 +214,10 @@ impl<T> RasterStackerProcessor<T> {
 /// compute the bands in the input source from the bands in a query that uses multiple sources
 fn map_query_bands_to_source_bands(
     query_bands: &BandSelection,
-    bands_per_source: &[usize],
+    bands_per_source: &[u32],
     source_index: usize,
 ) -> Option<BandSelection> {
-    let source_start: usize = bands_per_source.iter().take(source_index).sum();
+    let source_start: u32 = bands_per_source.iter().take(source_index).sum();
     let source_bands = bands_per_source[source_index];
     let source_end = source_start + source_bands;
 

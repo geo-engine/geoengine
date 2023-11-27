@@ -151,7 +151,7 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-        band: usize,
+        band: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         let snapped_start = self.step.snap_relative(self.step_reference, start_time)?;
         Ok(Some(QueryRectangle {
@@ -227,7 +227,7 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-        band: usize,
+        band: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         let snapped_start = self.step.snap_relative(self.step_reference, start_time)?;
         Ok(Some(QueryRectangle {

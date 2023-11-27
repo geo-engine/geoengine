@@ -1420,6 +1420,15 @@ impl From<geoengine_datatypes::operations::image::Breakpoint> for Breakpoint {
     }
 }
 
+impl From<Breakpoint> for geoengine_datatypes::operations::image::Breakpoint {
+    fn from(breakpoint: Breakpoint) -> Self {
+        Self {
+            value: breakpoint.value.into(),
+            color: breakpoint.color.into(),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(untagged, rename_all = "camelCase", into = "OverUnderColors")]
 pub enum DefaultColors {
@@ -1561,6 +1570,42 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
     }
 }
 
+impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
+    fn from(v: Colorizer) -> Self {
+        match v {
+            Colorizer::LinearGradient(linear_gradient) => Self::LinearGradient {
+                breakpoints: linear_gradient
+                    .breakpoints
+                    .into_iter()
+                    .map(Into::into)
+                    .collect::<Vec<geoengine_datatypes::operations::image::Breakpoint>>(),
+                no_data_color: linear_gradient.no_data_color.into(),
+                default_colors: linear_gradient.color_fields.into(),
+            },
+            Colorizer::LogarithmicGradient(logarithmic_gradient) => Self::LogarithmicGradient {
+                breakpoints: logarithmic_gradient
+                    .breakpoints
+                    .into_iter()
+                    .map(Into::into)
+                    .collect::<Vec<geoengine_datatypes::operations::image::Breakpoint>>(),
+                no_data_color: logarithmic_gradient.no_data_color.into(),
+                default_colors: logarithmic_gradient.color_fields.into(),
+            },
+
+            Colorizer::Palette {
+                colors,
+                no_data_color,
+                default_color,
+            } => Self::Palette {
+                colors: colors.into(),
+                no_data_color: no_data_color.into(),
+                default_color: default_color.into(),
+            },
+            Colorizer::Rgba => Self::Rgba,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum RasterColorizer {
@@ -1571,6 +1616,14 @@ pub enum RasterColorizer {
     //     green: ...,
     //     blue: ..,
     // },
+}
+
+impl RasterColorizer {
+    pub fn band_selection(&self) -> BandSelection {
+        match self {
+            RasterColorizer::SingleBandColorizer { band, .. } => BandSelection::new_single(*band),
+        }
+    }
 }
 
 impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterColorizer {
@@ -1598,6 +1651,18 @@ impl From<geoengine_datatypes::operations::image::Palette> for Palette {
         Self(
             palette
                 .into_inner()
+                .into_iter()
+                .map(|(value, color)| (value, color.into()))
+                .collect(),
+        )
+    }
+}
+
+impl From<Palette> for geoengine_datatypes::operations::image::Palette {
+    fn from(palette: Palette) -> Self {
+        Self::new(
+            palette
+                .0
                 .into_iter()
                 .map(|(value, color)| (value, color.into()))
                 .collect(),

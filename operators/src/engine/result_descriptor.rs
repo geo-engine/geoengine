@@ -104,6 +104,10 @@ impl RasterBandDescriptors {
         self.0.len()
     }
 
+    pub fn count(&self) -> u32 {
+        self.0.len() as u32
+    }
+
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }

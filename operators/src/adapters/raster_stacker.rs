@@ -16,20 +16,20 @@ use std::task::{Context, Poll};
 pub struct RasterStackerAdapter<S> {
     #[pin]
     streams: Vec<S>,
-    batch_size_per_stream: Vec<usize>,
+    batch_size_per_stream: Vec<u32>,
     current_stream: usize,
-    current_stream_item: usize,
+    current_stream_item: u32,
     current_time: Option<TimeInterval>,
     finished: bool,
 }
 
 pub struct StreamBundle<S> {
     pub stream: S,
-    pub bands: usize,
+    pub bands: u32,
 }
 
-impl<S> From<(S, usize)> for StreamBundle<S> {
-    fn from(value: (S, usize)) -> Self {
+impl<S> From<(S, u32)> for StreamBundle<S> {
+    fn from(value: (S, u32)) -> Self {
         debug_assert!(value.1 > 0, "At least one band required");
         Self {
             stream: value.0,
@@ -88,7 +88,7 @@ where
             let band = batch_size_per_stream
                 .iter()
                 .take(*current_stream)
-                .sum::<usize>()
+                .sum::<u32>()
                 + *current_stream_item;
             tile.band = band;
 

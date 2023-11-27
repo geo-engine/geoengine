@@ -34,7 +34,7 @@ use super::FeatureAggregationMethod;
 pub struct RasterVectorJoinProcessor<G> {
     collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     raster_processors: Vec<TypedRasterQueryProcessor>,
-    raster_bands: Vec<usize>, // TODO: store result descriptors instead? could drive column names from measurement, once there is one measurement for each band
+    raster_bands: Vec<u32>, // TODO: store result descriptors instead? could drive column names from measurement, once there is one measurement for each band
     column_names: Vec<String>,
     aggregation_method: FeatureAggregationMethod,
     ignore_no_data: bool,
@@ -48,7 +48,7 @@ where
     pub fn new(
         collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
         raster_processors: Vec<TypedRasterQueryProcessor>,
-        raster_bands: Vec<usize>,
+        raster_bands: Vec<u32>,
         column_names: Vec<String>,
         aggregation_method: FeatureAggregationMethod,
         ignore_no_data: bool,
@@ -67,7 +67,7 @@ where
     fn process_collections<'a>(
         collection: BoxStream<'a, Result<FeatureCollection<G>>>,
         raster_processor: &'a TypedRasterQueryProcessor,
-        bands: usize,
+        bands: u32,
         new_column_name: &'a str,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -97,7 +97,7 @@ where
     async fn process_collection_chunk<'a>(
         collection: FeatureCollection<G>,
         raster_processor: &'a TypedRasterQueryProcessor,
-        bands: usize,
+        bands: u32,
         new_column_name: &'a str,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -170,7 +170,7 @@ where
 
     fn collection_with_new_null_columns<'a>(
         collection: &FeatureCollection<G>,
-        bands: usize,
+        bands: u32,
         new_column_names: &[String],
         feature_data_type: FeatureDataType,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
@@ -194,7 +194,7 @@ where
     async fn process_typed_collection_chunk<'a, P: Pixel>(
         collection: FeatureCollection<G>,
         raster_processor: &'a dyn RasterQueryProcessor<RasterType = P>,
-        bands: usize,
+        bands: u32,
         new_column_names: Vec<String>,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -233,14 +233,14 @@ struct JoinerState<G, C> {
     covered_pixels: C,
     feature_pixels: Option<Vec<Vec<GridIdx2D>>>,
     current_tile: GridIdx2D,
-    current_band: usize,
+    current_band: u32,
     aggregators: Vec<TypedAggregator>, // one aggregator per band
     g: PhantomData<G>,
 }
 
 struct VectorRasterJoiner<G, C> {
     state: Option<JoinerState<G, C>>,
-    bands: usize,
+    bands: u32,
     aggregation_method: FeatureAggregationMethod,
     ignore_no_data: bool,
     cache_hint: CacheHint,
@@ -252,11 +252,7 @@ where
     C: CoveredPixels<G>,
     FeatureCollection<G>: PixelCoverCreator<G, C = C>,
 {
-    fn new(
-        bands: usize,
-        aggregation_method: FeatureAggregationMethod,
-        ignore_no_data: bool,
-    ) -> Self {
+    fn new(bands: u32, aggregation_method: FeatureAggregationMethod, ignore_no_data: bool) -> Self {
         // TODO: is it possible to do the initialization here?
 
         Self {
@@ -326,7 +322,7 @@ where
             self.initialize::<P>(initial_collection, &raster.time)?;
         };
         let collection = &state.covered_pixels.collection_ref();
-        let aggregator = &mut state.aggregators[raster.band];
+        let aggregator = &mut state.aggregators[raster.band as usize];
         let covered_pixels = &state.covered_pixels;
 
         if state.feature_pixels.is_some() && raster.tile_position == state.current_tile {
