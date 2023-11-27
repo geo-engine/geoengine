@@ -29,8 +29,8 @@ impl Migration for Migration0001RasterStacks {
             ALTER TYPE "RasterResultDescriptor" ADD ATTRIBUTE bands "RasterBandDescriptor"[];
 
             CREATE TYPE "RasterColorizerType" AS ENUM (
-                'SingleBandColorizer'
-                -- TODO: 'MultiBandColorizer'
+                'SingleBand'
+                -- TODO: 'MultiBand'
             );
 
             CREATE TYPE "RasterColorizer" AS (

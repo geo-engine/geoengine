@@ -350,9 +350,7 @@ async fn wms_map_handler<C: ApplicationContext>(
         let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
 
         let (band, colorizer) = match raster_colorizer {
-            Some(RasterColorizer::SingleBandColorizer { band, colorizer }) => {
-                (band, Some(colorizer.into()))
-            }
+            Some(RasterColorizer::SingleBand { band, colorizer }) => (band, Some(colorizer.into())),
             _ => (0, None),
         };
 
@@ -806,7 +804,7 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBandColorizer {
+        let raster_colorizer = RasterColorizer::SingleBand {
             band: 0,
             colorizer: colorizer.into(),
         };
@@ -872,7 +870,7 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBandColorizer {
+        let raster_colorizer = RasterColorizer::SingleBand {
             band: 0,
             colorizer: colorizer.into(),
         };
@@ -933,7 +931,7 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBandColorizer {
+        let raster_colorizer = RasterColorizer::SingleBand {
             band: 0,
             colorizer: colorizer.into(),
         };
@@ -1005,7 +1003,7 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBandColorizer {
+        let raster_colorizer = RasterColorizer::SingleBand {
             band: 0,
             colorizer: colorizer.into(),
         };

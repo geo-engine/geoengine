@@ -5,7 +5,7 @@
     "description": "NDVI data from MODIS",
     "sourceOperator": "GdalSource",
     "colorizer": {
-      "type": "singleBandColorizer",
+      "type": "singleBand",
       "band": 0,
       "colorizer": {
         "type": "raster",

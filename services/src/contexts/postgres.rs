@@ -2002,7 +2002,7 @@ mod tests {
                     "type": "raster",
                     "opacity": 1,
                     "colorizer": {
-                        "type": "singleBandColorizer",
+                        "type": "singleBand",
                         "band": 0,
                         "colorizer": {
                             "type": "linearGradient",
@@ -2038,7 +2038,7 @@ mod tests {
                     "type": "raster",
                     "opacity": 1,
                     "colorizer": {
-                        "type": "singleBandColorizer",
+                        "type": "singleBand",
                         "band": 0,
                         "colorizer": {
                             "type": "linearGradient",
@@ -2116,7 +2116,7 @@ mod tests {
                     "type": "raster",
                     "opacity": 1,
                     "colorizer": {
-                        "type": "singleBandColorizer",
+                        "type": "singleBand",
                         "band": 0,
                         "colorizer": {
                             "type": "linearGradient",
@@ -2194,7 +2194,7 @@ mod tests {
                     "type": "raster",
                     "opacity": 1,
                     "colorizer": {
-                        "type": "singleBandColorizer",
+                        "type": "singleBand",
                         "band": 0,
                         "colorizer": {
                             "type": "linearGradient",
@@ -2588,7 +2588,7 @@ mod tests {
                 }),
                 Symbology::Raster(RasterSymbology {
                     opacity: 1.0,
-                    colorizer: RasterColorizer::SingleBandColorizer {
+                    colorizer: RasterColorizer::SingleBand {
                         band: 0,
                         colorizer: Colorizer::LinearGradient {
                             breakpoints: vec![

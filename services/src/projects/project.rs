@@ -679,7 +679,7 @@ mod tests {
                         "type": "raster",
                         "opacity": 1.0,
                         "colorizer": {
-                            "type": "singleBandColorizer",
+                            "type": "singleBand",
                             "band": 0,
                             "colorizer": {
                                 "type": "rgba"
@@ -699,7 +699,7 @@ mod tests {
                 },
                 symbology: Symbology::Raster(RasterSymbology {
                     opacity: 1.0,
-                    colorizer: RasterColorizer::SingleBandColorizer {
+                    colorizer: RasterColorizer::SingleBand {
                         band: 0,
                         colorizer: Colorizer::Rgba,
                     },
@@ -723,7 +723,7 @@ mod tests {
                     visibility: Default::default(),
                     symbology: Symbology::Raster(RasterSymbology {
                         opacity: 1.0,
-                        colorizer: RasterColorizer::SingleBandColorizer {
+                        colorizer: RasterColorizer::SingleBand {
                             band: 0,
                             colorizer: Colorizer::Rgba,
                         },
@@ -735,7 +735,7 @@ mod tests {
                     visibility: Default::default(),
                     symbology: Symbology::Raster(RasterSymbology {
                         opacity: 1.0,
-                        colorizer: RasterColorizer::SingleBandColorizer {
+                        colorizer: RasterColorizer::SingleBand {
                             band: 0,
                             colorizer: Colorizer::Rgba,
                         },

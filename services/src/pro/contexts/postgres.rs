@@ -3080,7 +3080,7 @@ mod tests {
                     "type": "raster",
                     "opacity": 1,
                     "colorizer": {
-                        "type": "singleBandColorizer",
+                        "type": "singleBand",
                         "band": 0,
                         "colorizer": {
                             "type": "linearGradient",
@@ -3116,7 +3116,7 @@ mod tests {
                     "type": "raster",
                     "opacity": 1,
                     "colorizer": {
-                        "type": "singleBandColorizer",
+                        "type": "singleBand",
                         "band": 0,
                         "colorizer": {
                         "type": "linearGradient",
@@ -3194,7 +3194,7 @@ mod tests {
                     "type": "raster",
                     "opacity": 1,
                     "colorizer": {
-                        "type": "singleBandColorizer",
+                        "type": "singleBand",
                         "band": 0,
                         "colorizer": {
                             "type": "linearGradient",
@@ -3272,7 +3272,7 @@ mod tests {
                     "type": "raster",
                     "opacity": 1,
                     "colorizer": {
-                        "type": "singleBandColorizer",
+                        "type": "singleBand",
                         "band": 0,
                         "colorizer": {
                             "type": "linearGradient",

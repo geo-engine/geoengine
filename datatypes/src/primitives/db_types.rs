@@ -251,15 +251,15 @@ pub struct RasterColorizerDbType {
 // TODO: use #[postgres(rename_all = "camelCase")]
 #[postgres(name = "RasterColorizerType")]
 pub enum RasterColorizerDbTypeType {
-    SingleBandColorizer,
+    SingleBand,
     // MultiBandColorizer
 }
 
 impl From<&RasterColorizer> for RasterColorizerDbType {
     fn from(value: &RasterColorizer) -> Self {
         match value {
-            RasterColorizer::SingleBandColorizer { band, colorizer } => Self {
-                r#type: RasterColorizerDbTypeType::SingleBandColorizer,
+            RasterColorizer::SingleBand { band, colorizer } => Self {
+                r#type: RasterColorizerDbTypeType::SingleBand,
                 band: i64::from(*band),
                 colorizer: colorizer.into(),
             },
@@ -273,10 +273,10 @@ impl TryFrom<RasterColorizerDbType> for RasterColorizer {
     fn try_from(value: RasterColorizerDbType) -> Result<Self, Self::Error> {
         match value {
             RasterColorizerDbType {
-                r#type: RasterColorizerDbTypeType::SingleBandColorizer,
+                r#type: RasterColorizerDbTypeType::SingleBand,
                 band,
                 colorizer,
-            } => Ok(Self::SingleBandColorizer {
+            } => Ok(Self::SingleBand {
                 band: u32::try_from(band).map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,
                 colorizer: colorizer.try_into()?,
             }),

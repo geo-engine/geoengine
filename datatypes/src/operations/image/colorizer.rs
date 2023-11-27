@@ -13,9 +13,9 @@ use std::str::FromStr;
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum RasterColorizer {
-    SingleBandColorizer { band: u32, colorizer: Colorizer },
+    SingleBand { band: u32, colorizer: Colorizer },
     // TODO: multiband colorizer, e.g.
-    // MultiBandColorizer {
+    // MultiBand {
     //     red: ...,
     //     green: ...,
     //     blue: ..,

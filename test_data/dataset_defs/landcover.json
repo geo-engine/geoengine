@@ -7,7 +7,7 @@
     "symbology": {
       "type": "raster",
       "colorizer": {
-        "type": "singleBandColorizer",
+        "type": "singleBand",
         "band": 0,
         "colorizer": {
           "type": "palette",
