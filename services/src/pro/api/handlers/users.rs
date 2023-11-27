@@ -715,6 +715,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::model::datatypes::RasterColorizer;
     use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{Session, SessionContext};
     use crate::pro::ge_context;
@@ -1671,6 +1672,11 @@ mod tests {
         )
         .unwrap();
 
+        let raster_colorizer = RasterColorizer::SingleBand {
+            band: 0,
+            colorizer: colorizer.into(),
+        };
+
         let params = &[
             ("request", "GetMap"),
             ("service", "WMS"),
@@ -1685,7 +1691,10 @@ mod tests {
             ("crs", "EPSG:4326"),
             (
                 "styles",
-                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+                &format!(
+                    "custom:{}",
+                    serde_json::to_string(&raster_colorizer).unwrap()
+                ),
             ),
             ("format", "image/png"),
             ("time", "2014-04-01T12:00:00.0Z"),
