@@ -4,11 +4,11 @@
     "displayName": "NDVI as GdalMetaDataList",
     "description": "NDVI data from MODIS",
     "sourceOperator": "GdalSource",
-    "colorizer": {
-      "type": "singleBand",
-      "band": 0,
+    "symbology": {
+      "type": "raster",
       "colorizer": {
-        "type": "raster",
+        "type": "singleBand",
+        "band": 0,
         "colorizer": {
           "type": "palette",
           "colors": {

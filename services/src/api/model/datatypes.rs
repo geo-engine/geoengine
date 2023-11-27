@@ -1607,7 +1607,7 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum RasterColorizer {
     SingleBand { band: u32, colorizer: Colorizer },
     // TODO: multiband colorizer, e.g.

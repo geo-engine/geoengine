@@ -4,11 +4,11 @@
     "displayName": "NDVI",
     "description": "NDVI data from MODIS",
     "sourceOperator": "GdalSource",
-    "colorizer": {
-      "type": "singleBand",
-      "band": 0,
+    "symbology": {
+      "type": "raster",
       "colorizer": {
-        "type": "raster",
+        "type": "singleBand",
+        "band": 0,
         "colorizer": {
           "type": "palette",
           "colors": {
@@ -268,10 +268,10 @@
             "253": [11, 36, 3, 255],
             "254": [11, 36, 3, 255],
             "255": [0, 0, 0, 255]
-          }
-        },
-        "noDataColor": [0, 0, 0, 0],
-        "defaultColor": [0, 0, 0, 0]
+          },
+          "noDataColor": [0, 0, 0, 0],
+          "defaultColor": [0, 0, 0, 0]
+        }
       },
       "opacity": 1.0
     },
