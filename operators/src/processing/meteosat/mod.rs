@@ -39,7 +39,7 @@ mod test_util {
 
     use futures::StreamExt;
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::util::test::TestDefault;
     use num_traits::AsPrimitive;
 
@@ -57,8 +57,8 @@ mod test_util {
     use geoengine_datatypes::util::Identifier;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterResultDescriptor, WorkflowOperatorPath,
+        MockExecutionContext, MockQueryContext, QueryProcessor, RasterBandDescriptor,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::meteosat::{
@@ -132,6 +132,7 @@ mod test_util {
                 TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 15, 0)),
             ),
             spatial_resolution: sr,
+            attributes: BandSelection::first(),
         }
     }
 
@@ -140,6 +141,7 @@ mod test_util {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         }
     }
 
@@ -177,6 +179,7 @@ mod test_util {
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: TestDefault::test_default(),
             },
+            0,
             raster,
             props,
             CacheHint::default(),
@@ -188,15 +191,19 @@ mod test_util {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: measurement.unwrap_or_else(|| {
-                        Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "raw".to_string(),
-                            unit: None,
-                        })
-                    }),
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                        "band".into(),
+                        measurement.unwrap_or_else(|| {
+                            Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "raw".to_string(),
+                                unit: None,
+                            })
+                        }),
+                    )])
+                    .unwrap(),
                 },
             },
         }
@@ -261,13 +268,17 @@ mod test_util {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81)
                     .into(),
-                measurement: Measurement::Continuous(ContinuousMeasurement {
-                    measurement: "raw".to_string(),
-                    unit: None,
-                }),
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                    "band".into(),
+                    Measurement::Continuous(ContinuousMeasurement {
+                        measurement: "raw".to_string(),
+                        unit: None,
+                    }),
+                )])
+                .unwrap(),
             },
             cache_ttl: CacheTtlSeconds::default(),
         };

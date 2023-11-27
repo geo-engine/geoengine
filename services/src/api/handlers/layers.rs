@@ -17,7 +17,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
-use geoengine_datatypes::primitives::QueryRectangle;
+use geoengine_datatypes::primitives::{BandSelection, QueryRectangle};
 use geoengine_operators::engine::WorkflowOperatorPath;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -626,13 +626,14 @@ async fn layer_to_dataset<C: ApplicationContext>(
                 cause: "is None".to_string(),
             },
         )?,
+        attributes: BandSelection::first(), // TODO: add to API
     };
 
     let from_workflow = RasterDatasetFromWorkflow {
         name: None,
         display_name: layer.name,
         description: Some(layer.description),
-        query: qr,
+        query: qr.into(),
         as_cog: true,
     };
 
@@ -912,7 +913,7 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
-        Measurement, RasterQueryRectangle, SpatialPartition2D, TimeGranularity, TimeInterval,
+        RasterQueryRectangle, SpatialPartition2D, TimeGranularity, TimeInterval,
     };
     use geoengine_datatypes::raster::{
         GeoTransform, Grid, GridShape, RasterDataType, RasterTile2D, TilingSpecification,
@@ -920,8 +921,8 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        ExecutionContext, InitializedRasterOperator, RasterOperator, RasterResultDescriptor,
-        SingleRasterOrVectorSource, TypedOperator,
+        ExecutionContext, InitializedRasterOperator, RasterBandDescriptors, RasterOperator,
+        RasterResultDescriptor, SingleRasterOrVectorSource, TypedOperator,
     };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::processing::{TimeShift, TimeShiftParams};
@@ -1300,6 +1301,7 @@ mod tests {
                 RasterTile2D {
                     time: TimeInterval::new_unchecked(1_671_868_800_000, 1_671_955_200_000),
                     tile_position: [-1, 0].into(),
+                    band: 0,
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                     properties: Default::default(),
@@ -1308,6 +1310,7 @@ mod tests {
                 RasterTile2D {
                     time: TimeInterval::new_unchecked(1_671_955_200_000, 1_672_041_600_000),
                     tile_position: [-1, 0].into(),
+                    band: 0,
                     global_geo_transform: TestDefault::test_default(),
                     grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                     properties: Default::default(),
@@ -1321,7 +1324,6 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
                         time: if has_time {
                             Some(TimeInterval::new_unchecked(
                                 1_671_868_800_000,
@@ -1343,6 +1345,7 @@ mod tests {
                         } else {
                             None
                         },
+                        bands: RasterBandDescriptors::new_single_band(),
                     },
                 },
             }
@@ -1378,6 +1381,7 @@ mod tests {
                     1_672_041_600_000 + i64::from(time_shift_millis),
                 ),
                 spatial_resolution: GeoTransform::test_default().spatial_resolution(),
+                attributes: BandSelection::first(),
             };
 
             MockRasterWorkflowLayerDescription {
@@ -1535,10 +1539,13 @@ mod tests {
 
         // query the layer
         let workflow_operator = mock_source.workflow.operator.get_raster().unwrap();
-        let workflow_result =
-            raster_operator_to_geotiff_bytes(&ctx, workflow_operator, mock_source.query_rectangle)
-                .await
-                .unwrap();
+        let workflow_result = raster_operator_to_geotiff_bytes(
+            &ctx,
+            workflow_operator,
+            mock_source.query_rectangle.clone(),
+        )
+        .await
+        .unwrap();
 
         // query the newly created dataset
         let dataset_operator = GdalSource {
@@ -1547,10 +1554,13 @@ mod tests {
             },
         }
         .boxed();
-        let dataset_result =
-            raster_operator_to_geotiff_bytes(&ctx, dataset_operator, mock_source.query_rectangle)
-                .await
-                .unwrap();
+        let dataset_result = raster_operator_to_geotiff_bytes(
+            &ctx,
+            dataset_operator,
+            mock_source.query_rectangle.clone(),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(workflow_result.as_slice(), dataset_result.as_slice());
     }

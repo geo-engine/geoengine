@@ -52,6 +52,7 @@ where
         BaseTile {
             time: self.time,
             grid_array: self.grid_array.convert_data_type(),
+            band: self.band,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             tile_position: self.tile_position,
@@ -123,6 +124,7 @@ where
         BaseTile {
             time: self.time,
             grid_array: self.grid_array.convert_data_type_parallel(),
+            band: self.band,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             tile_position: self.tile_position,
@@ -235,6 +237,7 @@ mod tests {
         let tile_u8 = RasterTile2D::new(
             TimeInterval::default(),
             [0, 0].into(),
+            0,
             GeoTransform::new((0., 0.).into(), 1., -1.),
             g_u8,
             CacheHint::default(),
@@ -262,6 +265,7 @@ mod tests {
         let tile_u8 = RasterTile2D::new(
             TimeInterval::default(),
             [0, 0].into(),
+            0,
             GeoTransform::new((0., 0.).into(), 1., -1.),
             g_u8,
             CacheHint::default(),

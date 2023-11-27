@@ -29,12 +29,12 @@ use geoengine_datatypes::collections::{
     VectorDataType,
 };
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, DateTime, DateTimeParseFormat,
     FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint, MultiPolygon,
     NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry, VectorQueryRectangle,
 };
+use geoengine_datatypes::primitives::{CacheTtlSeconds, ColumnSelection};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use log::debug;
 use pin_project::pin_project;
@@ -512,6 +512,7 @@ where
 {
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
+    type Selection = ColumnSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -519,7 +520,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         Ok(OgrSourceStream::new(
-            self.dataset_information.loading_info(query).await?,
+            self.dataset_information.loading_info(query.clone()).await?,
             query,
             ctx.chunk_byte_size().into(),
             self.attribute_filters.clone(),
@@ -1287,7 +1288,7 @@ where
                 this.dataset_information.clone(),
                 this.feature_collection_builder.clone(),
                 this.data_types.clone(),
-                *this.query_rectangle,
+                this.query_rectangle.clone(),
                 this.time_extractor.clone(),
                 this.time_attribute_parser.clone(),
                 *this.chunk_byte_size,
@@ -2074,6 +2075,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -2126,6 +2128,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into()).unwrap(),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -2171,6 +2174,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (5., 5.).into()).unwrap(),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -2221,6 +2225,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -2306,6 +2311,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -2405,6 +2411,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -2507,6 +2514,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -2660,6 +2668,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -2837,6 +2846,7 @@ mod tests {
                     )?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -4020,6 +4030,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -4139,6 +4150,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 2.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -4348,6 +4360,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context1,
             )
@@ -4382,6 +4395,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -4499,6 +4513,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -4588,6 +4603,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -4708,6 +4724,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -4835,6 +4852,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -4960,6 +4978,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -5085,6 +5104,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -5206,6 +5226,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -5340,6 +5361,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -5460,6 +5482,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -5571,6 +5594,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -5697,6 +5721,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -5812,6 +5837,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -5927,6 +5953,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -6046,6 +6073,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -6164,6 +6192,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -6297,6 +6326,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -6412,6 +6442,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -6519,6 +6550,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -6612,6 +6644,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -6702,6 +6735,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -6792,6 +6826,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )
@@ -6882,6 +6917,7 @@ mod tests {
                     spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
                 },
                 &context,
             )

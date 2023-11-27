@@ -57,8 +57,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::primitives::{CacheHint, RasterQueryRectangle, SpatialPartition2D};
-    use geoengine_operators::engine::MultipleRasterSources;
+    use geoengine_datatypes::primitives::{
+        BandSelection, CacheHint, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
+    };
+    use geoengine_operators::engine::{MultipleRasterSources, RasterBandDescriptors};
     use geoengine_operators::{
         engine::QueryProcessor,
         pro::machine_learning::xgboost::{XgboostOperator, XgboostParams},
@@ -78,7 +80,7 @@ mod tests {
     use crate::workflows::workflow::Workflow;
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::primitives::{Measurement, SpatialResolution, TimeInterval};
+    use geoengine_datatypes::primitives::{SpatialResolution, TimeInterval};
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -138,6 +140,7 @@ mod tests {
                     global_tile_position,
                     tile_size_in_pixels,
                 },
+                0,
                 masked_grid,
                 CacheHint::default(),
             ));
@@ -149,10 +152,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -227,10 +230,11 @@ mod tests {
 
         let spatial_resolution = SpatialResolution::one();
 
-        let qry: QueryRectangle<BoundingBox2D> = VectorQueryRectangle {
+        let qry: QueryRectangle<BoundingBox2D, ColumnSelection> = VectorQueryRectangle {
             spatial_bounds,
             time_interval,
             spatial_resolution,
+            attributes: ColumnSelection::all(),
         };
 
         let xg_train = crate::pro::machine_learning::MLTrainRequest {
@@ -551,10 +555,11 @@ mod tests {
 
         let spatial_resolution = SpatialResolution::one();
 
-        let qry: QueryRectangle<BoundingBox2D> = VectorQueryRectangle {
+        let qry: QueryRectangle<BoundingBox2D, ColumnSelection> = VectorQueryRectangle {
             spatial_bounds,
             time_interval,
             spatial_resolution,
+            attributes: ColumnSelection::all(),
         };
 
         // generate a hashmap of xgboost parameters with the corresponding setting values
@@ -757,6 +762,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
 
         let query_ctx = ctx.query_context().unwrap();

@@ -122,6 +122,7 @@ where
         Ok(RasterTile2D::new(
             time,
             tile_position,
+            0,
             global_geo_transform,
             F::into_grid(state_grid)?,
             cache_hint,
@@ -182,12 +183,14 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
+        band: usize,
     ) -> Result<Option<RasterQueryRectangle>> {
         let snapped_start = self.step.snap_relative(self.step_reference, start_time)?;
         Ok(Some(RasterQueryRectangle {
             spatial_bounds: tile_info.spatial_partition(),
             spatial_resolution: query_rect.spatial_resolution,
             time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
+            attributes: band.into(),
         }))
     }
 

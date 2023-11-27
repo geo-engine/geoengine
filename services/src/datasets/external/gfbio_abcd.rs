@@ -469,10 +469,10 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
     use geoengine_datatypes::dataset::ExternalDataId;
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
@@ -679,6 +679,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    attributes: ColumnSelection::all(),
                 })
                 .await
                 .map_err(|e| e.to_string())?;
@@ -812,6 +813,7 @@ mod tests {
                 spatial_bounds: BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
+                attributes: ColumnSelection::all(),
             };
             let ctx = MockQueryContext::test_default();
 

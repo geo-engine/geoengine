@@ -239,8 +239,8 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
+    use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
@@ -381,6 +381,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
+            attributes: ColumnSelection::all(),
         };
         let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
 

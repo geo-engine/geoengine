@@ -482,6 +482,7 @@ where
             global_geo_transform: tile.global_geo_transform,
             properties: tile.properties,
             tile_position: tile.tile_position,
+            band: tile.band,
         }
     }
 
@@ -501,6 +502,7 @@ where
             global_geo_transform: self.global_geo_transform,
             properties: self.properties.clone(),
             tile_position: self.tile_position,
+            band: self.band,
         })
     }
 
@@ -600,7 +602,7 @@ mod tests {
     use std::sync::Arc;
 
     use geoengine_datatypes::{
-        primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution},
+        primitives::{BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution},
         raster::GeoTransform,
         util::test::TestDefault,
     };
@@ -631,6 +633,7 @@ mod tests {
             global_geo_transform: GeoTransform::test_default(),
             properties: Default::default(),
             tile_position: [0, 0].into(),
+            band: 0,
         }
     }
 
@@ -665,8 +668,10 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
+            attributes: BandSelection::first(),
         };
-        let mut lq = RasterLandingQueryEntry::create_empty::<CompressedRasterTile2D<u8>>(query);
+        let mut lq =
+            RasterLandingQueryEntry::create_empty::<CompressedRasterTile2D<u8>>(query.clone());
         tile.move_element_into_landing_zone(lq.elements_mut())
             .unwrap();
         let mut cache_entry = CompressedRasterTile2D::<u8>::landing_zone_to_cache_entry(lq);
@@ -683,6 +688,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         assert!(tile.intersects_query(&query));
 
@@ -694,6 +700,7 @@ mod tests {
             ),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         assert!(tile.intersects_query(&query));
 
@@ -705,6 +712,7 @@ mod tests {
             ),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         assert!(!tile.intersects_query(&query));
     }
@@ -715,9 +723,10 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let cache_query_entry = RasterCacheQueryEntry {
-            query: cache_entry_bounds,
+            query: cache_entry_bounds.clone(),
             elements: CachedTiles::U8(Arc::new(Vec::new())),
         };
 
@@ -733,6 +742,7 @@ mod tests {
             ),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         assert!(cache_query_entry.query().is_match(&query2));
 
@@ -744,6 +754,7 @@ mod tests {
             ),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         assert!(!cache_query_entry.query().is_match(&query3));
     }

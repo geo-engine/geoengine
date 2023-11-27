@@ -841,6 +841,7 @@ pub trait CacheQueryMatch<RHS = Self> {
 
 impl CacheQueryMatch for RasterQueryRectangle {
     fn is_match(&self, query: &RasterQueryRectangle) -> bool {
+        // TODO: also check for bands
         self.spatial_bounds.contains(&query.spatial_bounds)
             && self.time_interval.contains(&query.time_interval)
             && self.spatial_resolution == query.spatial_resolution
@@ -1008,7 +1009,9 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{CacheHint, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{
+            BandSelection, CacheHint, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
+        },
         raster::{Grid, RasterProperties, RasterTile2D},
     };
     use serde_json::json;
@@ -1062,6 +1065,7 @@ mod tests {
         RasterTile2D::<u8> {
             time: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
             tile_position: [-1, 0].into(),
+            band: 0,
             global_geo_transform: TestDefault::test_default(),
             grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
@@ -1075,6 +1079,7 @@ mod tests {
         CompressedRasterTile2D::<u8> {
             time: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
             tile_position: [-1, 0].into(),
+            band: 0,
             global_geo_transform: TestDefault::test_default(),
             grid_array: CompressedGridOrEmpty::Compressed(CompressedMaskedGrid::new(
                 [3, 2].into(),
@@ -1095,6 +1100,7 @@ mod tests {
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
                 .unwrap(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         }
     }
 
@@ -1182,10 +1188,10 @@ mod tests {
 
     #[test]
     fn cache_byte_size() {
-        assert_eq!(create_compressed_tile().byte_size(), 268);
+        assert_eq!(create_compressed_tile().byte_size(), 276);
         assert_eq!(
             CachedTiles::U8(Arc::new(vec![create_compressed_tile()])).byte_size(),
-            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 268
+            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 276
         );
         assert_eq!(
             CachedTiles::U8(Arc::new(vec![
@@ -1193,7 +1199,7 @@ mod tests {
                 create_compressed_tile()
             ]))
             .byte_size(),
-            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 2 * 268
+            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 2 * 276
         );
     }
 

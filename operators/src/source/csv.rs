@@ -8,7 +8,7 @@ use futures::stream::BoxStream;
 use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::primitives::{ColumnSelection, VectorQueryRectangle};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
 
@@ -401,6 +401,7 @@ struct CsvSourceProcessor {
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
     type SpatialBounds = BoundingBox2D;
+    type Selection = ColumnSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -574,6 +575,7 @@ x,y
             ),
             time_interval: TimeInterval::new_unchecked(0, 1),
             spatial_resolution: SpatialResolution::zero_point_one(),
+            attributes: ColumnSelection::all(),
         };
         let ctx = MockQueryContext::new((10 * 8 * 2).into());
 

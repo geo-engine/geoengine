@@ -12,7 +12,9 @@ use actix_web::{web, FromRequest, HttpRequest, Responder};
 use base64::Engine;
 use geoengine_datatypes::operations::reproject::reproject_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
-use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, ColumnSelection, SpatialResolution, VectorQueryRectangle,
+};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
     QueryContext, ResultDescriptor, TypedPlotQueryProcessor, WorkflowOperatorPath,
@@ -133,6 +135,7 @@ async fn get_plot_handler<C: ApplicationContext>(
         spatial_bounds: params.bbox,
         time_interval: params.time.into(),
         spatial_resolution: params.spatial_resolution,
+        attributes: ColumnSelection::all(),
     };
 
     let query_rect = if request_spatial_ref == workflow_spatial_ref {
@@ -161,19 +164,19 @@ async fn get_plot_handler<C: ApplicationContext>(
 
     let data = match processor {
         TypedPlotQueryProcessor::JsonPlain(processor) => {
-            let json = processor.plot_query(query_rect, &query_ctx);
+            let json = processor.plot_query(query_rect.into(), &query_ctx);
             let result = abortable_query_execution(json, conn_closed, query_abort_trigger).await;
             result.context(error::Operator)?
         }
         TypedPlotQueryProcessor::JsonVega(processor) => {
-            let chart = processor.plot_query(query_rect, &query_ctx);
+            let chart = processor.plot_query(query_rect.into(), &query_ctx);
             let chart = abortable_query_execution(chart, conn_closed, query_abort_trigger).await;
             let chart = chart.context(error::Operator)?;
 
             serde_json::to_value(chart).context(error::SerdeJson)?
         }
         TypedPlotQueryProcessor::ImagePng(processor) => {
-            let png_bytes = processor.plot_query(query_rect, &query_ctx);
+            let png_bytes = processor.plot_query(query_rect.into(), &query_ctx);
             let png_bytes =
                 abortable_query_execution(png_bytes, conn_closed, query_abort_trigger).await;
             let png_bytes = png_bytes.context(error::Operator)?;
@@ -219,13 +222,15 @@ mod tests {
     use actix_web::http::{header, Method};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::primitives::CacheHint;
-    use geoengine_datatypes::primitives::{DateTime, Measurement};
+    use geoengine_datatypes::primitives::DateTime;
     use geoengine_datatypes::raster::{
         Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_operators::engine::{PlotOperator, RasterOperator, RasterResultDescriptor};
+    use geoengine_operators::engine::{
+        PlotOperator, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+    };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::plot::{
         Histogram, HistogramBounds, HistogramBuckets, HistogramParams, Statistics, StatisticsParams,
@@ -243,6 +248,7 @@ mod tests {
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels: [3, 2].into(),
                     },
+                    0,
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
@@ -251,10 +257,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }

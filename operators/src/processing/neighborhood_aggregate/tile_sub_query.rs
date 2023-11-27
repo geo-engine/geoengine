@@ -82,7 +82,7 @@ where
         crate::util::spawn_blocking(move || {
             create_enlarged_tile(
                 tile_info,
-                query_rect,
+                &query_rect,
                 pool,
                 tiling_specification,
                 neighborhood,
@@ -98,6 +98,7 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
+        band: usize,
     ) -> Result<Option<RasterQueryRectangle>> {
         let spatial_bounds = tile_info.spatial_partition();
 
@@ -115,6 +116,7 @@ where
             spatial_bounds: enlarged_spatial_bounds,
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: query_rect.spatial_resolution,
+            attributes: band.into(),
         }))
     }
 
@@ -196,6 +198,7 @@ where
         return RasterTile2D::new_with_tile_info(
             input.time,
             *info_out,
+            0, // TODO
             EmptyGrid::new(info_out.tile_size_in_pixels).into(),
             CacheHint::max_duration(),
         );
@@ -229,6 +232,7 @@ where
     RasterTile2D::new(
         input.time,
         info_out.global_tile_position,
+        input.band,
         info_out.global_geo_transform,
         out_data,
         input.cache_hint.clone_with_current_datetime(),
@@ -237,7 +241,7 @@ where
 
 fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
     tile_info: TileInformation,
-    query_rect: RasterQueryRectangle,
+    query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
     neighborhood: Neighborhood,
@@ -268,6 +272,7 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
     let input_tile = RasterTile2D::new(
         query_rect.time_interval,
         [0, 0].into(),
+        0, // TODO
         geo_transform,
         GridOrEmpty::from(grid),
         CacheHint::max_duration(),
@@ -337,7 +342,9 @@ mod tests {
         },
     };
     use geoengine_datatypes::{
-        primitives::SpatialResolution, raster::TilingStrategy, util::test::TestDefault,
+        primitives::{BandSelection, SpatialResolution},
+        raster::TilingStrategy,
+        util::test::TestDefault,
     };
 
     #[test]
@@ -362,6 +369,7 @@ mod tests {
             spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInstance::from_millis(0).unwrap().into(),
             spatial_resolution,
+            attributes: BandSelection::first(),
         };
 
         let aggregator = NeighborhoodAggregateTileNeighborhood::<u8, StandardDeviation>::new(
@@ -372,7 +380,7 @@ mod tests {
         );
 
         let tile_query_rectangle = aggregator
-            .tile_query_rectangle(tile_info, qrect, qrect.time_interval.start())
+            .tile_query_rectangle(tile_info, qrect.clone(), qrect.time_interval.start(), 0)
             .unwrap()
             .unwrap();
 
@@ -387,7 +395,7 @@ mod tests {
 
         let accu = create_enlarged_tile::<u8, Sum>(
             tile_info,
-            tile_query_rectangle,
+            &tile_query_rectangle,
             execution_context.thread_pool.clone(),
             execution_context.tiling_specification,
             aggregator.neighborhood,

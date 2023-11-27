@@ -41,6 +41,8 @@ use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::test_data;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::ChunkByteSize;
+use geoengine_operators::engine::RasterBandDescriptor;
+use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::engine::RasterResultDescriptor;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::FileNotFoundHandling;
@@ -256,7 +258,13 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
-                measurement: geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
+                time: Some(geoengine_datatypes::primitives::TimeInterval::default()),
+                bbox: Some(geoengine_datatypes::primitives::SpatialPartition2D::new((-180., 90.).into(),
+                     (180., -90.).into()).unwrap()),
+                resolution: Some(SpatialResolution {
+                    x: 0.1, y: 0.1,
+                }),
+                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
                 [
                     (0_u8, "Water Bodies".to_string()),
                     (1, "Evergreen Needleleaf Forests".to_string()),
@@ -275,13 +283,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                     (14, "Cropland-Natural Vegetation Mosaics".to_string()),
                     (15, "Snow and Ice".to_string()),
                     (16, "Barren or Sparsely Vegetated".to_string()),
-                ].into()),
-                time: Some(geoengine_datatypes::primitives::TimeInterval::default()),
-                bbox: Some(geoengine_datatypes::primitives::SpatialPartition2D::new((-180., 90.).into(),
-                     (180., -90.).into()).unwrap()),
-                resolution: Some(SpatialResolution {
-                    x: 0.1, y: 0.1,
-                }),
+                ].into()))]).unwrap(),
             },
             cache_ttl: CacheTtlSeconds::default(),
         }),

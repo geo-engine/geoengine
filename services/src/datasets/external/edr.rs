@@ -21,8 +21,8 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterOperator, RasterResultDescriptor, StaticMetaData,
-    TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+    StaticMetaData, TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -679,10 +679,10 @@ impl EdrCollectionMetaData {
         Ok(RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: Some(self.get_time_interval()?),
             bbox: Some(bbox),
             resolution: None,
+            bands: RasterBandDescriptors::new_single_band(),
         })
     }
 
@@ -1171,7 +1171,9 @@ pub enum EdrProviderError {
 mod tests {
     use super::*;
     use geoengine_datatypes::{
-        dataset::ExternalDataId, primitives::SpatialResolution, util::gdal::hide_gdal_errors,
+        dataset::ExternalDataId,
+        primitives::{BandSelection, ColumnSelection, SpatialResolution},
+        util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
     use httptest::{matchers::*, responders::status_code, Expectation, Server};
@@ -1535,6 +1537,7 @@ mod tests {
                 ),
                 time_interval: TimeInterval::default(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
+                attributes: ColumnSelection::all(),
             })
             .await
             .unwrap();
@@ -1636,6 +1639,7 @@ mod tests {
                 ),
                 time_interval: TimeInterval::new_unchecked(1_692_144_000_000, 1_692_500_400_000),
                 spatial_resolution: SpatialResolution::new_unchecked(1., 1.),
+                attributes: BandSelection::first(),
             })
             .await
             .unwrap()
@@ -1708,7 +1712,6 @@ mod tests {
             RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: Some(TimeInterval::new_unchecked(
                     1_692_144_000_000,
                     1_692_500_400_000
@@ -1718,6 +1721,7 @@ mod tests {
                     (359.500_000_000_000_06, -90.).into()
                 )),
                 resolution: None,
+                bands: RasterBandDescriptors::new_single_band(),
             }
         );
     }

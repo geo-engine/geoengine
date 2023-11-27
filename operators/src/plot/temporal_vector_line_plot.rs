@@ -9,7 +9,7 @@ use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::TryStreamExt;
-use geoengine_datatypes::primitives::{FeatureDataType, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{FeatureDataType, PlotQueryRectangle};
 use geoengine_datatypes::{
     collections::FeatureCollection,
     plots::{Plot, PlotData},
@@ -164,14 +164,14 @@ where
 
     async fn plot_query<'a>(
         &'a self,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let values = FeatureAttributeValues::<MAX_FEATURES>::default();
 
         let values = self
             .features
-            .query(query, ctx)
+            .query(query.into(), ctx)
             .await?
             .try_fold(values, |mut acc, features| async move {
                 let ids = features.data(&self.params.id_column)?;
@@ -272,7 +272,7 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::primitives::{CacheHint, PlotSeriesSelection};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
@@ -349,11 +349,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -497,11 +498,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -633,11 +635,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )

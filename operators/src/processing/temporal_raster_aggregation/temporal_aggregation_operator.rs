@@ -8,6 +8,7 @@ use super::aggregators::{
 use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
+use crate::adapters::{RasterStackerAdapter, StreamBundle};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
     RasterOperator, SingleRasterSource, WorkflowOperatorPath,
@@ -22,7 +23,9 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInstance};
+use geoengine_datatypes::primitives::{
+    BandSelection, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
+};
 use geoengine_datatypes::raster::{Pixel, RasterDataType, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
 use log::debug;
@@ -186,7 +189,12 @@ where
 
 impl<Q, P> TemporalRasterAggregationProcessor<Q, P>
 where
-    Q: RasterQueryProcessor<RasterType = P>,
+    Q: RasterQueryProcessor<RasterType = P>
+        + QueryProcessor<
+            Output = RasterTile2D<P>,
+            SpatialBounds = SpatialPartition2D,
+            Selection = BandSelection,
+        >,
     P: Pixel,
 {
     fn new(
@@ -240,27 +248,21 @@ where
             _phantom_pixel_type: PhantomData,
         }
     }
-}
-
-#[async_trait]
-impl<Q, P> QueryProcessor for TemporalRasterAggregationProcessor<Q, P>
-where
-    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialBounds = SpatialPartition2D>,
-    P: Pixel,
-{
-    type Output = RasterTile2D<P>;
-    type SpatialBounds = SpatialPartition2D;
 
     #[allow(clippy::too_many_lines)]
-    async fn _query<'a>(
+    fn create_subquery_adapter_stream_for_single_band<'a>(
         &'a self,
-        query: RasterQueryRectangle,
+        query_rect_to_answer: RasterQueryRectangle,
+        band: usize,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
+    ) -> futures::stream::BoxStream<'a, Result<RasterTile2D<P>>> {
+        let mut query = query_rect_to_answer;
+        query.attributes = band.into();
+
         match self.aggregation_type {
             Aggregation::Min {
                 ignore_no_data: true,
-            } => Ok(self
+            } => self
                 .create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<
                         P,
@@ -268,18 +270,18 @@ where
                     >,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Min")),
+                .expect("no tiles must be skipped in Aggregation::Min"),
             Aggregation::Min {
                 ignore_no_data: false,
-            } => Ok(self
+            } => self
                 .create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<P, MinPixelAggregator>,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Min")),
+                .expect("no tiles must be skipped in Aggregation::Min"),
             Aggregation::Max {
                 ignore_no_data: true,
-            } => Ok(self
+            } => self
                 .create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<
                         P,
@@ -287,19 +289,19 @@ where
                     >,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Max")),
+                .expect("no tiles must be skipped in Aggregation::Max"),
             Aggregation::Max {
                 ignore_no_data: false,
-            } => Ok(self
+            } => self
                 .create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<P, MaxPixelAggregator>,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Max")),
+                .expect("no tiles must be skipped in Aggregation::Max"),
 
             Aggregation::First {
                 ignore_no_data: true,
-            } => Ok(self
+            } => self
                 .create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<
                         P,
@@ -307,16 +309,16 @@ where
                     >,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::First")),
+                .expect("no tiles must be skipped in Aggregation::First"),
             Aggregation::First {
                 ignore_no_data: false,
-            } => Ok(self
+            } => self
                 .create_subquery_first(first_tile_fold_future::<P>)
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::First")),
+                .expect("no tiles must be skipped in Aggregation::First"),
             Aggregation::Last {
                 ignore_no_data: true,
-            } => Ok(self
+            } => self
                 .create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<
                         P,
@@ -324,18 +326,18 @@ where
                     >,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Last")),
+                .expect("no tiles must be skipped in Aggregation::Last"),
 
             Aggregation::Last {
                 ignore_no_data: false,
-            } => Ok(self
+            } => self
                 .create_subquery_last(last_tile_fold_future::<P>)
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Last")),
+                .expect("no tiles must be skipped in Aggregation::Last"),
 
             Aggregation::Mean {
                 ignore_no_data: true,
-            } => Ok(self
+            } => self
                 .create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<
                         P,
@@ -343,20 +345,20 @@ where
                     >,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Mean")),
+                .expect("no tiles must be skipped in Aggregation::Mean"),
 
             Aggregation::Mean {
                 ignore_no_data: false,
-            } => Ok(self
+            } => self
                 .create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator>,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Mean")),
+                .expect("no tiles must be skipped in Aggregation::Mean"),
 
             Aggregation::Sum {
                 ignore_no_data: true,
-            } => Ok(self
+            } => self
                 .create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<
                         P,
@@ -364,20 +366,20 @@ where
                     >,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Sum")),
+                .expect("no tiles must be skipped in Aggregation::Sum"),
 
             Aggregation::Sum {
                 ignore_no_data: false,
-            } => Ok(self
+            } => self
                 .create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<P, SumPixelAggregator>,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Sum")),
+                .expect("no tiles must be skipped in Aggregation::Sum"),
 
             Aggregation::Count {
                 ignore_no_data: true,
-            } => Ok(self
+            } => self
                 .create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<
                         P,
@@ -385,17 +387,63 @@ where
                     >,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Sum")),
+                .expect("no tiles must be skipped in Aggregation::Sum"),
 
             Aggregation::Count {
                 ignore_no_data: false,
-            } => Ok(self
+            } => self
                 .create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<P, CountPixelAggregator>,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Sum")),
+                .expect("no tiles must be skipped in Aggregation::Sum"),
         }
+    }
+}
+
+#[async_trait]
+impl<Q, P> QueryProcessor for TemporalRasterAggregationProcessor<Q, P>
+where
+    Q: QueryProcessor<
+        Output = RasterTile2D<P>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+    >,
+    P: Pixel,
+{
+    type Output = RasterTile2D<P>;
+    type SpatialBounds = SpatialPartition2D;
+    type Selection = BandSelection;
+    async fn _query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
+        if query.attributes.count() == 1 {
+            // special case of single band query requires no tile stacking
+            return Ok(self.create_subquery_adapter_stream_for_single_band(
+                query.clone(),
+                query.attributes.as_slice()[0],
+                ctx,
+            ));
+        }
+
+        // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
+        let band_streams = query
+            .attributes
+            .as_slice()
+            .iter()
+            .map(|band| StreamBundle {
+                stream: self.create_subquery_adapter_stream_for_single_band(
+                    query.clone(),
+                    *band,
+                    ctx,
+                ),
+                bands: 1,
+            })
+            .collect::<Vec<_>>();
+
+        Ok(Box::pin(RasterStackerAdapter::new(band_streams)?))
     }
 }
 
@@ -413,9 +461,14 @@ mod tests {
     };
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext},
+        engine::{
+            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
-        processing::{Expression, ExpressionParams, ExpressionSources},
+        processing::{
+            raster_stacker::{RasterStacker, RasterStackerParams},
+            Expression, ExpressionParams, ExpressionSources,
+        },
     };
 
     use super::*;
@@ -431,10 +484,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -464,6 +517,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -493,6 +547,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
                 CacheHint::default()
             )
@@ -506,6 +561,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
                 CacheHint::default()
             )
@@ -519,6 +575,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
                 CacheHint::default()
             )
@@ -532,6 +589,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
                 CacheHint::default()
             )
@@ -549,10 +607,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -582,6 +640,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -611,6 +670,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default()
             )
@@ -624,6 +684,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -637,6 +698,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default()
             )
@@ -650,6 +712,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -667,10 +730,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -700,6 +763,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -729,6 +793,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7],).unwrap()),
                 CacheHint::default()
             )
@@ -742,6 +807,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -755,6 +821,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default()
             )
@@ -768,6 +835,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -785,10 +853,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -818,6 +886,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 40),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -847,6 +916,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default()
             )
@@ -860,6 +930,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -873,6 +944,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default()
             )
@@ -886,6 +958,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -904,16 +977,17 @@ mod tests {
                         tile_size_in_pixels: [3, 2].into(),
                         global_geo_transform: TestDefault::test_default(),
                     },
+                    0,
                     GridOrEmpty::from(EmptyGrid2D::<u8>::new([3, 2].into())),
                     CacheHint::default(),
                 )],
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -943,6 +1017,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 20),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -972,6 +1047,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::Empty(EmptyGrid::new([3, 2].into())),
                 CacheHint::default()
             )
@@ -988,10 +1064,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1021,6 +1097,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1050,6 +1127,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 16, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -1063,6 +1141,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
@@ -1086,10 +1165,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1119,6 +1198,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1148,6 +1228,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![13, 8, 15, 16, 17, 18]).unwrap()),
                 CacheHint::default()
             )
@@ -1161,6 +1242,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
@@ -1184,10 +1266,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1217,6 +1299,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1246,6 +1329,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap(),
@@ -1266,6 +1350,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::Empty(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default()
             )
@@ -1282,10 +1367,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1315,6 +1400,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1344,6 +1430,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default()
             )
@@ -1357,6 +1444,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
@@ -1380,10 +1468,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1413,6 +1501,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1442,6 +1531,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default()
             )
@@ -1455,6 +1545,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
@@ -1478,10 +1569,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1511,6 +1602,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1540,6 +1632,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![10, 8, 12, 16, 14, 15]).unwrap()),
                 CacheHint::default()
             )
@@ -1553,6 +1646,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
@@ -1588,10 +1682,10 @@ mod tests {
                         result_descriptor: RasterResultDescriptor {
                             data_type: RasterDataType::U8,
                             spatial_reference: SpatialReference::epsg_4326().into(),
-                            measurement: Measurement::Unitless,
                             time: None,
                             bbox: None,
                             resolution: None,
+                            bands: RasterBandDescriptors::new_single_band(),
                         },
                     },
                 }
@@ -1608,6 +1702,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1636,6 +1731,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
                     .unwrap()
                     .into(),
@@ -1648,6 +1744,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
                     .unwrap()
                     .into(),
@@ -1660,6 +1757,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
                     .unwrap()
                     .into(),
@@ -1672,6 +1770,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
                     .unwrap()
                     .into(),
@@ -1690,10 +1789,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1723,6 +1822,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1752,6 +1852,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default()
             )
@@ -1765,6 +1866,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
@@ -1788,10 +1890,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1821,6 +1923,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1850,6 +1953,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![20, 8, 24, 16, 28, 30]).unwrap()),
                 CacheHint::default()
             )
@@ -1863,6 +1967,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
@@ -1906,10 +2011,10 @@ mod tests {
                                 result_descriptor: RasterResultDescriptor {
                                     data_type: RasterDataType::U8,
                                     spatial_reference: SpatialReference::epsg_4326().into(),
-                                    measurement: Measurement::Unitless,
                                     time: None,
                                     bbox: None,
                                     resolution: None,
+                                    bands: RasterBandDescriptors::new_single_band(),
                                 },
                             },
                         }
@@ -1929,6 +2034,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -1957,6 +2063,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new(
                     [3, 2].into(),
                     vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
@@ -1972,6 +2079,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new(
                     [3, 2].into(),
                     vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
@@ -1987,6 +2095,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new(
                     [3, 2].into(),
                     vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
@@ -2002,6 +2111,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new(
                     [3, 2].into(),
                     vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
@@ -2035,10 +2145,10 @@ mod tests {
                         result_descriptor: RasterResultDescriptor {
                             data_type: RasterDataType::U8,
                             spatial_reference: SpatialReference::epsg_4326().into(),
-                            measurement: Measurement::Unitless,
                             time: None,
                             bbox: None,
                             resolution: None,
+                            bands: RasterBandDescriptors::new_single_band(),
                         },
                     },
                 }
@@ -2055,6 +2165,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -2083,6 +2194,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
                     .unwrap()
                     .into(),
@@ -2095,6 +2207,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
                     .unwrap()
                     .into(),
@@ -2107,6 +2220,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
                     .unwrap()
                     .into(),
@@ -2119,6 +2233,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
                     .unwrap()
                     .into(),
@@ -2137,10 +2252,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -2170,6 +2285,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -2199,6 +2315,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default()
             )
@@ -2212,6 +2329,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 1, 1, 0, 1, 1]).unwrap(),
@@ -2235,10 +2353,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -2268,6 +2386,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -2297,6 +2416,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![2, 1, 2, 1, 2, 2]).unwrap()),
                 CacheHint::default()
             )
@@ -2310,6 +2430,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 1, 1, 0, 1, 1]).unwrap(),
@@ -2333,10 +2454,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -2366,6 +2487,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(5, 5),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
         let query_ctx = MockQueryContext::test_default();
 
@@ -2394,6 +2516,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
                 CacheHint::default()
             )
@@ -2407,6 +2530,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default()
             )
@@ -2422,6 +2546,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2432,6 +2557,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2442,6 +2568,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2452,6 +2579,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2462,6 +2590,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2472,6 +2601,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2482,6 +2612,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![12, 11, 10, 9, 8, 7]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2492,6 +2623,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1]).unwrap()),
                 CacheHint::default(),
             ),
@@ -2508,6 +2640,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default(),
             ),
@@ -2518,6 +2651,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
@@ -2535,6 +2669,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![7, 8, 9, 42, 11, 12]).unwrap(),
@@ -2552,6 +2687,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default(),
             ),
@@ -2562,6 +2698,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     MaskedGrid2D::new(
                         Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap(),
@@ -2579,10 +2716,204 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(EmptyGrid2D::new([3, 2].into())),
                 CacheHint::default(),
             ),
         ];
         raster_tiles
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_sums_multiple_bands() {
+        let operator = TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: Aggregation::Sum {
+                    ignore_no_data: false,
+                },
+                window: TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
+                    step: 20,
+                },
+                window_reference: Some(TimeInstance::from_millis(0).unwrap()),
+                output_type: None,
+            },
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![
+                            MockRasterSource {
+                                params: MockRasterSourceParams {
+                                    data: make_raster(),
+                                    result_descriptor: RasterResultDescriptor {
+                                        data_type: RasterDataType::U8,
+                                        spatial_reference: SpatialReference::epsg_4326().into(),
+                                        time: None,
+                                        bbox: None,
+                                        resolution: None,
+                                        bands: RasterBandDescriptors::new_single_band(),
+                                    },
+                                },
+                            }
+                            .boxed(),
+                            MockRasterSource {
+                                params: MockRasterSourceParams {
+                                    data: make_raster(),
+                                    result_descriptor: RasterResultDescriptor {
+                                        data_type: RasterDataType::U8,
+                                        spatial_reference: SpatialReference::epsg_4326().into(),
+                                        time: None,
+                                        bbox: None,
+                                        resolution: None,
+                                        bands: RasterBandDescriptors::new_single_band(),
+                                    },
+                                },
+                            }
+                            .boxed(),
+                        ],
+                    },
+                }
+                .boxed(),
+            },
+        }
+        .boxed();
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 30),
+            spatial_resolution: SpatialResolution::one(),
+            attributes: [0, 1].into(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        let query_processor = operator
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let result = query_processor
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>()
+            .await;
+
+        assert!(result.tiles_equal_ignoring_cache_hint(&[
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 20),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                    .unwrap()
+                    .into(),
+                CacheHint::default()
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 20),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                1,
+                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                    .unwrap()
+                    .into(),
+                CacheHint::default()
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 20),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                    .unwrap()
+                    .into(),
+                CacheHint::default()
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 20),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                1,
+                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                    .unwrap()
+                    .into(),
+                CacheHint::default()
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(20, 40),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                    .unwrap()
+                    .into(),
+                CacheHint::default()
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(20, 40),
+                TileInformation {
+                    global_tile_position: [-1, 0].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                1,
+                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                    .unwrap()
+                    .into(),
+                CacheHint::default()
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(20, 40),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                    .unwrap()
+                    .into(),
+                CacheHint::default()
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(20, 40),
+                TileInformation {
+                    global_tile_position: [-1, 1].into(),
+                    tile_size_in_pixels: [3, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                1,
+                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                    .unwrap()
+                    .into(),
+                CacheHint::default()
+            )
+        ]));
     }
 }

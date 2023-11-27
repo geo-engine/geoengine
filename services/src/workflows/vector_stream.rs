@@ -201,6 +201,7 @@ mod tests {
     use actix_web_actors::ws::WebsocketContext;
     use bytes::{Bytes, BytesMut};
     use futures::channel::mpsc::UnboundedSender;
+    use geoengine_datatypes::primitives::ColumnSelection;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         primitives::{
@@ -282,6 +283,7 @@ mod tests {
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
                 .unwrap(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: ColumnSelection::all(),
         };
 
         let handler = VectorWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(

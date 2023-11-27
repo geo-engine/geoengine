@@ -3,8 +3,8 @@ use crate::{
     engine::{
         BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
         InitializedSources, Operator, OperatorData, OperatorName, QueryContext, QueryProcessor,
-        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
-        WorkflowOperatorPath,
+        RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        TypedRasterQueryProcessor, WorkflowOperatorPath,
     },
     util::Result,
 };
@@ -13,7 +13,7 @@ use futures::{stream::BoxStream, try_join, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
-        partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle,
+        partitions_extent, time_interval_extent, BandSelection, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution,
     },
     raster::{
@@ -161,6 +161,16 @@ impl RasterOperator for Rgb {
 
         let sources = self.sources.initialize_sources(path, context).await?;
 
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            sources
+                .iter()
+                .all(|r| r.result_descriptor().bands.len() == 1),
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: Rgb::TYPE_NAME
+            }
+        );
+
         let spatial_reference = sources.red.result_descriptor().spatial_reference;
 
         ensure!(
@@ -194,10 +204,10 @@ impl RasterOperator for Rgb {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U32,
             spatial_reference,
-            measurement: Measurement::Unitless,
             time,
             bbox,
             resolution,
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         let initialized_operator = InitializedRgb {
@@ -284,6 +294,7 @@ impl RgbQueryProcessor {
 impl QueryProcessor for RgbQueryProcessor {
     type Output = RasterTile2D<u32>;
     type SpatialBounds = SpatialPartition2D;
+    type Selection = BandSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -358,6 +369,7 @@ fn compute_tile(
     RasterTile2D::new(
         red.time,
         red.tile_position,
+        0, // TODO
         red.global_geo_transform,
         out_grid,
         red.cache_hint
@@ -401,8 +413,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::{
-        CacheHint, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-        TimeInterval,
+        CacheHint, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
         Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, TileInformation,
@@ -515,6 +526,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -598,6 +610,7 @@ mod tests {
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: TestDefault::test_default(),
             },
+            0,
             real_raster,
             CacheHint::no_cache(),
         );
@@ -608,10 +621,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }

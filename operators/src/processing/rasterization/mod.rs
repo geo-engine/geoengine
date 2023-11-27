@@ -2,11 +2,11 @@ use crate::engine::TypedVectorQueryProcessor::MultiPoint;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleVectorSource,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
+    RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
-use geoengine_datatypes::primitives::CacheHint;
+use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 
 use crate::error;
 use crate::processing::rasterization::GridOrDensity::Grid;
@@ -19,8 +19,8 @@ use futures::{stream, StreamExt};
 use geoengine_datatypes::collections::GeometryCollection;
 
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, Measurement, RasterQueryRectangle,
-    SpatialPartition2D, SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
+    SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{
     GeoTransform, Grid2D, GridOrEmpty, GridSize, GridSpaceToLinearSpace, RasterDataType,
@@ -102,10 +102,10 @@ impl RasterOperator for Rasterization {
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterDataType::F64,
-            measurement: Measurement::default(),
             bbox: None,
             time: in_desc.time,
             resolution: None,
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         match self.params {
@@ -299,6 +299,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
                     spatial_bounds: grid_spatial_bounds.as_bbox(),
                     time_interval: query.time_interval,
                     spatial_resolution: grid_resolution,
+                    attributes: ColumnSelection::all(),
                 };
 
                 let grid_geo_transform = GeoTransform::new(
@@ -360,13 +361,14 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
                 Ok(RasterTile2D::new_with_tile_info(
                     query.time_interval,
                     tile_info,
+                    0,
                     GridOrEmpty::Grid(tile_grid.into()),
                     cache_hint,
                 ))
             });
             Ok(tiles.boxed())
         } else {
-            Ok(generate_zeroed_tiles(self.tiling_specification, query))
+            Ok(generate_zeroed_tiles(self.tiling_specification, &query))
         }
     }
 }
@@ -421,6 +423,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                     ),
                     time_interval: query.time_interval,
                     spatial_resolution: query.spatial_resolution,
+                    attributes: ColumnSelection::all(),
                 };
 
                 let tile_geo_transform = tile_info.tile_geo_transform();
@@ -466,6 +469,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                 Ok(RasterTile2D::new_with_tile_info(
                     query.time_interval,
                     tile_info,
+                    0,
                     GridOrEmpty::Grid(
                         Grid2D::new(tiling_strategy.tile_size_in_pixels, tile_data)
                             .expect(
@@ -479,18 +483,19 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
 
             Ok(tiles.boxed())
         } else {
-            Ok(generate_zeroed_tiles(self.tiling_specification, query))
+            Ok(generate_zeroed_tiles(self.tiling_specification, &query))
         }
     }
 }
 
 fn generate_zeroed_tiles<'a>(
     tiling_specification: TilingSpecification,
-    query: RasterQueryRectangle,
+    query: &RasterQueryRectangle,
 ) -> BoxStream<'a, util::Result<RasterTile2D<f64>>> {
     let tiling_strategy =
         tiling_specification.strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
     let tile_shape = tiling_strategy.tile_size_in_pixels;
+    let time_interval = query.time_interval;
 
     stream::iter(
         tiling_strategy
@@ -501,8 +506,9 @@ fn generate_zeroed_tiles<'a>(
                     .expect("Data vector length should match the number of pixels in the tile");
 
                 Ok(RasterTile2D::new_with_tile_info(
-                    query.time_interval,
+                    time_interval,
                     tile_info,
+                    0,
                     GridOrEmpty::Grid(tile_grid.into()),
                     CacheHint::no_cache(),
                 ))
@@ -569,7 +575,7 @@ mod tests {
     };
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{
-        Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+        BandSelection, Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
     };
     use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::util::test::TestDefault;
@@ -631,6 +637,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., -2.].into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+            attributes: BandSelection::first(),
         };
 
         let res = get_results(rasterization, query).await;
@@ -680,6 +687,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., -2.].into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+            attributes: BandSelection::first(),
         };
 
         let res = get_results(rasterization, query).await;
@@ -729,6 +737,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new([-3., 3.].into(), [3., -3.].into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+            attributes: BandSelection::first(),
         };
 
         let res = get_results(rasterization, query).await;
@@ -779,6 +788,7 @@ mod tests {
                 .unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 0.5, y: 0.5 },
+            attributes: BandSelection::first(),
         };
 
         let res = get_results(rasterization, query).await;
@@ -829,6 +839,7 @@ mod tests {
                 .unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 0.5, y: 0.5 },
+            attributes: BandSelection::first(),
         };
 
         let res = get_results(rasterization, query).await;
@@ -878,6 +889,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new([-1., 1.].into(), [1., -1.].into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 0.5, y: 0.5 },
+            attributes: BandSelection::first(),
         };
 
         let res = get_results(rasterization, query).await;
@@ -921,6 +933,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., 0.].into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+            attributes: BandSelection::first(),
         };
 
         let res = get_results(rasterization, query).await;
@@ -1000,6 +1013,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., 0.].into()).unwrap(),
             time_interval: Default::default(),
             spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+            attributes: BandSelection::first(),
         };
 
         let res = get_results(rasterization, query).await;

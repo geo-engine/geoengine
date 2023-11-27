@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use futures::TryStreamExt;
 use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
-use geoengine_datatypes::primitives::CacheHint;
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{
     Measurement, QueryRectangle, RasterQueryRectangle, SpatialPartitioned,
 };
@@ -17,7 +17,8 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{
-    MetaData, RasterResultDescriptor, SingleRasterOrVectorSource, WorkflowOperatorPath,
+    MetaData, RasterBandDescriptors, RasterResultDescriptor, SingleRasterOrVectorSource,
+    WorkflowOperatorPath,
 };
 use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
 use geoengine_operators::processing::{
@@ -58,7 +59,7 @@ pub trait BenchmarkRunner {
 pub struct WorkflowSingleBenchmark<F, O> {
     bench_id: &'static str,
     query_name: &'static str,
-    query_rect: QueryRectangle<SpatialPartition2D>,
+    query_rect: QueryRectangle<SpatialPartition2D, BandSelection>,
     tiling_spec: TilingSpecification,
     chunk_byte_size: ChunkByteSize,
     num_threads: usize,
@@ -69,7 +70,10 @@ pub struct WorkflowSingleBenchmark<F, O> {
 impl<O, F> WorkflowSingleBenchmark<F, O>
 where
     F: Fn(TilingSpecification, usize) -> MockExecutionContext,
-    O: Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
+    O: Fn(
+        TilingSpecification,
+        QueryRectangle<SpatialPartition2D, BandSelection>,
+    ) -> Box<dyn RasterOperator>,
 {
     #[inline(never)]
     pub fn run_bench(&self) -> WorkflowBenchmarkResult {
@@ -77,7 +81,7 @@ where
         let exe_ctx = (self.context_builder)(self.tiling_spec, self.num_threads);
         let ctx = exe_ctx.mock_query_context(self.chunk_byte_size);
 
-        let operator = (self.operator_builder)(self.tiling_spec, self.query_rect);
+        let operator = (self.operator_builder)(self.tiling_spec, self.query_rect.clone());
         let init_start = Instant::now();
         let initialized_operator = run_time.block_on(async {
             operator
@@ -92,7 +96,7 @@ where
                 let start_query = Instant::now();
                 // query the operator
                 let query = op
-                    .raster_query(self.query_rect, &ctx)
+                    .raster_query(self.query_rect.clone(), &ctx)
                     .await
                     .unwrap();
                 let query_elapsed = start_query.elapsed();
@@ -129,7 +133,10 @@ where
 impl<F, O> BenchmarkRunner for WorkflowSingleBenchmark<F, O>
 where
     F: Fn(TilingSpecification, usize) -> MockExecutionContext,
-    O: Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
+    O: Fn(
+        TilingSpecification,
+        QueryRectangle<SpatialPartition2D, BandSelection>,
+    ) -> Box<dyn RasterOperator>,
 {
     fn run_all_benchmarks(self, bencher: &mut BenchmarkCollector) {
         bencher.add_benchmark_result(WorkflowSingleBenchmark::run_bench(&self))
@@ -154,7 +161,10 @@ where
     B: IntoIterator<Item = ChunkByteSize> + Clone,
     F: Clone + Fn(TilingSpecification, usize) -> MockExecutionContext,
     O: Clone
-        + Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
+        + Fn(
+            TilingSpecification,
+            QueryRectangle<SpatialPartition2D, BandSelection>,
+        ) -> Box<dyn RasterOperator>,
 {
     pub fn new(
         bench_id: &'static str,
@@ -235,7 +245,10 @@ where
     B: IntoIterator<Item = ChunkByteSize> + Clone,
     F: Clone + Fn(TilingSpecification, usize) -> MockExecutionContext,
     O: Clone
-        + Fn(TilingSpecification, QueryRectangle<SpatialPartition2D>) -> Box<dyn RasterOperator>,
+        + Fn(
+            TilingSpecification,
+            QueryRectangle<SpatialPartition2D, BandSelection>,
+        ) -> Box<dyn RasterOperator>,
 {
     fn run_all_benchmarks(self, bencher: &mut BenchmarkCollector) {
         self.into_benchmark_iterator()
@@ -275,6 +288,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+        attributes: BandSelection::first(),
     };
     let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
 
@@ -301,6 +315,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                 RasterTile2D::new_with_tile_info(
                     query_time,
                     tile_info,
+                    0,
                     data.into(),
                     CacheHint::default(),
                 )
@@ -313,10 +328,10 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -342,6 +357,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(0.005, 0.005).unwrap(),
+        attributes: BandSelection::first(),
     };
 
     let qrects = vec![("World in 72000x36000 pixels", qrect)];
@@ -374,6 +390,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                 RasterTile2D::new_with_tile_info(
                     query_time,
                     tile_info,
+                    0,
                     data.into(),
                     CacheHint::default(),
                 )
@@ -386,10 +403,10 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         };
@@ -428,6 +445,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+        attributes: BandSelection::first(),
     };
 
     let qrects = vec![("World in 36000x18000 pixels", qrect)];
@@ -459,6 +477,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                 RasterTile2D::new_with_tile_info(
                     query_time,
                     tile_info,
+                    0,
                     data.into(),
                     CacheHint::default(),
                 )
@@ -471,10 +490,10 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         };
@@ -513,6 +532,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
         .unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: SpatialResolution::new(1050., 2100.).unwrap(),
+        attributes: BandSelection::first(),
     };
     let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
 
@@ -538,6 +558,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                 RasterTile2D::new_with_tile_info(
                     query_time,
                     tile_info,
+                    0,
                     data.into(),
                     CacheHint::default(),
                 )
@@ -549,10 +570,10 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         };
@@ -590,6 +611,7 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+                attributes: BandSelection::first(),
             },
         ),
         (
@@ -600,6 +622,7 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::new(0.005, 0.005).unwrap(),
+                attributes: BandSelection::first(),
             },
         ),
     ];
@@ -652,6 +675,7 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
                 .unwrap(),
             time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
             spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+            attributes: BandSelection::first(),
         },
     )];
 
@@ -713,6 +737,7 @@ fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut B
                 .unwrap(),
             time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
             spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+            attributes: BandSelection::first(),
         },
     )];
 
@@ -776,6 +801,7 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
             .unwrap(),
             time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
             spatial_resolution: SpatialResolution::new(1050., 2100.).unwrap(),
+            attributes: BandSelection::first(),
         },
     )];
 

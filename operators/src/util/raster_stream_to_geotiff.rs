@@ -13,7 +13,7 @@ use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOption};
 use gdal::{Dataset, DriverManager, Metadata};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, DateTimeParseFormat, QueryRectangle, RasterQueryRectangle,
+    AxisAlignedRectangle, BandSelection, DateTimeParseFormat, QueryRectangle, RasterQueryRectangle,
     SpatialPartition2D, TimeInterval,
 };
 use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
@@ -25,6 +25,7 @@ use geoengine_datatypes::raster::{
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use log::debug;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
@@ -51,7 +52,7 @@ where
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
     let tiles = abortable_query_execution(
-        consume_stream_into_vec(processor, query_rect, query_ctx, tile_limit),
+        consume_stream_into_vec(processor, query_rect.clone(), query_ctx, tile_limit),
         conn_closed,
         query_abort_trigger,
     )
@@ -59,7 +60,7 @@ where
 
     let (initial_tile_time, file_path, dataset, writer) = create_multiband_dataset_and_writer(
         &tiles,
-        query_rect,
+        &query_rect,
         tiling_specification,
         gdal_tiff_options,
         gdal_tiff_metadata,
@@ -108,7 +109,7 @@ where
 
 fn create_multiband_dataset_and_writer<T>(
     tiles: &Vec<RasterTile2D<T>>,
-    query_rect: QueryRectangle<SpatialPartition2D>,
+    query_rect: &QueryRectangle<SpatialPartition2D, BandSelection>,
     tiling_specification: TilingSpecification,
     gdal_tiff_options: GdalGeoTiffOptions,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
@@ -215,7 +216,7 @@ where
 
 async fn consume_stream_into_vec<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    query_rect: geoengine_datatypes::primitives::QueryRectangle<SpatialPartition2D>,
+    query_rect: geoengine_datatypes::primitives::QueryRectangle<SpatialPartition2D, BandSelection>,
     query_ctx: C,
     tile_limit: Option<usize>,
 ) -> Result<Vec<RasterTile2D<T>>>
@@ -330,6 +331,14 @@ pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
 where
     P: Pixel + GdalType,
 {
+    // TODO: support multi band geotiffs
+    ensure!(
+        query_rect.attributes.count() == 1,
+        crate::error::OperationDoesNotSupportMultiBandQueriesYet {
+            operation: "raster_stream_to_geotiff"
+        }
+    );
+
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
     // TODO: create file path if it doesn't exist
@@ -349,13 +358,15 @@ where
     let dataset_holder: Result<GdalDatasetHolder<P>> = Ok(GdalDatasetHolder::new_with_tiling_spec(
         tiling_specification,
         &file_path,
-        query_rect,
+        &query_rect,
         gdal_tiff_metadata,
         gdal_tiff_options,
         gdal_config_options,
     ));
 
-    let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
+    let tile_stream = processor
+        .raster_query(query_rect.clone(), &query_ctx)
+        .await?;
 
     let mut dataset_holder = tile_stream
         .enumerate()
@@ -479,7 +490,7 @@ struct GdalDatasetHolder<P: Pixel + GdalType> {
 impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
     fn new(
         file_path: &Path,
-        query_rect: RasterQueryRectangle,
+        query_rect: &RasterQueryRectangle,
         gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
         gdal_tiff_options: GdalGeoTiffOptions,
         gdal_config_options: Option<Vec<(String, String)>>,
@@ -645,7 +656,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
     fn new_with_tiling_spec(
         tiling_specification: TilingSpecification,
         file_path: &Path,
-        query_rect: RasterQueryRectangle,
+        query_rect: &RasterQueryRectangle,
         gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
         gdal_tiff_options: GdalGeoTiffOptions,
         gdal_config_options: Option<Vec<(String, String)>>,
@@ -1081,6 +1092,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                attributes: BandSelection::first(),
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1137,6 +1149,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                attributes: BandSelection::first(),
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1189,6 +1202,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                attributes: BandSelection::first(),
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1245,6 +1259,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                attributes: BandSelection::first(),
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1304,6 +1319,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                attributes: BandSelection::first(),
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1366,6 +1382,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                attributes: BandSelection::first(),
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1442,6 +1459,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                attributes: BandSelection::first(),
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1488,6 +1506,7 @@ mod tests {
                     query_bbox.size_x() / 600.,
                     query_bbox.size_y() / 600.,
                 ),
+                attributes: BandSelection::first(),
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1536,6 +1555,7 @@ mod tests {
                     0.228_716_645_489_199_48,
                     0.226_407_384_987_887_26,
                 ),
+                attributes: BandSelection::first(),
             },
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1586,6 +1606,7 @@ mod tests {
             RasterTile2D {
                 time: *time_intervals.get(0).unwrap(),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
@@ -1594,6 +1615,7 @@ mod tests {
             RasterTile2D {
                 time: *time_intervals.get(1).unwrap(),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
@@ -1607,12 +1629,14 @@ mod tests {
         let processor = MockRasterSourceProcessor {
             data,
             tiling_specification,
+            bands: 1,
         }
         .boxed();
         let query_rectangle = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(1_596_109_801_000, 1_659_181_801_000),
             spatial_resolution: GeoTransform::test_default().spatial_resolution(),
+            attributes: BandSelection::first(),
         };
 
         let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
@@ -1732,6 +1756,7 @@ mod tests {
                 // 1.1.2014 - 1.4.2014
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_396_306_800_000).unwrap(),
                 spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
+                attributes: BandSelection::first(),
             },
             ctx,
             GdalGeoTiffDatasetMetadata {

@@ -7,13 +7,19 @@ use crate::api::model::datatypes::{
     MultiPoint, MultiPolygon, NoGeometry, QueryRectangle, RasterPropertiesEntryType,
     RasterPropertiesKey, SpatialResolution, TimeInstance, TimeStep, VectorQueryRectangle,
 };
+use crate::error::{
+    RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique, Result,
+};
 use async_trait::async_trait;
+use geoengine_datatypes::primitives::ColumnSelection;
+use geoengine_datatypes::util::ByteSize;
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde::{Deserialize, Deserializer, Serialize};
+use snafu::ensure;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -26,10 +32,80 @@ pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
-    pub measurement: Measurement,
     pub time: Option<TimeInterval>,
     pub bbox: Option<SpatialPartition2D>,
     pub resolution: Option<SpatialResolution>,
+    pub bands: RasterBandDescriptors,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct RasterBandDescriptors(Vec<RasterBandDescriptor>);
+
+impl RasterBandDescriptors {
+    pub fn new(bands: Vec<RasterBandDescriptor>) -> Result<Self> {
+        let mut names = HashSet::new();
+        for value in &bands {
+            ensure!(!value.name.is_empty(), RasterBandNameMustNotBeEmpty);
+            ensure!(value.name.byte_size() <= 256, RasterBandNameTooLong);
+            ensure!(
+                names.insert(&value.name),
+                RasterBandNamesMustBeUnique {
+                    duplicate_key: value.name.clone()
+                }
+            );
+        }
+
+        Ok(Self(bands))
+    }
+}
+
+impl<'de> Deserialize<'de> for RasterBandDescriptors {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let vec = Vec::deserialize(deserializer)?;
+        RasterBandDescriptors::new(vec).map_err(serde::de::Error::custom)
+    }
+}
+
+impl From<geoengine_operators::engine::RasterBandDescriptors> for RasterBandDescriptors {
+    fn from(value: geoengine_operators::engine::RasterBandDescriptors) -> Self {
+        Self(value.into_vec().into_iter().map(Into::into).collect())
+    }
+}
+
+impl From<RasterBandDescriptors> for geoengine_operators::engine::RasterBandDescriptors {
+    fn from(value: RasterBandDescriptors) -> Self {
+        geoengine_operators::engine::RasterBandDescriptors::new(
+            value.0.into_iter().map(Into::into).collect(),
+        )
+        .expect("RasterBandDescriptors should be valid, because the API descriptors are valid")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+pub struct RasterBandDescriptor {
+    pub name: String,
+    pub measurement: Measurement,
+}
+
+impl From<geoengine_operators::engine::RasterBandDescriptor> for RasterBandDescriptor {
+    fn from(value: geoengine_operators::engine::RasterBandDescriptor) -> Self {
+        Self {
+            name: value.name,
+            measurement: value.measurement.into(),
+        }
+    }
+}
+
+impl From<RasterBandDescriptor> for geoengine_operators::engine::RasterBandDescriptor {
+    fn from(value: RasterBandDescriptor) -> Self {
+        Self {
+            name: value.name,
+            measurement: value.measurement.into(),
+        }
+    }
 }
 
 impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultDescriptor {
@@ -37,10 +113,10 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
-            measurement: value.measurement.into(),
             time: value.time.map(Into::into),
             bbox: value.bbox.map(Into::into),
             resolution: value.resolution.map(Into::into),
+            bands: value.bands.into(),
         }
     }
 }
@@ -50,10 +126,10 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
-            measurement: value.measurement.into(),
             time: value.time.map(Into::into),
             bbox: value.bbox.map(Into::into),
             resolution: value.resolution.map(Into::into),
+            bands: value.bands.into(),
         }
     }
 }
@@ -304,6 +380,7 @@ impl
             geoengine_operators::engine::VectorResultDescriptor,
             geoengine_datatypes::primitives::QueryRectangle<
                 geoengine_datatypes::primitives::BoundingBox2D,
+                ColumnSelection,
             >,
         >,
     >
@@ -319,6 +396,7 @@ impl
             geoengine_operators::engine::VectorResultDescriptor,
             geoengine_datatypes::primitives::QueryRectangle<
                 geoengine_datatypes::primitives::BoundingBox2D,
+                ColumnSelection,
             >,
         >,
     ) -> Self {
@@ -337,6 +415,7 @@ impl
             geoengine_operators::engine::VectorResultDescriptor,
             geoengine_datatypes::primitives::QueryRectangle<
                 geoengine_datatypes::primitives::BoundingBox2D,
+                ColumnSelection,
             >,
         >,
     > for StaticMetaData<OgrSourceDataset, VectorResultDescriptor, QueryRectangle<BoundingBox2D>>
@@ -347,6 +426,7 @@ impl
             geoengine_operators::engine::VectorResultDescriptor,
             geoengine_datatypes::primitives::QueryRectangle<
                 geoengine_datatypes::primitives::BoundingBox2D,
+                ColumnSelection,
             >,
         >,
     ) -> Self {
@@ -384,6 +464,7 @@ impl From<MockMetaData>
         geoengine_operators::engine::VectorResultDescriptor,
         geoengine_datatypes::primitives::QueryRectangle<
             geoengine_datatypes::primitives::BoundingBox2D,
+            ColumnSelection,
         >,
     >
 {
@@ -402,6 +483,7 @@ impl From<OgrMetaData>
         geoengine_operators::engine::VectorResultDescriptor,
         geoengine_datatypes::primitives::QueryRectangle<
             geoengine_datatypes::primitives::BoundingBox2D,
+            ColumnSelection,
         >,
     >
 {
@@ -1236,5 +1318,54 @@ impl From<FormatSpecifics> for geoengine_operators::source::FormatSpecifics {
                 header: header.into(),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn it_checks_duplicates_while_deserializing_band_descriptors() {
+        assert_eq!(
+            serde_json::from_value::<RasterBandDescriptors>(json!([{
+                "name": "foo",
+                "measurement": {
+                    "type": "unitless"
+                }
+            },{
+                "name": "bar",
+                "measurement": {
+                    "type": "unitless"
+                }
+            }]))
+            .unwrap(),
+            RasterBandDescriptors::new(vec![
+                RasterBandDescriptor {
+                    name: "foo".into(),
+                    measurement: Measurement::Unitless
+                },
+                RasterBandDescriptor {
+                    name: "bar".into(),
+                    measurement: Measurement::Unitless
+                },
+            ])
+            .unwrap()
+        );
+
+        assert!(serde_json::from_value::<RasterBandDescriptors>(json!([{
+            "name": "foo",
+            "measurement": {
+                "type": "unitless"
+            }
+        },{
+            "name": "foo",
+            "measurement": {
+                "type": "unitless"
+            }
+        }]))
+        .is_err());
     }
 }

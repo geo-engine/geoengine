@@ -41,9 +41,6 @@
     "resultDescriptor": {
       "dataType": "U8",
       "spatialReference": "EPSG:4326",
-      "measurement": {
-        "type": "unitless"
-      },
       "time": {
         "start": "-262144-01-01T00:00:00+00:00",
         "end": "+262143-12-31T23:59:59.999+00:00"
@@ -55,7 +52,15 @@
       "resolution": {
         "x": 0.09999999999999,
         "y": 0.09999999999999
-      }
+      },
+      "bands": [
+        {
+          "name": "green",
+          "measurement": {
+            "type": "unitless"
+          }
+        }
+      ]
     },
     "params": {
       "filePath": "test_data/raster/natural_earth_2/NE2_150M_SR_W.tif",

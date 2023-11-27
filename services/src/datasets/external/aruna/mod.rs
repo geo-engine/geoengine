@@ -26,8 +26,9 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterOperator, RasterResultDescriptor, ResultDescriptor,
-    TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
+    RasterResultDescriptor, ResultDescriptor, TypedOperator, VectorColumnInfo, VectorOperator,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -348,10 +349,7 @@ impl ArunaDataProvider {
         Ok(RasterResultDescriptor {
             data_type: info.data_type,
             spatial_reference: crs,
-            measurement: info
-                .measurement
-                .as_ref()
-                .map_or(Measurement::Unitless, Clone::clone),
+
             time: Some(info.time_interval),
             bbox: Some(
                 info.geo_transform
@@ -361,6 +359,13 @@ impl ArunaDataProvider {
                 info.geo_transform.x_pixel_size,
                 info.geo_transform.y_pixel_size,
             ))?),
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                "band".into(),
+                info.measurement
+                    .as_ref()
+                    .map_or(Measurement::Unitless, Clone::clone),
+            )])
+            .unwrap(),
         })
     }
 
@@ -933,7 +938,8 @@ mod tests {
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, CacheTtlSeconds, SpatialResolution, TimeInterval, VectorQueryRectangle,
+        BoundingBox2D, CacheTtlSeconds, ColumnSelection, SpatialResolution, TimeInterval,
+        VectorQueryRectangle,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
@@ -1818,6 +1824,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::zero_point_one(),
+            attributes: ColumnSelection::all(),
         };
 
         let result: Vec<MultiPointCollection> = proc

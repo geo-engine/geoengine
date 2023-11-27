@@ -456,6 +456,15 @@ pub enum Error {
         expected: String,
         found: String,
     },
+
+    #[snafu(display("Raster band names must be unique. Found {duplicate_key} more than once."))]
+    RasterBandNamesMustBeUnique {
+        duplicate_key: String,
+    },
+    #[snafu(display("Raster band names must not be empty"))]
+    RasterBandNameMustNotBeEmpty,
+    #[snafu(display("Raster band names must not be longer than 256 bytes"))]
+    RasterBandNameTooLong,
 }
 
 impl actix_web::error::ResponseError for Error {
