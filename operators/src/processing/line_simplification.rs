@@ -639,6 +639,6 @@ mod tests {
         assert_eq!(result.feature_offsets().len(), 2);
         assert_eq!(result.polygon_offsets().len(), 23);
         assert_eq!(result.ring_offsets().len(), 23);
-        assert_eq!(result.coordinates().len(), 98 /* was 3027 */);
+        assert_eq!(result.coordinates().len(), 96 /* was 3027 */);
     }
 }

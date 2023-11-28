@@ -102,14 +102,19 @@ pub async fn start_server() -> Result<()> {
 #[cfg(feature = "pro")]
 fn open_telemetry_layer<S>(
     open_telemetry_config: &geoengine_services::pro::util::config::OpenTelemetry,
-) -> Result<tracing_opentelemetry::OpenTelemetryLayer<S, opentelemetry::sdk::trace::Tracer>>
+) -> Result<
+    tracing_opentelemetry::OpenTelemetryLayer<
+        S,
+        impl opentelemetry::trace::Tracer + tracing_opentelemetry::PreSampledTracer,
+    >,
+>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
     use opentelemetry_jaeger::config::agent::AgentPipeline;
     use tracing_opentelemetry::OpenTelemetryLayer;
     let tracer = AgentPipeline::default()
-        .with_endpoint(open_telemetry_config.endpoint)
+        .with_endpoint(open_telemetry_config.endpoint.to_string())
         .with_service_name("Geo Engine")
         .install_simple()?;
     let opentelemetry: OpenTelemetryLayer<S, _> =

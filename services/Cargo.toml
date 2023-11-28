@@ -41,30 +41,30 @@ config = "0.13"
 derive_builder = "0.12"
 erased-serde = "0.3"
 fallible-iterator = "0.2" # only for postgres-protocol
-flexi_logger = { version = "0.25", features = ["trc"] }
+flexi_logger = { version = "0.27.3", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
 gdal = "0.16"
 gdal-sys = "0.9"
-geo = "0.26"
+geo = "0.27.0"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-macros = { path = "../macros" }
 geoengine-operators = { path = "../operators" }
 geojson = { version = "0.24", features = ["geo-types"] }
 image = "0.24"
-itertools = "0.10"
+itertools = "0.12"
 lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
 oauth2 = "4.2.3"
 openidconnect = "3.1"
 # `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-jaeger`
-opentelemetry = { version = "0.20", default-features = false, features = [
+opentelemetry = { version = "0.21.0", default-features = false, features = [
   "trace",
 ] }
-opentelemetry-jaeger = "0.19"
-ordered-float = { version = "3.0", features = ["serde"] }
+opentelemetry-jaeger = "0.20.0"
+ordered-float = { version = "4.1.1", features = ["serde"] }
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive", "array-impls"] }
@@ -99,7 +99,7 @@ tonic = { version = "0.9", features = [
 ] } # must be compatible with `aruna-rust-api`
 tracing = "0.1"
 tracing-actix-web = "0.7"
-tracing-opentelemetry = "0.20"
+tracing-opentelemetry = "0.22.0"
 tracing-subscriber = { version = "0.3", features = [
   "local-time",
   "ansi",

@@ -24,17 +24,17 @@ float-cmp = "0.9"
 futures = "0.3"
 gdal = "0.16"
 gdal-sys = "0.9"
-geo = "0.26"
+geo = "0.27.0"
 geoengine-datatypes = { path = "../datatypes" }
-itertools = "0.11"
+itertools = "0.12"
 libloading = "0.8"
 log = "0.4"
-lru = "0.11"
+lru = "0.12.1"
 lz4_flex = { version = "0.11" }
 num-traits = "0.2"
 num = "0.4"
-ouroboros = "0.17"
-ordered-float = { version = "3.0", features = ["serde"] }
+ouroboros = "0.18.0"
+ordered-float = { version = "4.1.1", features = ["serde"] }
 paste = "1.0"
 pest = "2.1"
 pest_derive = "2.1"
@@ -62,7 +62,7 @@ tokio = { version = "1.15", features = [
   "time",
 ] }
 tracing = "0.1"
-tracing-opentelemetry = "0.20"
+tracing-opentelemetry = "0.22.0"
 typetag = "0.2"
 uuid = { version = "1.1", features = ["serde", "v4", "v5"] }
 xgboost-rs = { version = "0.3", optional = true }
@@ -74,7 +74,7 @@ httptest = "0.15.2"
 ndarray = "0.15"
 tracing-subscriber = { version = "0.3", features = ["json"] }
 rand = "0.8"
-serial_test = "1.0"
+serial_test = "2.0.0"
 
 [[bench]]
 name = "bands"
