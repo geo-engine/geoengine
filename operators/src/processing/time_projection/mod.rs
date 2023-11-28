@@ -12,7 +12,7 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::primitives::{Geometry, TimeInterval};
+use geoengine_datatypes::primitives::{ColumnSelection, Geometry, TimeInterval};
 use geoengine_datatypes::primitives::{TimeInstance, TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use log::debug;
@@ -162,7 +162,7 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let query = self.expand_query_rectangle(query)?;
+        let query = self.expand_query_rectangle(&query)?;
         let stream = self
             .processor
             .vector_query(query, ctx)
@@ -179,7 +179,7 @@ impl<G> VectorTimeProjectionProcessor<G>
 where
     G: Geometry + ArrowTyped + 'static,
 {
-    fn expand_query_rectangle(&self, query: VectorQueryRectangle) -> Result<VectorQueryRectangle> {
+    fn expand_query_rectangle(&self, query: &VectorQueryRectangle) -> Result<VectorQueryRectangle> {
         Ok(expand_query_rectangle(
             self.step,
             self.step_reference,
@@ -233,12 +233,13 @@ where
 fn expand_query_rectangle(
     step: TimeStep,
     step_reference: TimeInstance,
-    query: VectorQueryRectangle,
+    query: &VectorQueryRectangle,
 ) -> Result<VectorQueryRectangle, TimeProjectionError> {
     Ok(VectorQueryRectangle {
         spatial_bounds: query.spatial_bounds,
         time_interval: expand_time_interval(step, step_reference, query.time_interval)?,
         spatial_resolution: query.spatial_resolution,
+        attributes: ColumnSelection::all(),
     })
 }
 
@@ -466,6 +467,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: ColumnSelection::all(),
                 },
                 &query_context,
             )
@@ -570,6 +572,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: ColumnSelection::all(),
                 },
                 &query_context,
             )

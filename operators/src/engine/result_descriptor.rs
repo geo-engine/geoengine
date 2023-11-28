@@ -2,12 +2,20 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, FeatureDataType, Measurement, SpatialPartition2D,
     SpatialResolution, TimeInterval,
 };
+use geoengine_datatypes::util::ByteSize;
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
 };
-use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use postgres_types::{FromSql, IsNull, ToSql, Type};
+use serde::{Deserialize, Deserializer, Serialize};
+use snafu::ensure;
+use std::collections::{HashMap, HashSet};
+use std::ops::Index;
+
+use crate::error::{
+    Error, RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique,
+};
+use crate::util::Result;
 
 /// A descriptor that contains information about the query result, for instance, the data type
 /// and spatial reference.
@@ -54,10 +62,182 @@ pub trait ResultDescriptor: Clone + Serialize {
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
-    pub measurement: Measurement,
     pub time: Option<TimeInterval>,
     pub bbox: Option<SpatialPartition2D>,
     pub resolution: Option<SpatialResolution>,
+    pub bands: RasterBandDescriptors,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RasterBandDescriptors(Vec<RasterBandDescriptor>);
+
+impl RasterBandDescriptors {
+    pub fn new(bands: Vec<RasterBandDescriptor>) -> Result<Self> {
+        let mut names = HashSet::new();
+        for value in &bands {
+            ensure!(!value.name.is_empty(), RasterBandNameMustNotBeEmpty);
+            ensure!(value.name.byte_size() <= 256, RasterBandNameTooLong);
+            ensure!(
+                names.insert(&value.name),
+                RasterBandNamesMustBeUnique {
+                    duplicate_key: value.name.clone()
+                }
+            );
+        }
+
+        Ok(Self(bands))
+    }
+
+    /// Convenience method to crate a single band result descriptor with no specific name and a unitless measurement for single band rasters
+    pub fn new_single_band() -> Self {
+        Self(vec![RasterBandDescriptor {
+            name: "band".into(),
+            measurement: Measurement::Unitless,
+        }])
+    }
+
+    pub fn bands(&self) -> &[RasterBandDescriptor] {
+        &self.0
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &RasterBandDescriptor> {
+        self.0.iter()
+    }
+
+    pub fn into_vec(self) -> Vec<RasterBandDescriptor> {
+        self.0
+    }
+
+    // Merge the bands of two descriptors into a new one, fails if there are duplicate names
+    pub fn merge(&self, other: &Self) -> Result<Self> {
+        let mut bands = self.0.clone();
+        bands.extend(other.0.clone());
+        Self::new(bands)
+    }
+
+    // Merge the bands of two descriptors into a new one, adds a suffix to the band names of the second descriptor if there are duplicate names
+    #[must_use]
+    pub fn merge_with_suffix(&self, other: &Self, suffix: &str) -> Self {
+        let mut bands = self.0.clone();
+        let band_names = bands.iter().map(|b| b.name.clone()).collect::<HashSet<_>>();
+
+        for other_band in other.iter() {
+            let name = if band_names.contains(&other_band.name) {
+                format!("{} {suffix}", other_band.name)
+            } else {
+                other_band.name.clone()
+            };
+
+            bands.push(RasterBandDescriptor::new(
+                name,
+                other_band.measurement.clone(),
+            ));
+        }
+
+        Self(bands)
+    }
+
+    // Merge the bands of multiple descriptors into a new one, adds a suffix to the band names if there are duplicate names
+    pub fn merge_all_with_suffix<'a, B>(mut bands: B, suffix: &str) -> Result<Self>
+    where
+        B: Iterator<Item = &'a RasterBandDescriptors>,
+    {
+        let accu = bands
+            .next()
+            .ok_or(Error::AtLeastOneRasterBandDescriptorRequired)?
+            .clone();
+
+        Ok(bands.fold(accu, |acc, other| acc.merge_with_suffix(other, suffix)))
+    }
+}
+
+impl TryFrom<Vec<RasterBandDescriptor>> for RasterBandDescriptors {
+    type Error = Error;
+
+    fn try_from(value: Vec<RasterBandDescriptor>) -> Result<Self, Self::Error> {
+        RasterBandDescriptors::new(value)
+    }
+}
+
+impl Index<usize> for RasterBandDescriptors {
+    type Output = RasterBandDescriptor;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl<'de> Deserialize<'de> for RasterBandDescriptors {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let vec = Vec::deserialize(deserializer)?;
+        RasterBandDescriptors::new(vec).map_err(serde::de::Error::custom)
+    }
+}
+
+impl<'a> FromSql<'a> for RasterBandDescriptors {
+    fn from_sql(
+        ty: &Type,
+        raw: &'a [u8],
+    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
+        let vec = Vec::<RasterBandDescriptor>::from_sql(ty, raw)?;
+        Ok(RasterBandDescriptors(vec))
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        <Vec<RasterBandDescriptor> as FromSql>::accepts(ty)
+    }
+}
+
+impl ToSql for RasterBandDescriptors {
+    fn to_sql(
+        &self,
+        ty: &Type,
+        w: &mut bytes::BytesMut,
+    ) -> Result<IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        ToSql::to_sql(&self.0, ty, w)
+    }
+
+    fn accepts(ty: &Type) -> bool {
+        <Vec<RasterBandDescriptor> as FromSql>::accepts(ty)
+    }
+
+    fn to_sql_checked(
+        &self,
+        ty: &Type,
+        w: &mut bytes::BytesMut,
+    ) -> Result<IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        ToSql::to_sql_checked(&self.0, ty, w)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSql, FromSql)]
+pub struct RasterBandDescriptor {
+    pub name: String,
+    pub measurement: Measurement,
+}
+
+impl RasterBandDescriptor {
+    pub fn new(name: String, measurement: Measurement) -> Self {
+        Self { name, measurement }
+    }
+
+    pub fn new_unitless(name: String) -> Self {
+        Self {
+            name,
+            measurement: Measurement::Unitless,
+        }
+    }
 }
 
 impl ResultDescriptor for RasterResultDescriptor {
@@ -77,7 +257,7 @@ impl ResultDescriptor for RasterResultDescriptor {
     {
         Self {
             data_type: f(&self.data_type),
-            measurement: self.measurement.clone(),
+            bands: self.bands.clone(),
             ..*self
         }
     }
@@ -88,7 +268,7 @@ impl ResultDescriptor for RasterResultDescriptor {
     {
         Self {
             spatial_reference: f(&self.spatial_reference),
-            measurement: self.measurement.clone(),
+            bands: self.bands.clone(),
             ..*self
         }
     }
@@ -99,7 +279,7 @@ impl ResultDescriptor for RasterResultDescriptor {
     {
         Self {
             time: f(&self.time),
-            measurement: self.measurement.clone(),
+            bands: self.bands.clone(),
             ..*self
         }
     }
@@ -427,6 +607,7 @@ mod db_types {
 mod tests {
     use super::*;
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use serde_json::json;
 
     #[test]
     fn map_vector_descriptor() {
@@ -465,5 +646,146 @@ mod tests {
                 bbox: None,
             }
         );
+    }
+
+    #[test]
+    fn it_checks_duplicate_bands() {
+        assert!(RasterBandDescriptors::new(vec![
+            RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+            RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+        ])
+        .is_ok());
+
+        assert!(RasterBandDescriptors::new(vec![
+            RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+            RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+            RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+        ])
+        .is_err());
+    }
+
+    #[test]
+    fn it_merges_band_descriptors() {
+        assert_eq!(
+            RasterBandDescriptors::new(vec![
+                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+            ])
+            .unwrap()
+            .merge(
+                &RasterBandDescriptors::new(vec![
+                    RasterBandDescriptor::new("baz".into(), Measurement::Unitless),
+                    RasterBandDescriptor::new("bla".into(), Measurement::Unitless),
+                ])
+                .unwrap()
+            )
+            .unwrap(),
+            RasterBandDescriptors::new(vec![
+                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("baz".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("bla".into(), Measurement::Unitless),
+            ])
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn it_merges_band_descriptors_and_suffixes_duplicates() {
+        assert_eq!(
+            RasterBandDescriptors::new(vec![
+                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+            ])
+            .unwrap()
+            .merge_with_suffix(
+                &RasterBandDescriptors::new(vec![
+                    RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+                    RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+                ])
+                .unwrap(),
+                "(dup)"
+            ),
+            RasterBandDescriptors::new(vec![
+                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("foo (dup)".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("bar (dup)".into(), Measurement::Unitless),
+            ])
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn it_merges_all_band_descriptors_and_suffixes_duplicates() {
+        assert_eq!(
+            RasterBandDescriptors::merge_all_with_suffix(
+                [
+                    RasterBandDescriptors::new(vec![
+                        RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+                        RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+                    ])
+                    .unwrap(),
+                    RasterBandDescriptors::new(vec![
+                        RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+                        RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+                    ])
+                    .unwrap(),
+                    RasterBandDescriptors::new(vec![
+                        RasterBandDescriptor::new("bla".into(), Measurement::Unitless),
+                        RasterBandDescriptor::new("blub".into(), Measurement::Unitless),
+                    ])
+                    .unwrap()
+                ]
+                .iter(),
+                "(dup)"
+            )
+            .unwrap(),
+            RasterBandDescriptors::new(vec![
+                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("foo (dup)".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("bar (dup)".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("bla".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("blub".into(), Measurement::Unitless),
+            ])
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn it_checks_duplicates_while_deserializing_band_descriptors() {
+        assert_eq!(
+            serde_json::from_value::<RasterBandDescriptors>(json!([{
+                "name": "foo",
+                "measurement": {
+                    "type": "unitless"
+                }
+            },{
+                "name": "bar",
+                "measurement": {
+                    "type": "unitless"
+                }
+            }]))
+            .unwrap(),
+            RasterBandDescriptors::new(vec![
+                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+            ])
+            .unwrap()
+        );
+
+        assert!(serde_json::from_value::<RasterBandDescriptors>(json!([{
+            "name": "foo",
+            "measurement": {
+                "type": "unitless"
+            }
+        },{
+            "name": "foo",
+            "measurement": {
+                "type": "unitless"
+            }
+        }]))
+        .is_err());
     }
 }

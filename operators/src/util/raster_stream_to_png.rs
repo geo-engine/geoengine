@@ -5,6 +5,7 @@ use geoengine_datatypes::{
     raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
+use snafu::ensure;
 use std::convert::TryInto;
 use tracing::{span, Level};
 
@@ -27,12 +28,20 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
 where
     T: Pixel,
 {
+    // TODO: support multi band colorizers
+    ensure!(
+        query_rect.attributes.count() == 1,
+        crate::error::OperationDoesNotSupportMultiBandQueriesYet {
+            operation: "raster_stream_to_png_bytes"
+        }
+    );
+
     let span = span!(Level::TRACE, "raster_stream_to_png_bytes");
     let _enter = span.enter();
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
-    let tile_stream = processor.query(query_rect, &query_ctx).await?;
+    let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
 
     let x_query_resolution = query_rect.spatial_bounds.size_x() / f64::from(width);
     let y_query_resolution = query_rect.spatial_bounds.size_y() / f64::from(height);
@@ -107,7 +116,7 @@ mod tests {
     use std::marker::PhantomData;
 
     use geoengine_datatypes::{
-        primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
+        primitives::{BandSelection, Coordinate2D, SpatialPartition2D, SpatialResolution},
         raster::TilingSpecification,
         util::test::TestDefault,
     };
@@ -140,6 +149,7 @@ mod tests {
                 time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
                     .unwrap(),
                 spatial_resolution: SpatialResolution::zero_point_one(),
+                attributes: BandSelection::first(),
             },
             ctx,
             600,

@@ -32,6 +32,7 @@ where
             return Ok(RasterTile2D::new_with_tile_info(
                 input.time,
                 *info_out,
+                input.band,
                 EmptyGrid::new(info_out.tile_size_in_pixels).into(),
                 input.cache_hint.clone_with_current_datetime(),
             ));
@@ -60,6 +61,7 @@ where
         let out_tile = RasterTile2D::new(
             input.time,
             info_out.global_tile_position,
+            input.band,
             info_out.global_geo_transform,
             out_data,
             input.cache_hint.clone_with_current_datetime(),
@@ -110,6 +112,7 @@ where
             return Ok(RasterTile2D::new_with_tile_info(
                 input.time,
                 *info_out,
+                input.band,
                 EmptyGrid::new(info_out.tile_size_in_pixels).into(),
                 input.cache_hint.clone_with_current_datetime(),
             ));
@@ -171,6 +174,7 @@ where
         let out_tile = RasterTile2D::new(
             input.time,
             info_out.global_tile_position,
+            input.band,
             info_out.global_geo_transform,
             out_data,
             input.cache_hint.clone_with_current_datetime(),
@@ -199,6 +203,7 @@ mod tests {
                 tile_size_in_pixels: [3, 3].into(),
                 global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
             },
+            0,
             GridOrEmpty::Grid(MaskedGrid::from(
                 Grid2D::new([3, 3].into(), vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap(),
             )),
@@ -272,6 +277,7 @@ mod tests {
                 tile_size_in_pixels: [3, 3].into(),
                 global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
             },
+            0,
             GridOrEmpty::Grid(MaskedGrid::from(
                 Grid2D::new([3, 3].into(), vec![1., 2., 3., 4., 5., 6., 7., 8., 9.]).unwrap(),
             )),

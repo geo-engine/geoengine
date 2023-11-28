@@ -18,14 +18,14 @@ use geoengine_datatypes::operations::reproject::{
 };
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, Measurement, RasterQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, RasterQueryRectangle,
     SpatialPartitioned, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, OperatorName, RasterOperator, RasterResultDescriptor,
-    TypedOperator, VectorResultDescriptor,
+    MetaData, MetaDataProvider, OperatorName, RasterBandDescriptors, RasterOperator,
+    RasterResultDescriptor, TypedOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -347,7 +347,7 @@ impl SentinelS2L2aCogsMetaData {
     async fn create_loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
         // for reference: https://stacspec.org/STAC-ext-api.html#operation/getSearchSTAC
         debug!("create_loading_info with: {:?}", &query);
-        let request_params = self.request_params(query)?;
+        let request_params = self.request_params(&query)?;
 
         if request_params.is_none() {
             log::debug!("Request params are empty -> returning empty loading info");
@@ -505,7 +505,10 @@ impl SentinelS2L2aCogsMetaData {
         })
     }
 
-    fn request_params(&self, query: RasterQueryRectangle) -> Result<Option<Vec<(String, String)>>> {
+    fn request_params(
+        &self,
+        query: &RasterQueryRectangle,
+    ) -> Result<Option<Vec<(String, String)>>> {
         let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
 
         // request all features in zone in order to be able to determine the temporal validity of individual tile
@@ -657,10 +660,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                 self.zone.epsg,
             )
             .into(),
-            measurement: Measurement::Unitless,
             time: None,
             bbox: None,
             resolution: None, // TODO: determine from STAC or data or hardcode it
+            bands: RasterBandDescriptors::new_single_band(),
         })
     }
 
@@ -758,7 +761,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         dataset::{DatasetId, ExternalDataId},
-        primitives::{SpatialPartition2D, SpatialResolution},
+        primitives::{BandSelection, SpatialPartition2D, SpatialResolution},
         util::{gdal::hide_gdal_errors, test::TestDefault, Identifier},
     };
     use geoengine_operators::{
@@ -810,6 +813,7 @@ mod tests {
                 .unwrap(),
                 time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
                 spatial_resolution: SpatialResolution::one(),
+                attributes: BandSelection::first(),
             })
             .await
             .unwrap();
@@ -918,6 +922,7 @@ mod tests {
             spatial_bounds,
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
             spatial_resolution,
+            attributes: BandSelection::first(),
         };
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
@@ -1187,6 +1192,7 @@ mod tests {
             time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44))
                 .unwrap(),
             spatial_resolution: SpatialResolution::new_unchecked(10., 10.),
+            attributes: BandSelection::first(),
         };
 
         let loading_info = meta.loading_info(query).await.unwrap();
@@ -1259,10 +1265,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U16,
                     spatial_reference: SpatialReference::from_str("EPSG:32736").unwrap().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
                 params,
                 cache_ttl: CacheTtlSeconds::default(),
@@ -1295,6 +1301,7 @@ mod tests {
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new(10., 10.).unwrap(),
+                    attributes: BandSelection::first(),
                 },
                 &query_context,
             )

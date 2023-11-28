@@ -14,11 +14,12 @@ use futures::stream::{BoxStream, FusedStream};
 use futures::{ready, Stream, StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, Geometry, QueryRectangle, VectorQueryRectangle,
+    AxisAlignedRectangle, Geometry, QueryAttributeSelection, QueryRectangle, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use pin_project::{pin_project, pinned_drop};
+use snafu::ensure;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -41,6 +42,14 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            self.source.result_descriptor().bands.len() == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: "CacheOperator"
+            }
+        );
+
         let processor_result = self.source.query_processor();
         match processor_result {
             Ok(p) => {
@@ -139,19 +148,19 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
 }
 
 /// A cache operator that caches the results of its source operator
-struct CacheQueryProcessor<P, E, Q>
+struct CacheQueryProcessor<P, E, Q, U>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialBounds = Q>,
+    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U>,
 {
     processor: P,
     cache_key: CanonicOperatorName,
 }
 
-impl<P, E, Q> CacheQueryProcessor<P, E, Q>
+impl<P, E, Q, U> CacheQueryProcessor<P, E, Q, U>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialBounds = Q> + Sized,
+    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U> + Sized,
 {
     pub fn new(processor: P, cache_key: CanonicOperatorName) -> Self {
         CacheQueryProcessor {
@@ -162,11 +171,12 @@ where
 }
 
 #[async_trait]
-impl<P, E, S> QueryProcessor for CacheQueryProcessor<P, E, S>
+impl<P, E, S, U> QueryProcessor for CacheQueryProcessor<P, E, S, U>
 where
-    P: QueryProcessor<Output = E, SpatialBounds = S> + Sized,
+    P: QueryProcessor<Output = E, SpatialBounds = S, Selection = U> + Sized,
     S: AxisAlignedRectangle + Send + Sync + 'static,
-    E: CacheElement<Query = QueryRectangle<S>>
+    U: QueryAttributeSelection,
+    E: CacheElement<Query = QueryRectangle<S, U>>
         + Send
         + Sync
         + 'static
@@ -177,10 +187,11 @@ where
 {
     type Output = E;
     type SpatialBounds = S;
+    type Selection = U;
 
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialBounds>,
+        query: QueryRectangle<Self::SpatialBounds, Self::Selection>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let shared_cache = ctx
@@ -195,14 +206,14 @@ where
             log::debug!("cache hit for operator {}", self.cache_key);
 
             let wrapped_result_steam =
-                E::wrap_result_stream(cache_result, ctx.chunk_byte_size(), query);
+                E::wrap_result_stream(cache_result, ctx.chunk_byte_size(), query.clone());
 
             return Ok(wrapped_result_steam);
         }
 
         // cache miss
         log::debug!("cache miss for operator {}", self.cache_key);
-        let source_stream = self.processor.query(query, ctx).await?;
+        let source_stream = self.processor.query(query.clone(), ctx).await?;
 
         let query_id = shared_cache.insert_query(&self.cache_key, &query).await;
 
@@ -373,14 +384,17 @@ where
         chunk_byte_size: ChunkByteSize,
         query: Self::Query,
     ) -> BoxStream<'a, Result<Self>> {
-        let filter_stream = stream.filter_map(move |result| async move {
-            result
-                .and_then(|collection| collection.filter_cache_element_entries(&query))
-                .map_err(|source| Error::CacheCantProduceResult {
-                    source: source.into(),
-                })
-                .map(|fc| if fc.is_empty() { None } else { Some(fc) })
-                .transpose()
+        let filter_stream = stream.filter_map(move |result| {
+            let query = query.clone();
+            async move {
+                result
+                    .and_then(|collection| collection.filter_cache_element_entries(&query))
+                    .map_err(|source| Error::CacheCantProduceResult {
+                        source: source.into(),
+                    })
+                    .map(|fc| if fc.is_empty() { None } else { Some(fc) })
+                    .transpose()
+            }
         });
 
         let merger_stream =
@@ -408,7 +422,7 @@ where
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{BandSelection, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilesEqualIgnoringCacheHint,
         util::test::TestDefault,
     };
@@ -460,6 +474,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    attributes: BandSelection::first(),
                 },
                 &query_ctx,
             )
@@ -481,6 +496,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    attributes: BandSelection::first(),
                 },
                 &query_ctx,
             )

@@ -1,7 +1,7 @@
 use crate::util::statistics::StatisticsError;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
-use geoengine_datatypes::primitives::FeatureDataType;
+use geoengine_datatypes::primitives::{FeatureDataType, TimeInterval};
 use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::ops::Range;
@@ -417,6 +417,40 @@ pub enum Error {
     CacheCantProduceResult {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
+
+    #[snafu(display("Input stream {stream_index} is not temporally aligned. Expected {expected:?}, found {found:?}."))]
+    InputStreamsMustBeTemporallyAligned {
+        stream_index: usize,
+        expected: TimeInterval,
+        found: TimeInterval,
+    },
+
+    AtLeastOneStreamRequired,
+
+    #[snafu(display("Operator {operator:?} does not support sources with multiple bands."))]
+    OperatorDoesNotSupportMultiBandsSourcesYet {
+        operator: &'static str,
+    },
+
+    #[snafu(display("Operation {operation:?} does not support queries with multiple bands."))]
+    OperationDoesNotSupportMultiBandQueriesYet {
+        operation: &'static str,
+    },
+
+    RasterInputsMustHaveSameSpatialReferenceAndDatatype,
+
+    GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet,
+
+    #[snafu(display("Raster band names must be unique. Found {duplicate_key} more than once.",))]
+    RasterBandNamesMustBeUnique {
+        duplicate_key: String,
+    },
+    #[snafu(display("Raster band names must not be empty"))]
+    RasterBandNameMustNotBeEmpty,
+    #[snafu(display("Raster band names must not be longer than 256 bytes"))]
+    RasterBandNameTooLong,
+
+    AtLeastOneRasterBandDescriptorRequired,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

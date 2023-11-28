@@ -16,8 +16,8 @@ use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-    VectorQueryRectangle,
+    BandSelection, BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
+    SpatialResolution, VectorQueryRectangle,
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
@@ -539,6 +539,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         spatial_bounds: query.spatial_bounds,
         time_interval: query.time_interval.into(),
         spatial_resolution: query.spatial_resolution,
+        attributes: BandSelection::first(),
     };
 
     // this is the only result type for now
@@ -621,6 +622,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         spatial_bounds: query.spatial_bounds,
         time_interval: query.time_interval.into(),
         spatial_resolution: query.spatial_resolution,
+        attributes: ColumnSelection::all(),
     };
 
     // this is the only result type for now
@@ -689,7 +691,8 @@ mod tests {
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_operators::engine::{
-        ExecutionContext, MultipleRasterOrSingleVectorSource, PlotOperator, TypedOperator,
+        ExecutionContext, MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
+        RasterBandDescriptors, TypedOperator,
     };
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
@@ -998,13 +1001,17 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "radiation".to_string(),
-                            unit: None,
-                        }),
                         time: None,
                         bbox: None,
                         resolution: None,
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                            "band".into(),
+                            Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "radiation".to_string(),
+                                unit: None,
+                            }),
+                        )])
+                        .unwrap(),
                     },
                 },
             }
@@ -1029,14 +1036,17 @@ mod tests {
                 "type": "raster",
                 "dataType": "U8",
                 "spatialReference": "EPSG:4326",
-                "measurement": {
-                    "type": "continuous",
-                    "measurement": "radiation",
-                    "unit": null
-                },
                 "time": null,
                 "bbox": null,
-                "resolution": null
+                "resolution": null,
+                "bands": [{
+                    "name": "band",
+                    "measurement": {
+                        "type": "continuous",
+                        "measurement": "radiation",
+                        "unit": null
+                    }
+                }]
             })
         );
     }
@@ -1289,9 +1299,6 @@ mod tests {
                 "type": "raster",
                 "dataType": "U8",
                 "spatialReference": "EPSG:4326",
-                "measurement": {
-                    "type": "unitless"
-                },
                 "time": {
                     "start": 1_388_534_400_000_i64,
                     "end": 1_404_172_800_000_i64,
@@ -1309,7 +1316,13 @@ mod tests {
                 "resolution": {
                     "x": 0.1,
                     "y": 0.1
-                }
+                },
+                "bands": [{
+                        "name": "band",
+                        "measurement": {
+                            "type": "unitless"
+                        }
+                    }]
             })
         );
 
@@ -1440,6 +1453,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
             spatial_resolution: SpatialResolution::zero_point_one(),
+            attributes: BandSelection::first(),
         };
 
         let processor = o.query_processor().unwrap().get_u8().unwrap();

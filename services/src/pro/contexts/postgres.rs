@@ -540,12 +540,12 @@ mod tests {
     use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::dataset::{DataProviderId, LayerId};
-    use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
         RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
         TimeStep, VectorQueryRectangle,
     };
+    use geoengine_datatypes::primitives::{CacheTtlSeconds, ColumnSelection};
     use geoengine_datatypes::pro::MlModelId;
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
@@ -553,8 +553,8 @@ mod tests {
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
-        RasterResultDescriptor, StaticMetaData, TypedOperator, TypedResultDescriptor,
-        VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+        RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TypedOperator,
+        TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
@@ -1168,6 +1168,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    attributes: ColumnSelection::all()
                 })
                 .await
                 .unwrap(),
@@ -1580,10 +1581,10 @@ mod tests {
         let raster_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
-            measurement: Default::default(),
             time: None,
             bbox: None,
             resolution: None,
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         let vector_ds = AddDataset {

@@ -2,8 +2,9 @@ use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::Expressio
 use crate::{
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-        Operator, OperatorData, OperatorName, RasterOperator, RasterQueryProcessor,
-        RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
+        Operator, OperatorData, OperatorName, RasterBandDescriptor, RasterBandDescriptors,
+        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+        WorkflowOperatorPath,
     },
     processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::Result,
@@ -257,6 +258,14 @@ impl RasterOperator for Expression {
             .map(InitializedRasterOperator::result_descriptor)
             .collect::<Vec<_>>();
 
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_descriptors.iter().all(|r| r.bands.len() == 1),
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: Expression::TYPE_NAME
+            }
+        );
+
         for other_spatial_reference in in_descriptors.iter().skip(1).map(|rd| rd.spatial_reference)
         {
             ensure!(
@@ -285,14 +294,17 @@ impl RasterOperator for Expression {
         let result_descriptor = RasterResultDescriptor {
             data_type: self.params.output_type,
             spatial_reference,
-            measurement: self
-                .params
-                .output_measurement
-                .as_ref()
-                .map_or(Measurement::Unitless, Measurement::clone),
             time,
             bbox,
             resolution,
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                "band".into(), // TODO: how to name the band?
+                self.params
+                    .output_measurement
+                    .as_ref()
+                    .map_or(Measurement::Unitless, Measurement::clone),
+            )])
+            .unwrap(),
         };
 
         let initialized_operator = InitializedExpression {
@@ -533,7 +545,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::primitives::{
         Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
@@ -641,6 +653,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -710,6 +723,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -724,7 +738,7 @@ mod tests {
             result[0].as_ref().unwrap().grid_array,
             GridOrEmpty::from(
                 MaskedGrid2D::new(
-                    Grid2D::new([3, 2].into(), vec![2, 4, 0, 8, 10, 12],).unwrap(), // pixels with no data are turned to Default::default wich is 0. And 0 is the out_no_data value.
+                    Grid2D::new([3, 2].into(), vec![2, 4, 0, 8, 10, 12],).unwrap(), // pixels with no data are turned to Default::default() wich is 0. And 0 is the out_no_data value.
                     Grid2D::new([3, 2].into(), vec![true, true, false, true, true, true],).unwrap()
                 )
                 .unwrap()
@@ -780,6 +794,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -853,6 +868,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -927,6 +943,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -1011,6 +1028,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -1077,6 +1095,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -1120,6 +1139,7 @@ mod tests {
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: TestDefault::test_default(),
             },
+            0,
             real_raster,
             cache_hint,
         );
@@ -1130,10 +1150,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1189,6 +1209,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -1258,6 +1279,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )
@@ -1329,6 +1351,7 @@ mod tests {
                     ),
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: BandSelection::first(),
                 },
                 &ctx,
             )

@@ -39,8 +39,8 @@ use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::util::gdal::ResamplingMethod;
-use geoengine_operators::engine::RasterOperator;
-use geoengine_operators::engine::TypedOperator;
+use geoengine_operators::engine::{RasterBandDescriptor, RasterOperator};
+use geoengine_operators::engine::{RasterBandDescriptors, TypedOperator};
 use geoengine_operators::source::GdalSource;
 use geoengine_operators::source::GdalSourceParameters;
 use geoengine_operators::source::{
@@ -492,10 +492,14 @@ impl NetCdfCfDataProvider {
             )
             .context(error::CannotParseCrs)?
             .into(),
-            measurement: derive_measurement(data_array.unit()),
             time: None,
             bbox: None,
             resolution: None,
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                "band".into(),
+                derive_measurement(data_array.unit()),
+            )])
+            .unwrap(),
         };
 
         let params = GdalDatasetParameters {
@@ -1541,6 +1545,7 @@ mod tests {
     use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
+    use geoengine_datatypes::primitives::{BandSelection, PlotSeriesSelection};
     use geoengine_datatypes::{
         primitives::{
             BoundingBox2D, PlotQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
@@ -1549,6 +1554,7 @@ mod tests {
         test_data,
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
+    use geoengine_operators::engine::RasterBandDescriptors;
     use geoengine_operators::{
         engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath},
         plot::{
@@ -1956,10 +1962,10 @@ mod tests {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
                 resolution: None,
+                bands: RasterBandDescriptors::new_single_band(),
             }
         );
 
@@ -1975,6 +1981,7 @@ mod tests {
                     0.000_343_322_7, // 256 pixel
                     0.000_343_322_7, // 256 pixel
                 ),
+                attributes: BandSelection::first(),
             })
             .await
             .unwrap();
@@ -2080,10 +2087,10 @@ mod tests {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 bbox: None,
                 resolution: Some(SpatialResolution::new_unchecked(1000.0, 1000.0)),
+                bands: RasterBandDescriptors::new_single_band(),
             }
         );
 
@@ -2099,6 +2106,7 @@ mod tests {
                     0.000_343_322_7, // 256 pixel
                     0.000_343_322_7, // 256 pixel
                 ),
+                attributes: BandSelection::first(),
             })
             .await
             .unwrap();
@@ -2317,6 +2325,7 @@ mod tests {
                     )
                     .unwrap(),
                     spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &query_context,
             )

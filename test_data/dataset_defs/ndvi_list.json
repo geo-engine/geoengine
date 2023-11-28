@@ -284,9 +284,7 @@
     "resultDescriptor": {
       "dataType": "U8",
       "spatialReference": "EPSG:4326",
-      "measurement": {
-        "type": "unitless"
-      },
+
       "time": {
         "start": "2014-01-01T00:00:00.000Z",
         "end": "2014-07-01T00:00:00.000Z"
@@ -298,7 +296,15 @@
       "resolution": {
         "x": 0.1,
         "y": 0.1
-      }
+      },
+      "bands": [
+        {
+          "name": "ndvi",
+          "measurement": {
+            "type": "unitless"
+          }
+        }
+      ]
     },
     "params": [
       {

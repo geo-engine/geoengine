@@ -26,8 +26,8 @@ pub use query_processor::{
     TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 pub use result_descriptor::{
-    PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
-    VectorColumnInfo, VectorResultDescriptor,
+    PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
+    ResultDescriptor, TypedResultDescriptor, VectorColumnInfo, VectorResultDescriptor,
 };
 use tracing::Span;
 

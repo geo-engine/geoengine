@@ -15,7 +15,7 @@ pro = ["geoengine-datatypes/pro", "dep:xgboost-rs"]
 [dependencies]
 arrow = { version = "45.0" } # TODO: activate SIMD when stable
 async-trait = "0.1"
-bytes = "1.0"                                                                                    # for postgres-types impls
+bytes = "1.0" # for postgres-types impls
 chrono = "0.4"
 crossbeam = "0.8"
 csv = "1.1"
@@ -75,6 +75,11 @@ ndarray = "0.15"
 tracing-subscriber = { version = "0.3", features = ["json"] }
 rand = "0.8"
 serial_test = "1.0"
+
+[[bench]]
+name = "bands"
+harness = false
+
 [[bench]]
 name = "cache"
 harness = false

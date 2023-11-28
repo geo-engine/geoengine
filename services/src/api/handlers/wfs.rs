@@ -13,8 +13,8 @@ use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use futures::future::BoxFuture;
 use futures_util::TryStreamExt;
 use geoengine_datatypes::collections::ToGeoJson;
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::{
     collections::{FeatureCollection, MultiPointCollection},
     primitives::SpatialResolution,
@@ -523,6 +523,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
         spatial_resolution: request
             .query_resolution
             .map_or_else(SpatialResolution::zero_point_one, |r| r.0),
+        attributes: ColumnSelection::all(),
     };
     let query_ctx = ctx.query_context()?;
 

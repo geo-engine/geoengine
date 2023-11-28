@@ -27,11 +27,11 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
     SpatialPartition2D, SpatialPartitioned,
 };
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::raster::TileInformation;
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, GridIdx2D, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
@@ -592,7 +592,7 @@ impl GdalRasterLoader {
     /// A stream of futures producing `RasterTile2D` for a single slice in time
     ///
     fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
-        query: RasterQueryRectangle,
+        query: &RasterQueryRectangle,
         info: GdalLoadingInfoTemporalSlice,
         tiling_strategy: TilingStrategy,
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> {
@@ -618,7 +618,7 @@ impl GdalRasterLoader {
     ) -> impl Stream<Item = Result<RasterTile2D<T>>> {
         loading_info_stream
             .map_ok(move |info| {
-                GdalRasterLoader::temporal_slice_tile_future_stream(query, info, tiling_strategy)
+                GdalRasterLoader::temporal_slice_tile_future_stream(&query, info, tiling_strategy)
                     .map(Result::Ok)
             })
             .try_flatten()
@@ -655,12 +655,18 @@ where
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
+    type Selection = BandSelection;
 
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
+        ensure!(
+            query.attributes.as_slice() == [0],
+            crate::error::GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet
+        );
+
         let start = Instant::now();
         debug!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",
@@ -721,19 +727,23 @@ where
                 parts: vec![].into_iter(),
             }
         } else {
-            let loading_info = self.meta_data.loading_info(query).await?;
+            let loading_info = self.meta_data.loading_info(query.clone()).await?;
             loading_info.info
         };
 
         let source_stream = stream::iter(loading_iter);
 
-        let source_stream =
-            GdalRasterLoader::loading_info_to_tile_stream(source_stream, query, tiling_strategy);
+        let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
+            source_stream,
+            query.clone(),
+            tiling_strategy,
+        );
 
         // use SparseTilesFillAdapter to fill all the gaps
         let filled_stream = SparseTilesFillAdapter::new(
             source_stream,
             tiling_strategy.tile_grid_box(query.spatial_partition()),
+            query.attributes.count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
@@ -1077,6 +1087,7 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrim
     Ok(RasterTile2D::new_with_tile_info_and_properties(
         tile_time,
         tile_info,
+        0,
         result_grid,
         properties,
         cache_hint,
@@ -1092,6 +1103,7 @@ fn create_no_data_tile<T: Pixel>(
     RasterTile2D::new_with_tile_info_and_properties(
         tile_time,
         tile_info,
+        0,
         EmptyGrid::new(tile_info.tile_size_in_pixels).into(),
         RasterProperties::default(),
         cache_hint,
@@ -1218,6 +1230,7 @@ mod tests {
                     spatial_bounds: output_bounds,
                     time_interval,
                     spatial_resolution,
+                    attributes: BandSelection::first(),
                 },
                 query_ctx,
             )
@@ -1493,6 +1506,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties,
             cache_hint: _,
@@ -1548,6 +1562,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties: _,
             cache_hint: _,
@@ -1584,6 +1599,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties: _,
             cache_hint: _,
@@ -1801,6 +1817,7 @@ mod tests {
         let expected = RasterTile2D::<f64>::new_with_tile_info(
             time_interval,
             tile_info,
+            0,
             EmptyGrid2D::new(output_shape).into(),
             CacheHint::default(),
         );
@@ -2131,6 +2148,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties,
             cache_hint: _,
@@ -2199,6 +2217,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties,
             cache_hint: _,
@@ -2473,6 +2492,7 @@ mod tests {
         let expected = RasterTile2D::<f64>::new_with_tile_info(
             time_interval,
             tile_info,
+            0,
             EmptyGrid2D::new(output_shape).into(),
             CacheHint::seconds(1234),
         );

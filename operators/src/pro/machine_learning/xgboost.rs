@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
-    partitions_extent, time_interval_extent, Measurement, RasterQueryRectangle, SpatialPartition2D,
+    partitions_extent, time_interval_extent, RasterQueryRectangle, SpatialPartition2D,
     SpatialResolution,
 };
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::pro::MlModelId;
 use geoengine_datatypes::raster::{
     BaseTile, Grid2D, GridOrEmpty, GridShape, GridShapeAccess, GridSize, RasterDataType,
@@ -23,8 +23,9 @@ use xgboost_rs::{Booster, DMatrix, XGBError};
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    MultipleRasterSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    MultipleRasterSources, Operator, OperatorName, QueryContext, QueryProcessor,
+    RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::pro::xg_error::error as XgModuleError;
 use crate::util::stream_zip::StreamVectorZip;
@@ -92,6 +93,14 @@ impl RasterOperator for XgboostOperator {
             .map(InitializedRasterOperator::result_descriptor)
             .collect::<Vec<_>>();
 
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_descriptors.iter().all(|r| r.bands.len() == 1),
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: XgboostOperator::TYPE_NAME
+            }
+        );
+
         for other_spatial_reference in in_descriptors.iter().skip(1).map(|rd| rd.spatial_reference)
         {
             ensure!(
@@ -123,7 +132,7 @@ impl RasterOperator for XgboostOperator {
             bbox,
             resolution,
             spatial_reference,
-            measurement: Measurement::Unitless,
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         let initialized_operator = InitializedXgboostOperator {
@@ -236,6 +245,7 @@ where
             RasterTile2D::new_with_properties(
                 time,
                 tile_position,
+                0,
                 global_geo_transform,
                 predicted_grid.into(),
                 props.clone(),
@@ -318,11 +328,15 @@ fn process_tile(
 #[async_trait]
 impl<Q> QueryProcessor for XgboostProcessor<Q>
 where
-    Q: QueryProcessor<Output = RasterTile2D<f32>, SpatialBounds = SpatialPartition2D>,
+    Q: QueryProcessor<
+        Output = RasterTile2D<f32>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+    >,
 {
     type Output = RasterTile2D<PixelOut>;
     type SpatialBounds = SpatialPartition2D;
-
+    type Selection = BandSelection;
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -333,7 +347,7 @@ where
         let mut band_buffer = Vec::new();
 
         for band in &self.sources {
-            let stream = band.query(query, ctx).await?;
+            let stream = band.query(query.clone(), ctx).await?;
             band_buffer.push(stream);
         }
 
@@ -355,7 +369,8 @@ where
 mod tests {
     use crate::engine::{
         MockExecutionContext, MockQueryContext, MultipleRasterSources, QueryProcessor,
-        RasterOperator, RasterResultDescriptor, SourceOperator, WorkflowOperatorPath,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SourceOperator,
+        WorkflowOperatorPath,
     };
     use crate::error::Error;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
@@ -364,9 +379,9 @@ mod tests {
     use geoengine_datatypes::pro::MlModelId;
 
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
     use geoengine_datatypes::primitives::{
-        Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
 
     use geoengine_datatypes::raster::{
@@ -470,6 +485,7 @@ mod tests {
                     global_tile_position,
                     tile_size_in_pixels,
                 },
+                0,
                 masked_grid,
                 CacheHint::default(),
             ));
@@ -481,10 +497,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -632,6 +648,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(), // TODO
         };
 
         let query_ctx = MockQueryContext::test_default();
@@ -970,6 +987,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (5., 0.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
 
         let query_ctx = MockQueryContext::test_default();

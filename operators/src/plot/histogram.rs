@@ -16,8 +16,8 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryFutureExt};
 use geoengine_datatypes::plots::{Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, DataRef, FeatureDataRef, FeatureDataType, Geometry,
-    Measurement, VectorQueryRectangle,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, DataRef, FeatureDataRef, FeatureDataType,
+    Geometry, Measurement, PlotQueryRectangle, RasterQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::{
@@ -108,6 +108,15 @@ impl PlotOperator for Histogram {
                     .await?;
 
                 let in_desc = raster_source.result_descriptor();
+
+                // TODO: implement multi-band functionality and remove this check
+                ensure!(
+                    in_desc.bands.len() == 1,
+                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                        operator: Histogram::TYPE_NAME
+                    }
+                );
+
                 InitializedHistogram::new(
                     name,
                     PlotResultDescriptor {
@@ -224,7 +233,7 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterO
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let processor = HistogramRasterQueryProcessor {
             input: self.source.query_processor()?,
-            measurement: self.source.result_descriptor().measurement.clone(),
+            measurement: self.source.result_descriptor().bands[0].measurement.clone(), // TODO: adjust for multibands
             metadata: self.metadata,
             interactive: self.interactive,
         };
@@ -295,10 +304,10 @@ impl PlotQueryProcessor for HistogramRasterQueryProcessor {
 
     async fn plot_query<'p>(
         &'p self,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        self.preprocess(query, ctx)
+        self.preprocess(query.clone(), ctx)
             .and_then(move |mut histogram_metadata| async move {
                 histogram_metadata.sanitize();
                 if histogram_metadata.has_invalid_parameters() {
@@ -322,10 +331,10 @@ impl PlotQueryProcessor for HistogramVectorQueryProcessor {
 
     async fn plot_query<'p>(
         &'p self,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        self.preprocess(query, ctx)
+        self.preprocess(query.clone(), ctx)
             .and_then(move |mut histogram_metadata| async move {
                 histogram_metadata.sanitize();
                 if histogram_metadata.has_invalid_parameters() {
@@ -342,7 +351,7 @@ impl PlotQueryProcessor for HistogramVectorQueryProcessor {
 impl HistogramRasterQueryProcessor {
     async fn preprocess<'p>(
         &'p self,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<HistogramMetadata> {
         async fn process_metadata<T: Pixel>(
@@ -370,14 +379,14 @@ impl HistogramRasterQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            process_metadata(processor.query(query.into(), ctx).await?, self.metadata).await
+            process_metadata(processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first()), ctx).await?, self.metadata).await
         })
     }
 
     async fn process<'p>(
         &'p self,
         metadata: HistogramMetadata,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
         let mut histogram = geoengine_datatypes::plots::Histogram::builder(
@@ -390,7 +399,7 @@ impl HistogramRasterQueryProcessor {
         .map_err(Error::from)?;
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            let mut query = processor.query(query.into(), ctx).await?;
+            let mut query = processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first()), ctx).await?;
 
             while let Some(tile) = query.next().await {
 
@@ -424,7 +433,7 @@ impl HistogramRasterQueryProcessor {
 impl HistogramVectorQueryProcessor {
     async fn preprocess<'p>(
         &'p self,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<HistogramMetadata> {
         async fn process_metadata<'m, G>(
@@ -455,14 +464,14 @@ impl HistogramVectorQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         call_on_generic_vector_processor!(&self.input, processor => {
-            process_metadata(processor.query(query, ctx).await?, &self.column_name, self.metadata).await
+            process_metadata(processor.query(query.into(), ctx).await?, &self.column_name, self.metadata).await
         })
     }
 
     async fn process<'p>(
         &'p self,
         metadata: HistogramMetadata,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
         let mut histogram = geoengine_datatypes::plots::Histogram::builder(
@@ -475,7 +484,7 @@ impl HistogramVectorQueryProcessor {
         .map_err(Error::from)?;
 
         call_on_generic_vector_processor!(&self.input, processor => {
-            let mut query = processor.query(query, ctx).await?;
+            let mut query = processor.query(query.into(), ctx).await?;
 
             while let Some(collection) = query.next().await {
                 let collection = collection?;
@@ -650,8 +659,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-        RasterResultDescriptor, StaticMetaData, VectorColumnInfo, VectorOperator,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterBandDescriptors,
+        RasterOperator, RasterResultDescriptor, StaticMetaData, VectorColumnInfo, VectorOperator,
         VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
@@ -661,7 +670,8 @@ mod tests {
     use crate::test_data;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
+        BoundingBox2D, DateTime, FeatureData, NoGeometry, PlotSeriesSelection, SpatialResolution,
+        TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::raster::{
@@ -799,6 +809,7 @@ mod tests {
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels: [3, 2].into(),
                     },
+                    0,
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
@@ -807,10 +818,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -848,10 +859,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -902,10 +914,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -965,11 +978,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1035,11 +1049,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1205,16 +1220,17 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
+                        0,
                         EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
                         CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
                         time: None,
                         bbox: None,
                         resolution: None,
+                        bands: RasterBandDescriptors::new_single_band(),
                     },
                 },
             }
@@ -1234,10 +1250,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1292,11 +1309,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1357,11 +1375,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1410,16 +1429,17 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
+                        0,
                         Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
                         CacheHint::default(),
                     )],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Unitless,
                         time: None,
                         bbox: None,
                         resolution: None,
+                        bands: RasterBandDescriptors::new_single_band(),
                     },
                 },
             }
@@ -1439,13 +1459,14 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle {
+                PlotQueryRectangle {
                     spatial_bounds: BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     time_interval: TimeInterval::new_instant(DateTime::new_utc(
                         2013, 12, 1, 12, 0, 0,
                     ))
                     .unwrap(),
                     spatial_resolution: SpatialResolution::one(),
+                    attributes: PlotSeriesSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )

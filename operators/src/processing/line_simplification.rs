@@ -15,8 +15,8 @@ use geoengine_datatypes::{
     },
     error::{BoxedResultExt, ErrorSource},
     primitives::{
-        BoundingBox2D, Geometry, MultiLineString, MultiLineStringRef, MultiPolygon,
-        MultiPolygonRef, SpatialResolution, VectorQueryRectangle,
+        BoundingBox2D, ColumnSelection, Geometry, MultiLineString, MultiLineStringRef,
+        MultiPolygon, MultiPolygonRef, SpatialResolution, VectorQueryRectangle,
     },
     util::arrow::ArrowTyped,
 };
@@ -272,7 +272,11 @@ where
 #[async_trait]
 impl<P, G, A> QueryProcessor for LineSimplificationProcessor<P, G, A>
 where
-    P: QueryProcessor<Output = FeatureCollection<G>, SpatialBounds = BoundingBox2D>,
+    P: QueryProcessor<
+        Output = FeatureCollection<G>,
+        SpatialBounds = BoundingBox2D,
+        Selection = ColumnSelection,
+    >,
     G: Geometry + ArrowTyped + 'static,
     for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>
         + GeoFeatureCollectionModifications<G, Output = FeatureCollection<G>>,
@@ -283,13 +287,14 @@ where
 {
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
+    type Selection = ColumnSelection;
 
     async fn _query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let chunks = self.source.query(query, ctx).await?;
+        let chunks = self.source.query(query.clone(), ctx).await?;
 
         let epsilon = self
             .epsilon
@@ -499,6 +504,7 @@ mod tests {
             spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             time_interval: TimeInterval::default(),
             spatial_resolution: SpatialResolution::one(),
+            attributes: ColumnSelection::all(),
         };
 
         let query_ctx = MockQueryContext::test_default();
@@ -617,6 +623,7 @@ mod tests {
                     spatial_bounds: query_bbox,
                     time_interval: Default::default(),
                     spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &query_context,
             )

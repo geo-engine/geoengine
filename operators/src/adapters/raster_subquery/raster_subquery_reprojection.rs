@@ -69,7 +69,7 @@ where
         // println!("new_fold_accu {:?}", &tile_info.global_tile_position);
 
         build_accu(
-            query_rect,
+            &query_rect,
             pool.clone(),
             tile_info,
             self.valid_bounds_out,
@@ -84,6 +84,7 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
+        band: usize,
     ) -> Result<Option<RasterQueryRectangle>> {
         // this is the spatial partition we are interested in
         let valid_spatial_bounds = self
@@ -99,6 +100,7 @@ where
                     spatial_bounds: pb,
                     time_interval: TimeInterval::new_instant(start_time)?,
                     spatial_resolution: self.in_spatial_res,
+                    attributes: band.into(),
                 })),
                 // In some strange cases the reprojection can return an empty box.
                 // We ignore it since it contains no pixels.
@@ -117,13 +119,14 @@ where
 }
 
 fn build_accu<T: Pixel>(
-    query_rect: RasterQueryRectangle,
+    query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tile_info: TileInformation,
     valid_bounds_out: SpatialPartition2D,
     out_srs: SpatialReference,
     in_srs: SpatialReference,
 ) -> impl Future<Output = Result<TileWithProjectionCoordinates<T>>> {
+    let time_interval = query_rect.time_interval;
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid::new(tile_info.tile_size_in_pixels);
 
@@ -140,8 +143,9 @@ fn build_accu<T: Pixel>(
 
         Ok(TileWithProjectionCoordinates {
             accu_tile: RasterTile2D::new_with_tile_info(
-                query_rect.time_interval,
+                time_interval,
                 tile_info,
+                0,
                 output_raster.into(),
                 CacheHint::max_duration(),
             ),
@@ -356,7 +360,7 @@ impl<T: Pixel> FoldTileAccuMut for TileWithProjectionCoordinates<T> {
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::Measurement,
+        primitives::BandSelection,
         raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
         util::test::TestDefault,
     };
@@ -364,8 +368,8 @@ mod tests {
     use crate::{
         adapters::RasterSubQueryAdapter,
         engine::{
-            MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
-            WorkflowOperatorPath,
+            MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
+            RasterResultDescriptor, WorkflowOperatorPath,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
@@ -380,6 +384,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
@@ -388,6 +393,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
@@ -396,6 +402,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
@@ -406,6 +413,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
@@ -421,10 +429,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -439,6 +447,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
 
         let query_ctx = MockQueryContext::test_default();

@@ -2,21 +2,23 @@ use std::sync::Arc;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use rayon::ThreadPool;
 
+use snafu::ensure;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
-    ClassificationMeasurement, ContinuousMeasurement, Measurement, RasterQueryRectangle,
-    SpatialPartition2D,
+    BandSelection, ClassificationMeasurement, ContinuousMeasurement, Measurement,
+    RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::raster::{
     MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
@@ -69,7 +71,15 @@ impl RasterOperator for Temperature {
 
         let in_desc = input.result_descriptor();
 
-        match &in_desc.measurement {
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_desc.bands.len() == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: Temperature::TYPE_NAME
+            }
+        );
+
+        match &in_desc.bands[0].measurement {
             Measurement::Continuous(ContinuousMeasurement {
                 measurement: m,
                 unit: _,
@@ -104,13 +114,17 @@ impl RasterOperator for Temperature {
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
-            measurement: Measurement::Continuous(ContinuousMeasurement {
-                measurement: "temperature".into(),
-                unit: Some("k".into()),
-            }),
             time: in_desc.time,
             bbox: in_desc.bbox,
             resolution: in_desc.resolution,
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                in_desc.bands[0].name.clone(),
+                Measurement::Continuous(ContinuousMeasurement {
+                    measurement: "temperature".into(),
+                    unit: Some("k".into()),
+                }),
+            )])
+            .unwrap(),
         };
 
         let initialized_operator = InitializedTemperature {
@@ -264,11 +278,16 @@ fn create_lookup_table(channel: &Channel, offset: f64, slope: f64, _pool: &Threa
 #[async_trait]
 impl<Q, P> QueryProcessor for TemperatureProcessor<Q, P>
 where
-    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialBounds = SpatialPartition2D>,
+    Q: QueryProcessor<
+        Output = RasterTile2D<P>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+    >,
     P: Pixel,
 {
     type Output = RasterTile2D<PixelOut>;
     type SpatialBounds = SpatialPartition2D;
+    type Selection = BandSelection;
 
     async fn _query<'a>(
         &'a self,

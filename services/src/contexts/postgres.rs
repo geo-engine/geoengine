@@ -493,10 +493,10 @@ mod tests {
     use geoengine_datatypes::dataset::{DataProviderId, LayerId};
     use geoengine_datatypes::operations::image::{Breakpoint, Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, ClassificationMeasurement, ContinuousMeasurement, Coordinate2D,
-        DateTimeParseFormat, FeatureDataType, MultiLineString, MultiPoint, MultiPolygon,
-        NoGeometry, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeGranularity,
-        TimeInstance, TimeInterval, TimeStep, TypedGeometry, VectorQueryRectangle,
+        BoundingBox2D, ClassificationMeasurement, ColumnSelection, ContinuousMeasurement,
+        Coordinate2D, DateTimeParseFormat, FeatureDataType, MultiLineString, MultiPoint,
+        MultiPolygon, NoGeometry, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+        TimeGranularity, TimeInstance, TimeInterval, TimeStep, TypedGeometry, VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheTtlSeconds, Measurement};
     use geoengine_datatypes::raster::{
@@ -507,8 +507,9 @@ mod tests {
     use geoengine_datatypes::util::{NotNanF64, StringPair};
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
-        PlotResultDescriptor, RasterResultDescriptor, StaticMetaData, TypedOperator,
-        TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+        PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
+        StaticMetaData, TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator,
+        VectorResultDescriptor,
     };
     use geoengine_operators::mock::{
         MockDatasetDataSourceLoadingInfo, MockPointSource, MockPointSourceParams,
@@ -896,6 +897,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    attributes: ColumnSelection::all()
                 })
                 .await
                 .unwrap(),
@@ -993,10 +995,10 @@ mod tests {
         let raster_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
-            measurement: Default::default(),
             time: None,
             bbox: None,
             resolution: None,
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         let vector_ds = AddDataset {
@@ -2715,7 +2717,6 @@ mod tests {
                 spatial_reference: SpatialReferenceOption::SpatialReference(
                     SpatialReference::epsg_4326(),
                 ),
-                measurement: Measurement::Unitless,
                 time: Some(TimeInterval::default()),
                 bbox: Some(
                     SpatialPartition2D::new(
@@ -2725,6 +2726,7 @@ mod tests {
                     .unwrap(),
                 ),
                 resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
+                bands: RasterBandDescriptors::new_single_band(),
             }],
         )
         .await;
@@ -2760,7 +2762,6 @@ mod tests {
                     spatial_reference: SpatialReferenceOption::SpatialReference(
                         SpatialReference::epsg_4326(),
                     ),
-                    measurement: Measurement::Unitless,
                     time: Some(TimeInterval::default()),
                     bbox: Some(
                         SpatialPartition2D::new(
@@ -2770,6 +2771,7 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
+                    bands: RasterBandDescriptors::new_single_band(),
                 }),
                 TypedResultDescriptor::Plot(PlotResultDescriptor {
                     spatial_reference: SpatialReferenceOption::Unreferenced,
@@ -3241,10 +3243,6 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Continuous(ContinuousMeasurement {
-                        measurement: "Temperature".to_string(),
-                        unit: Some("°C".to_string()),
-                    }),
                     time: TimeInterval::new_unchecked(0, 1).into(),
                     bbox: Some(
                         SpatialPartition2D::new(
@@ -3254,6 +3252,14 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution::zero_point_one()),
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                        "band".into(),
+                        Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "Temperature".to_string(),
+                            unit: Some("°C".to_string()),
+                        }),
+                    )])
+                    .unwrap(),
                 },
                 params: GdalDatasetParameters {
                     file_path: "text".into(),
@@ -3309,10 +3315,6 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Continuous(ContinuousMeasurement {
-                        measurement: "Temperature".to_string(),
-                        unit: Some("°C".to_string()),
-                    }),
                     time: TimeInterval::new_unchecked(0, 1).into(),
                     bbox: Some(
                         SpatialPartition2D::new(
@@ -3322,6 +3324,14 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution::zero_point_one()),
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                        "band".into(),
+                        Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "Temperature".to_string(),
+                            unit: Some("°C".to_string()),
+                        }),
+                    )])
+                    .unwrap(),
                 },
                 params: GdalDatasetParameters {
                     file_path: "text".into(),
@@ -3363,10 +3373,6 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Continuous(ContinuousMeasurement {
-                        measurement: "Temperature".to_string(),
-                        unit: Some("°C".to_string()),
-                    }),
                     time: TimeInterval::new_unchecked(0, 1).into(),
                     bbox: Some(
                         SpatialPartition2D::new(
@@ -3376,6 +3382,14 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution::zero_point_one()),
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                        "band".into(),
+                        Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "Temperature".to_string(),
+                            unit: Some("°C".to_string()),
+                        }),
+                    )])
+                    .unwrap(),
                 },
                 params: GdalDatasetParameters {
                     file_path: "text".into(),
@@ -3424,10 +3438,6 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Continuous(ContinuousMeasurement {
-                        measurement: "Temperature".to_string(),
-                        unit: Some("°C".to_string()),
-                    }),
                     time: TimeInterval::new_unchecked(0, 1).into(),
                     bbox: Some(
                         SpatialPartition2D::new(
@@ -3437,6 +3447,14 @@ mod tests {
                         .unwrap(),
                     ),
                     resolution: Some(SpatialResolution::zero_point_one()),
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                        "band".into(),
+                        Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "Temperature".to_string(),
+                            unit: Some("°C".to_string()),
+                        }),
+                    )])
+                    .unwrap(),
                 },
                 params: vec![GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::new_unchecked(0, 1),
@@ -3585,10 +3603,6 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "Temperature".to_string(),
-                            unit: Some("°C".to_string()),
-                        }),
                         time: TimeInterval::new_unchecked(0, 1).into(),
                         bbox: Some(
                             SpatialPartition2D::new(
@@ -3598,6 +3612,14 @@ mod tests {
                             .unwrap(),
                         ),
                         resolution: Some(SpatialResolution::zero_point_one()),
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                            "band".into(),
+                            Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "Temperature".to_string(),
+                                unit: Some("°C".to_string()),
+                            }),
+                        )])
+                        .unwrap(),
                     },
                     params: GdalDatasetParameters {
                         file_path: "text".into(),
@@ -3647,10 +3669,6 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "Temperature".to_string(),
-                            unit: Some("°C".to_string()),
-                        }),
                         time: TimeInterval::new_unchecked(0, 1).into(),
                         bbox: Some(
                             SpatialPartition2D::new(
@@ -3660,6 +3678,14 @@ mod tests {
                             .unwrap(),
                         ),
                         resolution: Some(SpatialResolution::zero_point_one()),
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                            "band".into(),
+                            Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "Temperature".to_string(),
+                                unit: Some("°C".to_string()),
+                            }),
+                        )])
+                        .unwrap(),
                     },
                     params: GdalDatasetParameters {
                         file_path: "text".into(),
@@ -3695,10 +3721,6 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "Temperature".to_string(),
-                            unit: Some("°C".to_string()),
-                        }),
                         time: TimeInterval::new_unchecked(0, 1).into(),
                         bbox: Some(
                             SpatialPartition2D::new(
@@ -3708,6 +3730,14 @@ mod tests {
                             .unwrap(),
                         ),
                         resolution: Some(SpatialResolution::zero_point_one()),
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                            "band".into(),
+                            Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "Temperature".to_string(),
+                                unit: Some("°C".to_string()),
+                            }),
+                        )])
+                        .unwrap(),
                     },
                     params: GdalDatasetParameters {
                         file_path: "text".into(),
@@ -3750,10 +3780,6 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        measurement: Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "Temperature".to_string(),
-                            unit: Some("°C".to_string()),
-                        }),
                         time: TimeInterval::new_unchecked(0, 1).into(),
                         bbox: Some(
                             SpatialPartition2D::new(
@@ -3763,6 +3789,14 @@ mod tests {
                             .unwrap(),
                         ),
                         resolution: Some(SpatialResolution::zero_point_one()),
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                            "band".into(),
+                            Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "Temperature".to_string(),
+                                unit: Some("°C".to_string()),
+                            }),
+                        )])
+                        .unwrap(),
                     },
                     params: vec![GdalLoadingInfoTemporalSlice {
                         time: TimeInterval::new_unchecked(0, 1),

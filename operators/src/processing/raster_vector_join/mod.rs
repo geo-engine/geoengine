@@ -82,6 +82,7 @@ pub enum TemporalAggregationMethod {
     Mean,
 }
 
+#[allow(clippy::too_many_lines)]
 #[typetag::serde]
 #[async_trait]
 impl VectorOperator for RasterVectorJoin {
@@ -136,11 +137,27 @@ impl VectorOperator for RasterVectorJoin {
         )
         .await?;
 
+        let source_descriptors = raster_sources
+            .iter()
+            .map(InitializedRasterOperator::result_descriptor)
+            .collect::<Vec<_>>();
+
+        // TODO: implement multi-band functionality for aggregated join and remove this check
+        ensure!(
+            matches!(
+                self.params.temporal_aggregation,
+                TemporalAggregationMethod::None
+            ) || source_descriptors.iter().all(|rd| rd.bands.len() == 1),
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: "RasterVectorAggregateJoin"
+            }
+        );
+
         let spatial_reference = vector_rd.spatial_reference;
 
-        for other_spatial_reference in raster_sources
+        for other_spatial_reference in source_descriptors
             .iter()
-            .map(|source| source.result_descriptor().spatial_reference)
+            .map(|source_descriptor| source_descriptor.spatial_reference)
         {
             ensure!(
                 spatial_reference == other_spatial_reference,
@@ -151,11 +168,18 @@ impl VectorOperator for RasterVectorJoin {
             );
         }
 
+        let raster_sources_bands = source_descriptors
+            .iter()
+            .map(|rd| rd.bands.len())
+            .collect::<Vec<_>>();
+
         let params = self.params;
 
         let result_descriptor = vector_rd.map_columns(|columns| {
             let mut columns = columns.clone();
-            for (i, new_column_name) in params.names.iter().enumerate() {
+            for ((i, new_column_name), source_descriptor) in
+                params.names.iter().enumerate().zip(&source_descriptors)
+            {
                 let feature_data_type = match params.temporal_aggregation {
                     TemporalAggregationMethod::First | TemporalAggregationMethod::None => {
                         match raster_sources[i].result_descriptor().data_type {
@@ -172,13 +196,22 @@ impl VectorOperator for RasterVectorJoin {
                     }
                     TemporalAggregationMethod::Mean => FeatureDataType::Float,
                 };
-                columns.insert(
-                    new_column_name.clone(),
-                    VectorColumnInfo {
-                        data_type: feature_data_type,
-                        measurement: raster_sources[i].result_descriptor().measurement.clone(),
-                    },
-                );
+
+                for (i, band) in source_descriptor.bands.iter().enumerate() {
+                    let column_name = if i == 0 {
+                        new_column_name.clone()
+                    } else {
+                        format!("{new_column_name}_{i}")
+                    };
+
+                    columns.insert(
+                        column_name,
+                        VectorColumnInfo {
+                            data_type: feature_data_type,
+                            measurement: band.measurement.clone(),
+                        },
+                    );
+                }
             }
             columns
         });
@@ -188,6 +221,7 @@ impl VectorOperator for RasterVectorJoin {
             result_descriptor,
             vector_source,
             raster_sources,
+            raster_sources_bands,
             state: params,
         }
         .boxed())
@@ -201,6 +235,7 @@ pub struct InitializedRasterVectorJoin {
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
+    raster_sources_bands: Vec<usize>,
     state: RasterVectorJoinParams,
 }
 
@@ -223,6 +258,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
                         points,
                         typed_raster_processors,
+                        self.raster_sources_bands.clone(),
                         self.state.names.clone(),
                         self.state.feature_aggregation,
                         self.state.feature_aggregation_ignore_no_data,
@@ -247,6 +283,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
                         polygons,
                         typed_raster_processors,
+                        self.raster_sources_bands.clone(),
                         self.state.names.clone(),
                         self.state.feature_aggregation,
                         self.state.feature_aggregation_ignore_no_data,
@@ -308,19 +345,21 @@ mod tests {
     use std::str::FromStr;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor,
+        RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
     };
-    use crate::mock::MockFeatureCollectionSource;
+    use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::NamedData;
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, DataRef, DateTime, FeatureDataRef, MultiPoint, SpatialResolution,
-        TimeInterval, VectorQueryRectangle,
+        BoundingBox2D, ColumnSelection, DataRef, DateTime, FeatureDataRef, MultiPoint,
+        SpatialResolution, TimeInterval, VectorQueryRectangle,
     };
+    use geoengine_datatypes::primitives::{CacheHint, Measurement};
+    use geoengine_datatypes::raster::RasterTile2D;
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
     use serde_json::json;
@@ -433,6 +472,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -511,6 +551,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -592,6 +633,7 @@ mod tests {
                         .unwrap(),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
+                    attributes: ColumnSelection::all(),
                 },
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -659,5 +701,135 @@ mod tests {
                 found: _,
             })
         ));
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_includes_bands_in_result_descriptor() {
+        let point_source = MockFeatureCollectionSource::with_collections_and_sref(
+            vec![MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    (-13.95, 20.05),
+                    (-14.05, 20.05),
+                    (-13.95, 19.95),
+                    (-14.05, 19.95),
+                ])
+                .unwrap(),
+                vec![TimeInterval::default(); 4],
+                Default::default(),
+                CacheHint::default(),
+            )
+            .unwrap()],
+            SpatialReference::from_str("EPSG:4326").unwrap(),
+        )
+        .boxed();
+
+        let raster_source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: Vec::<RasterTile2D<u8>>::new(),
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                    bands: RasterBandDescriptors::new(vec![
+                        RasterBandDescriptor::new_unitless("band_0".into()),
+                        RasterBandDescriptor::new_unitless("band_1".into()),
+                    ])
+                    .unwrap(),
+                },
+            },
+        }
+        .boxed();
+
+        let raster_source2 = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: Vec::<RasterTile2D<u8>>::new(),
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                    bands: RasterBandDescriptors::new(vec![
+                        RasterBandDescriptor::new_unitless("band_0".into()),
+                        RasterBandDescriptor::new_unitless("band_1".into()),
+                        RasterBandDescriptor::new_unitless("band_2".into()),
+                    ])
+                    .unwrap(),
+                },
+            },
+        }
+        .boxed();
+
+        let exe_ctc = MockExecutionContext::test_default();
+
+        let join = RasterVectorJoin {
+            params: RasterVectorJoinParams {
+                names: vec!["s0".to_string(), "s1".to_string()],
+                feature_aggregation: FeatureAggregationMethod::First,
+                feature_aggregation_ignore_no_data: false,
+                temporal_aggregation: TemporalAggregationMethod::None,
+                temporal_aggregation_ignore_no_data: false,
+            },
+            sources: SingleVectorMultipleRasterSources {
+                vector: point_source,
+                rasters: vec![raster_source, raster_source2],
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            join.result_descriptor(),
+            &VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: [
+                    (
+                        "s0".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Int,
+                            measurement: Measurement::Unitless
+                        }
+                    ),
+                    (
+                        "s0_1".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Int,
+                            measurement: Measurement::Unitless
+                        }
+                    ),
+                    (
+                        "s1".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Int,
+                            measurement: Measurement::Unitless
+                        }
+                    ),
+                    (
+                        "s1_1".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Int,
+                            measurement: Measurement::Unitless
+                        }
+                    ),
+                    (
+                        "s1_2".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Int,
+                            measurement: Measurement::Unitless
+                        }
+                    )
+                ]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None
+            }
+        );
     }
 }

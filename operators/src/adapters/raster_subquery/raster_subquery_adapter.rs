@@ -11,7 +11,7 @@ use futures::{
 };
 use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt, TryFutureExt};
-use geoengine_datatypes::primitives::CacheHint;
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
@@ -95,6 +95,10 @@ where
     query_rect_to_answer: RasterQueryRectangle,
     /// The `GridBoundingBox2D` that defines the tile grid space of the query.
     grid_bounds: GridBoundingBox2D,
+    // the selected bands from the source
+    bands: Vec<usize>,
+    // the band being currently processed
+    current_band_index: usize,
 
     /// The `SubQuery` defines what this adapter does.
     sub_query: SubQuery,
@@ -149,7 +153,9 @@ where
             current_tile_spec: first_tile_spec,
             current_time_end: None,
             current_time_start: query_rect_to_answer.time_interval.start(),
+            current_band_index: 0,
             grid_bounds,
+            bands: query_rect_to_answer.attributes.as_vec(),
             query_ctx,
             query_rect_to_answer,
             source_processor,
@@ -170,6 +176,7 @@ where
         let grid_bounds = self.grid_bounds.clone();
         let global_geo_transform = self.current_tile_spec.global_geo_transform;
         let tile_shape = self.current_tile_spec.tile_size_in_pixels;
+        let bands = self.bands.len();
 
         let s = self.filter_map(|x| async move {
             match x {
@@ -182,6 +189,7 @@ where
         let s_filled = SparseTilesFillAdapter::new(
             s,
             grid_bounds,
+            bands,
             global_geo_transform,
             tile_shape,
             cache_expiration,
@@ -204,8 +212,11 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> FusedStream
     for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
-    RasterProcessorType:
-        QueryProcessor<Output = RasterTile2D<PixelType>, SpatialBounds = SpatialPartition2D>,
+    RasterProcessorType: QueryProcessor<
+        Output = RasterTile2D<PixelType>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+    >,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {
     fn is_terminated(&self) -> bool {
@@ -217,8 +228,11 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> Stream
     for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
-    RasterProcessorType:
-        QueryProcessor<Output = RasterTile2D<PixelType>, SpatialBounds = SpatialPartition2D>,
+    RasterProcessorType: QueryProcessor<
+        Output = RasterTile2D<PixelType>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+    >,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {
     type Item = Result<Option<RasterTile2D<PixelType>>>;
@@ -253,13 +267,14 @@ where
         if matches!(*this.state, StateInner::CreateNextQuery) {
             match this.sub_query.tile_query_rectangle(
                 *this.current_tile_spec,
-                *this.query_rect_to_answer,
+                this.query_rect_to_answer.clone(),
                 *this.current_time_start,
+                this.bands[*this.current_band_index],
             ) {
                 Ok(Some(tile_query_rectangle)) => {
                     let tile_query_stream_fut = this
                         .source_processor
-                        .raster_query(tile_query_rectangle, *this.query_ctx);
+                        .raster_query(tile_query_rectangle.clone(), *this.query_ctx);
 
                     let tile_folding_accu_fut = this.sub_query.new_fold_accu(
                         *this.current_tile_spec,
@@ -344,7 +359,9 @@ where
             };
 
             match rf_res {
-                Ok(tile) => {
+                Ok(mut tile) => {
+                    // set the tile band to the running index, that is because output bands always start at zero and are consecutive, independent of the input bands
+                    tile.band = *this.current_band_index;
                     this.state.set(StateInner::ReturnResult(Some(tile)));
                 }
                 Err(e) => {
@@ -373,15 +390,22 @@ where
         };
 
         // now do progress
-        // move idx by 1
-        // if the grid idx wraps around set the ne query time instance to the end time instance of the last round
-        match (
+
+        let next_tile_pos = if *this.current_band_index + 1 < this.bands.len() {
+            // there is still another band to process for the current tile position
+            *this.current_band_index += 1;
+            Some(this.current_tile_spec.global_tile_position)
+        } else {
+            // all bands for the current tile are processed, we can go to the next tile in space, if there is one
+            *this.current_band_index = 0;
             this.grid_bounds
-                .inc_idx_unchecked(this.current_tile_spec.global_tile_position, 1),
-            *this.current_time_end,
-        ) {
+                .inc_idx_unchecked(this.current_tile_spec.global_tile_position, 1)
+        };
+
+        // if the grid idx wraps around set the ne query time instance to the end time instance of the last round
+        match (next_tile_pos, *this.current_time_end) {
             (Some(idx), _) => {
-                // move the SPATIAL index further to the next tile
+                // update the spatial index
                 this.current_tile_spec.global_tile_position = idx;
             }
             (None, None) => {
@@ -450,6 +474,7 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
+        band: usize,
     ) -> Result<Option<RasterQueryRectangle>>;
 
     /// This method generates the method which combines the accumulator and each tile of the sub-query stream in the `TryFold` stream adapter.
@@ -526,7 +551,7 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        identity_accu(tile_info, query_rect, pool.clone()).boxed()
+        identity_accu(tile_info, &query_rect, pool.clone()).boxed()
     }
 
     fn tile_query_rectangle(
@@ -534,11 +559,13 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
+        band: usize,
     ) -> Result<Option<RasterQueryRectangle>> {
         Ok(Some(RasterQueryRectangle {
             spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: query_rect.spatial_resolution,
+            attributes: band.into(),
         }))
     }
 
@@ -549,14 +576,16 @@ where
 
 pub fn identity_accu<T: Pixel>(
     tile_info: TileInformation,
-    query_rect: RasterQueryRectangle,
+    query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<RasterTileAccu2D<T>>> {
+    let time_interval = query_rect.time_interval;
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
         let output_tile = RasterTile2D::new_with_tile_info(
-            query_rect.time_interval,
+            time_interval,
             tile_info,
+            0,
             output_raster,
             CacheHint::max_duration(),
         );
@@ -609,7 +638,7 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{Measurement, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -617,8 +646,8 @@ mod tests {
 
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor,
-        WorkflowOperatorPath,
+        MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
+        RasterResultDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
@@ -629,6 +658,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
@@ -637,6 +667,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
@@ -645,6 +676,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
                     .unwrap()
@@ -655,6 +687,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
                 tile_position: [-1, 1].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
                     .unwrap()
@@ -670,10 +703,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -688,6 +721,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
         };
 
         let query_ctx = MockQueryContext::test_default();

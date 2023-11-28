@@ -4,7 +4,9 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::primitives::CacheHint;
+use geoengine_datatypes::primitives::{
+    BandSelection, CacheHint, ColumnSelection, RasterQueryRectangle,
+};
 use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
@@ -90,9 +92,15 @@ where
                 spatial_bounds: query.spatial_bounds,
                 time_interval: time_span.time_interval,
                 spatial_resolution: query.spatial_resolution,
+                attributes: ColumnSelection::all(),
             };
 
-            let mut rasters = raster_processor.raster_query(query.into(), ctx).await?;
+            let mut rasters = raster_processor
+                .raster_query(
+                    RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first()),
+                    ctx,
+                )
+                .await?;
 
             // TODO: optimize geo access (only specific tiles, etc.)
 
@@ -215,6 +223,7 @@ where
 {
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
+    type Selection = ColumnSelection;
 
     async fn _query<'a>(
         &'a self,
@@ -223,28 +232,31 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let stream = self
             .collection
-            .query(query, ctx)
+            .query(query.clone(), ctx)
             .await?
-            .and_then(move |mut collection| async move {
-                for (raster, new_column_name) in
-                    self.raster_processors.iter().zip(&self.column_names)
-                {
-                    collection = call_on_generic_raster_processor!(raster, raster => {
-                        Self::extract_raster_values(
-                            &collection,
-                            raster,
-                            new_column_name,
-                            self.feature_aggregation,
-                            self.feature_aggregation_ignore_no_data,
-                            self.temporal_aggregation,
-                            self.temporal_aggregation_ignore_no_data,
-                            query,
-                            ctx
-                        ).await?
-                    });
-                }
+            .and_then(move |mut collection| {
+                let query = query.clone();
+                async move {
+                    for (raster, new_column_name) in
+                        self.raster_processors.iter().zip(&self.column_names)
+                    {
+                        collection = call_on_generic_raster_processor!(raster, raster => {
+                            Self::extract_raster_values(
+                                &collection,
+                                raster,
+                                new_column_name,
+                                self.feature_aggregation,
+                                self.feature_aggregation_ignore_no_data,
+                                self.temporal_aggregation,
+                                self.temporal_aggregation_ignore_no_data,
+                                query.clone(),
+                                ctx
+                            ).await?
+                        });
+                    }
 
-                Ok(collection)
+                    Ok(collection)
+                }
             })
             .boxed();
 
@@ -257,7 +269,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, RasterResultDescriptor, WorkflowOperatorPath,
+        ChunkByteSize, MockExecutionContext, RasterBandDescriptors, RasterResultDescriptor,
+        WorkflowOperatorPath,
     };
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
@@ -268,9 +281,7 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
-        primitives::{
-            BoundingBox2D, FeatureDataRef, Measurement, MultiPoint, SpatialResolution, TimeInterval,
-        },
+        primitives::{BoundingBox2D, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval},
         raster::TilingSpecification,
     };
 
@@ -283,6 +294,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
@@ -295,10 +307,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -341,6 +353,7 @@ mod tests {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                attributes: ColumnSelection::all(),
             },
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
@@ -364,6 +377,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
@@ -376,6 +390,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
@@ -388,10 +403,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -434,6 +449,7 @@ mod tests {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                attributes: ColumnSelection::all(),
             },
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
@@ -457,6 +473,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
@@ -469,6 +486,7 @@ mod tests {
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
@@ -481,6 +499,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
@@ -493,6 +512,7 @@ mod tests {
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
@@ -510,10 +530,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -552,6 +572,7 @@ mod tests {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                attributes: ColumnSelection::all(),
             },
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
@@ -579,6 +600,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
@@ -591,6 +613,7 @@ mod tests {
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
@@ -603,6 +626,7 @@ mod tests {
                 global_tile_position: [0, 2].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![160, 150, 140, 130, 120, 110])
                 .unwrap()
                 .into(),
@@ -615,6 +639,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
@@ -627,6 +652,7 @@ mod tests {
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
@@ -639,6 +665,7 @@ mod tests {
                 global_tile_position: [0, 2].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![110, 120, 130, 140, 150, 160])
                 .unwrap()
                 .into(),
@@ -658,10 +685,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -702,6 +729,7 @@ mod tests {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                 time_interval: Default::default(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                attributes: ColumnSelection::all(),
             },
             &MockQueryContext::new(ChunkByteSize::MIN),
         )

@@ -790,7 +790,7 @@ mod tests {
     use bb8_postgres::bb8::ManageConnection;
     use geoengine_datatypes::{
         dataset::ExternalDataId,
-        primitives::{BoundingBox2D, SpatialResolution, TimeInterval},
+        primitives::{BoundingBox2D, ColumnSelection, SpatialResolution, TimeInterval},
         test_data,
     };
     use httptest::{
@@ -1093,6 +1093,7 @@ mod tests {
                     ),
                     time_interval: TimeInterval::default(),
                     spatial_resolution: SpatialResolution::zero_point_one(),
+                    attributes: ColumnSelection::all(),
                 })
                 .await
                 .map_err(|e| e.to_string())?;

@@ -162,6 +162,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(0, 1).unwrap(),
                 tile_information,
+                0,
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
@@ -170,6 +171,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(1, 2).unwrap(),
                 tile_information,
+                0,
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
@@ -178,6 +180,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(2, 3).unwrap(),
                 tile_information,
+                0,
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
@@ -226,6 +229,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(0, 1).unwrap(),
                 tile_information,
+                0,
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
@@ -234,6 +238,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(1, 2).unwrap(),
                 tile_information,
+                0,
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),
@@ -242,6 +247,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(1, 2).unwrap(),
                 tile_information,
+                0,
                 Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                     .unwrap()
                     .into(),
@@ -250,6 +256,7 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new(2, 3).unwrap(),
                 tile_information,
+                0,
                 Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                     .unwrap()
                     .into(),

@@ -171,6 +171,7 @@ where
             grid_array: self.grid_array.map_elements(map_fn),
             time: self.time,
             tile_position: self.tile_position,
+            band: self.band,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             cache_hint: self.cache_hint.clone_with_current_datetime(),
@@ -347,6 +348,7 @@ where
             grid_array: self.grid_array.map_elements_parallel(map_fn),
             time: self.time,
             tile_position: self.tile_position,
+            band: self.band,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             cache_hint: self.cache_hint.clone_with_current_datetime(),
@@ -458,6 +460,7 @@ mod tests {
         let t1 = RasterTile2D::new(
             TimeInterval::default(),
             [0, 0].into(),
+            0,
             geo,
             r1,
             CacheHint::default(),
@@ -481,6 +484,7 @@ mod tests {
         let t1 = RasterTile2D::new(
             TimeInterval::default(),
             [0, 0].into(),
+            0,
             geo,
             r1,
             CacheHint::default(),
