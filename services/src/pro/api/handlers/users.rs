@@ -734,7 +734,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
+    use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use httptest::matchers::request;
     use httptest::responders::status_code;
@@ -1664,10 +1664,8 @@ mod tests {
                 (255.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            DefaultColors::OverUnder {
-                over_color: RgbaColor::white(),
-                under_color: RgbaColor::black(),
-            },
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
