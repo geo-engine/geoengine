@@ -37,7 +37,7 @@ impl DateTime {
             .expect("should set valid date")
             .and_hms_opt(hour.into(), minute.into(), second.into())
             .expect("should set valid time");
-        let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
+        let datetime = chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc);
 
         Self { datetime }
     }
@@ -57,7 +57,7 @@ impl DateTime {
     ) -> Option<Self> {
         let date = NaiveDate::from_ymd_opt(year, month.into(), day.into())?;
         let datetime = date.and_hms_opt(hour.into(), minute.into(), second.into())?;
-        let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
+        let datetime = chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc);
 
         Some(Self { datetime })
     }
@@ -81,7 +81,7 @@ impl DateTime {
             .expect("should set valid date")
             .and_hms_milli_opt(hour.into(), minute.into(), second.into(), millis.into())
             .expect("should set valid time");
-        let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
+        let datetime = chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc);
 
         Self { datetime }
     }
@@ -103,7 +103,7 @@ impl DateTime {
         let date = NaiveDate::from_ymd_opt(year, month.into(), day.into())?;
         let datetime =
             date.and_hms_milli_opt(hour.into(), minute.into(), second.into(), millis.into())?;
-        let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
+        let datetime = chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc);
 
         Some(Self { datetime })
     }
@@ -135,7 +135,7 @@ impl DateTime {
                         })?;
 
                 Ok(Self {
-                    datetime: chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc),
+                    datetime: chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc),
                 })
             }
             (false, true) => Err(DateTimeError::CannotParseOnlyDateWithTimeZone),
@@ -148,7 +148,7 @@ impl DateTime {
                     .expect("`00:00:00` should be a valid time");
 
                 Ok(Self {
-                    datetime: chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc),
+                    datetime: chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc),
                 })
             }
         }
@@ -582,7 +582,7 @@ mod sql {
     impl<'a> FromSql<'a> for DateTime {
         fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
             let naive = chrono::NaiveDateTime::from_sql(ty, raw)?;
-            let datetime = chrono::DateTime::from_utc(naive, chrono::Utc);
+            let datetime = chrono::DateTime::from_naive_utc_and_offset(naive, chrono::Utc);
             Ok(DateTime { datetime })
         }
 
