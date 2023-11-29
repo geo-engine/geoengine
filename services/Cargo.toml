@@ -99,7 +99,7 @@ tonic = { version = "0.9", features = [
 ] } # must be compatible with `aruna-rust-api`
 tracing = "0.1"
 tracing-actix-web = "0.7"
-tracing-opentelemetry = "0.22.0"
+tracing-opentelemetry = "0.22"
 tracing-subscriber = { version = "0.3", features = [
   "local-time",
   "ansi",
