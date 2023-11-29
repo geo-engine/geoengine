@@ -41,7 +41,7 @@ config = "0.13"
 derive_builder = "0.12"
 erased-serde = "0.3"
 fallible-iterator = "0.2" # only for postgres-protocol
-flexi_logger = { version = "0.27.3", features = ["trc"] }
+flexi_logger = { version = "0.27", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
