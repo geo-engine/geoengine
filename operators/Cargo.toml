@@ -74,7 +74,7 @@ httptest = "0.15.2"
 ndarray = "0.15"
 tracing-subscriber = { version = "0.3", features = ["json"] }
 rand = "0.8"
-serial_test = "2.0.0"
+serial_test = "2.0"
 
 [[bench]]
 name = "bands"
