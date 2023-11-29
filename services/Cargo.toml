@@ -47,7 +47,7 @@ futures = "0.3"
 futures-util = "0.3"
 gdal = "0.16"
 gdal-sys = "0.9"
-geo = "0.27.0"
+geo = "0.27"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-macros = { path = "../macros" }
 geoengine-operators = { path = "../operators" }
