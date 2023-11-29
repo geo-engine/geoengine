@@ -29,7 +29,7 @@ geoengine-datatypes = { path = "../datatypes" }
 itertools = "0.12"
 libloading = "0.8"
 log = "0.4"
-lru = "0.12.1"
+lru = "0.12"
 lz4_flex = { version = "0.11" }
 num-traits = "0.2"
 num = "0.4"
