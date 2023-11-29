@@ -11,12 +11,12 @@ use crate::api::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResu
 use crate::api::model::datatypes::{
     AxisLabels, BoundingBox2D, Breakpoint, CacheTtlSeconds, ClassificationMeasurement, Colorizer,
     ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DateTime,
-    DateTimeParseFormat, DefaultColors, ExternalDataId, FeatureDataType, GdalConfigOption, LayerId,
+    DateTimeParseFormat, ExternalDataId, FeatureDataType, GdalConfigOption, LayerId,
     LinearGradient, LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon,
-    NamedData, NoGeometry, OverUnderColors, Palette, PlotOutputFormat, PlotQueryRectangle,
-    RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
-    RgbaColor, SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair,
-    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
+    NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType,
+    RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
+    SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity,
+    TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -256,8 +256,6 @@ use utoipa::{Modify, OpenApi};
             TextSymbology,
             LinearGradient,
             LogarithmicGradient,
-            DefaultColors,
-            OverUnderColors,
 
             OgcBoundingBox,
 
