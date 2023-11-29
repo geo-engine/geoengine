@@ -60,7 +60,7 @@ mime = "0.3"
 oauth2 = "4.2.3"
 openidconnect = "3.1"
 # `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-jaeger`
-opentelemetry = { version = "0.21.0", default-features = false, features = [
+opentelemetry = { version = "0.21", default-features = false, features = [
   "trace",
 ] }
 opentelemetry-jaeger = "0.20"
