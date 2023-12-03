@@ -126,7 +126,7 @@ nix = { version = "0.27", features = ["socket"] }
 [dev-dependencies]
 assert_cmd = "2.0"
 httptest = "0.15.2"
-hyper = "0.14"
+hyper = "1.0"
 prost = "0.11"
 serial_test = "2.0"
 tempfile = "3.1"
