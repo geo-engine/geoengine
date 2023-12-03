@@ -20,7 +20,7 @@ arrow = { version = "45.0", features = [ # wait for https://github.com/apache/ar
 async-trait = "0.1"
 bytes = "1.0" # for postgres-types impls
 chrono = "0.4"
-fallible-iterator = "0.2"
+fallible-iterator = "0.3"
 float-cmp = "0.9"
 gdal = "0.16"
 geo-types = "0.7"
