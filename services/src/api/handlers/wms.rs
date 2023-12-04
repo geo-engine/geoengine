@@ -349,9 +349,11 @@ async fn wms_map_handler<C: ApplicationContext>(
 
         let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
 
-        let (band, colorizer) = match raster_colorizer {
-            Some(RasterColorizer::SingleBand { band, colorizer }) => (band, Some(colorizer.into())),
-            _ => (0, None),
+        let (attributes, colorizer) = match raster_colorizer {
+            Some(RasterColorizer::SingleBand { band, colorizer }) => {
+                (BandSelection::new_single(band), Some(colorizer.into()))
+            }
+            _ => (BandSelection::new_single(0), None),
         };
 
         let query_rect = RasterQueryRectangle {
@@ -361,7 +363,7 @@ async fn wms_map_handler<C: ApplicationContext>(
                 x_query_resolution,
                 y_query_resolution,
             ),
-            attributes: BandSelection::new_single(band),
+            attributes,
         };
 
         let query_ctx = ctx.query_context()?;
