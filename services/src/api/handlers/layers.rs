@@ -147,21 +147,6 @@ async fn get_layer_providers<C: ApplicationContext>(
     if options.offset == 0 && options.limit > 0 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
             id: ProviderLayerCollectionId {
-                provider_id: crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID,
-                collection_id: LayerCollectionId(
-                    crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID.to_string(),
-                ),
-            },
-            name: "Datasets".to_string(),
-            description: "Basic Layers for all Datasets".to_string(),
-            properties: Default::default(),
-        }));
-
-        options.limit -= 1;
-    }
-    if options.offset <= 1 && options.limit > 1 {
-        providers.push(CollectionItem::Collection(LayerCollectionListing {
-            id: ProviderLayerCollectionId {
                 provider_id: crate::layers::storage::INTERNAL_PROVIDER_ID,
                 collection_id: LayerCollectionId(
                     crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
