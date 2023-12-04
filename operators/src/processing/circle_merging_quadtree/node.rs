@@ -1,4 +1,4 @@
-use geo::intersects::Intersects;
+use geo::algorithm::intersects::Intersects;
 use geoengine_datatypes::{operations::Contains, primitives::BoundingBox2D};
 
 use super::circle_of_points::CircleOfPoints;

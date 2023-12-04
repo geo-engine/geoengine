@@ -492,7 +492,7 @@ mod tests {
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::dataset::{DataProviderId, LayerId};
     use geoengine_datatypes::operations::image::{
-        Breakpoint, Colorizer, DefaultColors, RasterColorizer, RgbaColor,
+        Breakpoint, Colorizer, RasterColorizer, RgbaColor,
     };
     use geoengine_datatypes::primitives::{
         BoundingBox2D, ClassificationMeasurement, ColumnSelection, ContinuousMeasurement,
@@ -2381,21 +2381,6 @@ mod tests {
 
         assert_sql_type(
             &pool,
-            "DefaultColors",
-            [
-                DefaultColors::DefaultColor {
-                    default_color: RgbaColor::new(0, 10, 20, 30),
-                },
-                DefaultColors::OverUnder {
-                    over_color: RgbaColor::new(1, 2, 3, 4),
-                    under_color: RgbaColor::new(5, 6, 7, 8),
-                },
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
             "Colorizer",
             [
                 Colorizer::LinearGradient {
@@ -2410,10 +2395,8 @@ mod tests {
                         },
                     ],
                     no_data_color: RgbaColor::new(0, 10, 20, 30),
-                    default_colors: DefaultColors::OverUnder {
-                        over_color: RgbaColor::new(1, 2, 3, 4),
-                        under_color: RgbaColor::new(5, 6, 7, 8),
-                    },
+                    over_color: RgbaColor::new(1, 2, 3, 4),
+                    under_color: RgbaColor::new(5, 6, 7, 8),
                 },
                 Colorizer::LogarithmicGradient {
                     breakpoints: vec![
@@ -2427,10 +2410,8 @@ mod tests {
                         },
                     ],
                     no_data_color: RgbaColor::new(0, 10, 20, 30),
-                    default_colors: DefaultColors::OverUnder {
-                        over_color: RgbaColor::new(1, 2, 3, 4),
-                        under_color: RgbaColor::new(5, 6, 7, 8),
-                    },
+                    over_color: RgbaColor::new(1, 2, 3, 4),
+                    under_color: RgbaColor::new(5, 6, 7, 8),
                 },
                 Colorizer::palette(
                     [
@@ -2602,10 +2583,8 @@ mod tests {
                                 },
                             ],
                             no_data_color: RgbaColor::new(0, 10, 20, 30),
-                            default_colors: DefaultColors::OverUnder {
-                                over_color: RgbaColor::new(1, 2, 3, 4),
-                                under_color: RgbaColor::new(5, 6, 7, 8),
-                            },
+                            over_color: RgbaColor::new(1, 2, 3, 4),
+                            under_color: RgbaColor::new(5, 6, 7, 8),
                         },
                     },
                 }),

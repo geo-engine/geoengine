@@ -24,12 +24,12 @@ fallible-iterator = "0.2"
 float-cmp = "0.9"
 gdal = "0.16"
 geo-types = "0.7"
-geo = "0.26"
+geo = "0.27"
 geojson = "0.24"
 image = "0.24"
 num = "0.4"
 num-traits = "0.2"
-ordered-float = { version = "3.0", features = ["serde"] }
+ordered-float = { version = "4.1", features = ["serde"] }
 paste = "1.0"
 postgres-protocol = { version = "0.6" }
 postgres-types = { version = "0.2", features = [

@@ -1429,77 +1429,13 @@ impl From<Breakpoint> for geoengine_datatypes::operations::image::Breakpoint {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
-#[serde(untagged, rename_all = "camelCase", into = "OverUnderColors")]
-pub enum DefaultColors {
-    #[serde(rename_all = "camelCase")]
-    DefaultColor { default_color: RgbaColor },
-    #[serde(rename_all = "camelCase")]
-    OverUnder(OverUnderColors),
-}
-
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct OverUnderColors {
-    pub over_color: RgbaColor,
-    pub under_color: RgbaColor,
-}
-
-impl From<DefaultColors> for OverUnderColors {
-    fn from(value: DefaultColors) -> Self {
-        match value {
-            DefaultColors::DefaultColor { default_color } => Self {
-                over_color: default_color,
-                under_color: default_color,
-            },
-            DefaultColors::OverUnder(over_under) => over_under,
-        }
-    }
-}
-
-impl From<DefaultColors> for geoengine_datatypes::operations::image::DefaultColors {
-    fn from(value: DefaultColors) -> Self {
-        match value {
-            DefaultColors::DefaultColor { default_color } => Self::DefaultColor {
-                default_color: default_color.into(),
-            },
-            DefaultColors::OverUnder(OverUnderColors {
-                over_color,
-                under_color,
-            }) => Self::OverUnder {
-                over_color: over_color.into(),
-                under_color: under_color.into(),
-            },
-        }
-    }
-}
-
-impl From<geoengine_datatypes::operations::image::DefaultColors> for DefaultColors {
-    fn from(value: geoengine_datatypes::operations::image::DefaultColors) -> Self {
-        match value {
-            geoengine_datatypes::operations::image::DefaultColors::DefaultColor {
-                default_color,
-            } => Self::DefaultColor {
-                default_color: default_color.into(),
-            },
-            geoengine_datatypes::operations::image::DefaultColors::OverUnder {
-                over_color,
-                under_color,
-            } => Self::OverUnder(OverUnderColors {
-                over_color: over_color.into(),
-                under_color: under_color.into(),
-            }),
-        }
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LinearGradient {
     pub breakpoints: Vec<Breakpoint>,
     pub no_data_color: RgbaColor,
-    #[serde(flatten)]
-    pub color_fields: DefaultColors,
+    pub over_color: RgbaColor,
+    pub under_color: RgbaColor,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
@@ -1507,8 +1443,8 @@ pub struct LinearGradient {
 pub struct LogarithmicGradient {
     pub breakpoints: Vec<Breakpoint>,
     pub no_data_color: RgbaColor,
-    #[serde(flatten)]
-    pub color_fields: DefaultColors,
+    pub over_color: RgbaColor,
+    pub under_color: RgbaColor,
 }
 
 /// A colorizer specifies a mapping between raster values and an output image
@@ -1535,26 +1471,30 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
             geoengine_datatypes::operations::image::Colorizer::LinearGradient {
                 breakpoints,
                 no_data_color,
-                default_colors: color_fields,
+                over_color,
+                under_color,
             } => Self::LinearGradient(LinearGradient {
                 breakpoints: breakpoints
                     .into_iter()
                     .map(Into::into)
                     .collect::<Vec<Breakpoint>>(),
                 no_data_color: no_data_color.into(),
-                color_fields: color_fields.into(),
+                over_color: over_color.into(),
+                under_color: under_color.into(),
             }),
             geoengine_datatypes::operations::image::Colorizer::LogarithmicGradient {
                 breakpoints,
                 no_data_color,
-                default_colors: color_fields,
+                over_color,
+                under_color,
             } => Self::LogarithmicGradient(LogarithmicGradient {
                 breakpoints: breakpoints
                     .into_iter()
                     .map(Into::into)
                     .collect::<Vec<Breakpoint>>(),
                 no_data_color: no_data_color.into(),
-                color_fields: color_fields.into(),
+                over_color: over_color.into(),
+                under_color: under_color.into(),
             }),
             geoengine_datatypes::operations::image::Colorizer::Palette {
                 colors,
@@ -1580,7 +1520,8 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
                     .map(Into::into)
                     .collect::<Vec<geoengine_datatypes::operations::image::Breakpoint>>(),
                 no_data_color: linear_gradient.no_data_color.into(),
-                default_colors: linear_gradient.color_fields.into(),
+                over_color: linear_gradient.over_color.into(),
+                under_color: linear_gradient.under_color.into(),
             },
             Colorizer::LogarithmicGradient(logarithmic_gradient) => Self::LogarithmicGradient {
                 breakpoints: logarithmic_gradient
@@ -1589,7 +1530,8 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
                     .map(Into::into)
                     .collect::<Vec<geoengine_datatypes::operations::image::Breakpoint>>(),
                 no_data_color: logarithmic_gradient.no_data_color.into(),
-                default_colors: logarithmic_gradient.color_fields.into(),
+                over_color: logarithmic_gradient.over_color.into(),
+                under_color: logarithmic_gradient.under_color.into(),
             },
 
             Colorizer::Palette {

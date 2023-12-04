@@ -181,7 +181,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::operations::image::colorizer::DefaultColors;
     use crate::operations::image::RgbaColor;
     use crate::raster::GridIndexAccessMut;
     use std::convert::TryInto;
@@ -201,10 +200,8 @@ mod tests {
                     .unwrap(),
             ],
             RgbaColor::transparent(),
-            DefaultColors::OverUnder {
-                over_color: RgbaColor::white(),
-                under_color: RgbaColor::black(),
-            },
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
@@ -233,10 +230,8 @@ mod tests {
                     .unwrap(),
             ],
             RgbaColor::transparent(),
-            DefaultColors::OverUnder {
-                over_color: RgbaColor::white(),
-                under_color: RgbaColor::black(),
-            },
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
@@ -316,10 +311,8 @@ mod tests {
                     .unwrap(),
             ],
             RgbaColor::transparent(),
-            DefaultColors::OverUnder {
-                over_color: RgbaColor::white(),
-                under_color: RgbaColor::black(),
-            },
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
@@ -345,10 +338,8 @@ mod tests {
                     .unwrap(),
             ],
             RgbaColor::transparent(),
-            DefaultColors::OverUnder {
-                over_color: RgbaColor::white(),
-                under_color: RgbaColor::black(),
-            },
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
