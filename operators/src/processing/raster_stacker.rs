@@ -232,7 +232,7 @@ fn map_query_bands_to_source_bands(
         return None;
     }
 
-    Some(BandSelection::new(bands))
+    Some(BandSelection::new_unchecked(bands))
 }
 
 #[async_trait]
@@ -311,12 +311,12 @@ mod tests {
         );
 
         assert_eq!(
-            map_query_bands_to_source_bands(&[1, 2].into(), &[2, 2], 0),
+            map_query_bands_to_source_bands(&[1, 2].try_into().unwrap(), &[2, 2], 0),
             Some(1.into())
         );
         assert_eq!(
-            map_query_bands_to_source_bands(&[1, 2, 3].into(), &[2, 2], 1),
-            Some([0, 1].into())
+            map_query_bands_to_source_bands(&[1, 2, 3].try_into().unwrap(), &[2, 2], 1),
+            Some([0, 1].try_into().unwrap())
         );
     }
 
@@ -458,7 +458,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            attributes: [0, 1].into(),
+            attributes: [0, 1].try_into().unwrap(),
         };
 
         let query_ctx = MockQueryContext::test_default();
@@ -718,7 +718,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 10),
             spatial_resolution: SpatialResolution::one(),
-            attributes: [0, 1, 2, 3].into(),
+            attributes: [0, 1, 2, 3].try_into().unwrap(),
         };
 
         let query_ctx = MockQueryContext::test_default();

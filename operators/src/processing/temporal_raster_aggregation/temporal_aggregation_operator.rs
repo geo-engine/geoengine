@@ -2788,7 +2788,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
-            attributes: [0, 1].into(),
+            attributes: [0, 1].try_into().unwrap(),
         };
         let query_ctx = MockQueryContext::test_default();
 
