@@ -7,7 +7,7 @@ use crate::error;
 use crate::error::Result;
 use crate::projects::Symbology;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::{MetaData, TypedResultDescriptor};
 use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf};
@@ -20,9 +20,6 @@ use std::fmt::Debug;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
-
-pub const DATASET_DB_LAYER_PROVIDER_ID: DataProviderId =
-    DataProviderId::from_u128(0xac50_ed0d_c9a0_41f8_9ce8_35fc_9e38_299b);
 
 pub const DATASET_DB_ROOT_COLLECTION_ID: Uuid =
     Uuid::from_u128(0x5460_73b6_d535_4205_b601_9967_5c9f_6dd7);

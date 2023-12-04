@@ -3,32 +3,20 @@ use super::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
-use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
-use crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID;
+
 use crate::datasets::storage::{
     Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
 };
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
-use crate::error::{self, Result};
-use crate::layers::layer::CollectionItem;
-use crate::layers::layer::Layer;
-use crate::layers::layer::LayerCollection;
-use crate::layers::layer::LayerCollectionListOptions;
-use crate::layers::layer::LayerListing;
-use crate::layers::layer::ProviderLayerCollectionId;
-use crate::layers::layer::ProviderLayerId;
-use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
-use crate::layers::storage::INTERNAL_PROVIDER_ID;
-use crate::projects::Symbology;
-use crate::util::operators::source_operator_from_dataset;
-use crate::workflows::workflow::Workflow;
+use crate::error::Result;
+
 use async_trait::async_trait;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
 use bb8_postgres::PostgresConnectionManager;
-use geoengine_datatypes::dataset::{DataId, DatasetId, LayerId};
+use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
@@ -39,9 +27,6 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use postgres_types::{FromSql, ToSql};
-use std::collections::HashMap;
-use std::str::FromStr;
-use uuid::Uuid;
 
 impl<Tls> DatasetDb for PostgresDb<Tls>
 where
@@ -558,128 +543,6 @@ where
         )
         .await?;
         Ok(())
-    }
-}
-
-#[async_trait]
-impl<Tls> DatasetLayerCollectionProvider for PostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    async fn load_dataset_layer_collection(
-        &self,
-        collection: &LayerCollectionId,
-        options: LayerCollectionListOptions,
-    ) -> Result<LayerCollection> {
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare(
-                "
-                SELECT 
-                    concat(id, '') AS id, 
-                    display_name, 
-                    description
-                FROM 
-                   datasets
-                ORDER BY name ASC
-                LIMIT $1
-                OFFSET $2;",
-            )
-            .await?;
-
-        let rows = conn
-            .query(
-                &stmt,
-                &[&i64::from(options.limit), &i64::from(options.offset)],
-            )
-            .await?;
-
-        let items = rows
-            .iter()
-            .map(|row| {
-                Result::<CollectionItem>::Ok(CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DATASET_DB_LAYER_PROVIDER_ID,
-                        layer_id: LayerId(row.get(0)),
-                    },
-                    name: row.get(1),
-                    description: row.get(2),
-                    properties: vec![],
-                }))
-            })
-            .filter_map(Result::ok)
-            .collect();
-
-        Ok(LayerCollection {
-            id: ProviderLayerCollectionId {
-                provider_id: INTERNAL_PROVIDER_ID,
-                collection_id: collection.clone(),
-            },
-            name: "Datasets".to_string(),
-            description: "Basic Layers for all Datasets".to_string(),
-            items,
-            entry_label: None,
-            properties: vec![],
-        })
-    }
-
-    async fn get_dataset_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
-        Ok(LayerCollectionId(DATASET_DB_ROOT_COLLECTION_ID.to_string()))
-    }
-
-    async fn load_dataset_layer(&self, id: &LayerId) -> Result<Layer> {
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare(
-                "
-                SELECT 
-                    name, 
-                    display_name,
-                    description,
-                    source_operator,
-                    symbology
-                FROM 
-                    datasets
-                WHERE id = $1;",
-            )
-            .await?;
-
-        let row = conn
-            .query_one(
-                &stmt,
-                &[
-                    &Uuid::from_str(&id.0).map_err(|_| error::Error::IdStringMustBeUuid {
-                        found: id.0.clone(),
-                    })?,
-                ],
-            )
-            .await?;
-
-        let name: DatasetName = row.get(0);
-        let display_name: String = row.get(1);
-        let description: String = row.get(2);
-        let source_operator: String = row.get(3);
-        let symbology: Option<Symbology> = row.get(4);
-
-        let operator = source_operator_from_dataset(&source_operator, &name.into())?;
-
-        Ok(Layer {
-            id: ProviderLayerId {
-                provider_id: DATASET_DB_LAYER_PROVIDER_ID,
-                layer_id: id.clone(),
-            },
-            name: display_name,
-            description,
-            workflow: Workflow { operator },
-            symbology,
-            properties: vec![],
-            metadata: HashMap::new(),
-        })
     }
 }
 
