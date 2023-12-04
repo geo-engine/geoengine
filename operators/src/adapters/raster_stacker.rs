@@ -25,7 +25,7 @@ pub struct RasterStackerAdapter<S> {
 
 pub struct StreamBundle<S> {
     pub stream: S,
-    pub bands: u32,
+    pub num_bands: u32,
 }
 
 impl<S> From<(S, u32)> for StreamBundle<S> {
@@ -33,7 +33,7 @@ impl<S> From<(S, u32)> for StreamBundle<S> {
         debug_assert!(value.1 > 0, "At least one band required");
         Self {
             stream: value.0,
-            bands: value.1,
+            num_bands: value.1,
         }
     }
 }
@@ -43,7 +43,7 @@ impl<S> RasterStackerAdapter<S> {
         ensure!(!streams.is_empty(), AtLeastOneStreamRequired);
 
         Ok(RasterStackerAdapter {
-            batch_size_per_stream: streams.iter().map(|s| s.bands).collect(),
+            batch_size_per_stream: streams.iter().map(|s| s.num_bands).collect(),
             streams: streams.into_iter().map(|s| s.stream).collect(),
             current_stream: 0,
             current_stream_item: 0,

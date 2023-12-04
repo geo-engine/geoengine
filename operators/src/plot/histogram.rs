@@ -226,7 +226,7 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterO
 
         let processor = HistogramRasterQueryProcessor {
             input: self.source.query_processor()?,
-            band: band_idx as u32,
+            band_idx: band_idx as u32,
             measurement: band.measurement.clone(),
             metadata: self.metadata,
             interactive: self.interactive,
@@ -274,7 +274,7 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
 /// A query processor that calculates the Histogram about its raster inputs.
 pub struct HistogramRasterQueryProcessor {
     input: TypedRasterQueryProcessor,
-    band: u32,
+    band_idx: u32,
     measurement: Measurement,
     metadata: HistogramMetadataOptions,
     interactive: bool,
@@ -374,7 +374,7 @@ impl HistogramRasterQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            process_metadata(processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::new_single(self.band)), ctx).await?, self.metadata).await
+            process_metadata(processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::new_single(self.band_idx)), ctx).await?, self.metadata).await
         })
     }
 
@@ -394,7 +394,7 @@ impl HistogramRasterQueryProcessor {
         .map_err(Error::from)?;
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            let mut query = processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::new_single(self.band)), ctx).await?;
+            let mut query = processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::new_single(self.band_idx)), ctx).await?;
 
             while let Some(tile) = query.next().await {
 
