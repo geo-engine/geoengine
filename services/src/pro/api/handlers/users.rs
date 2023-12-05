@@ -1672,7 +1672,7 @@ mod tests {
 
         let raster_colorizer = RasterColorizer::SingleBand {
             band: 0,
-            colorizer: colorizer.into(),
+            band_colorizer: colorizer.into(),
         };
 
         let params = &[

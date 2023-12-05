@@ -1551,7 +1551,11 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum RasterColorizer {
-    SingleBand { band: u32, colorizer: Colorizer },
+    #[serde(rename_all = "camelCase")]
+    SingleBand {
+        band: u32,
+        band_colorizer: Colorizer,
+    },
     // TODO: multiband colorizer, e.g.
     // MultiBand {
     //     red: ...,
@@ -1573,10 +1577,10 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
         match v {
             geoengine_datatypes::operations::image::RasterColorizer::SingleBand {
                 band,
-                colorizer,
+                band_colorizer: colorizer,
             } => Self::SingleBand {
                 band,
-                colorizer: colorizer.into(),
+                band_colorizer: colorizer.into(),
             },
         }
     }

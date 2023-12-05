@@ -2001,10 +2001,10 @@ mod tests {
                 "symbology": {
                     "type": "raster",
                     "opacity": 1,
-                    "colorizer": {
+                    "rasterColorizer": {
                         "type": "singleBand",
                         "band": 0,
-                        "colorizer": {
+                        "bandColorizer": {
                             "type": "linearGradient",
                             "breakpoints": [{
                                 "value": 1,
@@ -2037,10 +2037,10 @@ mod tests {
                 "symbology": {
                     "type": "raster",
                     "opacity": 1,
-                    "colorizer": {
+                    "rasterColorizer": {
                         "type": "singleBand",
                         "band": 0,
-                        "colorizer": {
+                        "bandColorizer": {
                             "type": "linearGradient",
                             "breakpoints": [{
                                 "value": 1,
@@ -2115,10 +2115,10 @@ mod tests {
                 "symbology": {
                     "type": "raster",
                     "opacity": 1,
-                    "colorizer": {
+                    "rasterColorizer": {
                         "type": "singleBand",
                         "band": 0,
-                        "colorizer": {
+                        "bandColorizer": {
                             "type": "linearGradient",
                             "breakpoints": [{
                                 "value": 1,
@@ -2193,10 +2193,10 @@ mod tests {
                 "symbology": {
                     "type": "raster",
                     "opacity": 1,
-                    "colorizer": {
+                    "rasterColorizer": {
                         "type": "singleBand",
                         "band": 0,
-                        "colorizer": {
+                        "bandColorizer": {
                             "type": "linearGradient",
                             "breakpoints": [{
                                 "value": 1,
@@ -2569,9 +2569,9 @@ mod tests {
                 }),
                 Symbology::Raster(RasterSymbology {
                     opacity: 1.0,
-                    colorizer: RasterColorizer::SingleBand {
+                    raster_colorizer: RasterColorizer::SingleBand {
                         band: 0,
-                        colorizer: Colorizer::LinearGradient {
+                        band_colorizer: Colorizer::LinearGradient {
                             breakpoints: vec![
                                 Breakpoint {
                                     value: NotNan::<f64>::new(-10.0).unwrap(),

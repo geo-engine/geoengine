@@ -1243,7 +1243,10 @@ pub fn layer_from_netcdf_overview(
         },
         symbology: Some(Symbology::Raster(RasterSymbology {
             opacity: 1.0,
-            colorizer: RasterColorizer::SingleBand { band: 0, colorizer },
+            raster_colorizer: RasterColorizer::SingleBand {
+                band: 0,
+                band_colorizer: colorizer,
+            },
         })),
         properties: [(
             "author".to_string(),

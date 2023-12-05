@@ -201,7 +201,7 @@ impl TryFrom<BreakpointDbType> for Breakpoint {
 pub struct RasterColorizerDbType {
     r#type: RasterColorizerDbTypeType,
     band: i64,
-    colorizer: ColorizerDbType,
+    band_colorizer: ColorizerDbType,
 }
 
 #[derive(Debug, PartialEq, ToSql, FromSql)]
@@ -215,10 +215,13 @@ pub enum RasterColorizerDbTypeType {
 impl From<&RasterColorizer> for RasterColorizerDbType {
     fn from(value: &RasterColorizer) -> Self {
         match value {
-            RasterColorizer::SingleBand { band, colorizer } => Self {
+            RasterColorizer::SingleBand {
+                band,
+                band_colorizer,
+            } => Self {
                 r#type: RasterColorizerDbTypeType::SingleBand,
                 band: i64::from(*band),
-                colorizer: colorizer.into(),
+                band_colorizer: band_colorizer.into(),
             },
         }
     }
@@ -232,10 +235,10 @@ impl TryFrom<RasterColorizerDbType> for RasterColorizer {
             RasterColorizerDbType {
                 r#type: RasterColorizerDbTypeType::SingleBand,
                 band,
-                colorizer,
+                band_colorizer: colorizer,
             } => Ok(Self::SingleBand {
                 band: u32::try_from(band).map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,
-                colorizer: colorizer.try_into()?,
+                band_colorizer: colorizer.try_into()?,
             }),
         }
     }

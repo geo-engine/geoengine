@@ -3079,10 +3079,10 @@ mod tests {
                 "symbology": {
                     "type": "raster",
                     "opacity": 1,
-                    "colorizer": {
+                    "rasterColorizer": {
                         "type": "singleBand",
                         "band": 0,
-                        "colorizer": {
+                        "bandColorizer": {
                             "type": "linearGradient",
                             "breakpoints": [{
                                 "value": 1,
@@ -3115,10 +3115,10 @@ mod tests {
                 "symbology": {
                     "type": "raster",
                     "opacity": 1,
-                    "colorizer": {
+                    "rasterColorizer": {
                         "type": "singleBand",
                         "band": 0,
-                        "colorizer": {
+                        "bandColorizer": {
                         "type": "linearGradient",
                             "breakpoints": [{
                                 "value": 1,
@@ -3193,10 +3193,10 @@ mod tests {
                 "symbology": {
                     "type": "raster",
                     "opacity": 1,
-                    "colorizer": {
+                    "rasterColorizer": {
                         "type": "singleBand",
                         "band": 0,
-                        "colorizer": {
+                        "bandColorizer": {
                             "type": "linearGradient",
                             "breakpoints": [{
                                 "value": 1,
@@ -3271,10 +3271,10 @@ mod tests {
                 "symbology": {
                     "type": "raster",
                     "opacity": 1,
-                    "colorizer": {
+                    "rasterColorizer": {
                         "type": "singleBand",
                         "band": 0,
-                        "colorizer": {
+                        "bandColorizer": {
                             "type": "linearGradient",
                             "breakpoints": [{
                                 "value": 1,

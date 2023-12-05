@@ -95,9 +95,9 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
             visibility: Default::default(),
             symbology: Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
-                colorizer: RasterColorizer::SingleBand {
+                raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
-                    colorizer: Colorizer::Rgba,
+                    band_colorizer: Colorizer::Rgba,
                 },
             }),
         })]),
@@ -206,8 +206,8 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
             source_operator: "GdalSource".to_string(),
             symbology: Some(Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
-                colorizer: RasterColorizer::SingleBand {
-                    band: 0, colorizer: Colorizer::palette(
+                raster_colorizer: RasterColorizer::SingleBand {
+                    band: 0, band_colorizer: Colorizer::palette(
                     [
                         (0.0.try_into().unwrap(), RgbaColor::new(134, 201, 227, 255)),
                         (1.0.try_into().unwrap(), RgbaColor::new(30, 129, 62, 255)),

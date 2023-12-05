@@ -6,10 +6,10 @@
     "sourceOperator": "GdalSource",
     "symbology": {
       "type": "raster",
-      "colorizer": {
+      "rasterColorizer": {
         "type": "singleBand",
         "band": 0,
-        "colorizer": {
+        "bandColorizer": {
           "type": "palette",
           "colors": {
             "0": [134, 201, 227, 255],

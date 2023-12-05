@@ -746,9 +746,9 @@ mod tests {
                 visibility: Default::default(),
                 symbology: Symbology::Raster(RasterSymbology {
                     opacity: 1.0,
-                    colorizer: RasterColorizer::SingleBand {
+                    raster_colorizer: RasterColorizer::SingleBand {
                         band: 0,
-                        colorizer: Colorizer::Rgba,
+                        band_colorizer: Colorizer::Rgba,
                     }
                 })
             })],
@@ -766,7 +766,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "Error in user input: missing field `id` at line 1 column 303",
+            "Error in user input: missing field `id` at line 1 column 313",
         )
         .await;
     }
@@ -818,9 +818,9 @@ mod tests {
             },
             symbology: Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
-                colorizer: RasterColorizer::SingleBand {
+                raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
-                    colorizer: Colorizer::Rgba,
+                    band_colorizer: Colorizer::Rgba,
                 },
             }),
         };
@@ -834,9 +834,9 @@ mod tests {
             },
             symbology: Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
-                colorizer: RasterColorizer::SingleBand {
+                raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
-                    colorizer: Colorizer::Rgba,
+                    band_colorizer: Colorizer::Rgba,
                 },
             }),
         };

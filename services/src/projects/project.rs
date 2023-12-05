@@ -257,9 +257,10 @@ pub enum Symbology {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[serde(rename_all = "camelCase")]
 pub struct RasterSymbology {
     pub opacity: f64,
-    pub colorizer: RasterColorizer,
+    pub raster_colorizer: RasterColorizer,
 }
 
 impl Eq for RasterSymbology {}
@@ -678,10 +679,10 @@ mod tests {
                     "symbology": {
                         "type": "raster",
                         "opacity": 1.0,
-                        "colorizer": {
+                        "rasterColorizer": {
                             "type": "singleBand",
                             "band": 0,
-                            "colorizer": {
+                            "bandColorizer": {
                                 "type": "rgba"
                             }
                         }
@@ -699,9 +700,9 @@ mod tests {
                 },
                 symbology: Symbology::Raster(RasterSymbology {
                     opacity: 1.0,
-                    colorizer: RasterColorizer::SingleBand {
+                    raster_colorizer: RasterColorizer::SingleBand {
                         band: 0,
-                        colorizer: Colorizer::Rgba,
+                        band_colorizer: Colorizer::Rgba,
                     },
                 })
             })
@@ -723,9 +724,9 @@ mod tests {
                     visibility: Default::default(),
                     symbology: Symbology::Raster(RasterSymbology {
                         opacity: 1.0,
-                        colorizer: RasterColorizer::SingleBand {
+                        raster_colorizer: RasterColorizer::SingleBand {
                             band: 0,
-                            colorizer: Colorizer::Rgba,
+                            band_colorizer: Colorizer::Rgba,
                         },
                     }),
                 }),
@@ -735,9 +736,9 @@ mod tests {
                     visibility: Default::default(),
                     symbology: Symbology::Raster(RasterSymbology {
                         opacity: 1.0,
-                        colorizer: RasterColorizer::SingleBand {
+                        raster_colorizer: RasterColorizer::SingleBand {
                             band: 0,
-                            colorizer: Colorizer::Rgba,
+                            band_colorizer: Colorizer::Rgba,
                         },
                     }),
                 }),

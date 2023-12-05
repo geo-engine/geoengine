@@ -208,8 +208,8 @@ impl SentinelS2L2aCogsDataProvider {
                         },
                         symbology: Some(Symbology::Raster(RasterSymbology {
                             opacity: 1.0,
-                            colorizer: RasterColorizer::SingleBand {
-                                band: 0, colorizer:
+                            raster_colorizer: RasterColorizer::SingleBand {
+                                band: 0, band_colorizer:
                                 geoengine_datatypes::operations::image::Colorizer::linear_gradient(
                                     vec![
                                         (0.0, RgbaColor::white())

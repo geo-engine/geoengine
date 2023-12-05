@@ -37,13 +37,12 @@ impl Migration for Migration0001RasterStacks {
                 "type" "RasterColorizerType",
                 -- single band colorizer
                 band bigint,
-                colorizer "Colorizer"
+                band_colorizer "Colorizer"
                 -- TODO: multi band colorizer
             );
 
 
-            ALTER TYPE "RasterSymbology" RENAME ATTRIBUTE colorizer TO colorizer_old;
-            ALTER TYPE "RasterSymbology" ADD ATTRIBUTE colorizer "RasterColorizer";
+            ALTER TYPE "RasterSymbology" ADD ATTRIBUTE raster_colorizer "RasterColorizer";
         "#,
         )
         .await?;
@@ -108,14 +107,14 @@ impl Migration for Migration0001RasterStacks {
             tx.batch_execute(&format!(
                 r#"
             WITH raster_layers AS (
-                SELECT {id_column}, (symbology).raster.colorizer_old colorizer_old
+                SELECT {id_column}, (symbology).raster.colorizer colorizer
                 FROM {layer_table}
-                WHERE symbology IS NOT NULL AND (symbology).raster.colorizer_old IS NOT NULL
+                WHERE symbology IS NOT NULL AND (symbology).raster.colorizer IS NOT NULL
             )
             UPDATE {layer_table}
             SET
-                symbology.raster.colorizer.band = 0,
-                symbology.raster.colorizer.colorizer = colorizer_old
+                symbology.raster.raster_colorizer.band = 0,
+                symbology.raster.raster_colorizer.band_colorizer = colorizer
             FROM raster_layers
             WHERE {layer_table}.{id_column} = raster_layers.{id_column};"#,
             ))
@@ -127,7 +126,7 @@ impl Migration for Migration0001RasterStacks {
             r#"
         ALTER TYPE "RasterResultDescriptor" DROP ATTRIBUTE measurement;
 
-        ALTER TYPE "RasterSymbology" DROP ATTRIBUTE colorizer_old;
+        ALTER TYPE "RasterSymbology" DROP ATTRIBUTE colorizer;
         "#,
         )
         .await?;
