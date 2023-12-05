@@ -28,6 +28,7 @@ impl Migration for Migration0001RasterStacks {
 
             ALTER TYPE "RasterResultDescriptor" ADD ATTRIBUTE bands "RasterBandDescriptor"[];
 
+
             CREATE TYPE "RasterColorizerType" AS ENUM (
                 'SingleBand'
                 -- TODO: 'MultiBand'
@@ -40,7 +41,6 @@ impl Migration for Migration0001RasterStacks {
                 band_colorizer "Colorizer"
                 -- TODO: multi band colorizer
             );
-
 
             ALTER TYPE "RasterSymbology" ADD ATTRIBUTE raster_colorizer "RasterColorizer";
         "#,
@@ -109,12 +109,15 @@ impl Migration for Migration0001RasterStacks {
             WITH raster_layers AS (
                 SELECT {id_column}, (symbology).raster.colorizer colorizer
                 FROM {layer_table}
-                WHERE symbology IS NOT NULL AND (symbology).raster.colorizer IS NOT NULL
+                WHERE (symbology).raster.colorizer."type" IS NOT NULL
             )
             UPDATE {layer_table}
             SET
-                symbology.raster.raster_colorizer.band = 0,
-                symbology.raster.raster_colorizer.band_colorizer = colorizer
+                symbology.raster.raster_colorizer = (
+                    'SingleBand'::"RasterColorizerType",
+                    0, 
+                    colorizer
+                )::"RasterColorizer"
             FROM raster_layers
             WHERE {layer_table}.{id_column} = raster_layers.{id_column};"#,
             ))
@@ -156,7 +159,7 @@ mod tests {
     use super::*;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_migrates_result_descriptors() -> Result<()> {
+    async fn it_migrates_result_descriptors_and_symbologies() -> Result<()> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
         let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
 
