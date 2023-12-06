@@ -2,13 +2,14 @@ use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::api::model::responses::IdResponse;
 use crate::contexts::ApplicationContext;
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
+use crate::error::Error::NotImplemented;
 use crate::error::{Error, Result};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
     ProviderLayerCollectionId,
 };
 use crate::layers::listing::{
-    DatasetLayerCollectionProvider, LayerCollectionId, LayerCollectionProvider,
+    DatasetLayerCollectionProvider, LayerCollectionId, LayerCollectionProvider, SearchParameters,
 };
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::config::get_config_element;
@@ -41,6 +42,15 @@ where
             .service(
                 web::scope("/collections")
                     .route("", web::get().to(list_root_collections_handler::<C>))
+                    .route(
+                        r#"{provider}/capabilities"#,
+                        web::get().to(search_capabilities_handler::<C>),
+                    )
+                    .route(r#"{provider}/search"#, web::get().to(search_handler::<C>))
+                    .route(
+                        r#"{provider}/autocomplete"#,
+                        web::get().to(autocomplete_handler::<C>),
+                    )
                     .route(
                         r#"/{provider}/{collection}"#,
                         web::get().to(list_collection_handler::<C>),
@@ -312,6 +322,116 @@ async fn list_collection_handler<C: ApplicationContext>(
         .await?;
 
     Ok(web::Json(collection))
+}
+
+async fn search_capabilities_handler<C: ApplicationContext>(
+    app_ctx: web::Data<C>,
+    path: web::Path<DataProviderId>,
+    session: C::Session,
+) -> Result<impl Responder> {
+    let provider = path.into_inner();
+
+    if provider == ROOT_PROVIDER_ID {
+        return Err(NotImplemented {
+            message: "Global search is not implemented".to_string(),
+        });
+    }
+
+    let db = app_ctx.session_context(session).db();
+
+    if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
+        return Err(NotImplemented {
+            message: "Dataset search is not implemented".to_string(),
+        });
+    }
+
+    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
+        let caps = db.get_search_capabilities().await?;
+
+        return Ok(web::Json(caps));
+    }
+
+    let caps = db
+        .load_layer_provider(provider.into())
+        .await?
+        .get_search_capabilities()
+        .await?;
+
+    Ok(web::Json(caps))
+}
+
+async fn search_handler<C: ApplicationContext>(
+    app_ctx: web::Data<C>,
+    path: web::Path<DataProviderId>,
+    options: ValidatedQuery<SearchParameters>,
+    session: C::Session,
+) -> Result<impl Responder> {
+    let (provider) = path.into_inner();
+
+    if provider == ROOT_PROVIDER_ID {
+        return Err(NotImplemented {
+            message: "Global search is not implemented".to_string(),
+        });
+    }
+
+    let db = app_ctx.session_context(session).db();
+
+    if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
+        return Err(NotImplemented {
+            message: "Dataset search is not implemented".to_string(),
+        });
+    }
+
+    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
+        let collection = db.search(options.into_inner()).await?;
+
+        return Ok(web::Json(collection));
+    }
+
+    let collection = db
+        .load_layer_provider(provider.into())
+        .await?
+        .search(options.into_inner())
+        .await?;
+
+    Ok(web::Json(collection))
+}
+
+async fn autocomplete_handler<C: ApplicationContext>(
+    app_ctx: web::Data<C>,
+    path: web::Path<DataProviderId>,
+    options: ValidatedQuery<SearchParameters>,
+    session: C::Session,
+) -> Result<impl Responder> {
+    let provider = path.into_inner();
+
+    if provider == ROOT_PROVIDER_ID {
+        return Err(NotImplemented {
+            message: "Global search is not implemented".to_string(),
+        });
+    }
+
+    let db = app_ctx.session_context(session).db();
+
+    if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
+        return Err(NotImplemented {
+            message: "Dataset search is not implemented".to_string(),
+        });
+    }
+
+    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
+        let suggestions = db.autocomplete_search(options.into_inner()).await?;
+
+        return Ok(web::Json(suggestions));
+    }
+
+    let suggestions = db
+        .load_layer_provider(provider.into())
+        .await?
+        .autocomplete_search(options.into_inner())
+        .await?;
+
+    Ok(web::Json(suggestions))
 }
 
 /// Retrieves the layer of the given provider

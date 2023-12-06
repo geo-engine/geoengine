@@ -2,6 +2,7 @@ use super::external::TypedDataProviderDefinition;
 use crate::contexts::PostgresDb;
 use crate::error;
 use crate::layers::layer::Property;
+use crate::layers::listing::{SearchCapabilities, SearchCapability, SearchParameters, SearchType};
 use crate::workflows::workflow::WorkflowId;
 use crate::{
     error::Result,
@@ -615,6 +616,235 @@ where
             entry_label: None,
             properties,
         })
+    }
+
+    async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
+        Ok(SearchCapabilities {
+            caps: vec![
+                SearchCapability {
+                    search_type: SearchType::FULLTEXT,
+                    autocomplete: true,
+                    filters: None,
+                },
+                SearchCapability {
+                    search_type: SearchType::PREFIX,
+                    autocomplete: true,
+                    filters: None,
+                },
+            ],
+        })
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn search(&self, search: SearchParameters) -> Result<LayerCollection> {
+        let collection = Uuid::from_str(&search.collection_id.0).map_err(|_| {
+            crate::error::Error::IdStringMustBeUuid {
+                found: search.collection_id.0.clone(),
+            }
+        })?;
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+        SELECT DISTINCT name, description, properties
+        FROM layer_collections
+        WHERE id = $1;",
+            )
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&collection]).await?;
+
+        let name: String = row.get(0);
+        let description: String = row.get(1);
+        let properties: Vec<Property> = row.get(2);
+
+        let pattern = match search.search_type {
+            SearchType::FULLTEXT => {
+                format!("%{}%", search.search_string)
+            }
+            SearchType::PREFIX => {
+                format!("{}%", search.search_string)
+            }
+        };
+
+        let stmt = conn
+            .prepare(
+                "
+        WITH RECURSIVE parents AS (
+            SELECT DISTINCT id
+            FROM (
+                SELECT id FROM layer_collections JOIN collection_children cc ON (id = cc.child) WHERE cc.parent = $1 OR cc.child = $1
+        ) u UNION ALL (
+            SELECT DISTINCT child FROM collection_children JOIN parents ON (parent = id)
+        ))
+        SELECT DISTINCT id, name, description, properties, is_layer
+        FROM (
+            SELECT 
+                concat(id, '') AS id, 
+                name, 
+                description, 
+                properties, 
+                FALSE AS is_layer
+            FROM layer_collections
+                JOIN (SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)) cc ON (id = cc.child)
+            WHERE name LIKE $4
+        ) u UNION (
+            SELECT 
+                concat(id, '') AS id, 
+                name, 
+                description, 
+                properties, 
+                TRUE AS is_layer
+            FROM layers uc
+                JOIN (SELECT DISTINCT layer FROM collection_layers JOIN parents ON (collection = id)) cl ON (id = cl.layer)
+            WHERE name LIKE $4
+        )
+        ORDER BY is_layer ASC, name ASC
+        LIMIT $2 
+        OFFSET $3;           
+        ",
+            )
+            .await?;
+
+        let rows = conn
+            .query(
+                &stmt,
+                &[
+                    &collection,
+                    &i64::from(search.limit),
+                    &i64::from(search.offset),
+                    &pattern,
+                ],
+            )
+            .await?;
+
+        let items = rows
+            .into_iter()
+            .map(|row| {
+                let is_layer: bool = row.get(4);
+
+                if is_layer {
+                    Ok(CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: LayerId(row.get(0)),
+                        },
+                        name: row.get(1),
+                        description: row.get(2),
+                        properties: row.get(3),
+                    }))
+                } else {
+                    Ok(CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(row.get(0)),
+                        },
+                        name: row.get(1),
+                        description: row.get(2),
+                        properties: row.get(3),
+                    }))
+                }
+            })
+            .collect::<Result<Vec<CollectionItem>>>()?;
+
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: INTERNAL_PROVIDER_ID,
+                collection_id: search.collection_id.clone(),
+            },
+            name,
+            description,
+            items,
+            entry_label: None,
+            properties,
+        })
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn autocomplete_search(&self, search: SearchParameters) -> Result<Vec<String>> {
+        let collection = Uuid::from_str(&search.collection_id.0).map_err(|_| {
+            crate::error::Error::IdStringMustBeUuid {
+                found: search.collection_id.0.clone(),
+            }
+        })?;
+
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+        SELECT DISTINCT name, description, properties
+        FROM layer_collections
+        WHERE id = $1;",
+            )
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&collection]).await?;
+
+        let name: String = row.get(0);
+        let description: String = row.get(1);
+        let properties: Vec<Property> = row.get(2);
+
+        let pattern = match search.search_type {
+            SearchType::FULLTEXT => {
+                format!("%{}%", search.search_string)
+            }
+            SearchType::PREFIX => {
+                format!("{}%", search.search_string)
+            }
+        };
+
+        let stmt = conn
+            .prepare(
+                "
+        WITH RECURSIVE parents AS (
+            SELECT DISTINCT id
+            FROM (
+                SELECT id FROM layer_collections JOIN collection_children cc ON (id = cc.child) WHERE cc.parent = $1 OR cc.child = $1
+        ) u UNION ALL (
+            SELECT DISTINCT child FROM collection_children JOIN parents ON (parent = id)
+        ))
+        SELECT DISTINCT name
+        FROM (
+            SELECT 
+                name
+            FROM layer_collections
+                JOIN (SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)) cc ON (id = cc.child)
+            WHERE name LIKE $4
+        ) u UNION (
+            SELECT 
+                name
+            FROM layers uc
+                JOIN (SELECT DISTINCT layer FROM collection_layers JOIN parents ON (collection = id)) cl ON (id = cl.layer)
+            WHERE name LIKE $4
+        )
+        ORDER BY name ASC
+        LIMIT $2 
+        OFFSET $3;            
+        ",
+            )
+            .await?;
+
+        let rows = conn
+            .query(
+                &stmt,
+                &[
+                    &collection,
+                    &i64::from(search.limit),
+                    &i64::from(search.offset),
+                    &pattern,
+                ],
+            )
+            .await?;
+
+        let items = rows
+            .into_iter()
+            .map(|row| Ok(row.get::<usize, &str>(0).to_string()))
+            .collect::<Result<Vec<String>>>()?;
+
+        Ok(items)
     }
 
     async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {

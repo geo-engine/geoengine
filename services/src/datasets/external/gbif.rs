@@ -5,12 +5,16 @@ use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
     LayerListing, ProviderLayerCollectionId, ProviderLayerId,
 };
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::layers::listing::{
+    LayerCollectionId, LayerCollectionProvider, SearchCapabilities, SearchCapability,
+    SearchParameters, SearchType,
+};
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
+use fallible_iterator::FallibleIterator;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
@@ -197,6 +201,129 @@ impl GbifDataProvider {
             .collect::<Vec<_>>())
     }
 
+    async fn get_datasets_search_items(
+        &self,
+        limit: &u32,
+        offset: &u32,
+        path: &str,
+        search_string: &str,
+    ) -> Result<Vec<CollectionItem>> {
+        let taxonrank = path
+            .split_once('/')
+            .map_or_else(String::new, |(taxonrank, _)| taxonrank.to_string());
+        ensure!(
+            ["family", "genus", "species"].contains(&taxonrank.as_str()),
+            crate::error::InvalidPath
+        );
+        let path = path.split_once('/').map_or_else(|| "", |(_, path)| path);
+        let filters = GbifDataProvider::get_filters(path);
+        let conn = self.pool.get().await?;
+        let query = &format!(
+            r#"
+            SELECT {taxonrank}, COUNT(*)
+            FROM {schema}.occurrences
+            WHERE {taxonrank} IN
+                (
+                    SELECT DISTINCT canonicalname
+                    FROM {schema}.species
+                    WHERE taxonrank = $1{filter} AND canonicalname LIKE $4
+                )
+            GROUP BY {taxonrank}
+            ORDER BY {taxonrank} 
+            LIMIT $2
+            OFFSET $3;
+            "#,
+            schema = self.db_config.schema,
+            filter = filters
+                .iter()
+                .enumerate()
+                .map(|(index, (column, _))| format!(
+                    r#" AND "{column}" = ${index}"#,
+                    index = index + 4
+                ))
+                .collect::<String>()
+        );
+
+        let stmt = conn.prepare(query).await?;
+
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![&taxonrank, limit, offset, &search_string];
+        filters.iter().for_each(|(_, value)| params.push(value));
+        let rows = conn.query(&stmt, params.as_slice()).await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                let canonicalname = row.get::<usize, String>(0);
+                let num_points = row.get::<usize, i64>(1);
+
+                CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        layer_id: LayerId(taxonrank.clone() + "/" + canonicalname.as_str()),
+                    },
+                    name: canonicalname.clone(),
+                    description: format!("{num_points} occurrences"),
+                    properties: vec![],
+                })
+            })
+            .collect::<Vec<_>>())
+    }
+
+    async fn get_datasets_autocomplete_items(
+        &self,
+        limit: &u32,
+        offset: &u32,
+        path: &str,
+        search_string: &str,
+    ) -> Result<Vec<String>> {
+        let taxonrank = path
+            .split_once('/')
+            .map_or_else(String::new, |(taxonrank, _)| taxonrank.to_string());
+        ensure!(
+            ["family", "genus", "species"].contains(&taxonrank.as_str()),
+            crate::error::InvalidPath
+        );
+        let path = path.split_once('/').map_or_else(|| "", |(_, path)| path);
+        let filters = GbifDataProvider::get_filters(path);
+        let conn = self.pool.get().await?;
+        let query = &format!(
+            r#"
+            SELECT {taxonrank}
+            FROM {schema}.occurrences
+            WHERE {taxonrank} IN
+                (
+                    SELECT DISTINCT canonicalname
+                    FROM {schema}.species
+                    WHERE taxonrank = $1{filter} AND canonicalname LIKE $4
+                )
+            GROUP BY {taxonrank}
+            ORDER BY {taxonrank} 
+            LIMIT $2
+            OFFSET $3;
+            "#,
+            schema = self.db_config.schema,
+            filter = filters
+                .iter()
+                .enumerate()
+                .map(|(index, (column, _))| format!(
+                    r#" AND "{column}" = ${index}"#,
+                    index = index + 4
+                ))
+                .collect::<String>()
+        );
+
+        let stmt = conn.prepare(query).await?;
+
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![&taxonrank, limit, offset, &search_string];
+        filters.iter().for_each(|(_, value)| params.push(value));
+        let rows = conn.query(&stmt, params.as_slice()).await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| row.get::<usize, String>(0))
+            .collect::<Vec<_>>())
+    }
+
     async fn get_filter_items(
         &self,
         options: &LayerCollectionListOptions,
@@ -252,6 +379,82 @@ impl GbifDataProvider {
                     properties: Default::default(),
                 })
             })
+            .collect::<Vec<_>>();
+        Ok(items)
+    }
+
+    async fn get_filter_search_items(
+        &self,
+        limit: &u32,
+        offset: &u32,
+        path: &str,
+        search_string: &str,
+    ) -> Result<Vec<CollectionItem>> {
+        let items = self
+            .get_filter_autocomplete_items(limit, offset, path, search_string)
+            .await?
+            .into_iter()
+            .map(|name| {
+                let new_path = GbifDataProvider::extend_path((*path).to_string(), &name);
+                let new_id = "select/".to_string() + &new_path;
+
+                CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: LayerCollectionId(new_id),
+                    },
+                    name,
+                    description: String::new(),
+                    properties: Default::default(),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        Ok(items)
+    }
+
+    async fn get_filter_autocomplete_items(
+        &self,
+        limit: &u32,
+        offset: &u32,
+        path: &str,
+        search_string: &str,
+    ) -> Result<Vec<String>> {
+        let column = GbifDataProvider::level_name(path);
+        if !Self::LEVELS.contains(&column.as_str()) {
+            return Err(Error::InvalidLayerCollectionId);
+        }
+        let filters = GbifDataProvider::get_filters(path);
+        let conn = self.pool.get().await?;
+        let query = &format!(
+            r#"
+            SELECT DISTINCT "{column}"
+            FROM {schema}.species
+            WHERE "{column}" IS NOT NULL{filter} AND "{column}" LIKE $3
+            ORDER BY "{column}"
+            LIMIT $1
+            OFFSET $2
+            "#,
+            schema = self.db_config.schema,
+            column = column,
+            filter = filters
+                .iter()
+                .enumerate()
+                .map(|(index, (column, _))| format!(
+                    r#" AND "{column}" = ${index}"#,
+                    index = index + 3
+                ))
+                .collect::<String>()
+        );
+        let stmt = conn.prepare(query).await?;
+
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset, &search_string];
+        filters.iter().for_each(|(_, value)| params.push(value));
+        let rows = conn.query(&stmt, params.as_slice()).await?;
+
+        let items = rows
+            .into_iter()
+            .map(|row| row.get::<usize, String>(0))
             .collect::<Vec<_>>();
         Ok(items)
     }
@@ -383,6 +586,106 @@ impl LayerCollectionProvider for GbifDataProvider {
             properties: vec![],
             metadata: Default::default(),
         })
+    }
+
+    async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
+        Ok(SearchCapabilities {
+            caps: vec![
+                SearchCapability {
+                    search_type: SearchType::FULLTEXT,
+                    autocomplete: true, // TODO have to see whether its too slow
+                    filters: None,
+                },
+                SearchCapability {
+                    search_type: SearchType::PREFIX,
+                    autocomplete: true, // TODO this should work fine with index
+                    filters: None, // TODO this is not needed in the current design since any filters applied are already part of the GBIF provider collection ID, so should we implement it now at all?
+                },
+            ],
+        })
+    }
+
+    async fn search(&self, search: SearchParameters) -> Result<LayerCollection> {
+        let collection = search.collection_id;
+        let selector = collection.0.split_once('/').map_or_else(
+            || collection.clone().0,
+            |(selector, _)| selector.to_string(),
+        );
+        let path = collection
+            .0
+            .split_once('/')
+            .map_or_else(|| "", |(_, path)| path);
+
+        let search_string = match search.search_type {
+            SearchType::FULLTEXT => format!("%{}%", search.search_string),
+            SearchType::PREFIX => format!("{}%", search.search_string),
+        };
+
+        let items = match selector.as_str() {
+            "datasets" => {
+                self.get_datasets_search_items(&search.limit, &search.offset, path, &search_string)
+                    .await?
+            }
+            "filter" => {
+                self.get_filter_search_items(&search.limit, &search.offset, path, &search_string)
+                    .await?
+            }
+            "select" => Self::get_select_items(path),
+            _ => vec![],
+        };
+
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: GBIF_PROVIDER_ID,
+                collection_id: collection.clone(),
+            },
+            name: "GBIF".to_owned(),
+            description: "GBIF occurrence datasets".to_owned(),
+            items,
+            entry_label: None,
+            properties: vec![],
+        })
+    }
+
+    async fn autocomplete_search(&self, search: SearchParameters) -> Result<Vec<String>> {
+        let collection = search.collection_id;
+        let selector = collection.0.split_once('/').map_or_else(
+            || collection.clone().0,
+            |(selector, _)| selector.to_string(),
+        );
+        let path = collection
+            .0
+            .split_once('/')
+            .map_or_else(|| "", |(_, path)| path);
+
+        let search_string = match search.search_type {
+            SearchType::FULLTEXT => format!("%{}%", search.search_string),
+            SearchType::PREFIX => format!("{}%", search.search_string),
+        };
+
+        let items = match selector.as_str() {
+            "datasets" => {
+                self.get_datasets_autocomplete_items(
+                    &search.limit,
+                    &search.offset,
+                    path,
+                    &search_string,
+                )
+                .await?
+            }
+            "filter" => {
+                self.get_filter_autocomplete_items(
+                    &search.limit,
+                    &search.offset,
+                    path,
+                    &search_string,
+                )
+                .await?
+            }
+            _ => vec![],
+        };
+
+        Ok(items)
     }
 }
 
