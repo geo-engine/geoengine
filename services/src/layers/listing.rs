@@ -63,14 +63,14 @@ pub trait LayerCollectionProvider {
     /// Perform a search
     async fn search(&self, search: SearchParameters) -> Result<LayerCollection> {
         Err(NotImplemented {
-            message: "Search is not implemented".to_string(),
+            message: "Layer search is not supported".to_string(),
         })
     }
 
     /// Perform search term autocomplete
     async fn autocomplete_search(&self, search: SearchParameters) -> Result<Vec<String>> {
         Err(NotImplemented {
-            message: "Autocomplete is not implemented".to_string(),
+            message: "Layer autocomplete is not supported".to_string(),
         })
     }
 
@@ -107,14 +107,14 @@ pub trait DatasetLayerCollectionProvider {
     /// Perform a search
     async fn search(&self, search: SearchParameters) -> Result<LayerCollection> {
         Err(NotImplemented {
-            message: "Search is not implemented".to_string(),
+            message: "Dataset search is not supported".to_string(),
         })
     }
 
     /// Perform search term autocomplete
     async fn autocomplete_search(&self, search: SearchParameters) -> Result<Vec<String>> {
         Err(NotImplemented {
-            message: "Autocomplete is not implemented".to_string(),
+            message: "Dataset autocomplete is not supported".to_string(),
         })
     }
 }
