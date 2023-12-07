@@ -6,7 +6,7 @@ mod raster_time_substream;
 mod sparse_tiles_fill_adapter;
 
 pub use feature_collection_merger::FeatureCollectionChunkMerger;
-pub use raster_stacker::{RasterStackerAdapter, StreamBundle};
+pub use raster_stacker::RasterStackerAdapter;
 pub use raster_subquery::{
     fold_by_coordinate_lookup_future, FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter,
     SubQueryTileAggregator, TileReprojectionSubQuery,

@@ -1,4 +1,4 @@
-use crate::adapters::{RasterStackerAdapter, StreamBundle};
+use crate::adapters::RasterStackerAdapter;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptors,
@@ -267,15 +267,16 @@ where
             .into_iter()
             .collect::<Result<Vec<_>>>()?;
 
-        let stream_bundles = source_streams
-            .into_iter()
-            .zip(selected_bands_per_source)
-            .map(Into::into)
-            .collect::<Vec<StreamBundle<_>>>();
+        // let stream_bundles = source_streams
+        //     .into_iter()
+        //     .zip(selected_bands_per_source)
+        //     .map(Into::into)
+        //     .collect::<Vec<QueryableBundle<_>>>();
 
-        let output = RasterStackerAdapter::new(stream_bundles)?;
+        // let output = RasterStackerAdapter::new(stream_bundles)?;
 
-        Ok(Box::pin(output))
+        // Ok(Box::pin(output))
+        todo!()
     }
 }
 
