@@ -88,6 +88,8 @@ impl GbifDataProvider {
         "canonicalname",
     ];
 
+    const LISTABLE_RANKS: [&'static str; 3] = ["family", "genus", "species"];
+
     async fn new(db_config: DatabaseConnectionConfig, cache_ttl: CacheTtlSeconds) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -142,7 +144,7 @@ impl GbifDataProvider {
             .split_once('/')
             .map_or_else(String::new, |(taxonrank, _)| taxonrank.to_string());
         ensure!(
-            ["family", "genus", "species"].contains(&taxonrank.as_str()),
+            Self::LISTABLE_RANKS.contains(&taxonrank.as_str()),
             crate::error::InvalidPath
         );
         let path = path.split_once('/').map_or_else(|| "", |(_, path)| path);
@@ -212,7 +214,7 @@ impl GbifDataProvider {
             .split_once('/')
             .map_or_else(String::new, |(taxonrank, _)| taxonrank.to_string());
         ensure!(
-            ["family", "genus", "species"].contains(&taxonrank.as_str()),
+            Self::LISTABLE_RANKS.contains(&taxonrank.as_str()),
             crate::error::InvalidPath
         );
         let path = path.split_once('/').map_or_else(|| "", |(_, path)| path);
@@ -280,7 +282,7 @@ impl GbifDataProvider {
             .split_once('/')
             .map_or_else(String::new, |(taxonrank, _)| taxonrank.to_string());
         ensure!(
-            ["family", "genus", "species"].contains(&taxonrank.as_str()),
+            Self::LISTABLE_RANKS.contains(&taxonrank.as_str()),
             crate::error::InvalidPath
         );
         let path = path.split_once('/').map_or_else(|| "", |(_, path)| path);
