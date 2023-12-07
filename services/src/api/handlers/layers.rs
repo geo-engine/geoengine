@@ -366,7 +366,7 @@ async fn search_handler<C: ApplicationContext>(
     options: ValidatedQuery<SearchParameters>,
     session: C::Session,
 ) -> Result<impl Responder> {
-    let (provider) = path.into_inner();
+    let provider = path.into_inner();
 
     if provider == ROOT_PROVIDER_ID {
         return Err(NotImplemented {

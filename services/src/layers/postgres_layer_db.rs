@@ -772,21 +772,6 @@ where
 
         let conn = self.conn_pool.get().await?;
 
-        let stmt = conn
-            .prepare(
-                "
-        SELECT DISTINCT name, description, properties
-        FROM layer_collections
-        WHERE id = $1;",
-            )
-            .await?;
-
-        let row = conn.query_one(&stmt, &[&collection]).await?;
-
-        let name: String = row.get(0);
-        let description: String = row.get(1);
-        let properties: Vec<Property> = row.get(2);
-
         let pattern = match search.search_type {
             SearchType::FULLTEXT => {
                 format!("%{}%", search.search_string)

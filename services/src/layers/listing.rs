@@ -2,7 +2,6 @@ use super::layer::{Layer, LayerCollection, LayerCollectionListOptions};
 use crate::error::Error::NotImplemented;
 use crate::error::Result;
 use async_trait::async_trait;
-use fallible_iterator::FallibleIterator;
 use geoengine_datatypes::dataset::LayerId;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -30,6 +29,7 @@ pub struct SearchCapability {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum SearchType {
     FULLTEXT,
     PREFIX,
@@ -63,6 +63,7 @@ pub trait LayerCollectionProvider {
     }
 
     /// Perform a search
+    #[allow(unused_variables)]
     async fn search(&self, search: SearchParameters) -> Result<LayerCollection> {
         Err(NotImplemented {
             message: "Layer search is not supported".to_string(),
@@ -70,6 +71,7 @@ pub trait LayerCollectionProvider {
     }
 
     /// Perform search term autocomplete
+    #[allow(unused_variables)]
     async fn autocomplete_search(&self, search: SearchParameters) -> Result<Vec<String>> {
         Err(NotImplemented {
             message: "Layer autocomplete is not supported".to_string(),
@@ -107,6 +109,7 @@ pub trait DatasetLayerCollectionProvider {
     async fn load_dataset_layer(&self, id: &LayerId) -> Result<Layer>;
 
     /// Perform a search
+    #[allow(unused_variables)]
     async fn search(&self, search: SearchParameters) -> Result<LayerCollection> {
         Err(NotImplemented {
             message: "Dataset search is not supported".to_string(),
@@ -114,6 +117,7 @@ pub trait DatasetLayerCollectionProvider {
     }
 
     /// Perform search term autocomplete
+    #[allow(unused_variables)]
     async fn autocomplete_search(&self, search: SearchParameters) -> Result<Vec<String>> {
         Err(NotImplemented {
             message: "Dataset autocomplete is not supported".to_string(),
