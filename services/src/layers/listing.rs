@@ -103,4 +103,18 @@ pub trait DatasetLayerCollectionProvider {
 
     /// get the full contents of the layer with the given `id`
     async fn load_dataset_layer(&self, id: &LayerId) -> Result<Layer>;
+
+    /// Perform a search
+    async fn search(&self, search: SearchParameters) -> Result<LayerCollection> {
+        Err(NotImplemented {
+            message: "Search is not implemented".to_string(),
+        })
+    }
+
+    /// Perform search term autocomplete
+    async fn autocomplete_search(&self, search: SearchParameters) -> Result<Vec<String>> {
+        Err(NotImplemented {
+            message: "Autocomplete is not implemented".to_string(),
+        })
+    }
 }

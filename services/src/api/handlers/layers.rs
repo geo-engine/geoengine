@@ -377,13 +377,13 @@ async fn search_handler<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
 
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        return Err(NotImplemented {
-            message: "Dataset search is not implemented".to_string(),
-        });
+        let collection = DatasetLayerCollectionProvider::search(&db, options.into_inner()).await?;
+
+        return Ok(web::Json(collection));
     }
 
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
-        let collection = db.search(options.into_inner()).await?;
+        let collection = LayerCollectionProvider::search(&db, options.into_inner()).await?;
 
         return Ok(web::Json(collection));
     }
@@ -414,13 +414,15 @@ async fn autocomplete_handler<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
 
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        return Err(NotImplemented {
-            message: "Dataset search is not implemented".to_string(),
-        });
+        let suggestions =
+            DatasetLayerCollectionProvider::autocomplete_search(&db, options.into_inner()).await?;
+
+        return Ok(web::Json(suggestions));
     }
 
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
-        let suggestions = db.autocomplete_search(options.into_inner()).await?;
+        let suggestions =
+            LayerCollectionProvider::autocomplete_search(&db, options.into_inner()).await?;
 
         return Ok(web::Json(suggestions));
     }
