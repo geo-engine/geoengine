@@ -592,7 +592,7 @@ impl LayerCollectionProvider for GbifDataProvider {
 
     async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
         Ok(SearchCapabilities {
-            caps: vec![
+            capabilities: vec![
                 SearchCapability {
                     search_type: SearchType::FULLTEXT,
                     autocomplete: true, // TODO have to see whether its too slow

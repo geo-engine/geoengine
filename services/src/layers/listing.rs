@@ -18,7 +18,7 @@ pub struct LayerCollectionId(pub String);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams)]
 pub struct SearchCapabilities {
-    pub(crate) caps: Vec<SearchCapability>,
+    pub(crate) capabilities: Vec<SearchCapability>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams)]
@@ -57,7 +57,9 @@ impl fmt::Display for LayerCollectionId {
 pub trait LayerCollectionProvider {
     /// Get a list of supported search capabilities
     async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
-        Ok(SearchCapabilities { caps: vec![] })
+        Ok(SearchCapabilities {
+            capabilities: vec![],
+        })
     }
 
     /// Perform a search
