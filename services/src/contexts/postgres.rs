@@ -1687,6 +1687,186 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
+    async fn it_autocompletes_layers(app_ctx: PostgresContext<NoTls>) {
+        let session = app_ctx.default_session().await.unwrap();
+
+        let layer_db = app_ctx.session_context(session).db();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockPointSource {
+                    params: MockPointSourceParams {
+                        points: vec![Coordinate2D::new(1., 2.); 3],
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
+
+        let _layer1 = layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer1".to_string(),
+                    description: "Layer 1".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: [("meta".to_string(), "datum".to_string())].into(),
+                    properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let collection1_id = layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection1".to_string(),
+                    description: "Collection 1".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let _layer2 = layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let _collection2_id = layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection2".to_string(),
+                    description: "Collection 2".to_string(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let root_collection_all = layer_db
+            .autocomplete_search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: "fulltext".to_string(),
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_all,
+            vec![
+                "Collection1".to_string(),
+                "Collection2".to_string(),
+                "Layer1".to_string(),
+                "Layer2".to_string(),
+                "Unsorted".to_string(),
+            ]
+        );
+
+        let root_collection_filtered = layer_db
+            .autocomplete_search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: "fulltext".to_string(),
+                    search_string: "lection".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_filtered,
+            vec!["Collection1".to_string(), "Collection2".to_string(),]
+        );
+
+        let collection1_all = layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: "fulltext".to_string(),
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_all,
+            vec!["Collection2".to_string(), "Layer2".to_string(),]
+        );
+
+        let collection1_filtered_fulltext = layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: "fulltext".to_string(),
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection1_filtered_fulltext, vec!["Layer2".to_string(),]);
+
+        let collection1_filtered_prefix = layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: "prefix".to_string(),
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection1_filtered_prefix, Vec::<String>::new());
+
+        let collection1_filtered_prefix2 = layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: "prefix".to_string(),
+                    search_string: "Lay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection1_filtered_prefix2, vec!["Layer2".to_string(),]);
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
     async fn it_removes_layer_collections(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.default_session().await.unwrap();
 
