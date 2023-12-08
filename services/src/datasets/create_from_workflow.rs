@@ -1,5 +1,6 @@
 use crate::api::model::datatypes::RasterQueryRectangle;
 use crate::contexts::SessionContext;
+use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::datasets::AddDataset;
@@ -186,6 +187,20 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
     info: RasterDatasetFromWorkflow,
     compression_num_threads: GdalCompressionNumThreads,
 ) -> error::Result<TaskId> {
+    if let Some(dataset_name) = &info.name {
+        let db = ctx.db();
+
+        let potential_id = db.resolve_dataset_name_to_id(dataset_name).await;
+
+        if let Ok(id) = potential_id {
+            return crate::error::DatasetNameAlreadyExists {
+                dataset_name: dataset_name.to_string(),
+                dataset_id: id,
+            }
+            .fail();
+        }
+    }
+
     let upload = UploadId::new();
     let upload_path = upload.root_path()?;
     fs::create_dir_all(&upload_path)

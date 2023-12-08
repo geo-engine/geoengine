@@ -209,6 +209,11 @@ pub enum Error {
     InvalidUploadFileName,
     InvalidDatasetIdNamespace,
     DuplicateDatasetId,
+    #[snafu(display("Dataset name '{}' already exists", dataset_name))]
+    DatasetNameAlreadyExists {
+        dataset_name: String,
+        dataset_id: DatasetId,
+    },
     InvalidDatasetName,
     DatasetInvalidLayerName {
         layer_name: String,
