@@ -1867,6 +1867,103 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
+    async fn it_reports_search_capabilities(app_ctx: PostgresContext<NoTls>) {
+        let session = app_ctx.default_session().await.unwrap();
+
+        let layer_db = app_ctx.session_context(session).db();
+
+        let capabilities = layer_db.get_search_capabilities().await.unwrap();
+
+        let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
+
+        if capabilities.search_types.fulltext {
+            assert!(layer_db
+                .search(
+                    &root_collection_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: String::new(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .is_ok());
+
+            if capabilities.autocomplete {
+                assert!(layer_db
+                    .autocomplete_search(
+                        &root_collection_id,
+                        SearchParameters {
+                            search_type: "fulltext".to_string(),
+                            search_string: String::new(),
+                            limit: 10,
+                            offset: 0,
+                        },
+                    )
+                    .await
+                    .is_ok());
+            } else {
+                assert!(layer_db
+                    .autocomplete_search(
+                        &root_collection_id,
+                        SearchParameters {
+                            search_type: "fulltext".to_string(),
+                            search_string: String::new(),
+                            limit: 10,
+                            offset: 0,
+                        },
+                    )
+                    .await
+                    .is_err());
+            }
+        }
+        if capabilities.search_types.prefix {
+            assert!(layer_db
+                .search(
+                    &root_collection_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: String::new(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .is_ok());
+
+            if capabilities.autocomplete {
+                assert!(layer_db
+                    .autocomplete_search(
+                        &root_collection_id,
+                        SearchParameters {
+                            search_type: "prefix".to_string(),
+                            search_string: String::new(),
+                            limit: 10,
+                            offset: 0,
+                        },
+                    )
+                    .await
+                    .is_ok());
+            } else {
+                assert!(layer_db
+                    .autocomplete_search(
+                        &root_collection_id,
+                        SearchParameters {
+                            search_type: "prefix".to_string(),
+                            search_string: String::new(),
+                            limit: 10,
+                            offset: 0,
+                        },
+                    )
+                    .await
+                    .is_err());
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
     async fn it_removes_layer_collections(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.default_session().await.unwrap();
 
