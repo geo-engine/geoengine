@@ -34,7 +34,6 @@ pub struct SearchTypes {
 pub struct SearchParameters {
     pub(crate) search_type: String,
     pub(crate) search_string: String,
-    pub(crate) collection_id: LayerCollectionId,
     pub(crate) limit: u32,
     pub(crate) offset: u32,
 }
@@ -62,7 +61,11 @@ pub trait LayerCollectionProvider {
 
     /// Perform a search
     #[allow(unused_variables)]
-    async fn search(&self, search: SearchParameters) -> Result<LayerCollection> {
+    async fn search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<LayerCollection> {
         Err(NotImplemented {
             message: "Layer search is not supported".to_string(),
         })
@@ -70,7 +73,11 @@ pub trait LayerCollectionProvider {
 
     /// Perform search term autocomplete
     #[allow(unused_variables)]
-    async fn autocomplete_search(&self, search: SearchParameters) -> Result<Vec<String>> {
+    async fn autocomplete_search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<Vec<String>> {
         Err(NotImplemented {
             message: "Layer autocomplete is not supported".to_string(),
         })
@@ -120,7 +127,11 @@ pub trait DatasetLayerCollectionProvider {
 
     /// Perform a search
     #[allow(unused_variables)]
-    async fn search(&self, search: SearchParameters) -> Result<LayerCollection> {
+    async fn search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<LayerCollection> {
         Err(NotImplemented {
             message: "Dataset search is not supported".to_string(),
         })
@@ -128,7 +139,11 @@ pub trait DatasetLayerCollectionProvider {
 
     /// Perform search term autocomplete
     #[allow(unused_variables)]
-    async fn autocomplete_search(&self, search: SearchParameters) -> Result<Vec<String>> {
+    async fn autocomplete_search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<Vec<String>> {
         Err(NotImplemented {
             message: "Dataset autocomplete is not supported".to_string(),
         })

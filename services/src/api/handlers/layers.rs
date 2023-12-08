@@ -41,16 +41,26 @@ where
         web::scope("/layers")
             .service(
                 web::scope("/collections")
-                    .route("", web::get().to(list_root_collections_handler::<C>))
-                    .route(
-                        r#"{provider}/capabilities"#,
-                        web::get().to(search_capabilities_handler::<C>),
+                    .service(
+                        web::scope("/search")
+                            .route(
+                                r#"autocomplete/{provider}/{collection}"#,
+                                web::get().to(autocomplete_handler::<C>),
+                            )
+                            .route(
+                                r#"capabilities/{provider}"#,
+                                web::get().to(search_capabilities_handler::<C>),
+                            )
+                            .route(
+                                r#"{provider}/{collection}"#,
+                                web::get().to(search_handler::<C>),
+                            ),
                     )
-                    .route(r#"{provider}/search"#, web::get().to(search_handler::<C>))
-                    .route(
-                        r#"{provider}/autocomplete"#,
+                    .service(web::scope("/autocomplete").route(
+                        r#"{provider}/{collection}"#,
                         web::get().to(autocomplete_handler::<C>),
-                    )
+                    ))
+                    .route("", web::get().to(list_root_collections_handler::<C>))
                     .route(
                         r#"/{provider}/{collection}"#,
                         web::get().to(list_collection_handler::<C>),
@@ -362,11 +372,11 @@ async fn search_capabilities_handler<C: ApplicationContext>(
 
 async fn search_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
-    path: web::Path<DataProviderId>,
+    path: web::Path<(DataProviderId, LayerCollectionId)>,
     options: ValidatedQuery<SearchParameters>,
     session: C::Session,
 ) -> Result<impl Responder> {
-    let provider = path.into_inner();
+    let (provider, collection) = path.into_inner();
 
     if provider == ROOT_PROVIDER_ID {
         return Err(NotImplemented {
@@ -377,13 +387,15 @@ async fn search_handler<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
 
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        let collection = DatasetLayerCollectionProvider::search(&db, options.into_inner()).await?;
+        let collection =
+            DatasetLayerCollectionProvider::search(&db, &collection, options.into_inner()).await?;
 
         return Ok(web::Json(collection));
     }
 
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
-        let collection = LayerCollectionProvider::search(&db, options.into_inner()).await?;
+        let collection =
+            LayerCollectionProvider::search(&db, &collection, options.into_inner()).await?;
 
         return Ok(web::Json(collection));
     }
@@ -391,7 +403,7 @@ async fn search_handler<C: ApplicationContext>(
     let collection = db
         .load_layer_provider(provider.into())
         .await?
-        .search(options.into_inner())
+        .search(&collection, options.into_inner())
         .await?;
 
     Ok(web::Json(collection))
@@ -399,11 +411,11 @@ async fn search_handler<C: ApplicationContext>(
 
 async fn autocomplete_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
-    path: web::Path<DataProviderId>,
+    path: web::Path<(DataProviderId, LayerCollectionId)>,
     options: ValidatedQuery<SearchParameters>,
     session: C::Session,
 ) -> Result<impl Responder> {
-    let provider = path.into_inner();
+    let (provider, collection) = path.into_inner();
 
     if provider == ROOT_PROVIDER_ID {
         return Err(NotImplemented {
@@ -414,15 +426,20 @@ async fn autocomplete_handler<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
 
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        let suggestions =
-            DatasetLayerCollectionProvider::autocomplete_search(&db, options.into_inner()).await?;
+        let suggestions = DatasetLayerCollectionProvider::autocomplete_search(
+            &db,
+            &collection,
+            options.into_inner(),
+        )
+        .await?;
 
         return Ok(web::Json(suggestions));
     }
 
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
         let suggestions =
-            LayerCollectionProvider::autocomplete_search(&db, options.into_inner()).await?;
+            LayerCollectionProvider::autocomplete_search(&db, &collection, options.into_inner())
+                .await?;
 
         return Ok(web::Json(suggestions));
     }
@@ -430,7 +447,7 @@ async fn autocomplete_handler<C: ApplicationContext>(
     let suggestions = db
         .load_layer_provider(provider.into())
         .await?
-        .autocomplete_search(options.into_inner())
+        .autocomplete_search(&collection, options.into_inner())
         .await?;
 
     Ok(web::Json(suggestions))

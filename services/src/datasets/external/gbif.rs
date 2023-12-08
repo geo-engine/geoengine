@@ -600,13 +600,16 @@ impl LayerCollectionProvider for GbifDataProvider {
         })
     }
 
-    async fn search(&self, search: SearchParameters) -> Result<LayerCollection> {
-        let collection = search.collection_id;
-        let selector = collection.0.split_once('/').map_or_else(
-            || collection.clone().0,
+    async fn search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<LayerCollection> {
+        let selector = collection_id.0.split_once('/').map_or_else(
+            || collection_id.clone().0,
             |(selector, _)| selector.to_string(),
         );
-        let path = collection
+        let path = collection_id
             .0
             .split_once('/')
             .map_or_else(|| "", |(_, path)| path);
@@ -637,7 +640,7 @@ impl LayerCollectionProvider for GbifDataProvider {
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
                 provider_id: GBIF_PROVIDER_ID,
-                collection_id: collection.clone(),
+                collection_id: collection_id.clone(),
             },
             name: "GBIF".to_owned(),
             description: "GBIF occurrence datasets".to_owned(),
@@ -647,13 +650,16 @@ impl LayerCollectionProvider for GbifDataProvider {
         })
     }
 
-    async fn autocomplete_search(&self, search: SearchParameters) -> Result<Vec<String>> {
-        let collection = search.collection_id;
-        let selector = collection.0.split_once('/').map_or_else(
-            || collection.clone().0,
+    async fn autocomplete_search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<Vec<String>> {
+        let selector = collection_id.0.split_once('/').map_or_else(
+            || collection_id.clone().0,
             |(selector, _)| selector.to_string(),
         );
-        let path = collection
+        let path = collection_id
             .0
             .split_once('/')
             .map_or_else(|| "", |(_, path)| path);

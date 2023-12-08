@@ -631,10 +631,14 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn search(&self, search: SearchParameters) -> Result<LayerCollection> {
-        let collection = Uuid::from_str(&search.collection_id.0).map_err(|_| {
+    async fn search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<LayerCollection> {
+        let collection = Uuid::from_str(&collection_id.0).map_err(|_| {
             crate::error::Error::IdStringMustBeUuid {
-                found: search.collection_id.0.clone(),
+                found: collection_id.0.clone(),
             }
         })?;
 
@@ -752,7 +756,7 @@ where
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
                 provider_id: INTERNAL_PROVIDER_ID,
-                collection_id: search.collection_id.clone(),
+                collection_id: collection_id.clone(),
             },
             name,
             description,
@@ -763,10 +767,14 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn autocomplete_search(&self, search: SearchParameters) -> Result<Vec<String>> {
-        let collection = Uuid::from_str(&search.collection_id.0).map_err(|_| {
+    async fn autocomplete_search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<Vec<String>> {
+        let collection = Uuid::from_str(&collection_id.0).map_err(|_| {
             crate::error::Error::IdStringMustBeUuid {
-                found: search.collection_id.0.clone(),
+                found: collection_id.0.clone(),
             }
         })?;
 
