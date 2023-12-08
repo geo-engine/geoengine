@@ -677,12 +677,9 @@ where
             .prepare(
                 "
         WITH RECURSIVE parents AS (
-            SELECT DISTINCT id
-            FROM (
-                SELECT id FROM layer_collections JOIN collection_children cc ON (id = cc.child) WHERE cc.parent = $1 OR cc.child = $1
-        ) u UNION ALL (
-            SELECT DISTINCT child FROM collection_children JOIN parents ON (parent = id)
-        ))
+            SELECT $1::uuid as id
+            UNION ALL SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)
+        )
         SELECT DISTINCT id, name, description, properties, is_layer
         FROM (
             SELECT 
@@ -798,12 +795,9 @@ where
             .prepare(
                 "
         WITH RECURSIVE parents AS (
-            SELECT DISTINCT id
-            FROM (
-                SELECT id FROM layer_collections JOIN collection_children cc ON (id = cc.child) WHERE cc.parent = $1 OR cc.child = $1
-        ) u UNION ALL (
-            SELECT DISTINCT child FROM collection_children JOIN parents ON (parent = id)
-        ))
+            SELECT $1::uuid as id
+            UNION ALL SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)
+        )
         SELECT DISTINCT name
         FROM (
             SELECT 
