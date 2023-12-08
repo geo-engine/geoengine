@@ -594,13 +594,13 @@ impl LayerCollectionProvider for GbifDataProvider {
             capabilities: vec![
                 SearchCapability {
                     search_type: SearchType::FULLTEXT,
-                    autocomplete: true, // TODO have to see whether its too slow
+                    autocomplete: true,
                     filters: None,
                 },
                 SearchCapability {
                     search_type: SearchType::PREFIX,
-                    autocomplete: true, // TODO this should work fine with index
-                    filters: None, // TODO this is not needed in the current design since any filters applied are already part of the GBIF provider collection ID, so should we implement it now at all?
+                    autocomplete: true,
+                    filters: None,
                 },
             ],
         })
