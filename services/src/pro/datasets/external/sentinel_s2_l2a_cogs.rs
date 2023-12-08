@@ -12,7 +12,7 @@ use crate::util::operators::source_operator_from_dataset;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
-use geoengine_datatypes::operations::image::RgbaColor;
+use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
@@ -208,7 +208,8 @@ impl SentinelS2L2aCogsDataProvider {
                         },
                         symbology: Some(Symbology::Raster(RasterSymbology {
                             opacity: 1.0,
-                            colorizer:
+                            raster_colorizer: RasterColorizer::SingleBand {
+                                band: 0, band_colorizer:
                                 geoengine_datatypes::operations::image::Colorizer::linear_gradient(
                                     vec![
                                         (0.0, RgbaColor::white())
@@ -223,7 +224,7 @@ impl SentinelS2L2aCogsDataProvider {
                                     RgbaColor::black(),
                                 )
                                 .expect("valid colorizer"),
-                        })), // TODO: individual colorizer per band
+                        }})), // TODO: individual colorizer per band
                         properties: vec![],
                         metadata: HashMap::new(),
                     };

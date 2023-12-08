@@ -14,25 +14,29 @@
     "symbology": {
       "type": "raster",
       "opacity": 1,
-      "colorizer": {
-        "type": "linearGradient",
-        "breakpoints": [
-          {
-            "value": 0,
-            "color": [247, 252, 245, 255]
-          },
-          {
-            "value": 127,
-            "color": [115, 195, 117, 255]
-          },
-          {
-            "value": 255,
-            "color": [246, 251, 244, 255]
-          }
-        ],
-        "noDataColor": [0, 0, 0, 0],
-        "underColor": [247, 252, 245, 255],
-        "overColor": [246, 251, 244, 255]
+      "rasterColorizer": {
+        "type": "singleBand",
+        "band": 0,
+        "bandColorizer": {
+          "type": "linearGradient",
+          "breakpoints": [
+            {
+              "value": 0,
+              "color": [247, 252, 245, 255]
+            },
+            {
+              "value": 127,
+              "color": [115, 195, 117, 255]
+            },
+            {
+              "value": 255,
+              "color": [246, 251, 244, 255]
+            }
+          ],
+          "noDataColor": [0, 0, 0, 0],
+          "underColor": [247, 252, 245, 255],
+          "overColor": [246, 251, 244, 255]
+        }
       }
     }
   },

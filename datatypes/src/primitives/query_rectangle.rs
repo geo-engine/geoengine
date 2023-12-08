@@ -2,7 +2,12 @@ use super::{
     AxisAlignedRectangle, BoundingBox2D, SpatialPartition2D, SpatialPartitioned, SpatialResolution,
     TimeInterval,
 };
+use crate::{
+    error::{DuplicateBandInQueryBandSelection, QueryBandSelectionMustNotBeEmpty},
+    util::Result,
+};
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 /// A spatio-temporal rectangle with a specified resolution and the selected bands
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -19,21 +24,24 @@ pub struct QueryRectangle<
 
 pub trait QueryAttributeSelection: Clone + Send + Sync {}
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-// TODO: custom deserializer that checks for duplicates (at least in API)
-pub struct BandSelection(Vec<usize>);
+#[derive(Clone, Debug, PartialEq, Serialize)]
+
+pub struct BandSelection(Vec<u32>);
 
 impl BandSelection {
-    pub fn new(mut bands: Vec<usize>) -> Self {
+    pub fn new(bands: Vec<u32>) -> Result<Self> {
         fn has_no_duplicates<T: std::hash::Hash + std::cmp::Eq>(vec: &[T]) -> bool {
             let set: std::collections::HashSet<_> = vec.iter().collect();
             set.len() == vec.len()
         }
-        // TODO: `ensure` instead of `debug_assert`?
-        debug_assert!(has_no_duplicates(&bands), "Input bands have duplicates");
-        debug_assert!(!bands.is_empty(), "Input bands empty");
 
-        bands.sort_unstable(); // TODO: should order of bands matter? Or: introduce a restacking operation?
+        ensure!(has_no_duplicates(&bands), DuplicateBandInQueryBandSelection);
+        ensure!(!bands.is_empty(), QueryBandSelectionMustNotBeEmpty);
+
+        Ok(Self(bands))
+    }
+
+    pub fn new_unchecked(bands: Vec<u32>) -> Self {
         Self(bands)
     }
 
@@ -41,41 +49,45 @@ impl BandSelection {
         Self(vec![0])
     }
 
-    pub fn first_n(n: usize) -> Self {
+    pub fn first_n(n: u32) -> Self {
         Self((0..n).collect())
     }
 
-    pub fn new_single(band: usize) -> Self {
+    pub fn new_single(band: u32) -> Self {
         Self(vec![band])
     }
 
-    pub fn count(&self) -> usize {
-        self.0.len()
+    pub fn count(&self) -> u32 {
+        self.0.len() as u32
     }
 
-    pub fn as_slice(&self) -> &[usize] {
+    pub fn as_slice(&self) -> &[u32] {
         &self.0
     }
 
-    pub fn as_vec(&self) -> Vec<usize> {
+    pub fn as_vec(&self) -> Vec<u32> {
         self.0.clone()
     }
 }
 
-impl From<usize> for BandSelection {
-    fn from(value: usize) -> Self {
+impl From<u32> for BandSelection {
+    fn from(value: u32) -> Self {
         Self(vec![value])
     }
 }
 
-impl From<Vec<usize>> for BandSelection {
-    fn from(value: Vec<usize>) -> Self {
+impl TryFrom<Vec<u32>> for BandSelection {
+    type Error = crate::error::Error;
+
+    fn try_from(value: Vec<u32>) -> Result<Self, Self::Error> {
         Self::new(value)
     }
 }
 
-impl<const N: usize> From<[usize; N]> for BandSelection {
-    fn from(value: [usize; N]) -> Self {
+impl<const N: usize> TryFrom<[u32; N]> for BandSelection {
+    type Error = crate::error::Error;
+
+    fn try_from(value: [u32; N]) -> Result<Self, Self::Error> {
         Self::new(value.to_vec())
     }
 }

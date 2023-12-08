@@ -170,7 +170,7 @@ impl VectorOperator for RasterVectorJoin {
 
         let raster_sources_bands = source_descriptors
             .iter()
-            .map(|rd| rd.bands.len())
+            .map(|rd| rd.bands.count())
             .collect::<Vec<_>>();
 
         let params = self.params;
@@ -235,7 +235,7 @@ pub struct InitializedRasterVectorJoin {
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
-    raster_sources_bands: Vec<usize>,
+    raster_sources_bands: Vec<u32>,
     state: RasterVectorJoinParams,
 }
 

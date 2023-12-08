@@ -13,10 +13,10 @@ use crate::api::model::datatypes::{
     ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DateTime,
     DateTimeParseFormat, ExternalDataId, FeatureDataType, GdalConfigOption, LayerId,
     LinearGradient, LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon,
-    NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType,
-    RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
-    SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity,
-    TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
+    NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle, RasterColorizer,
+    RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
+    RgbaColor, SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair,
+    TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -250,6 +250,7 @@ use utoipa::{Modify, OpenApi};
             PointSymbology,
             PolygonSymbology,
             RasterSymbology,
+            RasterColorizer,
             RgbaColor,
             StrokeParam,
             Symbology,

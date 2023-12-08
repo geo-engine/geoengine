@@ -4,7 +4,7 @@ use crate::projects::error::ProjectDbError;
 use crate::util::config::ProjectService;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
-use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer, RgbaColor};
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::primitives::TimeInstance;
 use geoengine_datatypes::{
@@ -257,9 +257,10 @@ pub enum Symbology {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[serde(rename_all = "camelCase")]
 pub struct RasterSymbology {
     pub opacity: f64,
-    pub colorizer: Colorizer,
+    pub raster_colorizer: RasterColorizer,
 }
 
 impl Eq for RasterSymbology {}
@@ -678,8 +679,12 @@ mod tests {
                     "symbology": {
                         "type": "raster",
                         "opacity": 1.0,
-                        "colorizer": {
-                            "type": "rgba"
+                        "rasterColorizer": {
+                            "type": "singleBand",
+                            "band": 0,
+                            "bandColorizer": {
+                                "type": "rgba"
+                            }
                         }
                     }
                 })
@@ -695,7 +700,10 @@ mod tests {
                 },
                 symbology: Symbology::Raster(RasterSymbology {
                     opacity: 1.0,
-                    colorizer: Colorizer::Rgba,
+                    raster_colorizer: RasterColorizer::SingleBand {
+                        band: 0,
+                        band_colorizer: Colorizer::Rgba,
+                    },
                 })
             })
         );
@@ -716,7 +724,10 @@ mod tests {
                     visibility: Default::default(),
                     symbology: Symbology::Raster(RasterSymbology {
                         opacity: 1.0,
-                        colorizer: Colorizer::Rgba,
+                        raster_colorizer: RasterColorizer::SingleBand {
+                            band: 0,
+                            band_colorizer: Colorizer::Rgba,
+                        },
                     }),
                 }),
                 LayerUpdate::UpdateOrInsert(ProjectLayer {
@@ -725,7 +736,10 @@ mod tests {
                     visibility: Default::default(),
                     symbology: Symbology::Raster(RasterSymbology {
                         opacity: 1.0,
-                        colorizer: Colorizer::Rgba,
+                        raster_colorizer: RasterColorizer::SingleBand {
+                            band: 0,
+                            band_colorizer: Colorizer::Rgba,
+                        },
                     }),
                 }),
             ]),

@@ -10,6 +10,22 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
 
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum RasterColorizer {
+    #[serde(rename_all = "camelCase")]
+    SingleBand {
+        band: u32,
+        band_colorizer: Colorizer,
+    },
+    // TODO: multiband colorizer, e.g.
+    // MultiBand {
+    //     red: ...,
+    //     green: ...,
+    //     blue: ..,
+    // },
+}
+
 /// A colorizer specifies a mapping between raster values and an output image
 /// There are different variants that perform different kinds of mapping.
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
@@ -570,6 +586,10 @@ pub type Breakpoints = Vec<Breakpoint>;
 pub struct Palette(HashMap<NotNan<f64>, RgbaColor>);
 
 impl Palette {
+    pub fn new(map: HashMap<NotNan<f64>, RgbaColor>) -> Self {
+        Self(map)
+    }
+
     pub fn into_inner(self) -> HashMap<NotNan<f64>, RgbaColor> {
         self.0
     }
