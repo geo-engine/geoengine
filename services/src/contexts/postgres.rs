@@ -472,7 +472,7 @@ mod tests {
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
         LayerCollectionListing, LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
     };
-    use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+    use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, SearchParameters};
     use crate::layers::storage::{
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
@@ -1334,6 +1334,351 @@ mod tests {
                         properties: vec![],
                     })
                 ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_searches_layers(app_ctx: PostgresContext<NoTls>) {
+        let session = app_ctx.default_session().await.unwrap();
+
+        let layer_db = app_ctx.session_context(session).db();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockPointSource {
+                    params: MockPointSourceParams {
+                        points: vec![Coordinate2D::new(1., 2.); 3],
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
+
+        let layer1 = layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer1".to_string(),
+                    description: "Layer 1".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: [("meta".to_string(), "datum".to_string())].into(),
+                    properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let collection1_id = layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection1".to_string(),
+                    description: "Collection 1".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let layer2 = layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let collection2_id = layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection2".to_string(),
+                    description: "Collection 2".to_string(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let root_collection_all = layer_db
+            .search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: "fulltext".to_string(),
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_all,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: root_collection_id.clone(),
+                },
+                name: "Layers".to_string(),
+                description: "All available Geo Engine layers".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1_id.clone(),
+                        },
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f".to_string()
+                            ),
+                        },
+                        name: "Unsorted".to_string(),
+                        description: "Unsorted Layers".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer1.clone(),
+                        },
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                        properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2.clone(),
+                        },
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        properties: vec![],
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let root_collection_filtered = layer_db
+            .search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: "fulltext".to_string(),
+                    search_string: "lection".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_filtered,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: root_collection_id.clone(),
+                },
+                name: "Layers".to_string(),
+                description: "All available Geo Engine layers".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1_id.clone(),
+                        },
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_all = layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: "fulltext".to_string(),
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_all,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2.clone(),
+                        },
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        properties: vec![],
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_filtered_fulltext = layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: "fulltext".to_string(),
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_filtered_fulltext,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: layer2.clone(),
+                    },
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    properties: vec![],
+                }),],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_filtered_prefix = layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: "prefix".to_string(),
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_filtered_prefix,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_filtered_prefix2 = layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: "prefix".to_string(),
+                    search_string: "Lay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_filtered_prefix2,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: layer2.clone(),
+                    },
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    properties: vec![],
+                }),],
                 entry_label: None,
                 properties: vec![],
             }
