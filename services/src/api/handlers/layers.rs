@@ -333,7 +333,7 @@ async fn search_capabilities_handler<C: ApplicationContext>(
 
     if provider == ROOT_PROVIDER_ID {
         return Err(NotImplemented {
-            message: "Global search is not implemented".to_string(),
+            message: "Global search is not supported".to_string(),
         });
     }
 
@@ -370,7 +370,7 @@ async fn search_handler<C: ApplicationContext>(
 
     if provider == ROOT_PROVIDER_ID {
         return Err(NotImplemented {
-            message: "Global search is not implemented".to_string(),
+            message: "Global search is not supported".to_string(),
         });
     }
 
@@ -407,7 +407,7 @@ async fn autocomplete_handler<C: ApplicationContext>(
 
     if provider == ROOT_PROVIDER_ID {
         return Err(NotImplemented {
-            message: "Global search is not implemented".to_string(),
+            message: "Global search is not supported".to_string(),
         });
     }
 
