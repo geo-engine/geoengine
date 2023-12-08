@@ -1,4 +1,5 @@
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
+use crate::error::Error::NotImplemented;
 use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use crate::layers::layer::{
@@ -6,8 +7,7 @@ use crate::layers::layer::{
     LayerListing, ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{
-    LayerCollectionId, LayerCollectionProvider, SearchCapabilities, SearchCapability,
-    SearchParameters, SearchType,
+    LayerCollectionId, LayerCollectionProvider, SearchCapabilities, SearchParameters, SearchTypes,
 };
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
@@ -591,18 +591,12 @@ impl LayerCollectionProvider for GbifDataProvider {
 
     async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
         Ok(SearchCapabilities {
-            capabilities: vec![
-                SearchCapability {
-                    search_type: SearchType::FULLTEXT,
-                    autocomplete: true,
-                    filters: None,
-                },
-                SearchCapability {
-                    search_type: SearchType::PREFIX,
-                    autocomplete: true,
-                    filters: None,
-                },
-            ],
+            search_types: SearchTypes {
+                fulltext: true,
+                prefix: true,
+            },
+            autocomplete: true,
+            filters: None,
         })
     }
 
@@ -617,9 +611,14 @@ impl LayerCollectionProvider for GbifDataProvider {
             .split_once('/')
             .map_or_else(|| "", |(_, path)| path);
 
-        let search_string = match search.search_type {
-            SearchType::FULLTEXT => format!("%{}%", search.search_string),
-            SearchType::PREFIX => format!("{}%", search.search_string),
+        let search_string = match search.search_type.as_str() {
+            "fulltext" => format!("%{}%", search.search_string),
+            "prefix" => format!("{}%", search.search_string),
+            _ => {
+                return Err(NotImplemented {
+                    message: format!("Search type {} is not supported", search.search_type),
+                })
+            }
         };
 
         let items = match selector.as_str() {
@@ -659,9 +658,14 @@ impl LayerCollectionProvider for GbifDataProvider {
             .split_once('/')
             .map_or_else(|| "", |(_, path)| path);
 
-        let search_string = match search.search_type {
-            SearchType::FULLTEXT => format!("%{}%", search.search_string),
-            SearchType::PREFIX => format!("{}%", search.search_string),
+        let search_string = match search.search_type.as_str() {
+            "fulltext" => format!("%{}%", search.search_string),
+            "prefix" => format!("{}%", search.search_string),
+            _ => {
+                return Err(NotImplemented {
+                    message: format!("Search type {} is not supported", search.search_type),
+                })
+            }
         };
 
         let items = match selector.as_str() {

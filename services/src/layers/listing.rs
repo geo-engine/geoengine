@@ -17,29 +17,22 @@ pub struct LayerCollectionId(pub String);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams)]
 pub struct SearchCapabilities {
-    pub(crate) capabilities: Vec<SearchCapability>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams)]
-pub struct SearchCapability {
-    pub(crate) search_type: SearchType,
-    // TODO enabled not necessary
+    pub(crate) search_types: SearchTypes,
     pub(crate) autocomplete: bool,
     pub(crate) filters: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
-#[allow(clippy::upper_case_acronyms)]
-pub enum SearchType {
-    FULLTEXT,
-    PREFIX,
+pub struct SearchTypes {
+    pub(crate) fulltext: bool,
+    pub(crate) prefix: bool,
 }
 
 #[derive(
     Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams, Validate,
 )]
 pub struct SearchParameters {
-    pub(crate) search_type: SearchType,
+    pub(crate) search_type: String,
     pub(crate) search_string: String,
     pub(crate) collection_id: LayerCollectionId,
     pub(crate) limit: u32,
@@ -58,7 +51,12 @@ pub trait LayerCollectionProvider {
     /// Get a list of supported search capabilities
     async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
         Ok(SearchCapabilities {
-            capabilities: vec![],
+            search_types: SearchTypes {
+                fulltext: false,
+                prefix: false,
+            },
+            autocomplete: false,
+            filters: None,
         })
     }
 
@@ -111,7 +109,12 @@ pub trait DatasetLayerCollectionProvider {
     /// Get a list of supported search capabilities
     async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
         Ok(SearchCapabilities {
-            capabilities: vec![],
+            search_types: SearchTypes {
+                fulltext: false,
+                prefix: false,
+            },
+            autocomplete: false,
+            filters: None,
         })
     }
 

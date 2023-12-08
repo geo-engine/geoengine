@@ -1,8 +1,9 @@
 use super::external::TypedDataProviderDefinition;
 use crate::contexts::PostgresDb;
 use crate::error;
+use crate::error::Error::NotImplemented;
 use crate::layers::layer::Property;
-use crate::layers::listing::{SearchCapabilities, SearchCapability, SearchParameters, SearchType};
+use crate::layers::listing::{SearchCapabilities, SearchParameters, SearchTypes};
 use crate::workflows::workflow::WorkflowId;
 use crate::{
     error::Result,
@@ -620,18 +621,12 @@ where
 
     async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
         Ok(SearchCapabilities {
-            capabilities: vec![
-                SearchCapability {
-                    search_type: SearchType::FULLTEXT,
-                    autocomplete: true,
-                    filters: None,
-                },
-                SearchCapability {
-                    search_type: SearchType::PREFIX,
-                    autocomplete: true,
-                    filters: None,
-                },
-            ],
+            search_types: SearchTypes {
+                fulltext: true,
+                prefix: true,
+            },
+            autocomplete: true,
+            filters: None,
         })
     }
 
@@ -660,12 +655,17 @@ where
         let description: String = row.get(1);
         let properties: Vec<Property> = row.get(2);
 
-        let pattern = match search.search_type {
-            SearchType::FULLTEXT => {
+        let pattern = match search.search_type.as_str() {
+            "fulltext" => {
                 format!("%{}%", search.search_string)
             }
-            SearchType::PREFIX => {
+            "prefix" => {
                 format!("{}%", search.search_string)
+            }
+            _ => {
+                return Err(NotImplemented {
+                    message: format!("Search type {} is not supported", search.search_type),
+                })
             }
         };
 
@@ -772,12 +772,17 @@ where
 
         let conn = self.conn_pool.get().await?;
 
-        let pattern = match search.search_type {
-            SearchType::FULLTEXT => {
+        let pattern = match search.search_type.as_str() {
+            "fulltext" => {
                 format!("%{}%", search.search_string)
             }
-            SearchType::PREFIX => {
+            "prefix" => {
                 format!("{}%", search.search_string)
+            }
+            _ => {
+                return Err(NotImplemented {
+                    message: format!("Search type {} is not supported", search.search_type),
+                })
             }
         };
 
