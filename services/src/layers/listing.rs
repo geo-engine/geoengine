@@ -108,6 +108,13 @@ pub trait DatasetLayerCollectionProvider {
     /// get the full contents of the layer with the given `id`
     async fn load_dataset_layer(&self, id: &LayerId) -> Result<Layer>;
 
+    /// Get a list of supported search capabilities
+    async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
+        Ok(SearchCapabilities {
+            capabilities: vec![],
+        })
+    }
+
     /// Perform a search
     #[allow(unused_variables)]
     async fn search(&self, search: SearchParameters) -> Result<LayerCollection> {

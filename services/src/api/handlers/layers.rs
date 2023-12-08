@@ -340,13 +340,13 @@ async fn search_capabilities_handler<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
 
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        return Err(NotImplemented {
-            message: "Dataset search is not implemented".to_string(),
-        });
+        let caps = DatasetLayerCollectionProvider::get_search_capabilities(&db).await?;
+
+        return Ok(web::Json(caps));
     }
 
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
-        let caps = db.get_search_capabilities().await?;
+        let caps = LayerCollectionProvider::get_search_capabilities(&db).await?;
 
         return Ok(web::Json(caps));
     }
