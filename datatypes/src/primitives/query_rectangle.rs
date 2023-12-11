@@ -74,6 +74,12 @@ impl From<Vec<usize>> for BandSelection {
     }
 }
 
+impl From<Vec<u32>> for BandSelection {
+    fn from(value: Vec<u32>) -> Self {
+        Self::new(value.iter().map(|&x| x as usize).collect())
+    }
+}
+
 impl<const N: usize> From<[usize; N]> for BandSelection {
     fn from(value: [usize; N]) -> Self {
         Self::new(value.to_vec())
