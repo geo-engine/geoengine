@@ -1038,6 +1038,7 @@ mod tests {
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::ge_context;
     use crate::layers::layer::Layer;
+    use crate::layers::storage::INTERNAL_PROVIDER_ID;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
@@ -1367,7 +1368,7 @@ mod tests {
         // try removing root collection id --> should fail
 
         let req = test::TestRequest::delete()
-            .uri(&format!("/layers/collections/{root_collection_id}"))
+            .uri(&format!("/layerDb/collections/{root_collection_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx.clone()).await;
 
@@ -1417,6 +1418,56 @@ mod tests {
                 .any(|item| item.name() == "Foo"),
             "{root_collection:#?}"
         );
+    }
+
+    #[ge_context::test]
+    async fn test_search_capabilities(app_ctx: PostgresContext<NoTls>) {
+        let session_id = app_ctx.default_session_id().await;
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/layers/collections/search/capabilities/{INTERNAL_PROVIDER_ID}",
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+    }
+
+    #[ge_context::test]
+    async fn test_search(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = app_ctx.default_session_id().await;
+
+        let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/layers/collections/search/{INTERNAL_PROVIDER_ID}/{root_collection_id}?limit=5&offset=0&search_type=fulltext&search_string=x"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+    }
+
+    #[ge_context::test]
+    async fn test_search_autocomplete(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = app_ctx.default_session_id().await;
+
+        let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/layers/collections/search/autocomplete/{INTERNAL_PROVIDER_ID}/{root_collection_id}?limit=5&offset=0&search_type=fulltext&search_string=x"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
     }
 
     struct MockRasterWorkflowLayerDescription {
