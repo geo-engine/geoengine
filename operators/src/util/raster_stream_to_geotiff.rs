@@ -1629,7 +1629,7 @@ mod tests {
         let processor = MockRasterSourceProcessor {
             data,
             tiling_specification,
-            bands: 1,
+            num_bands: 1,
         }
         .boxed();
         let query_rectangle = RasterQueryRectangle {

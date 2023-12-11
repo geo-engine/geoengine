@@ -2,7 +2,9 @@ use crate::util::Result;
 use futures::future::JoinAll;
 use futures::stream::Stream;
 use futures::{ready, Future};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInterval};
+use geoengine_datatypes::primitives::{
+    BandSelection, RasterQueryRectangle, SpatialPartition2D, TimeInterval,
+};
 use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy};
 use pin_project::pin_project;
 use std::pin::Pin;
@@ -89,7 +91,10 @@ where
     pub fn new(queryables: Vec<RasterStackerSource<F>>, query_rect: RasterQueryRectangle) -> Self {
         debug_assert!(
             query_rect.attributes.count()
-                == queryables.iter().map(|q| q.band_idxs.len()).sum::<usize>(),
+                == queryables
+                    .iter()
+                    .map(|q| q.band_idxs.len() as u32)
+                    .sum::<u32>(),
             "number of bands in query rectangle must match number of bands in queryables"
         );
 
@@ -140,7 +145,8 @@ where
                         .iter()
                         .map(|source| {
                             let mut query_rect = query_rect.clone();
-                            query_rect.attributes = source.band_idxs.clone().into();
+                            query_rect.attributes =
+                                BandSelection::new_unchecked(source.band_idxs.clone());
                             source.queryable.query(query_rect.clone())
                         })
                         .collect::<Vec<_>>();
@@ -274,8 +280,8 @@ where
                             .iter()
                             .take(*current_stream)
                             .map(|b| b.band_idxs.len() as u32)
-                            .sum::<u32>() as usize
-                            + *current_band;
+                            .sum::<u32>()
+                            + *current_band as u32;
                         tile.time = *time_slice;
 
                         // make progress
@@ -518,7 +524,7 @@ mod tests {
                 spatial_bounds: SpatialPartition2D::new_unchecked([0., 1.].into(), [3., 0.].into()),
                 time_interval: TimeInterval::new_unchecked(0, 10),
                 spatial_resolution: SpatialResolution::one(),
-                attributes: [0, 1].into(),
+                attributes: [0, 1].try_into().unwrap(),
             },
         );
 
@@ -798,7 +804,7 @@ mod tests {
                 spatial_bounds: SpatialPartition2D::new_unchecked([0., 1.].into(), [3., 0.].into()),
                 time_interval: TimeInterval::new_unchecked(0, 10),
                 spatial_resolution: SpatialResolution::one(),
-                attributes: [0, 1, 2, 3].into(),
+                attributes: [0, 1, 2, 3].try_into().unwrap(),
             },
         );
 
@@ -1085,7 +1091,7 @@ mod tests {
                 spatial_bounds: SpatialPartition2D::new_unchecked([0., 1.].into(), [3., 0.].into()),
                 time_interval: TimeInterval::new_unchecked(0, 10),
                 spatial_resolution: SpatialResolution::one(),
-                attributes: [0, 1, 2, 3].into(),
+                attributes: [0, 1, 2, 3].try_into().unwrap(),
             },
         );
 

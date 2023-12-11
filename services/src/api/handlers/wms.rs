@@ -1,4 +1,6 @@
-use crate::api::model::datatypes::{SpatialReference, SpatialReferenceOption, TimeInterval};
+use crate::api::model::datatypes::{
+    RasterColorizer, SpatialReference, SpatialReferenceOption, TimeInterval,
+};
 use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::api::ogc::wms::request::{
     GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat,
@@ -12,11 +14,11 @@ use crate::util::server::{connection_closed, not_implemented_handler, CacheContr
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
 };
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-use geoengine_datatypes::{operations::image::Colorizer, primitives::SpatialResolution};
 use geoengine_operators::engine::{
     CanonicOperatorName, ExecutionContext, ResultDescriptor, SingleRasterOrVectorSource,
     WorkflowOperatorPath,
@@ -244,6 +246,7 @@ fn wms_url(workflow: WorkflowId) -> Result<Url> {
         ("session_token" = [])
     )
 )]
+#[allow(clippy::too_many_lines)]
 async fn wms_map_handler<C: ApplicationContext>(
     req: HttpRequest,
     workflow: web::Path<WorkflowId>,
@@ -344,6 +347,16 @@ async fn wms_map_handler<C: ApplicationContext>(
         let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
         let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
 
+        let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
+
+        let (attributes, colorizer) = match raster_colorizer {
+            Some(RasterColorizer::SingleBand {
+                band,
+                band_colorizer,
+            }) => (BandSelection::new_single(band), Some(band_colorizer.into())),
+            _ => (BandSelection::new_single(0), None),
+        };
+
         let query_rect = RasterQueryRectangle {
             spatial_bounds: query_bbox,
             time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
@@ -351,12 +364,10 @@ async fn wms_map_handler<C: ApplicationContext>(
                 x_query_resolution,
                 y_query_resolution,
             ),
-            attributes: BandSelection::first(), // TODO: support multi bands in API (via colorizer) and set the selection here
+            attributes,
         };
 
         let query_ctx = ctx.query_context()?;
-
-        let colorizer = colorizer_from_style(&request.styles)?;
 
         call_on_generic_raster_processor!(
             processor,
@@ -400,7 +411,7 @@ fn handle_wms_error(
     }
 }
 
-fn colorizer_from_style(styles: &str) -> Result<Option<Colorizer>> {
+fn raster_colorizer_from_style(styles: &str) -> Result<Option<RasterColorizer>> {
     match styles.strip_prefix("custom:") {
         None => Ok(None),
         Some(suffix) => serde_json::from_str(suffix).map_err(error::Error::from),
@@ -471,11 +482,11 @@ mod tests {
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
         register_ndvi_workflow_helper_with_cache_ttl, send_test_request,
     };
+    use actix_http::header::{self, CONTENT_TYPE};
     use actix_web::dev::ServiceResponse;
-    use actix_web::http::header;
     use actix_web::http::Method;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::operations::image::RgbaColor;
+    use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
@@ -794,6 +805,11 @@ mod tests {
         )
         .unwrap();
 
+        let raster_colorizer = RasterColorizer::SingleBand {
+            band: 0,
+            band_colorizer: colorizer.into(),
+        };
+
         let params = &[
             ("request", "GetMap"),
             ("service", "WMS"),
@@ -805,7 +821,10 @@ mod tests {
             ("crs", "EPSG:4326"),
             (
                 "styles",
-                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+                &format!(
+                    "custom:{}",
+                    serde_json::to_string(&raster_colorizer).unwrap()
+                ),
             ),
             ("format", "image/png"),
             ("time", "2014-01-01T00:00:00.0Z"),
@@ -850,6 +869,11 @@ mod tests {
         )
         .unwrap();
 
+        let raster_colorizer = RasterColorizer::SingleBand {
+            band: 0,
+            band_colorizer: colorizer.into(),
+        };
+
         let params = &[
             ("request", "GetMap"),
             ("service", "WMS"),
@@ -864,7 +888,10 @@ mod tests {
             ("crs", "EPSG:4326"),
             (
                 "styles",
-                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+                &format!(
+                    "custom:{}",
+                    serde_json::to_string(&raster_colorizer).unwrap()
+                ),
             ),
             ("format", "image/png"),
             ("time", "2014-04-01T12:00:00.0Z"),
@@ -880,6 +907,7 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
+        assert_eq!(res.headers().get(CONTENT_TYPE).unwrap(), "image/png");
     }
 
     #[ge_context::test]
@@ -900,6 +928,11 @@ mod tests {
         )
         .unwrap();
 
+        let raster_colorizer = RasterColorizer::SingleBand {
+            band: 0,
+            band_colorizer: colorizer.into(),
+        };
+
         let params = &[
             ("request", "GetMap"),
             ("service", "WMS"),
@@ -914,7 +947,10 @@ mod tests {
             ("crs", "EPSG:432"),
             (
                 "styles",
-                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+                &format!(
+                    "custom:{}",
+                    serde_json::to_string(&raster_colorizer).unwrap()
+                ),
             ),
             ("format", "image/png"),
             ("time", "2014-04-01T12:00:00.0Z"),
@@ -962,6 +998,11 @@ mod tests {
         )
         .unwrap();
 
+        let raster_colorizer = RasterColorizer::SingleBand {
+            band: 0,
+            band_colorizer: colorizer.into(),
+        };
+
         let params = &[
             ("request", "GetMap"),
             ("service", "WMS"),
@@ -976,7 +1017,10 @@ mod tests {
             ("crs", "EPSG:432"),
             (
                 "styles",
-                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+                &format!(
+                    "custom:{}",
+                    serde_json::to_string(&raster_colorizer).unwrap()
+                ),
             ),
             ("format", "image/png"),
             ("time", "2014-04-01T12:00:00.0Z"),

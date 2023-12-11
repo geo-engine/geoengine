@@ -342,7 +342,7 @@ mod tests {
         let workflow = Workflow {
             operator: Histogram {
                 params: HistogramParams {
-                    column_name: None,
+                    attribute_name: "band".to_string(),
                     bounds: HistogramBounds::Values {
                         min: 0.0,
                         max: 10.0,

@@ -326,6 +326,9 @@ pub enum Error {
     },
 
     UnexpectedInvalidDbTypeConversion,
+
+    DuplicateBandInQueryBandSelection,
+    QueryBandSelectionMustNotBeEmpty,
 }
 
 impl From<arrow::error::ArrowError> for Error {

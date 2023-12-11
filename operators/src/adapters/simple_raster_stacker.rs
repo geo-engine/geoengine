@@ -27,7 +27,7 @@ pub struct SimpleRasterStackerAdapter<S> {
 
 pub struct SimpleRasterStackerSource<S> {
     pub stream: S,
-    pub bands: usize,
+    pub num_bands: usize,
 }
 
 impl<S> From<(S, usize)> for SimpleRasterStackerSource<S> {
@@ -35,7 +35,7 @@ impl<S> From<(S, usize)> for SimpleRasterStackerSource<S> {
         debug_assert!(value.1 > 0, "At least one band required");
         Self {
             stream: value.0,
-            bands: value.1,
+            num_bands: value.1,
         }
     }
 }
@@ -45,7 +45,7 @@ impl<S> SimpleRasterStackerAdapter<S> {
         ensure!(!streams.is_empty(), AtLeastOneStreamRequired);
 
         Ok(SimpleRasterStackerAdapter {
-            batch_size_per_stream: streams.iter().map(|s| s.bands).collect(),
+            batch_size_per_stream: streams.iter().map(|s| s.num_bands).collect(),
             streams: streams.into_iter().map(|s| s.stream).collect(),
             current_stream: 0,
             current_stream_item: 0,
@@ -92,7 +92,7 @@ where
                 .take(*current_stream)
                 .sum::<usize>()
                 + *current_stream_item;
-            tile.band = band;
+            tile.band = band as u32;
 
             // TODO: replace time check with temporal alignment
             if let Some(time) = current_time {

@@ -5,6 +5,7 @@ use crate::error::Result;
 
 use super::database_migration::{DatabaseVersion, Migration};
 
+/// This migration adds multi band support for result descriptors and symbologies
 pub struct Migration0001RasterStacks;
 
 #[async_trait]
@@ -26,6 +27,22 @@ impl Migration for Migration0001RasterStacks {
             );
 
             ALTER TYPE "RasterResultDescriptor" ADD ATTRIBUTE bands "RasterBandDescriptor"[];
+
+
+            CREATE TYPE "RasterColorizerType" AS ENUM (
+                'SingleBand'
+                -- TODO: 'MultiBand'
+            );
+
+            CREATE TYPE "RasterColorizer" AS (
+                "type" "RasterColorizerType",
+                -- single band colorizer
+                band bigint,
+                band_colorizer "Colorizer"
+                -- TODO: multi band colorizer
+            );
+
+            ALTER TYPE "RasterSymbology" ADD ATTRIBUTE raster_colorizer "RasterColorizer";
         "#,
         )
         .await?;
@@ -39,13 +56,16 @@ impl Migration for Migration0001RasterStacks {
         tx.batch_execute(
             r#"
             WITH raster_datasets AS (
-                SELECT id, (result_descriptor).raster.measurement measurement
+                SELECT 
+                    id, 
+                    (result_descriptor).raster.measurement measurement
                 FROM datasets
                 WHERE (result_descriptor).raster.data_type IS NOT NULL
             )
             UPDATE datasets
-            SET result_descriptor.raster.bands = 
-                ARRAY[('band', raster_datasets.measurement)]::"RasterBandDescriptor"[]
+            SET 
+                result_descriptor.raster.bands = 
+                    ARRAY[('band', raster_datasets.measurement)]::"RasterBandDescriptor"[]
             FROM raster_datasets
             WHERE datasets.id = raster_datasets.id;"#,
         )
@@ -78,9 +98,38 @@ impl Migration for Migration0001RasterStacks {
             .await?;
         }
 
+        // update symbology in project layers and collection layers
+        for (layer_table, id_column) in [
+            ("datasets", "id"),
+            ("project_version_layers", "project_version_id"),
+            ("layers", "id"),
+        ] {
+            tx.batch_execute(&format!(
+                r#"
+            WITH raster_layers AS (
+                SELECT {id_column}, (symbology).raster.colorizer colorizer
+                FROM {layer_table}
+                WHERE (symbology).raster.colorizer."type" IS NOT NULL
+            )
+            UPDATE {layer_table}
+            SET
+                symbology.raster.raster_colorizer = (
+                    'SingleBand'::"RasterColorizerType",
+                    0, 
+                    colorizer
+                )::"RasterColorizer"
+            FROM raster_layers
+            WHERE {layer_table}.{id_column} = raster_layers.{id_column};"#,
+            ))
+            .await?;
+        }
+
+        // complete new definitions of types by dropping redundant attributes
         tx.batch_execute(
             r#"
         ALTER TYPE "RasterResultDescriptor" DROP ATTRIBUTE measurement;
+
+        ALTER TYPE "RasterSymbology" DROP ATTRIBUTE colorizer;
         "#,
         )
         .await?;
@@ -110,7 +159,7 @@ mod tests {
     use super::*;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_migrates_result_descriptors() -> Result<()> {
+    async fn it_migrates_result_descriptors_and_symbologies() -> Result<()> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
         let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
 

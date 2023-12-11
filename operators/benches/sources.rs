@@ -115,7 +115,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             ),
         ],
         tiling_specification: tiling_spec,
-        bands: 1,
+        num_bands: 1,
     }
 }
 

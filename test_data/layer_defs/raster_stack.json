@@ -1,0 +1,38 @@
+{
+  "id": "c078db52-2dc6-4838-ad75-340cefeab476",
+  "name": "Stacked Raster",
+  "description": "A raster with two bands for testing",
+  "workflow": {
+    "type": "Raster",
+    "operator": {
+      "type": "RasterStacker",
+      "params": {},
+      "sources": {
+        "rasters": [
+          {
+            "type": "GdalSource",
+            "params": {
+              "data": "ndvi"
+            }
+          },
+          {
+            "type": "Expression",
+            "params": {
+              "expression": "if A > 100 { A } else { 0 }",
+              "outputType": "U8",
+              "mapNoData": false
+            },
+            "sources": {
+              "a": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "ndvi"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

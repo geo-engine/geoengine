@@ -38,7 +38,7 @@ where
 {
     pub data: Vec<RasterTile2D<T>>,
     pub tiling_specification: TilingSpecification,
-    pub bands: usize,
+    pub num_bands: u32,
 }
 
 impl<T> MockRasterSourceProcessor<T>
@@ -48,19 +48,19 @@ where
     fn new_unchecked(
         data: Vec<RasterTile2D<T>>,
         tiling_specification: TilingSpecification,
-        bands: usize,
+        num_bands: u32,
     ) -> Self {
         Self {
             data,
             tiling_specification,
-            bands,
+            num_bands,
         }
     }
 
     fn _new(
         data: Vec<RasterTile2D<T>>,
         tiling_specification: TilingSpecification,
-        bands: usize,
+        num_bands: u32,
     ) -> Result<Self, MockRasterSourceError> {
         if let Some(tile_shape) =
             first_tile_shape_not_matching_tiling_spec(&data, tiling_specification)
@@ -76,7 +76,7 @@ where
         Ok(Self {
             data,
             tiling_specification,
-            bands,
+            num_bands,
         })
     }
 }
@@ -141,7 +141,7 @@ where
         Ok(SparseTilesFillAdapter::new(
             inner_stream,
             tiling_strategy.tile_grid_box(query.spatial_partition()),
-            self.bands,
+            self.num_bands,
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::FixedValue(CacheExpiration::max()), // cache forever because we know all mock data
@@ -272,7 +272,7 @@ where
             MockRasterSourceProcessor::new_unchecked(
                 self.data.clone(),
                 self.tiling_specification,
-                self.result_descriptor.bands.len(),
+                self.result_descriptor.bands.count(),
             )
             .boxed(),
         );
