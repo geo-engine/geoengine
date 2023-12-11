@@ -1,14 +1,15 @@
-use crate::adapters::RasterStackerAdapter;
+use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptors,
     RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
     WorkflowOperatorPath,
 };
-use crate::error::RasterInputsMustHaveSameSpatialReferenceAndDatatype;
+use crate::error::{
+    InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
+};
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::future::join_all;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, BandSelection, RasterQueryRectangle, SpatialResolution,
@@ -44,9 +45,10 @@ impl RasterOperator for RasterStacker {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        // TODO: ensure at least two inputs
-
-        // TODO: verify all inputs have same data type and spatial reference
+        ensure!(
+            !self.sources.rasters.is_empty() && self.sources.rasters.len() <= 8,
+            InvalidNumberOfRasterStackerInputs
+        );
 
         let raster_sources = self
             .sources
@@ -246,8 +248,7 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<T>>>> {
-        let mut source_stream_futures = vec![];
-        let mut selected_bands_per_source = vec![];
+        let mut sources = vec![];
 
         for (idx, source) in self.sources.iter().enumerate() {
             let Some(bands) =
@@ -258,25 +259,15 @@ where
 
             let mut source_query = query.clone();
             source_query.attributes = bands.clone();
-            source_stream_futures.push(async move { source.raster_query(source_query, ctx).await });
-            selected_bands_per_source.push(bands.count());
+            sources.push(RasterStackerSource {
+                queryable: QueryWrapper { p: source, ctx },
+                band_idxs: bands.as_slice().iter().map(|&x| x as u32).collect(),
+            });
         }
 
-        let source_streams = join_all(source_stream_futures)
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>>>()?;
+        let output = RasterStackerAdapter::new(sources, query);
 
-        // let stream_bundles = source_streams
-        //     .into_iter()
-        //     .zip(selected_bands_per_source)
-        //     .map(Into::into)
-        //     .collect::<Vec<QueryableBundle<_>>>();
-
-        // let output = RasterStackerAdapter::new(stream_bundles)?;
-
-        // Ok(Box::pin(output))
-        todo!()
+        Ok(Box::pin(output))
     }
 }
 

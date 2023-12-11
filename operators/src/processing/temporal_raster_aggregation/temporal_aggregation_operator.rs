@@ -8,7 +8,7 @@ use super::aggregators::{
 use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
-use crate::adapters::RasterStackerAdapter;
+use crate::adapters::{SimpleRasterStackerAdapter, SimpleRasterStackerSource};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
     RasterOperator, SingleRasterSource, WorkflowOperatorPath,
@@ -429,23 +429,21 @@ where
         }
 
         // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
-        // let band_streams = query
-        //     .attributes
-        //     .as_slice()
-        //     .iter()
-        //     .map(|band| QueryableBundle {
-        //         stream: self.create_subquery_adapter_stream_for_single_band(
-        //             query.clone(),
-        //             *band,
-        //             ctx,
-        //         ),
-        //         bands: 1,
-        //     })
-        //     .collect::<Vec<_>>();
+        let band_streams = query
+            .attributes
+            .as_slice()
+            .iter()
+            .map(|band| SimpleRasterStackerSource {
+                stream: self.create_subquery_adapter_stream_for_single_band(
+                    query.clone(),
+                    *band,
+                    ctx,
+                ),
+                bands: 1,
+            })
+            .collect::<Vec<_>>();
 
-        // Ok(Box::pin(RasterStackerAdapter::new(band_streams)?))
-
-        todo!()
+        Ok(Box::pin(SimpleRasterStackerAdapter::new(band_streams)?))
     }
 }
 

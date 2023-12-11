@@ -103,6 +103,7 @@ pub enum Error {
     InvalidExpression,
 
     InvalidNumberOfExpressionInputs,
+    InvalidNumberOfRasterStackerInputs,
 
     InvalidNoDataValueValueForOutputDataType,
 

@@ -11,7 +11,7 @@ use std::task::{Context, Poll};
 use super::Queryable;
 
 #[pin_project(project = ArrayStateProjection)]
-enum State<T, F, const N: usize>
+enum State<T, F>
 where
     T: Pixel,
     F: Queryable<T>,
@@ -25,19 +25,19 @@ where
     },
     ConsumingStreams {
         #[pin]
-        streams: [F::Stream; N],
-        stream_state: StreamState<T, N>,
+        streams: Vec<F::Stream>,
+        stream_state: StreamState<T>,
     },
 
     Finished,
 }
 
-enum StreamState<T, const N: usize> {
+enum StreamState<T> {
     CollectingFirstTiles {
-        first_tiles: [Option<Result<RasterTile2D<T>>>; N],
+        first_tiles: Vec<Option<Result<RasterTile2D<T>>>>,
     },
     ProducingTimeSlice {
-        first_tiles: [RasterTile2D<T>; N],
+        first_tiles: Vec<RasterTile2D<T>>,
         time_slice: TimeInterval,
         current_stream: usize,
         current_band: usize,
@@ -45,12 +45,12 @@ enum StreamState<T, const N: usize> {
     },
 }
 
-pub struct QueryableBundle<Q> {
+pub struct RasterStackerSource<Q> {
     pub queryable: Q,
     pub band_idxs: Vec<u32>,
 }
 
-impl<Q> From<(Q, Vec<u32>)> for QueryableBundle<Q> {
+impl<Q> From<(Q, Vec<u32>)> for RasterStackerSource<Q> {
     fn from(value: (Q, Vec<u32>)) -> Self {
         debug_assert!(!value.1.is_empty(), "At least one band required");
         Self {
@@ -63,7 +63,7 @@ impl<Q> From<(Q, Vec<u32>)> for QueryableBundle<Q> {
 /// Stacks the bands of the input raster streams to create a single raster stream with all the combined bands.
 /// The input streams are automatically temporally aligned.
 #[pin_project(project = RasterArrayTimeAdapterProjection)]
-pub struct RasterStackerAdapter<T, F, const N: usize>
+pub struct RasterStackerAdapter<T, F>
 where
     T: Pixel,
     F: Queryable<T>,
@@ -71,53 +71,33 @@ where
     F::Output: Future<Output = Result<F::Stream>>,
 {
     // the sources (wrapped `QueryProcessor`s)
-    sources: [F; N],
+    sources: Vec<RasterStackerSource<F>>,
     #[pin]
-    state: State<T, F, N>,
+    state: State<T, F>,
     // the current query rectangle, which is advanced over time by increasing the start time
     query_rect: RasterQueryRectangle,
     num_spatial_tiles: Option<usize>,
-    source_band_idxs: [Vec<u32>; N],
 }
 
-impl<T, F, const N: usize> RasterStackerAdapter<T, F, N>
+impl<T, F> RasterStackerAdapter<T, F>
 where
     T: Pixel,
     F: Queryable<T>,
     F::Stream: Stream<Item = Result<RasterTile2D<T>>>,
     F::Output: Future<Output = Result<F::Stream>>,
 {
-    pub fn new(queryables: [QueryableBundle<F>; N], query_rect: RasterQueryRectangle) -> Self {
+    pub fn new(queryables: Vec<RasterStackerSource<F>>, query_rect: RasterQueryRectangle) -> Self {
         debug_assert!(
             query_rect.attributes.count()
                 == queryables.iter().map(|q| q.band_idxs.len()).sum::<usize>(),
             "number of bands in query rectangle must match number of bands in queryables"
         );
 
-        let Ok(source_band_idxs) = queryables
-            .iter()
-            .map(|queryable| queryable.band_idxs.clone())
-            .collect::<Vec<_>>()
-            .try_into()
-        else {
-            unreachable!("Vec should be of length N because the input was of length N")
-        };
-
-        let Ok(sources) = queryables
-            .into_iter()
-            .map(|queryable| queryable.queryable)
-            .collect::<Vec<_>>()
-            .try_into()
-        else {
-            unreachable!("Vec should be of length N because the input was of length N")
-        };
-
         Self {
-            sources,
+            sources: queryables,
             query_rect,
             state: State::Initial,
             num_spatial_tiles: None,
-            source_band_idxs,
         }
     }
 
@@ -135,7 +115,7 @@ where
     }
 }
 
-impl<T, F, const N: usize> Stream for RasterStackerAdapter<T, F, N>
+impl<T, F> Stream for RasterStackerAdapter<T, F>
 where
     T: Pixel,
     F: Queryable<T>,
@@ -151,7 +131,6 @@ where
             mut state,
             query_rect,
             num_spatial_tiles,
-            source_band_idxs,
         } = self.project();
 
         loop {
@@ -159,11 +138,10 @@ where
                 ArrayStateProjection::Initial => {
                     let array_of_futures = sources
                         .iter()
-                        .zip(source_band_idxs.iter())
-                        .map(|(source, band_idxs)| {
+                        .map(|source| {
                             let mut query_rect = query_rect.clone();
-                            query_rect.attributes = band_idxs.clone().into();
-                            source.query(query_rect.clone())
+                            query_rect.attributes = source.band_idxs.clone().into();
+                            source.queryable.query(query_rect.clone())
                         })
                         .collect::<Vec<_>>();
 
@@ -174,7 +152,7 @@ where
                 ArrayStateProjection::AwaitingQuery { query_futures } => {
                     let queries = ready!(query_futures.poll(cx));
 
-                    let mut ok_queries = Vec::with_capacity(N);
+                    let mut ok_queries = Vec::with_capacity(sources.len());
                     for query in queries {
                         match query {
                             Ok(query) => ok_queries.push(query),
@@ -187,13 +165,10 @@ where
                     }
 
                     // all sources produced an output, set the stream to be consumed
-                    let Ok(streams) = ok_queries.try_into() else {
-                        unreachable!("RasterArrayTimeAdapter: ok_queries.len() != N");
-                    };
                     state.set(State::ConsumingStreams {
-                        streams, // TODO: fuse?
+                        streams: ok_queries, // TODO: fuse?
                         stream_state: StreamState::CollectingFirstTiles {
-                            first_tiles: [(); N].map(|_| None),
+                            first_tiles: (0..sources.len()).map(|_| None).collect(),
                         },
                     });
                 }
@@ -202,7 +177,7 @@ where
                     stream_state,
                 } => match stream_state {
                     StreamState::CollectingFirstTiles { first_tiles } => {
-                        for (stream, value) in streams.iter_mut().zip(first_tiles.as_mut()) {
+                        for (stream, value) in streams.iter_mut().zip(first_tiles.iter_mut()) {
                             if value.is_none() {
                                 match Pin::new(stream).poll_next(cx) {
                                     Poll::Ready(Some(item)) => *value = Some(item),
@@ -212,15 +187,21 @@ where
                         }
 
                         let first_tiles = if first_tiles.iter().all(Option::is_some) {
-                            let values: [Option<Result<RasterTile2D<T>>>; N] =
-                                std::mem::replace(first_tiles, [(); N].map(|_| None));
-                            values.map(Option::unwrap)
+                            let mut values = Vec::new();
+
+                            for option in &mut *first_tiles {
+                                if let Some(value) = option.take() {
+                                    values.push(value);
+                                }
+                            }
+
+                            values
                         } else {
                             state.set(State::Finished);
                             return Poll::Ready(None);
                         };
 
-                        let mut ok_tiles = Vec::with_capacity(N);
+                        let mut ok_tiles = Vec::with_capacity(sources.len());
                         for tile in first_tiles {
                             match tile {
                                 Ok(tile) => ok_tiles.push(tile),
@@ -232,12 +213,11 @@ where
                             }
                         }
 
-                        let first_tiles: [RasterTile2D<T>; N] = ok_tiles
-                            .try_into()
-                            .expect("RasterArrayTimeAdapter: ok_tiles.len() != N");
-
-                        let mut iter = first_tiles.iter();
-                        let mut time = iter.next().expect("RasterArrayTimeAdapter: N > 0").time;
+                        let mut iter = ok_tiles.iter();
+                        let mut time = iter
+                            .next()
+                            .expect("RasterArrayTimeAdapter must have at least one input")
+                            .time;
 
                         for tile in iter {
                             time = time.intersect(&tile.time).unwrap_or_else(|| {
@@ -252,12 +232,12 @@ where
                         }
 
                         *num_spatial_tiles = Some(Self::number_of_tiles_in_partition(
-                            &first_tiles[0].tile_information(),
+                            &ok_tiles[0].tile_information(),
                             query_rect.spatial_bounds,
                         ));
 
                         *stream_state = StreamState::ProducingTimeSlice {
-                            first_tiles,
+                            first_tiles: ok_tiles,
                             time_slice: time,
                             current_stream: 0,
                             current_band: 0,
@@ -290,17 +270,17 @@ where
                             }
                         };
 
-                        tile.band = source_band_idxs
+                        tile.band = sources
                             .iter()
                             .take(*current_stream)
-                            .map(|b| b.len() as u32)
+                            .map(|b| b.band_idxs.len() as u32)
                             .sum::<u32>() as usize
                             + *current_band;
                         tile.time = *time_slice;
 
                         // make progress
                         *current_band += 1;
-                        if *current_band >= source_band_idxs[*current_stream].len() {
+                        if *current_band >= sources[*current_stream].band_idxs.len() {
                             *current_band = 0;
                             *current_stream += 1;
                         }
@@ -516,7 +496,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let stacker = RasterStackerAdapter::new(
-            [
+            vec![
                 (
                     QueryWrapper {
                         p: &qp1,
@@ -796,7 +776,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let stacker = RasterStackerAdapter::new(
-            [
+            vec![
                 (
                     QueryWrapper {
                         p: &qp1,
@@ -1083,7 +1063,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let stacker = RasterStackerAdapter::new(
-            [
+            vec![
                 (
                     QueryWrapper {
                         p: &qp1,
