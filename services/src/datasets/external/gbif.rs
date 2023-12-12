@@ -34,6 +34,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
+use tokio::time::{timeout, Duration};
 use tokio_postgres::NoTls;
 
 pub const GBIF_PROVIDER_ID: DataProviderId =
@@ -321,12 +322,15 @@ impl GbifDataProvider {
         let offset = &i64::from(*offset);
         let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset, &search_string];
         filters.iter().for_each(|(_, value)| params.push(value));
-        let rows = conn.query(&stmt, params.as_slice()).await?;
+        let rows = timeout(Duration::from_secs(3), conn.query(&stmt, params.as_slice())).await;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| row.get::<usize, String>(0))
-            .collect::<Vec<_>>())
+        match rows {
+            Ok(rows) => Ok(rows?
+                .into_iter()
+                .map(|row| row.get::<usize, String>(0))
+                .collect::<Vec<_>>()),
+            Err(_) => Ok(Vec::<String>::new()),
+        }
     }
 
     async fn get_filter_items(
@@ -396,7 +400,7 @@ impl GbifDataProvider {
         search_string: &str,
     ) -> Result<Vec<CollectionItem>> {
         let items = self
-            .get_filter_autocomplete_items(limit, offset, path, search_string)
+            .query_filter_items(limit, offset, path, search_string)
             .await?
             .into_iter()
             .map(|name| {
@@ -419,6 +423,25 @@ impl GbifDataProvider {
     }
 
     async fn get_filter_autocomplete_items(
+        &self,
+        limit: &u32,
+        offset: &u32,
+        path: &str,
+        search_string: &str,
+    ) -> Result<Vec<String>> {
+        let filter_items = timeout(
+            Duration::from_secs(3),
+            self.query_filter_items(limit, offset, path, search_string),
+        )
+        .await;
+
+        match filter_items {
+            Ok(filter_items) => Ok(filter_items?),
+            Err(_) => Ok(Vec::<String>::new()),
+        }
+    }
+
+    async fn query_filter_items(
         &self,
         limit: &u32,
         offset: &u32,
