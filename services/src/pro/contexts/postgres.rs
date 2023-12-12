@@ -3453,11 +3453,17 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            db.resolve_dataset_name_to_id(&dataset_name1).await.unwrap(),
+            db.resolve_dataset_name_to_id(&dataset_name1)
+                .await
+                .unwrap()
+                .unwrap(),
             dataset_id1
         );
         assert_eq!(
-            db.resolve_dataset_name_to_id(&dataset_name2).await.unwrap(),
+            db.resolve_dataset_name_to_id(&dataset_name2)
+                .await
+                .unwrap()
+                .unwrap(),
             dataset_id2
         );
     }

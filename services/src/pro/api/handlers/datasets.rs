@@ -438,7 +438,11 @@ mod tests {
             construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
 
         let db = ctx.db();
-        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
 
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
@@ -495,7 +499,11 @@ mod tests {
         let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
-        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
 
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 

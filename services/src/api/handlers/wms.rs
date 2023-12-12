@@ -578,6 +578,7 @@ mod tests {
                 ctx.db()
                     .resolve_dataset_name_to_id(&DatasetName::new(None, "NDVI"))
                     .await
+                    .unwrap()
                     .unwrap(),
             )
             .await
@@ -685,6 +686,7 @@ mod tests {
                 ctx.db()
                     .resolve_dataset_name_to_id(&DatasetName::new(None, "NDVI"))
                     .await
+                    .unwrap()
                     .unwrap(),
             )
             .await

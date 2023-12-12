@@ -55,7 +55,11 @@ impl Resource {
             }
             Resource::Project(project_id) => ResourceId::Project(project_id),
             Resource::Dataset(dataset_name) => {
-                ResourceId::DatasetId(db.resolve_dataset_name_to_id(&dataset_name).await?)
+                ResourceId::DatasetId(db.resolve_dataset_name_to_id(&dataset_name).await?.ok_or(
+                    crate::error::Error::UnknownDatasetName {
+                        dataset_name: dataset_name.to_string(),
+                    },
+                )?)
             }
         })
     }
