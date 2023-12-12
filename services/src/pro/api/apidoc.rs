@@ -51,12 +51,15 @@ use crate::layers::listing::LayerCollectionId;
 use crate::pro;
 use crate::pro::api::handlers::users::{Quota, UpdateQuota};
 use crate::pro::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
-use crate::pro::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
+use crate::pro::users::{
+    AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
+    UserSession,
+};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
-    ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId, RasterSymbology,
-    STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
+    ProjectId, ProjectLayer, ProjectListing, ProjectUpdateToken, ProjectVersion, ProjectVersionId,
+    RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
 use crate::util::{
@@ -107,6 +110,9 @@ use utoipa::{Modify, OpenApi};
         pro::api::handlers::users::login_handler,
         pro::api::handlers::users::logout_handler,
         pro::api::handlers::users::quota_handler,
+        pro::api::handlers::users::oidc_login,
+        pro::api::handlers::users::oidc_init,
+        pro::api::handlers::users::quota_handler,
         pro::api::handlers::users::get_user_quota_handler,
         pro::api::handlers::users::update_user_quota_handler,
         pro::api::handlers::users::register_user_handler,
@@ -152,7 +158,8 @@ use utoipa::{Modify, OpenApi};
             UnauthorizedUserResponse,
             BadRequestQueryResponse,
             PngResponse,
-            ZipResponse
+            ZipResponse,
+            AuthCodeRequestURL
         ),
         schemas(
             ErrorResponse,
@@ -163,6 +170,8 @@ use utoipa::{Modify, OpenApi};
             UserInfo,
             Quota,
             UpdateQuota,
+            AuthCodeResponse,
+            AuthCodeRequestURL,
 
             DataId,
             DataProviderId,
@@ -349,6 +358,7 @@ use utoipa::{Modify, OpenApi};
             ProjectVersion,
             LayerUpdate,
             PlotUpdate,
+            ProjectUpdateToken,
             Plot,
             ProjectLayer,
             LayerVisibility,
