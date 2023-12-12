@@ -157,12 +157,12 @@ impl GbifDataProvider {
                 (
                     SELECT DISTINCT canonicalname
                     FROM {schema}.species
-                    WHERE taxonrank = $1{filter}
+                    WHERE taxonrank = '{taxonrank}'{filter}
                 )
             GROUP BY {taxonrank}
             ORDER BY {taxonrank} 
-            LIMIT $2
-            OFFSET $3;
+            LIMIT $1
+            OFFSET $2;
             "#,
             schema = self.db_config.schema,
             filter = filters
@@ -170,7 +170,7 @@ impl GbifDataProvider {
                 .enumerate()
                 .map(|(index, (column, _))| format!(
                     r#" AND "{column}" = ${index}"#,
-                    index = index + 4
+                    index = index + 3
                 ))
                 .collect::<String>()
         );
@@ -179,7 +179,7 @@ impl GbifDataProvider {
 
         let limit = &i64::from(options.limit);
         let offset = &i64::from(options.offset);
-        let mut params: Vec<&(dyn ToSql + Sync)> = vec![&taxonrank, limit, offset];
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset];
         filters.iter().for_each(|(_, value)| params.push(value));
         let rows = conn.query(&stmt, params.as_slice()).await?;
 
@@ -221,18 +221,18 @@ impl GbifDataProvider {
         let conn = self.pool.get().await?;
         let query = &format!(
             r#"
-            SELECT {taxonrank}, COUNT(*)
+            SELECT "{taxonrank}", COUNT(*)
             FROM {schema}.occurrences
-            WHERE {taxonrank} IN
+            WHERE "{taxonrank}" IN
                 (
                     SELECT DISTINCT canonicalname
                     FROM {schema}.species
-                    WHERE taxonrank = $1{filter} AND canonicalname LIKE $4
+                    WHERE taxonrank = '{taxonrank}'{filter} AND canonicalname LIKE $3
                 )
-            GROUP BY {taxonrank}
-            ORDER BY {taxonrank} 
-            LIMIT $2
-            OFFSET $3;
+            GROUP BY "{taxonrank}"
+            ORDER BY "{taxonrank}" 
+            LIMIT $1
+            OFFSET $2;
             "#,
             schema = self.db_config.schema,
             filter = filters
@@ -247,7 +247,9 @@ impl GbifDataProvider {
 
         let stmt = conn.prepare(query).await?;
 
-        let mut params: Vec<&(dyn ToSql + Sync)> = vec![&taxonrank, limit, offset, &search_string];
+        let limit = &i64::from(*limit);
+        let offset = &i64::from(*offset);
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset, &search_string];
         filters.iter().for_each(|(_, value)| params.push(value));
         let rows = conn.query(&stmt, params.as_slice()).await?;
 
@@ -295,12 +297,12 @@ impl GbifDataProvider {
                 (
                     SELECT DISTINCT canonicalname
                     FROM {schema}.species
-                    WHERE taxonrank = $1{filter} AND canonicalname LIKE $4
+                    WHERE taxonrank = '{taxonrank}'{filter} AND canonicalname LIKE $3
                 )
             GROUP BY {taxonrank}
             ORDER BY {taxonrank} 
-            LIMIT $2
-            OFFSET $3;
+            LIMIT $1
+            OFFSET $2;
             "#,
             schema = self.db_config.schema,
             filter = filters
@@ -315,7 +317,9 @@ impl GbifDataProvider {
 
         let stmt = conn.prepare(query).await?;
 
-        let mut params: Vec<&(dyn ToSql + Sync)> = vec![&taxonrank, limit, offset, &search_string];
+        let limit = &i64::from(*limit);
+        let offset = &i64::from(*offset);
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset, &search_string];
         filters.iter().for_each(|(_, value)| params.push(value));
         let rows = conn.query(&stmt, params.as_slice()).await?;
 
@@ -443,12 +447,14 @@ impl GbifDataProvider {
                 .enumerate()
                 .map(|(index, (column, _))| format!(
                     r#" AND "{column}" = ${index}"#,
-                    index = index + 3
+                    index = index + 4
                 ))
                 .collect::<String>()
         );
         let stmt = conn.prepare(query).await?;
 
+        let limit = &i64::from(*limit);
+        let offset = &i64::from(*offset);
         let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset, &search_string];
         filters.iter().for_each(|(_, value)| params.push(value));
         let rows = conn.query(&stmt, params.as_slice()).await?;
@@ -2517,6 +2523,795 @@ mod tests {
             let result = test(db_config).await;
 
             assert!(result.is_ok());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_ignores_search_on_select_items() {
+        with_temp_schema(|db_config| async {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                db_config,
+                cache_ttl: Default::default(),
+            })
+            .initialize()
+            .await
+            .unwrap();
+
+            let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+            let collection = provider
+                .search(
+                    &root_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "x".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await;
+
+            let collection = collection.unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: root_id,
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![
+                        CollectionItem::Collection(LayerCollectionListing {
+                            id: ProviderLayerCollectionId {
+                                provider_id: GBIF_PROVIDER_ID,
+                                collection_id: LayerCollectionId("filter/".to_string()),
+                            },
+                            name: "Select kingdom".to_string(),
+                            description: "Refine the current filter".to_string(),
+                            properties: Default::default(),
+                        }),
+                        CollectionItem::Collection(LayerCollectionListing {
+                            id: ProviderLayerCollectionId {
+                                provider_id: GBIF_PROVIDER_ID,
+                                collection_id: LayerCollectionId("datasets/family/".to_string()),
+                            },
+                            name: "Family datasets".to_string(),
+                            description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
+                        }),
+                        CollectionItem::Collection(LayerCollectionListing {
+                            id: ProviderLayerCollectionId {
+                                provider_id: GBIF_PROVIDER_ID,
+                                collection_id: LayerCollectionId("datasets/genus/".to_string()),
+                            },
+                            name: "Genus datasets".to_string(),
+                            description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
+                        }),
+                        CollectionItem::Collection(LayerCollectionListing {
+                            id: ProviderLayerCollectionId {
+                                provider_id: GBIF_PROVIDER_ID,
+                                collection_id: LayerCollectionId("datasets/species/".to_string()),
+                            },
+                            name: "Species datasets".to_string(),
+                            description: "Apply the current filter".to_string(),
+                            properties: Default::default(),
+                        })
+                    ],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_ignores_autocomplete_search_on_select_items() {
+        with_temp_schema(|db_config| async {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                db_config,
+                cache_ttl: Default::default(),
+            })
+            .initialize()
+            .await
+            .unwrap();
+
+            let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+            let collection = provider
+                .autocomplete_search(
+                    &root_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "x".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await;
+
+            let collection = collection.unwrap();
+
+            assert_eq!(collection, Vec::<String>::new());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_searches_on_filter_items() {
+        with_temp_schema(|db_config| async {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                db_config,
+                cache_ttl: Default::default(),
+            })
+            .initialize()
+            .await
+            .unwrap();
+
+            let layer_collection_id = LayerCollectionId("filter/".to_string());
+
+            let collection = provider
+                .search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "x".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: layer_collection_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            let collection = provider
+                .search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "n".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: layer_collection_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            collection_id: LayerCollectionId("select/Animalia".to_string()),
+                        },
+                        name: "Animalia".to_string(),
+                        description: String::new(),
+                        properties: Default::default(),
+                    })],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            let collection = provider
+                .search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: "n".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: layer_collection_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            let collection = provider
+                .search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: "An".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: layer_collection_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            collection_id: LayerCollectionId("select/Animalia".to_string()),
+                        },
+                        name: "Animalia".to_string(),
+                        description: String::new(),
+                        properties: Default::default(),
+                    })],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_autocompletes_search_on_filter_items() {
+        with_temp_schema(|db_config| async {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                db_config,
+                cache_ttl: Default::default(),
+            })
+            .initialize()
+            .await
+            .unwrap();
+
+            let layer_collection_id = LayerCollectionId("filter/".to_string());
+
+            let collection = provider
+                .autocomplete_search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "x".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(collection, Vec::<String>::new());
+
+            let collection = provider
+                .autocomplete_search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "n".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(collection, vec!["Animalia".to_string()]);
+
+            let collection = provider
+                .autocomplete_search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: "n".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(collection, Vec::<String>::new());
+
+            let collection = provider
+                .autocomplete_search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: "An".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(collection, vec!["Animalia".to_string()]);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_searches_on_filtered_filter_items() {
+        with_temp_schema(|db_config| async {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                db_config,
+                cache_ttl: Default::default(),
+            })
+            .initialize()
+            .await
+            .unwrap();
+
+            let layer_collection_id = LayerCollectionId("filter/Animalia".to_string());
+
+            let collection = provider
+                .search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "x".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: layer_collection_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            let collection = provider
+                .search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "r".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: layer_collection_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "select/Animalia/Arthropoda".to_string()
+                            ),
+                        },
+                        name: "Arthropoda".to_string(),
+                        description: String::new(),
+                        properties: Default::default(),
+                    })],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            let collection = provider
+                .search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: "r".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: layer_collection_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            let collection = provider
+                .search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: "Ar".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: layer_collection_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "select/Animalia/Arthropoda".to_string()
+                            ),
+                        },
+                        name: "Arthropoda".to_string(),
+                        description: String::new(),
+                        properties: Default::default(),
+                    })],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_autocompletes_search_on_filtered_filter_items() {
+        with_temp_schema(|db_config| async {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                db_config,
+                cache_ttl: Default::default(),
+            })
+            .initialize()
+            .await
+            .unwrap();
+
+            let layer_collection_id = LayerCollectionId("filter/Animalia".to_string());
+
+            let collection = provider
+                .autocomplete_search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "x".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(collection, Vec::<String>::new());
+
+            let collection = provider
+                .autocomplete_search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "r".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(collection, vec!["Arthropoda".to_string()]);
+
+            let collection = provider
+                .autocomplete_search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: "r".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(collection, Vec::<String>::new());
+
+            let collection = provider
+                .autocomplete_search(
+                    &layer_collection_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: "Ar".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(collection, vec!["Arthropoda".to_string()]);
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_searches_result_items() {
+        with_temp_schema(|db_config| async {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                db_config,
+                cache_ttl: Default::default(),
+            })
+            .initialize()
+            .await
+            .unwrap();
+
+            let root_id = LayerCollectionId("datasets/family/".to_string());
+
+            let collection = provider
+                .search(
+                    &root_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "x".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: root_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            let collection = provider
+                .search(
+                    &root_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "m".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: root_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            layer_id: LayerId("family/Limoniidae".to_string()),
+                        },
+                        name: "Limoniidae".to_string(),
+                        description: "3 occurrences".to_string(),
+                        properties: vec![]
+                    }),],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            let collection = provider
+                .search(
+                    &root_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: "m".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: root_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            let collection = provider
+                .search(
+                    &root_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: "Lim".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: root_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            layer_id: LayerId("family/Limoniidae".to_string()),
+                        },
+                        name: "Limoniidae".to_string(),
+                        description: "3 occurrences".to_string(),
+                        properties: vec![]
+                    }),],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_autocompletes_search_on_result_items() {
+        with_temp_schema(|db_config| async {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                db_config,
+                cache_ttl: Default::default(),
+            })
+            .initialize()
+            .await
+            .unwrap();
+
+            let root_id = LayerCollectionId("datasets/family/".to_string());
+
+            let collection = provider
+                .autocomplete_search(
+                    &root_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "x".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(collection, Vec::<String>::new());
+
+            let collection = provider
+                .autocomplete_search(
+                    &root_id,
+                    SearchParameters {
+                        search_type: "fulltext".to_string(),
+                        search_string: "m".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(collection, vec!["Limoniidae".to_string()]);
+
+            let collection = provider
+                .autocomplete_search(
+                    &root_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: "m".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(collection, Vec::<String>::new());
+
+            let collection = provider
+                .autocomplete_search(
+                    &root_id,
+                    SearchParameters {
+                        search_type: "prefix".to_string(),
+                        search_string: "Lim".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(collection, vec!["Limoniidae".to_string()]);
         })
         .await;
     }
