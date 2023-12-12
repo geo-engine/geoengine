@@ -81,6 +81,7 @@ where
     F2::Output: Future<Output = Result<F2::Stream>>,
 {
     pub fn new(source_a: F1, source_b: F2, query_rect: RasterQueryRectangle) -> Self {
+        // TODO: need to ensure all sources are single-band
         Self {
             source_a,
             source_b,
@@ -177,6 +178,7 @@ where
     F::Output: Future<Output = Result<F::Stream>>,
 {
     pub fn new(sources: [F; N], query_rect: RasterQueryRectangle) -> Self {
+        // TODO: need to ensure all sources are single-band
         Self {
             sources,
             query_rect,
