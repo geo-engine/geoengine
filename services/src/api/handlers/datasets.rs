@@ -187,10 +187,20 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
 ) -> Result<impl Responder, GetDatasetError> {
     let session_ctx = app_ctx.session_context(session).db();
 
+    let real_dataset = dataset.into_inner();
+
     let dataset_id = session_ctx
-        .resolve_dataset_name_to_id(&dataset.into_inner())
+        .resolve_dataset_name_to_id(&real_dataset)
         .await
         .context(CannotLoadDataset)?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id
+        .ok_or(error::Error::UnknownDatasetName {
+            dataset_name: real_dataset.to_string(),
+        })
+        .context(CannotLoadDataset)?;
+
     let dataset = session_ctx
         .load_dataset(&dataset_id)
         .await
@@ -1061,9 +1071,16 @@ pub async fn delete_dataset_handler<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let session_ctx = app_ctx.session_context(session).db();
 
+    let real_dataset = dataset.into_inner();
+
     let dataset_id = session_ctx
-        .resolve_dataset_name_to_id(&dataset.into_inner())
+        .resolve_dataset_name_to_id(&real_dataset)
         .await?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id.ok_or(error::Error::UnknownDatasetName {
+        dataset_name: real_dataset.to_string(),
+    })?;
 
     session_ctx.delete_dataset(dataset_id).await?;
 
@@ -2246,7 +2263,11 @@ mod tests {
             construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
 
         let db = ctx.db();
-        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()
@@ -2303,7 +2324,11 @@ mod tests {
         let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
 
         let db = ctx.db();
-        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         let req = actix_web::test::TestRequest::delete()

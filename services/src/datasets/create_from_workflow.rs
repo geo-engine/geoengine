@@ -190,14 +190,15 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
     if let Some(dataset_name) = &info.name {
         let db = ctx.db();
 
-        let potential_id = db.resolve_dataset_name_to_id(dataset_name).await;
+        // try to resolve the dataset name to an id
+        let potential_id_result = db.resolve_dataset_name_to_id(dataset_name).await?;
 
-        if let Ok(id) = potential_id {
-            return crate::error::DatasetNameAlreadyExists {
+        // handle the case where the dataset name is already taken
+        if let Some(dataset_id) = potential_id_result {
+            return Err(error::Error::DatasetNameAlreadyExists {
                 dataset_name: dataset_name.to_string(),
-                dataset_id: id,
-            }
-            .fail();
+                dataset_id: dataset_id.into(),
+            });
         }
     }
 

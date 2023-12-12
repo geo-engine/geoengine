@@ -214,6 +214,10 @@ pub enum Error {
         dataset_name: String,
         dataset_id: DatasetId,
     },
+    #[snafu(display("Dataset name '{}' does not exist", dataset_name))]
+    UnknownDatasetName {
+        dataset_name: String,
+    },
     InvalidDatasetName,
     DatasetInvalidLayerName {
         layer_name: String,
