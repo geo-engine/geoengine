@@ -509,22 +509,28 @@ pub type PlotUpdate = VecUpdate<Plot>;
 string_token!(NoUpdate, "none");
 string_token!(Delete, "delete");
 
+// use common schema for `Delete` and `NoUpdate`
+// TODO: maybe revert when https://github.com/OpenAPITools/openapi-generator/issues/14831 is fixed
+impl<'a> ToSchema<'a> for Delete {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        use utoipa::openapi::*;
+        (
+            "ProjectUpdateToken",
+            ObjectBuilder::new()
+                .schema_type(SchemaType::String)
+                .enum_values::<[&str; 2], &str>(Some(["none", "delete"]))
+                .into(),
+        )
+    }
+}
+
 impl<'a> ToSchema<'a> for LayerUpdate {
     fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
         (
             "LayerUpdate",
             OneOfBuilder::new()
-                .item(
-                    ObjectBuilder::new()
-                        .schema_type(SchemaType::String)
-                        .enum_values::<[&str; 1], &str>(Some(["none"])),
-                )
-                .item(
-                    ObjectBuilder::new()
-                        .schema_type(SchemaType::String)
-                        .enum_values::<[&str; 1], &str>(Some(["delete"])),
-                )
+                .item(Ref::from_schema_name("ProjectUpdateToken"))
                 .item(Ref::from_schema_name("ProjectLayer"))
                 .into(),
         )
@@ -537,16 +543,7 @@ impl<'a> ToSchema<'a> for PlotUpdate {
         (
             "PlotUpdate",
             OneOfBuilder::new()
-                .item(
-                    ObjectBuilder::new()
-                        .schema_type(SchemaType::String)
-                        .enum_values::<[&str; 1], &str>(Some(["none"])),
-                )
-                .item(
-                    ObjectBuilder::new()
-                        .schema_type(SchemaType::String)
-                        .enum_values::<[&str; 1], &str>(Some(["delete"])),
-                )
+                .item(Ref::from_schema_name("ProjectUpdateToken"))
                 .item(Ref::from_schema_name("Plot"))
                 .into(),
         )

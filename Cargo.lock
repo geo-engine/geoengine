@@ -6099,6 +6099,7 @@ dependencies = [
  "quote",
  "regex",
  "syn 2.0.39",
+ "url",
  "uuid",
 ]
 

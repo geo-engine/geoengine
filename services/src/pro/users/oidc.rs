@@ -29,6 +29,7 @@ use snafu::Snafu;
 use std::collections::HashMap;
 use std::sync::Arc;
 use url::{ParseError, Url};
+use utoipa::{ToResponse, ToSchema};
 
 pub type DefaultProviderMetadata = ProviderMetadata<
     EmptyAdditionalProviderMetadata,
@@ -86,12 +87,12 @@ struct PendingRequest {
     code_verifier: PkceCodeVerifier,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, ToResponse, ToSchema)]
 pub struct AuthCodeRequestURL {
     url: Url,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
 pub struct AuthCodeResponse {
     #[serde(rename = "sessionState")]
     pub session_state: String,
