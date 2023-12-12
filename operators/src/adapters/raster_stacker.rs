@@ -3,7 +3,7 @@ use futures::future::JoinAll;
 use futures::stream::Stream;
 use futures::{ready, Future};
 use geoengine_datatypes::primitives::{
-    BandSelection, RasterQueryRectangle, SpatialPartition2D, TimeInterval,
+    BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy};
 use pin_project::pin_project;
@@ -62,6 +62,34 @@ impl<Q> From<(Q, Vec<u32>)> for RasterStackerSource<Q> {
     }
 }
 
+#[derive(Debug)]
+pub struct PartialQueryRect {
+    pub spatial_bounds: SpatialPartition2D,
+    pub time_interval: TimeInterval,
+    pub spatial_resolution: SpatialResolution,
+}
+
+impl PartialQueryRect {
+    fn raster_query_rectangle(&self, attributes: BandSelection) -> RasterQueryRectangle {
+        RasterQueryRectangle {
+            spatial_bounds: self.spatial_bounds,
+            time_interval: self.time_interval,
+            spatial_resolution: self.spatial_resolution,
+            attributes,
+        }
+    }
+}
+
+impl From<RasterQueryRectangle> for PartialQueryRect {
+    fn from(value: RasterQueryRectangle) -> Self {
+        Self {
+            spatial_bounds: value.spatial_bounds,
+            time_interval: value.time_interval,
+            spatial_resolution: value.spatial_resolution,
+        }
+    }
+}
+
 /// Stacks the bands of the input raster streams to create a single raster stream with all the combined bands.
 /// The input streams are automatically temporally aligned.
 #[pin_project(project = RasterArrayTimeAdapterProjection)]
@@ -77,7 +105,7 @@ where
     #[pin]
     state: State<T, F>,
     // the current query rectangle, which is advanced over time by increasing the start time
-    query_rect: RasterQueryRectangle,
+    query_rect: PartialQueryRect,
     num_spatial_tiles: Option<usize>,
 }
 
@@ -88,16 +116,7 @@ where
     F::Stream: Stream<Item = Result<RasterTile2D<T>>>,
     F::Output: Future<Output = Result<F::Stream>>,
 {
-    pub fn new(queryables: Vec<RasterStackerSource<F>>, query_rect: RasterQueryRectangle) -> Self {
-        debug_assert!(
-            query_rect.attributes.count()
-                == queryables
-                    .iter()
-                    .map(|q| q.band_idxs.len() as u32)
-                    .sum::<u32>(),
-            "number of bands in query rectangle must match number of bands in queryables"
-        );
-
+    pub fn new(queryables: Vec<RasterStackerSource<F>>, query_rect: PartialQueryRect) -> Self {
         Self {
             sources: queryables,
             query_rect,
@@ -144,9 +163,9 @@ where
                     let array_of_futures = sources
                         .iter()
                         .map(|source| {
-                            let mut query_rect = query_rect.clone();
-                            query_rect.attributes =
-                                BandSelection::new_unchecked(source.band_idxs.clone());
+                            let query_rect = query_rect.raster_query_rectangle(
+                                BandSelection::new_unchecked(source.band_idxs.clone()),
+                            );
                             source.queryable.query(query_rect.clone())
                         })
                         .collect::<Vec<_>>();
@@ -520,11 +539,10 @@ mod tests {
                 )
                     .into(),
             ],
-            RasterQueryRectangle {
+            PartialQueryRect {
                 spatial_bounds: SpatialPartition2D::new_unchecked([0., 1.].into(), [3., 0.].into()),
                 time_interval: TimeInterval::new_unchecked(0, 10),
                 spatial_resolution: SpatialResolution::one(),
-                attributes: [0, 1].try_into().unwrap(),
             },
         );
 
@@ -800,11 +818,10 @@ mod tests {
                 )
                     .into(),
             ],
-            RasterQueryRectangle {
+            PartialQueryRect {
                 spatial_bounds: SpatialPartition2D::new_unchecked([0., 1.].into(), [3., 0.].into()),
                 time_interval: TimeInterval::new_unchecked(0, 10),
                 spatial_resolution: SpatialResolution::one(),
-                attributes: [0, 1, 2, 3].try_into().unwrap(),
             },
         );
 
@@ -1087,11 +1104,10 @@ mod tests {
                 )
                     .into(),
             ],
-            RasterQueryRectangle {
+            PartialQueryRect {
                 spatial_bounds: SpatialPartition2D::new_unchecked([0., 1.].into(), [3., 0.].into()),
                 time_interval: TimeInterval::new_unchecked(0, 10),
                 spatial_resolution: SpatialResolution::one(),
-                attributes: [0, 1, 2, 3].try_into().unwrap(),
             },
         );
 

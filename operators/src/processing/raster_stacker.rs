@@ -265,7 +265,7 @@ where
             });
         }
 
-        let output = RasterStackerAdapter::new(sources, query);
+        let output = RasterStackerAdapter::new(sources, query.into());
 
         Ok(Box::pin(output))
     }
