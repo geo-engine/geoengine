@@ -334,6 +334,30 @@ async fn list_collection_handler<C: ApplicationContext>(
     Ok(web::Json(collection))
 }
 
+// Returns the search capabilities of the given provider
+#[utoipa::path(
+    tag = "Layers",
+    get,
+    path = "/layers/collections/search/capabilities/{provider}",
+    responses(
+        (status = 200, description = "OK", body = SearchCapabilities,
+            example = json!({
+                "search_types": {
+                    "fulltext": true,
+                    "prefix": true
+                },
+                "autocomplete": true,
+                "filters": [],
+            })
+        )
+    ),
+    params(
+        ("provider" = DataProviderId, description = "Data provider id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn search_capabilities_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<DataProviderId>,
@@ -370,6 +394,56 @@ async fn search_capabilities_handler<C: ApplicationContext>(
     Ok(web::Json(caps))
 }
 
+// Searches the contents of the collection of the given provider
+#[utoipa::path(
+    tag = "Layers",
+    get,
+    path = "/layers/collections/search/{provider}/{collection}",
+    responses(
+        (status = 200, description = "OK", body = LayerCollection,
+            example = json!({
+                "id": {
+                    "providerId": "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74",
+                    "collectionId": "05102bb3-a855-4a37-8a8a-30026a91fef1"
+                },
+                "name": "Layers",
+                "description": "All available Geo Engine layers",
+                "items": [
+                    {
+                        "type": "collection",
+                        "id": {
+                            "providerId": "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74",
+                            "collectionId": "a29f77cc-51ce-466b-86ef-d0ab2170bc0a"
+                        },
+                        "name": "An empty collection",
+                        "description": "There is nothing here",
+                        "properties": []
+                    },
+                    {
+                        "type": "layer",
+                        "id": {
+                            "providerId": "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74",
+                            "layerId": "b75db46e-2b9a-4a86-b33f-bc06a73cd711"
+                        },
+                        "name": "Ports in Germany",
+                        "description": "Natural Earth Ports point filtered with Germany polygon",
+                        "properties": []
+                    }
+                ],
+                "entryLabel": null,
+                "properties": []
+            })
+        )
+    ),
+    params(
+        ("provider" = DataProviderId, description = "Data provider id"),
+        ("collection" = LayerCollectionId, description = "Layer collection id"),
+        SearchParameters
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn search_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerCollectionId)>,
@@ -409,6 +483,25 @@ async fn search_handler<C: ApplicationContext>(
     Ok(web::Json(collection))
 }
 
+// Autocompletes the search on the contents of the collection of the given provider
+#[utoipa::path(
+    tag = "Layers",
+    get,
+    path = "/layers/collections/search/autocomplete/{provider}/{collection}",
+    responses(
+        (status = 200, description = "OK", body = Vec<String>,
+            example = json!(["An empty collection", "Ports in Germany"])
+        )
+    ),
+    params(
+        ("provider" = DataProviderId, description = "Data provider id"),
+        ("collection" = LayerCollectionId, description = "Layer collection id"),
+        SearchParameters
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
 async fn autocomplete_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerCollectionId)>,

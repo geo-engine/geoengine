@@ -22,7 +22,7 @@ pub struct SearchCapabilities {
     pub(crate) filters: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams)]
 pub struct SearchTypes {
     pub(crate) fulltext: bool,
     pub(crate) prefix: bool,
