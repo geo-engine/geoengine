@@ -1,7 +1,7 @@
 use crate::util::Result;
 use futures::future::JoinAll;
-use futures::stream::Stream;
-use futures::{ready, Future};
+use futures::stream::{Fuse, FusedStream, Stream};
+use futures::{ready, Future, StreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
 };
@@ -27,7 +27,7 @@ where
     },
     ConsumingStreams {
         #[pin]
-        streams: Vec<F::Stream>,
+        streams: Vec<Fuse<F::Stream>>,
         stream_state: StreamState<T>,
     },
 
@@ -166,7 +166,7 @@ where
                             let query_rect = query_rect.raster_query_rectangle(
                                 BandSelection::new_unchecked(source.band_idxs.clone()),
                             );
-                            source.queryable.query(query_rect.clone())
+                            source.queryable.query(query_rect)
                         })
                         .collect::<Vec<_>>();
 
@@ -191,7 +191,7 @@ where
 
                     // all sources produced an output, set the stream to be consumed
                     state.set(State::ConsumingStreams {
-                        streams: ok_queries, // TODO: fuse?
+                        streams: ok_queries.into_iter().map(StreamExt::fuse).collect(),
                         stream_state: StreamState::CollectingFirstTiles {
                             first_tiles: (0..sources.len()).map(|_| None).collect(),
                         },
@@ -221,9 +221,11 @@ where
                             }
 
                             values
-                        } else {
+                        } else if streams.iter().any(FusedStream::is_terminated) {
                             state.set(State::Finished);
                             return Poll::Ready(None);
+                        } else {
+                            return Poll::Pending;
                         };
 
                         let mut ok_tiles = Vec::with_capacity(sources.len());

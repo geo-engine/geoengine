@@ -18,17 +18,14 @@ use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-// TODO: IF this operator shall perform temporal alignment automatically: specify the alignment strategy here(?)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RasterStackerParams {}
 
 /// This `QueryProcessor` stacks all of it's inputs into a single raster time-series.
 /// It does so by querying all of it's inputs outputting them by band, space and then time.
+/// The tiles are automatically temporally aligned.
 ///
 /// All inputs must have the same data type and spatial reference.
-// TODO: temporal alignment or do that beforehand?
-//     if we explicitly align beforehand using custom operators we have the problem that we need to hardcode the alignment params(?) and if the dataset changes the workflow no longer works
-//      we have no way of aligning indepentently of each other before putting them into the `RasterStacker`` as we cannot access other operators in the workflow
 pub type RasterStacker = Operator<RasterStackerParams, MultipleRasterSources>;
 
 impl OperatorName for RasterStacker {
@@ -273,9 +270,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{CacheHint, SpatialPartition2D, TimeInterval},
+        primitives::{CacheHint, SpatialPartition2D, TimeInstance, TimeInterval},
         raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -286,6 +285,9 @@ mod tests {
             MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
+        processing::{Expression, ExpressionParams, ExpressionSources},
+        source::{GdalSource, GdalSourceParameters},
+        util::gdal::add_ndvi_dataset,
     };
 
     use super::*;
@@ -908,5 +910,131 @@ mod tests {
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
         assert!(data2.tiles_equal_ignoring_cache_hint(&result));
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_stacks_ndvi() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+
+        let expression = Expression {
+            params: ExpressionParams {
+                expression: "if A > 100 { A } else { 0 }".into(),
+                output_type: RasterDataType::U8,
+                output_measurement: None,
+                map_no_data: false,
+            },
+            sources: ExpressionSources::new_a(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: ndvi_id.clone(),
+                    },
+                }
+                .boxed(),
+            ),
+        }
+        .boxed();
+
+        let operator = RasterStacker {
+            params: RasterStackerParams {},
+            sources: MultipleRasterSources {
+                rasters: vec![
+                    GdalSource {
+                        params: GdalSourceParameters { data: ndvi_id },
+                    }
+                    .boxed(),
+                    expression,
+                ],
+            },
+        }
+        .boxed();
+
+        let operator = operator
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let processor = operator.query_processor().unwrap().get_u8().unwrap();
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+            shape_array: [2, 2],
+        };
+
+        let query_ctx = MockQueryContext::test_default();
+
+        // query both bands
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180., -90.).into(),
+            ),
+            time_interval: TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+            ),
+            spatial_resolution: SpatialResolution::one(),
+            attributes: [0, 1].try_into().unwrap(),
+        };
+
+        let result = processor
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        assert!(!result.is_empty());
+
+        // query only first band
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180., -90.).into(),
+            ),
+            time_interval: TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+            ),
+            spatial_resolution: SpatialResolution::one(),
+            attributes: [0].try_into().unwrap(),
+        };
+
+        let result = processor
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        assert!(!result.is_empty());
+
+        // query only second band
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180., -90.).into(),
+            ),
+            time_interval: TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+            ),
+            spatial_resolution: SpatialResolution::one(),
+            attributes: [1].try_into().unwrap(),
+        };
+
+        let result = processor
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        assert!(!result.is_empty());
     }
 }
