@@ -34,7 +34,7 @@ use super::FeatureAggregationMethod;
 pub struct RasterVectorJoinProcessor<G> {
     collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     raster_processors: Vec<TypedRasterQueryProcessor>,
-    raster_bands: Vec<usize>, // TODO: store result descriptors instead? could drive column names from measurement, once there is one measurement for each band
+    raster_bands: Vec<u32>, // TODO: store result descriptors instead? could drive column names from measurement, once there is one measurement for each band
     column_names: Vec<String>,
     aggregation_method: FeatureAggregationMethod,
     ignore_no_data: bool,
@@ -48,7 +48,7 @@ where
     pub fn new(
         collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
         raster_processors: Vec<TypedRasterQueryProcessor>,
-        raster_bands: Vec<usize>,
+        raster_bands: Vec<u32>,
         column_names: Vec<String>,
         aggregation_method: FeatureAggregationMethod,
         ignore_no_data: bool,
@@ -67,7 +67,7 @@ where
     fn process_collections<'a>(
         collection: BoxStream<'a, Result<FeatureCollection<G>>>,
         raster_processor: &'a TypedRasterQueryProcessor,
-        bands: usize,
+        num_bands: u32,
         new_column_name: &'a str,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -78,7 +78,7 @@ where
             Self::process_collection_chunk(
                 collection,
                 raster_processor,
-                bands,
+                num_bands,
                 new_column_name,
                 query.clone(),
                 ctx,
@@ -97,14 +97,14 @@ where
     async fn process_collection_chunk<'a>(
         collection: FeatureCollection<G>,
         raster_processor: &'a TypedRasterQueryProcessor,
-        bands: usize,
+        num_bands: u32,
         new_column_name: &'a str,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
         aggregation_method: FeatureAggregationMethod,
         ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
-        let new_column_names_vec = (0..bands)
+        let new_column_names_vec = (0..num_bands)
             .map(|i| {
                 if i == 0 {
                     new_column_name.to_owned()
@@ -121,7 +121,7 @@ where
 
             return Self::collection_with_new_null_columns(
                 &collection,
-                bands,
+                num_bands,
                 &new_column_names_vec,
                 raster_processor.raster_data_type().into(),
             );
@@ -144,20 +144,20 @@ where
 
             return Self::collection_with_new_null_columns(
                 &collection,
-                bands,
+                num_bands,
                 &new_column_names_vec,
                 raster_processor.raster_data_type().into(),
             );
         };
 
         let query =
-            RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first_n(bands));
+            RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first_n(num_bands));
 
         call_on_generic_raster_processor!(raster_processor, raster_processor => {
             Self::process_typed_collection_chunk(
                 collection,
                 raster_processor,
-                bands,
+                num_bands,
                 new_column_names_vec,
                 query,
                 ctx,
@@ -170,11 +170,11 @@ where
 
     fn collection_with_new_null_columns<'a>(
         collection: &FeatureCollection<G>,
-        bands: usize,
+        num_bands: u32,
         new_column_names: &[String],
         feature_data_type: FeatureDataType,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
-        let feature_data = (0..bands)
+        let feature_data = (0..num_bands)
             .map(|_| feature_data_type.null_feature_data(collection.len()))
             .collect::<Vec<_>>();
 
@@ -194,7 +194,7 @@ where
     async fn process_typed_collection_chunk<'a, P: Pixel>(
         collection: FeatureCollection<G>,
         raster_processor: &'a dyn RasterQueryProcessor<RasterType = P>,
-        bands: usize,
+        num_bands: u32,
         new_column_names: Vec<String>,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -209,7 +209,7 @@ where
             .time_multi_fold(
                 move || {
                     Ok(VectorRasterJoiner::new(
-                        bands,
+                        num_bands,
                         aggregation_method,
                         ignore_no_data,
                     ))
@@ -233,14 +233,14 @@ struct JoinerState<G, C> {
     covered_pixels: C,
     feature_pixels: Option<Vec<Vec<GridIdx2D>>>,
     current_tile: GridIdx2D,
-    current_band: usize,
+    current_band_idx: u32,
     aggregators: Vec<TypedAggregator>, // one aggregator per band
     g: PhantomData<G>,
 }
 
 struct VectorRasterJoiner<G, C> {
     state: Option<JoinerState<G, C>>,
-    bands: usize,
+    num_bands: u32,
     aggregation_method: FeatureAggregationMethod,
     ignore_no_data: bool,
     cache_hint: CacheHint,
@@ -253,7 +253,7 @@ where
     FeatureCollection<G>: PixelCoverCreator<G, C = C>,
 {
     fn new(
-        bands: usize,
+        num_bands: u32,
         aggregation_method: FeatureAggregationMethod,
         ignore_no_data: bool,
     ) -> Self {
@@ -261,7 +261,7 @@ where
 
         Self {
             state: None,
-            bands,
+            num_bands,
             aggregation_method,
             ignore_no_data,
             cache_hint: CacheHint::max_duration(),
@@ -294,7 +294,7 @@ where
         let collection = collection.replace_time(&time_intervals)?;
 
         self.state = Some(JoinerState::<G, C> {
-            aggregators: (0..self.bands)
+            aggregators: (0..self.num_bands)
                 .map(|_| {
                     create_feature_aggregator::<P>(
                         collection.len(),
@@ -306,7 +306,7 @@ where
             covered_pixels: collection.create_covered_pixels(),
             feature_pixels: None,
             current_tile: [0, 0].into(),
-            current_band: 0,
+            current_band_idx: 0,
             g: Default::default(),
         });
 
@@ -326,19 +326,19 @@ where
             self.initialize::<P>(initial_collection, &raster.time)?;
         };
         let collection = &state.covered_pixels.collection_ref();
-        let aggregator = &mut state.aggregators[raster.band];
+        let aggregator = &mut state.aggregators[raster.band as usize];
         let covered_pixels = &state.covered_pixels;
 
         if state.feature_pixels.is_some() && raster.tile_position == state.current_tile {
             // same tile as before, but a different band. We can re-use the covered pixels
-            state.current_band = raster.band;
+            state.current_band_idx = raster.band;
             // state
             //     .feature_pixels
             //     .expect("feature_pixels should exist because we checked it above")
         } else {
             // first or new tile, we need to calculcate the covered pixels
             state.current_tile = raster.tile_position;
-            state.current_band = raster.band;
+            state.current_band_idx = raster.band;
 
             state.feature_pixels = Some(
                 (0..collection.len())

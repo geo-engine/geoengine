@@ -8,7 +8,7 @@ use super::aggregators::{
 use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
-use crate::adapters::{RasterStackerAdapter, StreamBundle};
+use crate::adapters::{SimpleRasterStackerAdapter, SimpleRasterStackerSource};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
     RasterOperator, SingleRasterSource, WorkflowOperatorPath,
@@ -253,11 +253,11 @@ where
     fn create_subquery_adapter_stream_for_single_band<'a>(
         &'a self,
         query_rect_to_answer: RasterQueryRectangle,
-        band: usize,
+        band_idx: u32,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> futures::stream::BoxStream<'a, Result<RasterTile2D<P>>> {
         let mut query = query_rect_to_answer;
-        query.attributes = band.into();
+        query.attributes = band_idx.into();
 
         match self.aggregation_type {
             Aggregation::Min {
@@ -433,17 +433,17 @@ where
             .attributes
             .as_slice()
             .iter()
-            .map(|band| StreamBundle {
+            .map(|band| SimpleRasterStackerSource {
                 stream: self.create_subquery_adapter_stream_for_single_band(
                     query.clone(),
                     *band,
                     ctx,
                 ),
-                bands: 1,
+                num_bands: 1,
             })
             .collect::<Vec<_>>();
 
-        Ok(Box::pin(RasterStackerAdapter::new(band_streams)?))
+        Ok(Box::pin(SimpleRasterStackerAdapter::new(band_streams)?))
     }
 }
 
@@ -2788,7 +2788,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
-            attributes: [0, 1].into(),
+            attributes: [0, 1].try_into().unwrap(),
         };
         let query_ctx = MockQueryContext::test_default();
 

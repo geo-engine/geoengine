@@ -39,7 +39,7 @@ pub struct BaseTile<G> {
     /// This is NOT a pixel position inside the tile.
     pub tile_position: GridIdx2D,
     // the band of the tile, relevant for multi-band raster
-    pub band: usize,
+    pub band: u32,
     /// The global geotransform to transform pixels into geographic coordinates
     pub global_geo_transform: GeoTransform,
     /// The pixels of the tile are stored as `Grid` or, in case they are all no-data as `NoDataGrid`.
@@ -177,7 +177,7 @@ where
     pub fn new_with_tile_info(
         time: TimeInterval,
         tile_info: TileInformation,
-        band: usize,
+        band: u32,
         data: GridOrEmpty<D, T>,
         cache_hint: CacheHint,
     ) -> Self
@@ -214,7 +214,7 @@ where
     pub fn new_with_tile_info_and_properties(
         time: TimeInterval,
         tile_info: TileInformation,
-        band: usize,
+        band: u32,
         data: GridOrEmpty<D, T>,
         properties: RasterProperties,
         cache_hint: CacheHint,
@@ -249,7 +249,7 @@ where
     pub fn new(
         time: TimeInterval,
         tile_position: GridIdx2D,
-        band: usize,
+        band: u32,
         global_geo_transform: GeoTransform,
         data: GridOrEmpty<D, T>,
         cache_hint: CacheHint,
@@ -269,7 +269,7 @@ where
     pub fn new_with_properties(
         time: TimeInterval,
         tile_position: GridIdx2D,
-        band: usize,
+        band: u32,
         global_geo_transform: GeoTransform,
         data: GridOrEmpty<D, T>,
         properties: RasterProperties,

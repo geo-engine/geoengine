@@ -55,7 +55,7 @@ where
 pub async fn resolve_dataset_name_to_id<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
     dataset_name: &DatasetName,
-) -> Result<DatasetId>
+) -> Result<Option<DatasetId>>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -70,9 +70,9 @@ where
         )
         .await?;
 
-    let row = conn.query_one(&stmt, &[&dataset_name]).await?;
+    let row_option = conn.query_opt(&stmt, &[&dataset_name]).await?;
 
-    Ok(row.get(0))
+    Ok(row_option.map(|row| row.get(0)))
 }
 
 #[async_trait]
@@ -218,7 +218,10 @@ where
         })
     }
 
-    async fn resolve_dataset_name_to_id(&self, dataset_name: &DatasetName) -> Result<DatasetId> {
+    async fn resolve_dataset_name_to_id(
+        &self,
+        dataset_name: &DatasetName,
+    ) -> Result<Option<DatasetId>> {
         let conn = self.conn_pool.get().await?;
         resolve_dataset_name_to_id(&conn, dataset_name).await
     }

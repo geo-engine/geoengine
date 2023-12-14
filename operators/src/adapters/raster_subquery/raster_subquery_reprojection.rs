@@ -84,7 +84,7 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-        band: usize,
+        band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         // this is the spatial partition we are interested in
         let valid_spatial_bounds = self
@@ -100,7 +100,7 @@ where
                     spatial_bounds: pb,
                     time_interval: TimeInterval::new_instant(start_time)?,
                     spatial_resolution: self.in_spatial_res,
-                    attributes: band.into(),
+                    attributes: band_idx.into(),
                 })),
                 // In some strange cases the reprojection can return an empty box.
                 // We ignore it since it contains no pixels.

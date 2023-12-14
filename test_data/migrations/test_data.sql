@@ -38,7 +38,8 @@ INSERT INTO datasets (
     description,
     source_operator,
     result_descriptor,
-    meta_data
+    meta_data,
+    symbology
 ) VALUES (
     '6cc80129-eea4-4140-b09c-6bcfbd76ad5f',
     (NULL, 'test')::"DatasetName",
@@ -99,5 +100,25 @@ INSERT INTO datasets (
         )::"GdalMetaDataStatic",        
         NULL,
         NULL
-    )::"MetaDataDefinition"
+    )::"MetaDataDefinition",
+    (
+        (
+            1.0, -- noqa: PRS
+            (
+                'LinearGradient'::"ColorizerType", -- noqa: PRS
+                array[(
+                        0.0, 
+                        array[128,128,128,255]::"RgbaColor"
+                    )::"Breakpoint"
+                ]::"Breakpoint"[],
+                array[0,0,0,0]::"RgbaColor",
+                array[0,0,0,0]::"RgbaColor",
+                array[0,0,0,0]::"RgbaColor",
+                NULL
+            )::"Colorizer"
+        )::"RasterSymbology", -- noqa: PRS
+        NULL,
+        NULL,
+        NULL
+    )::"Symbology"
 );

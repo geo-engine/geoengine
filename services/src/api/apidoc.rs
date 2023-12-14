@@ -11,7 +11,7 @@ use crate::api::model::datatypes::{
     ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat,
     ExternalDataId, FeatureDataType, GdalConfigOption, LayerId, LinearGradient,
     LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon, NamedData,
-    NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType,
+    NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle, RasterColorizer, RasterDataType,
     RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
     SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity,
     TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
@@ -50,8 +50,8 @@ use crate::layers::listing::SearchTypes;
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
-    ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId, RasterSymbology,
-    STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
+    ProjectId, ProjectLayer, ProjectListing, ProjectUpdateToken, ProjectVersion, ProjectVersionId,
+    RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
 use crate::util::{
@@ -230,6 +230,7 @@ use utoipa::{Modify, OpenApi};
             PointSymbology,
             PolygonSymbology,
             RasterSymbology,
+            RasterColorizer,
             RgbaColor,
             StrokeParam,
             Symbology,
@@ -327,7 +328,7 @@ use utoipa::{Modify, OpenApi};
             PlotUpdate,
             LayerUpdate,
             Project,
-            LayerUpdate,
+            ProjectUpdateToken,
             PlotUpdate,
             ProjectLayer,
             LayerVisibility,

@@ -215,7 +215,7 @@ where
 
         // gather the data
         let grid_shape = tile.grid_shape();
-        let n_bands = bands_of_tile.len() as i32;
+        let n_bands = bands_of_tile.len() as u32;
         let props = tile.properties.clone(); // = &tile.properties;
         let time = tile.time;
         let tile_position = tile.tile_position;
@@ -234,7 +234,7 @@ where
                 &pool,
                 &model_content,
                 grid_shape,
-                n_bands as usize,
+                n_bands,
                 ndv,
             )
         })
@@ -261,7 +261,7 @@ fn process_tile(
     pool: &ThreadPool,
     model_file: &Arc<String>,
     grid_shape: GridShape<[usize; 2]>,
-    n_bands: usize,
+    n_bands: u32,
     nan_val: f32,
 ) -> Result<geoengine_datatypes::raster::Grid<GridShape<[usize; 2]>, f32>, XGBoostModuleError> {
     pool.install(|| {
@@ -281,7 +281,7 @@ fn process_tile(
 
         // TODO: clarify: as of right now, this is not doing anything
         // because xgboost seems to be the fastest, when the chunks are big.
-        let chunk_size = grid_shape.number_of_elements() * n_bands;
+        let chunk_size = grid_shape.number_of_elements() * n_bands as usize;
 
         let res: Vec<Vec<f32>> = pixels
             .par_chunks(chunk_size)
@@ -289,10 +289,10 @@ fn process_tile(
                 // get xgboost style matrices
                 let xg_matrix = DMatrix::from_col_major_f32(
                     elem,
-                    mem::size_of::<f32>() * n_bands,
+                    mem::size_of::<f32>() * n_bands as usize,
                     mem::size_of::<f32>(),
                     grid_shape.number_of_elements(),
-                    n_bands,
+                    n_bands as usize,
                     -1, // TODO: add this to settings.toml: # of threads for xgboost to use
                     nan_val,
                 )
@@ -306,7 +306,7 @@ fn process_tile(
                 // measure time for prediction
                 let predictions: Result<Vec<f32>, XGBError> = bst.predict_from_dmat(
                     &xg_matrix,
-                    &[grid_shape.number_of_elements() as u64, n_bands as u64],
+                    &[grid_shape.number_of_elements() as u64, u64::from(n_bands)],
                     &mut out_dim,
                 );
 

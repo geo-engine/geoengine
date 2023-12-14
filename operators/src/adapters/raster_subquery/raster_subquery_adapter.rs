@@ -96,9 +96,9 @@ where
     /// The `GridBoundingBox2D` that defines the tile grid space of the query.
     grid_bounds: GridBoundingBox2D,
     // the selected bands from the source
-    bands: Vec<usize>,
+    bands: Vec<u32>,
     // the band being currently processed
-    current_band_index: usize,
+    current_band_index: u32,
 
     /// The `SubQuery` defines what this adapter does.
     sub_query: SubQuery,
@@ -176,7 +176,7 @@ where
         let grid_bounds = self.grid_bounds.clone();
         let global_geo_transform = self.current_tile_spec.global_geo_transform;
         let tile_shape = self.current_tile_spec.tile_size_in_pixels;
-        let bands = self.bands.len();
+        let num_bands = self.bands.len() as u32;
 
         let s = self.filter_map(|x| async move {
             match x {
@@ -189,7 +189,7 @@ where
         let s_filled = SparseTilesFillAdapter::new(
             s,
             grid_bounds,
-            bands,
+            num_bands,
             global_geo_transform,
             tile_shape,
             cache_expiration,
@@ -269,7 +269,7 @@ where
                 *this.current_tile_spec,
                 this.query_rect_to_answer.clone(),
                 *this.current_time_start,
-                this.bands[*this.current_band_index],
+                this.bands[*this.current_band_index as usize],
             ) {
                 Ok(Some(tile_query_rectangle)) => {
                     let tile_query_stream_fut = this
@@ -391,7 +391,7 @@ where
 
         // now do progress
 
-        let next_tile_pos = if *this.current_band_index + 1 < this.bands.len() {
+        let next_tile_pos = if *this.current_band_index + 1 < this.bands.len() as u32 {
             // there is still another band to process for the current tile position
             *this.current_band_index += 1;
             Some(this.current_tile_spec.global_tile_position)
@@ -474,7 +474,7 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-        band: usize,
+        band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>>;
 
     /// This method generates the method which combines the accumulator and each tile of the sub-query stream in the `TryFold` stream adapter.
@@ -559,13 +559,13 @@ where
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-        band: usize,
+        band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         Ok(Some(RasterQueryRectangle {
             spatial_bounds: tile_info.spatial_partition(),
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: query_rect.spatial_resolution,
-            attributes: band.into(),
+            attributes: band_idx.into(),
         }))
     }
 

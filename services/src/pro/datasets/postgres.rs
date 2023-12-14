@@ -209,7 +209,10 @@ where
         })
     }
 
-    async fn resolve_dataset_name_to_id(&self, dataset_name: &DatasetName) -> Result<DatasetId> {
+    async fn resolve_dataset_name_to_id(
+        &self,
+        dataset_name: &DatasetName,
+    ) -> Result<Option<DatasetId>> {
         let conn = self.conn_pool.get().await?;
         resolve_dataset_name_to_id(&conn, dataset_name).await
     }
