@@ -2,7 +2,7 @@ use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSingleRasterOrVectorOperator, InitializedSources, InitializedVectorOperator,
     Operator, OperatorName, QueryContext, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriber, RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource,
+    RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
 };
@@ -381,6 +381,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedVectorOperator
         Ok(
             call_on_generic_vector_processor!(source_processor, processor => VectorTimeShiftProcessor {
                 processor,
+                result_descriptor: self.result_descriptor.clone(),
                 shift: self.shift,
             }.boxed().into()),
         )
@@ -430,6 +431,7 @@ where
     Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
     processor: Q,
+    result_descriptor: VectorResultDescriptor,
     shift: Shift,
 }
 
@@ -478,14 +480,8 @@ where
 
         Ok(stream.boxed())
     }
-}
 
-impl<Q, P, Shift> RasterResultDescriber for RasterTimeShiftProcessor<Q, P, Shift>
-where
-    Q: RasterQueryProcessor<RasterType = P>,
-    Shift: TimeShiftOperation,
-{
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
     }
 }
@@ -523,6 +519,10 @@ where
         });
 
         Ok(Box::pin(stream))
+    }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

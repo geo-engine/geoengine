@@ -1,7 +1,7 @@
 use crate::adapters::{FillerTileCacheExpirationStrategy, SparseTilesFillAdapter};
 use crate::engine::{
-    QueryContext, RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor,
-    VectorQueryProcessor, VectorResultDescriptor,
+    QueryContext, RasterQueryProcessor, RasterResultDescriptor, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -26,14 +26,6 @@ impl<S, Q, A, R> MapQueryProcessor<S, Q, A, R> {
             query_fn,
             additional_data,
         }
-    }
-}
-
-impl<S, Q> RasterResultDescriber
-    for MapQueryProcessor<S, Q, TilingSpecification, RasterResultDescriptor>
-{
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
     }
 }
 
@@ -70,6 +62,10 @@ where
             .boxed())
         }
     }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[async_trait]
@@ -92,5 +88,9 @@ where
             log::debug!("Query was rewritten to empty query. Returning empty stream.");
             Ok(Box::pin(futures::stream::empty())) // TODO: should be empty collection?
         }
+    }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        self.source.vector_result_descriptor()
     }
 }

@@ -1076,6 +1076,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1133,6 +1137,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1186,6 +1194,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1243,6 +1255,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1303,6 +1319,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1363,6 +1383,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1440,6 +1464,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1490,6 +1518,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1537,6 +1569,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1746,6 +1782,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,

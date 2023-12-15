@@ -2,8 +2,8 @@ use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptors,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::error::{
     InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
@@ -277,12 +277,6 @@ fn map_query_bands_to_source_bands(
     Some(BandSelection::new_unchecked(bands))
 }
 
-impl<T> RasterResultDescriber for RasterStackerProcessor<T> {
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
-    }
-}
-
 #[async_trait]
 impl<T> RasterQueryProcessor for RasterStackerProcessor<T>
 where
@@ -314,6 +308,10 @@ where
         let output = RasterStackerAdapter::new(sources, query.into());
 
         Ok(Box::pin(output))
+    }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

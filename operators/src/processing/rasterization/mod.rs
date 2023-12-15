@@ -2,9 +2,8 @@ use crate::engine::TypedVectorQueryProcessor::MultiPoint;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
-    RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriber,
-    RasterResultDescriptor, SingleVectorSource, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, WorkflowOperatorPath,
+    RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
@@ -247,12 +246,6 @@ pub struct GridRasterizationQueryProcessor {
     origin_coordinate: Coordinate2D,
 }
 
-impl RasterResultDescriber for GridRasterizationQueryProcessor {
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
-    }
-}
-
 #[async_trait]
 impl RasterQueryProcessor for GridRasterizationQueryProcessor {
     type RasterType = f64;
@@ -381,6 +374,10 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
             Ok(generate_zeroed_tiles(self.tiling_specification, &query))
         }
     }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 pub struct DensityRasterizationQueryProcessor {
@@ -389,12 +386,6 @@ pub struct DensityRasterizationQueryProcessor {
     tiling_specification: TilingSpecification,
     radius: f64,
     stddev: f64,
-}
-
-impl RasterResultDescriber for DensityRasterizationQueryProcessor {
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
-    }
 }
 
 #[async_trait]
@@ -502,6 +493,10 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
         } else {
             Ok(generate_zeroed_tiles(self.tiling_specification, &query))
         }
+    }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

@@ -7,8 +7,7 @@ use crate::adapters::{
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriber, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -201,17 +200,6 @@ where
     }
 }
 
-impl<Q, P, I> RasterResultDescriber for InterploationProcessor<Q, P, I>
-where
-    Q: RasterQueryProcessor<RasterType = P>,
-    P: Pixel,
-    I: InterpolationAlgorithm<P>,
-{
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
-    }
-}
-
 #[async_trait]
 impl<Q, P, I> QueryProcessor for InterploationProcessor<Q, P, I>
 where
@@ -219,6 +207,7 @@ where
         Output = RasterTile2D<P>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
     P: Pixel,
     I: InterpolationAlgorithm<P>,
@@ -226,6 +215,7 @@ where
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -258,6 +248,10 @@ where
         .filter_and_fill(
             crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
         ))
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

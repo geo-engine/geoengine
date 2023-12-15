@@ -1,8 +1,8 @@
 use crate::adapters::{FillerTileCacheExpirationStrategy, SparseTilesFillAdapter};
 use crate::engine::{
     CanonicOperatorName, InitializedRasterOperator, OperatorData, OperatorName, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor, SourceOperator,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -97,15 +97,6 @@ where
     None
 }
 
-impl<T> RasterResultDescriber for MockRasterSourceProcessor<T>
-where
-    T: Pixel,
-{
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
-    }
-}
-
 #[async_trait]
 impl<T> RasterQueryProcessor for MockRasterSourceProcessor<T>
 where
@@ -156,6 +147,10 @@ where
             FillerTileCacheExpirationStrategy::FixedValue(CacheExpiration::max()), // cache forever because we know all mock data
         )
         .boxed())
+    }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

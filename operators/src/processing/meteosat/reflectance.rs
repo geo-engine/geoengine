@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor,
-    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -282,15 +282,6 @@ fn calculate_esd(timestamp: &DateTime) -> f64 {
     1.0 - e * theta.cos()
 }
 
-impl<Q> RasterResultDescriber for ReflectanceProcessor<Q>
-where
-    Q: RasterQueryProcessor<RasterType = PixelOut>,
-{
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
-    }
-}
-
 #[async_trait]
 impl<Q> QueryProcessor for ReflectanceProcessor<Q>
 where
@@ -298,11 +289,13 @@ where
         Output = RasterTile2D<PixelOut>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
 {
     type Output = RasterTile2D<PixelOut>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -312,6 +305,10 @@ where
         let src = self.source.query(query, ctx).await?;
         let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
     }
 }
 

@@ -11,7 +11,7 @@ use super::first_last_subquery::{
 use crate::adapters::{SimpleRasterStackerAdapter, SimpleRasterStackerSource};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
-    RasterOperator, RasterResultDescriber, SingleRasterSource, WorkflowOperatorPath,
+    RasterOperator, SingleRasterSource, WorkflowOperatorPath,
 };
 use crate::{
     adapters::SubQueryTileAggregator,
@@ -196,6 +196,7 @@ where
             Output = RasterTile2D<P>,
             SpatialBounds = SpatialPartition2D,
             Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
@@ -405,16 +406,6 @@ where
     }
 }
 
-impl<Q, P> RasterResultDescriber for TemporalRasterAggregationProcessor<Q, P>
-where
-    Q: RasterQueryProcessor<RasterType = P>,
-    P: Pixel,
-{
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
-    }
-}
-
 #[async_trait]
 impl<Q, P> QueryProcessor for TemporalRasterAggregationProcessor<Q, P>
 where
@@ -422,12 +413,14 @@ where
         Output = RasterTile2D<P>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -459,6 +452,10 @@ where
             .collect::<Vec<_>>();
 
         Ok(Box::pin(SimpleRasterStackerAdapter::new(band_streams)?))
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
     }
 }
 

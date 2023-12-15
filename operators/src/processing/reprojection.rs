@@ -9,9 +9,9 @@ use crate::{
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
         InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
-        RasterOperator, RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor,
-        SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-        VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
+        TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        VectorResultDescriptor, WorkflowOperatorPath,
     },
     error::{self, Error},
     util::Result,
@@ -249,17 +249,35 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
             )),
             TypedVectorQueryProcessor::MultiPoint(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPoint(
-                    VectorReprojectionProcessor::new(source, source_srs, target_srs).boxed(),
+                    VectorReprojectionProcessor::new(
+                        source,
+                        self.result_descriptor.clone(),
+                        source_srs,
+                        target_srs,
+                    )
+                    .boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiLineString(source) => {
                 Ok(TypedVectorQueryProcessor::MultiLineString(
-                    VectorReprojectionProcessor::new(source, source_srs, target_srs).boxed(),
+                    VectorReprojectionProcessor::new(
+                        source,
+                        self.result_descriptor.clone(),
+                        source_srs,
+                        target_srs,
+                    )
+                    .boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiPolygon(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPolygon(
-                    VectorReprojectionProcessor::new(source, source_srs, target_srs).boxed(),
+                    VectorReprojectionProcessor::new(
+                        source,
+                        self.result_descriptor.clone(),
+                        source_srs,
+                        target_srs,
+                    )
+                    .boxed(),
                 ))
             }
         }
@@ -275,6 +293,7 @@ where
     Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
     source: Q,
+    result_descriptor: VectorResultDescriptor,
     from: SpatialReference,
     to: SpatialReference,
 }
@@ -283,8 +302,18 @@ impl<Q, G> VectorReprojectionProcessor<Q, G>
 where
     Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
-    pub fn new(source: Q, from: SpatialReference, to: SpatialReference) -> Self {
-        Self { source, from, to }
+    pub fn new(
+        source: Q,
+        result_descriptor: VectorResultDescriptor,
+        from: SpatialReference,
+        to: SpatialReference,
+    ) -> Self {
+        Self {
+            source,
+            result_descriptor,
+            from,
+            to,
+        }
     }
 }
 
@@ -295,6 +324,7 @@ where
         Output = FeatureCollection<G>,
         SpatialBounds = BoundingBox2D,
         Selection = ColumnSelection,
+        ResultDescription = VectorResultDescriptor,
     >,
     FeatureCollection<G>: Reproject<CoordinateProjector, Out = FeatureCollection<G>>,
     G: Geometry + ArrowTyped,
@@ -302,6 +332,7 @@ where
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -327,6 +358,10 @@ where
             let res = Ok(FeatureCollection::empty());
             Ok(Box::pin(stream::once(async { res })))
         }
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -539,15 +574,6 @@ where
     }
 }
 
-impl<Q, P> RasterResultDescriber for RasterReprojectionProcessor<Q, P>
-where
-    Q: RasterQueryProcessor<RasterType = P>,
-{
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
-    }
-}
-
 #[async_trait]
 impl<Q, P> QueryProcessor for RasterReprojectionProcessor<Q, P>
 where
@@ -555,12 +581,15 @@ where
         Output = RasterTile2D<P>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
+
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -614,6 +643,10 @@ where
                 FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
             )))
         }
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

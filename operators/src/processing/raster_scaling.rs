@@ -1,8 +1,8 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -240,15 +240,6 @@ where
     }
 }
 
-impl<Q, P, S> RasterResultDescriber for RasterTransformationProcessor<Q, P, S>
-where
-    Q: RasterQueryProcessor<RasterType = P>,
-{
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
-    }
-}
-
 #[async_trait]
 impl<Q, P, S> RasterQueryProcessor for RasterTransformationProcessor<Q, P, S>
 where
@@ -272,6 +263,10 @@ where
         let src = self.source.raster_query(query, ctx).await?;
         let rs = src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
+    }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

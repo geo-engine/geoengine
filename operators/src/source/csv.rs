@@ -191,6 +191,7 @@ impl InitializedVectorOperator for InitializedCsvSource {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             CsvSourceProcessor {
                 params: self.state.clone(),
+                result_descriptor: self.result_descriptor.clone(),
             }
             .boxed(),
         ))
@@ -395,6 +396,7 @@ impl Stream for CsvSourceStream {
 #[derive(Debug)]
 struct CsvSourceProcessor {
     params: CsvSourceParameters,
+    result_descriptor: VectorResultDescriptor,
 }
 
 #[async_trait]
@@ -402,6 +404,7 @@ impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -410,6 +413,10 @@ impl QueryProcessor for CsvSourceProcessor {
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // TODO: properly handle chunk_size
         Ok(CsvSourceStream::new(self.params.clone(), query.spatial_bounds, 10)?.boxed())
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -566,7 +573,16 @@ x,y
             time: CsvTimeSpecification::None,
         };
 
-        let p = CsvSourceProcessor { params };
+        let p = CsvSourceProcessor {
+            params,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: Default::default(),
+                time: None,
+                bbox: None,
+            },
+        };
 
         let query = VectorQueryRectangle {
             spatial_bounds: BoundingBox2D::new_unchecked(

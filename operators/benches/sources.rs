@@ -24,6 +24,10 @@ fn setup_gdal_source(
     tiling_specification: TilingSpecification,
 ) -> GdalSourceProcessor<u8> {
     GdalSourceProcessor::<u8> {
+        result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+            RasterDataType::U8,
+            1,
+        ),
         tiling_specification,
         meta_data: Box::new(meta_data),
         _phantom_data: PhantomData,
