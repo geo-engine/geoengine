@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -157,6 +157,7 @@ impl InitializedRasterOperator for InitializedReflectance {
         if let TypedRasterQueryProcessor::F32(p) = q {
             Ok(QueryProcessorOut(Box::new(ReflectanceProcessor::new(
                 p,
+                self.result_descriptor.clone(),
                 self.params,
             ))))
         } else {
@@ -174,6 +175,7 @@ where
     Q: RasterQueryProcessor<RasterType = PixelOut>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     params: ReflectanceParams,
     channel_key: RasterPropertiesKey,
     satellite_key: RasterPropertiesKey,
@@ -183,9 +185,14 @@ impl<Q> ReflectanceProcessor<Q>
 where
     Q: RasterQueryProcessor<RasterType = PixelOut>,
 {
-    pub fn new(source: Q, params: ReflectanceParams) -> Self {
+    pub fn new(
+        source: Q,
+        result_descriptor: RasterResultDescriptor,
+        params: ReflectanceParams,
+    ) -> Self {
         Self {
             source,
+            result_descriptor,
             params,
             channel_key: new_channel_key(),
             satellite_key: new_satellite_key(),
@@ -273,6 +280,15 @@ fn calculate_esd(timestamp: &DateTime) -> f64 {
     let e = 0.0167;
     let theta = std::f64::consts::TAU * (perihelion / 365.0);
     1.0 - e * theta.cos()
+}
+
+impl<Q> RasterResultDescriber for ReflectanceProcessor<Q>
+where
+    Q: RasterQueryProcessor<RasterType = PixelOut>,
+{
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[async_trait]

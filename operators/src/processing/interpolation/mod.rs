@@ -7,7 +7,8 @@ use crate::adapters::{
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterResultDescriber, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -138,12 +139,14 @@ impl InitializedRasterOperator for InitializedInterpolation {
             source_processor, p => match self.interpolation_method  {
                 InterpolationMethod::NearestNeighbor => InterploationProcessor::<_,_, NearestNeighbor>::new(
                         p,
+                        self.result_descriptor.clone(),
                         self.input_resolution,
                         self.tiling_specification,
                     ).boxed()
                     .into(),
                 InterpolationMethod::BiLinear =>InterploationProcessor::<_,_, Bilinear>::new(
                         p,
+                        self.result_descriptor.clone(),
                         self.input_resolution,
                         self.tiling_specification,
                     ).boxed()
@@ -170,6 +173,7 @@ where
     I: InterpolationAlgorithm<P>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     input_resolution: SpatialResolution,
     tiling_specification: TilingSpecification,
     interpolation: PhantomData<I>,
@@ -183,15 +187,28 @@ where
 {
     pub fn new(
         source: Q,
+        result_descriptor: RasterResultDescriptor,
         input_resolution: SpatialResolution,
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
             source,
+            result_descriptor,
             input_resolution,
             tiling_specification,
             interpolation: PhantomData,
         }
+    }
+}
+
+impl<Q, P, I> RasterResultDescriber for InterploationProcessor<Q, P, I>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
+    I: InterpolationAlgorithm<P>,
+{
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

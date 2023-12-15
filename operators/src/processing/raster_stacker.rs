@@ -2,8 +2,8 @@ use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptors,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::{
     InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
@@ -137,52 +137,92 @@ impl InitializedRasterOperator for InitializedRasterStacker {
         Ok(match datatype {
             geoengine_datatypes::raster::RasterDataType::U8 => {
                 let inputs = typed_raster_processors.into_iter().map(|p| p.get_u8().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
-                let p = RasterStackerProcessor::new(inputs, bands_per_source);
+                let p = RasterStackerProcessor::new(
+                    inputs,
+                    self.result_descriptor.clone(),
+                    bands_per_source,
+                );
                 TypedRasterQueryProcessor::U8(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::U16 => {
                 let inputs = typed_raster_processors.into_iter().map(|p| p.get_u16().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
-                let p = RasterStackerProcessor::new(inputs, bands_per_source);
+                let p = RasterStackerProcessor::new(
+                    inputs,
+                    self.result_descriptor.clone(),
+                    bands_per_source,
+                );
                 TypedRasterQueryProcessor::U16(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::U32 => {
                 let inputs = typed_raster_processors.into_iter().map(|p| p.get_u32().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
-                let p = RasterStackerProcessor::new(inputs, bands_per_source);
+                let p = RasterStackerProcessor::new(
+                    inputs,
+                    self.result_descriptor.clone(),
+                    bands_per_source,
+                );
                 TypedRasterQueryProcessor::U32(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::U64 => {
                 let inputs = typed_raster_processors.into_iter().map(|p| p.get_u64().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
-                let p = RasterStackerProcessor::new(inputs, bands_per_source);
+                let p = RasterStackerProcessor::new(
+                    inputs,
+                    self.result_descriptor.clone(),
+                    bands_per_source,
+                );
                 TypedRasterQueryProcessor::U64(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::I8 => {
                 let inputs = typed_raster_processors.into_iter().map(|p| p.get_i8().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
-                let p = RasterStackerProcessor::new(inputs, bands_per_source);
+                let p = RasterStackerProcessor::new(
+                    inputs,
+                    self.result_descriptor.clone(),
+                    bands_per_source,
+                );
                 TypedRasterQueryProcessor::I8(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::I16 => {
                 let inputs = typed_raster_processors.into_iter().map(|p| p.get_i16().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
-                let p = RasterStackerProcessor::new(inputs, bands_per_source);
+                let p = RasterStackerProcessor::new(
+                    inputs,
+                    self.result_descriptor.clone(),
+                    bands_per_source,
+                );
                 TypedRasterQueryProcessor::I16(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::I32 => {
                 let inputs = typed_raster_processors.into_iter().map(|p| p.get_i32().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
-                let p = RasterStackerProcessor::new(inputs, bands_per_source);
+                let p = RasterStackerProcessor::new(
+                    inputs,
+                    self.result_descriptor.clone(),
+                    bands_per_source,
+                );
                 TypedRasterQueryProcessor::I32(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::I64 => {
                 let inputs = typed_raster_processors.into_iter().map(|p| p.get_i64().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
-                let p = RasterStackerProcessor::new(inputs, bands_per_source);
+                let p = RasterStackerProcessor::new(
+                    inputs,
+                    self.result_descriptor.clone(),
+                    bands_per_source,
+                );
                 TypedRasterQueryProcessor::I64(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::F32 => {
                 let inputs = typed_raster_processors.into_iter().map(|p| p.get_f32().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
-                let p = RasterStackerProcessor::new(inputs, bands_per_source);
+                let p = RasterStackerProcessor::new(
+                    inputs,
+                    self.result_descriptor.clone(),
+                    bands_per_source,
+                );
                 TypedRasterQueryProcessor::F32(Box::new(p))
             }
             geoengine_datatypes::raster::RasterDataType::F64 => {
                 let inputs = typed_raster_processors.into_iter().map(|p| p.get_f64().expect("all inputs should have the same datatype because it was checked in the initialization of the operator")).collect();
-                let p = RasterStackerProcessor::new(inputs, bands_per_source);
+                let p = RasterStackerProcessor::new(
+                    inputs,
+                    self.result_descriptor.clone(),
+                    bands_per_source,
+                );
                 TypedRasterQueryProcessor::F64(Box::new(p))
             }
         })
@@ -195,16 +235,19 @@ impl InitializedRasterOperator for InitializedRasterStacker {
 
 pub(crate) struct RasterStackerProcessor<T> {
     sources: Vec<Box<dyn RasterQueryProcessor<RasterType = T>>>,
+    result_descriptor: RasterResultDescriptor,
     bands_per_source: Vec<u32>,
 }
 
 impl<T> RasterStackerProcessor<T> {
     pub fn new(
         sources: Vec<Box<dyn RasterQueryProcessor<RasterType = T>>>,
+        result_descriptor: RasterResultDescriptor,
         bands_per_source: Vec<u32>,
     ) -> Self {
         Self {
             sources,
+            result_descriptor,
             bands_per_source,
         }
     }
@@ -232,6 +275,12 @@ fn map_query_bands_to_source_bands(
     }
 
     Some(BandSelection::new_unchecked(bands))
+}
+
+impl<T> RasterResultDescriber for RasterStackerProcessor<T> {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[async_trait]

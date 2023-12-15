@@ -1,8 +1,8 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -150,10 +150,10 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
 
         let res = match scaling_mode {
             ScalingMode::SubOffsetDivSlope => {
-                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, CheckedSubThenDivTransformation>(slope, offset,  source_proc)) })
+                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, CheckedSubThenDivTransformation>(self.result_descriptor.clone(), slope, offset,  source_proc)) })
             }
             ScalingMode::MulSlopeAddOffset => {
-                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, CheckedMulThenAddTransformation>(slope, offset,  source_proc)) })
+                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, CheckedMulThenAddTransformation>(self.result_descriptor.clone(), slope, offset,  source_proc)) })
             }
         };
 
@@ -170,12 +170,14 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     slope: SlopeOffsetSelection,
     offset: SlopeOffsetSelection,
     _transformation: PhantomData<S>,
 }
 
 fn create_boxed_processor<Q, P, S>(
+    result_descriptor: RasterResultDescriptor,
     slope: SlopeOffsetSelection,
     offset: SlopeOffsetSelection,
     source: Q,
@@ -186,7 +188,8 @@ where
     f64: AsPrimitive<P>,
     S: Send + Sync + 'static + ScalingTransformation<P>,
 {
-    RasterTransformationProcessor::<Q, P, S>::create(slope, offset, source).boxed()
+    RasterTransformationProcessor::<Q, P, S>::create(result_descriptor, slope, offset, source)
+        .boxed()
 }
 
 impl<Q, P, S> RasterTransformationProcessor<Q, P, S>
@@ -197,12 +200,14 @@ where
     S: Send + Sync + 'static + ScalingTransformation<P>,
 {
     pub fn create(
+        result_descriptor: RasterResultDescriptor,
         slope: SlopeOffsetSelection,
         offset: SlopeOffsetSelection,
         source: Q,
     ) -> RasterTransformationProcessor<Q, P, S> {
         RasterTransformationProcessor {
             source,
+            result_descriptor,
             slope,
             offset,
             _transformation: PhantomData,
@@ -232,6 +237,15 @@ where
                 .await?;
 
         Ok(res_tile)
+    }
+}
+
+impl<Q, P, S> RasterResultDescriber for RasterTransformationProcessor<Q, P, S>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+{
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

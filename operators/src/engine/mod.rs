@@ -22,8 +22,8 @@ pub use query::{
 };
 pub use query_processor::{
     BoxRasterQueryProcessor, PlotQueryProcessor, QueryProcessor, QueryProcessorExt,
-    RasterQueryProcessor, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, VectorQueryProcessor,
+    RasterQueryProcessor, RasterResultDescriber, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 pub use result_descriptor::{
     PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,

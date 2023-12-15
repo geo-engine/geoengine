@@ -68,6 +68,19 @@ pub struct RasterResultDescriptor {
     pub bands: RasterBandDescriptors,
 }
 
+impl RasterResultDescriptor {
+    pub fn with_datatype_and_num_bands(data_type: RasterDataType, num_bands: u32) -> Self {
+        Self {
+            data_type,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            time: None,
+            bbox: None,
+            resolution: None,
+            bands: RasterBandDescriptors::new_multiple_bands(num_bands),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RasterBandDescriptors(Vec<RasterBandDescriptor>);
 
@@ -94,6 +107,15 @@ impl RasterBandDescriptors {
             name: "band".into(),
             measurement: Measurement::Unitless,
         }])
+    }
+
+    /// Convenience method to crate multipe band result descriptors with no specific name and a unitless measurement
+    pub fn new_multiple_bands(num_bands: u32) -> Self {
+        Self(
+            (0..num_bands)
+                .map(RasterBandDescriptor::new_unitless_with_idx)
+                .collect(),
+        )
     }
 
     pub fn bands(&self) -> &[RasterBandDescriptor] {
@@ -239,6 +261,13 @@ impl RasterBandDescriptor {
     pub fn new_unitless(name: String) -> Self {
         Self {
             name,
+            measurement: Measurement::Unitless,
+        }
+    }
+
+    pub fn new_unitless_with_idx(idx: u32) -> Self {
+        Self {
+            name: format!("band {idx}"),
             measurement: Measurement::Unitless,
         }
     }

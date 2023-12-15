@@ -2,6 +2,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use super::query::QueryContext;
+use super::RasterResultDescriptor;
 use crate::processing::RasterTypeConversionQueryProcessor;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -71,6 +72,10 @@ pub trait QueryProcessorExt: QueryProcessor {
 }
 
 impl<Q> QueryProcessorExt for Q where Q: QueryProcessor {}
+
+pub trait RasterResultDescriber {
+    fn result_descriptor(&self) -> &RasterResultDescriptor;
+}
 
 /// An instantiation of a raster operator that produces a stream of raster results for a query
 #[async_trait]

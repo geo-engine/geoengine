@@ -1,5 +1,8 @@
 use crate::adapters::{FillerTileCacheExpirationStrategy, SparseTilesFillAdapter};
-use crate::engine::{QueryContext, RasterQueryProcessor, VectorQueryProcessor};
+use crate::engine::{
+    QueryContext, RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor,
+    VectorQueryProcessor, VectorResultDescriptor,
+};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -8,24 +11,35 @@ use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle
 use geoengine_datatypes::raster::{RasterTile2D, TilingSpecification};
 
 /// This `QueryProcessor` allows to rewrite a query. It does not change the data. Results of the children are forwarded.
-pub(crate) struct MapQueryProcessor<S, Q, A> {
+pub(crate) struct MapQueryProcessor<S, Q, A, R> {
     source: S,
+    result_descriptor: R,
     query_fn: Q,
     additional_data: A,
 }
 
-impl<S, Q, A> MapQueryProcessor<S, Q, A> {
-    pub fn new(source: S, query_fn: Q, additional_data: A) -> Self {
+impl<S, Q, A, R> MapQueryProcessor<S, Q, A, R> {
+    pub fn new(source: S, result_descriptor: R, query_fn: Q, additional_data: A) -> Self {
         Self {
             source,
+            result_descriptor,
             query_fn,
             additional_data,
         }
     }
 }
 
+impl<S, Q> RasterResultDescriber
+    for MapQueryProcessor<S, Q, TilingSpecification, RasterResultDescriptor>
+{
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
+}
+
 #[async_trait]
-impl<S, Q> RasterQueryProcessor for MapQueryProcessor<S, Q, TilingSpecification>
+impl<S, Q> RasterQueryProcessor
+    for MapQueryProcessor<S, Q, TilingSpecification, RasterResultDescriptor>
 where
     S: RasterQueryProcessor,
     Q: Fn(RasterQueryRectangle) -> Result<Option<RasterQueryRectangle>> + Sync + Send,
@@ -59,7 +73,7 @@ where
 }
 
 #[async_trait]
-impl<S, Q> VectorQueryProcessor for MapQueryProcessor<S, Q, ()>
+impl<S, Q> VectorQueryProcessor for MapQueryProcessor<S, Q, (), VectorResultDescriptor>
 where
     S: VectorQueryProcessor,
     Q: Fn(VectorQueryRectangle) -> Result<Option<VectorQueryRectangle>> + Sync + Send,

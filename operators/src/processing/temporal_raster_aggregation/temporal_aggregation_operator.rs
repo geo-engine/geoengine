@@ -11,7 +11,7 @@ use super::first_last_subquery::{
 use crate::adapters::{SimpleRasterStackerAdapter, SimpleRasterStackerSource};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
-    RasterOperator, SingleRasterSource, WorkflowOperatorPath,
+    RasterOperator, RasterResultDescriber, SingleRasterSource, WorkflowOperatorPath,
 };
 use crate::{
     adapters::SubQueryTileAggregator,
@@ -158,6 +158,7 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
         let res = call_on_generic_raster_processor!(
             source_processor, p =>
             TemporalRasterAggregationProcessor::new(
+                self.result_descriptor.clone(),
                 self.aggregation_type,
                 self.window,
                 self.window_reference,
@@ -180,6 +181,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
+    result_descriptor: RasterResultDescriptor,
     aggregation_type: Aggregation,
     window: TimeStep,
     window_reference: TimeInstance,
@@ -198,6 +200,7 @@ where
     P: Pixel,
 {
     fn new(
+        result_descriptor: RasterResultDescriptor,
         aggregation_type: Aggregation,
         window: TimeStep,
         window_reference: TimeInstance,
@@ -205,6 +208,7 @@ where
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
+            result_descriptor,
             aggregation_type,
             window,
             window_reference,
@@ -401,6 +405,16 @@ where
     }
 }
 
+impl<Q, P> RasterResultDescriber for TemporalRasterAggregationProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
+{
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
+}
+
 #[async_trait]
 impl<Q, P> QueryProcessor for TemporalRasterAggregationProcessor<Q, P>
 where
@@ -414,6 +428,7 @@ where
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -148,36 +148,36 @@ impl InitializedRasterOperator for InitializedRadiance {
         let q = self.source.query_processor()?;
 
         Ok(match q {
-            TypedRasterQueryProcessor::U8(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::U16(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::U32(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::U64(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::I8(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::I16(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::I32(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::I64(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::F32(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::F64(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
+            TypedRasterQueryProcessor::U8(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::U16(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::U32(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::U64(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::I8(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::I16(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::I32(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::I64(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::F32(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::F64(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
         })
     }
 
@@ -191,6 +191,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     offset_key: RasterPropertiesKey,
     slope_key: RasterPropertiesKey,
 }
@@ -200,9 +201,10 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
-    pub fn new(source: Q) -> Self {
+    pub fn new(source: Q, result_descriptor: RasterResultDescriptor) -> Self {
         Self {
             source,
+            result_descriptor,
             offset_key: new_offset_key(),
             slope_key: new_slope_key(),
         }
@@ -229,6 +231,16 @@ where
         .await?;
 
         Ok(result_tile)
+    }
+}
+
+impl<Q, P> RasterResultDescriber for RadianceProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
+{
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

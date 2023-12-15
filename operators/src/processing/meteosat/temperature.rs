@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -149,36 +149,36 @@ impl InitializedRasterOperator for InitializedTemperature {
         let q = self.source.query_processor()?;
 
         Ok(match q {
-            TypedRasterQueryProcessor::U8(p) => {
-                QueryProcessorOut(Box::new(TemperatureProcessor::new(p, self.params.clone())))
-            }
-            TypedRasterQueryProcessor::U16(p) => {
-                QueryProcessorOut(Box::new(TemperatureProcessor::new(p, self.params.clone())))
-            }
-            TypedRasterQueryProcessor::U32(p) => {
-                QueryProcessorOut(Box::new(TemperatureProcessor::new(p, self.params.clone())))
-            }
-            TypedRasterQueryProcessor::U64(p) => {
-                QueryProcessorOut(Box::new(TemperatureProcessor::new(p, self.params.clone())))
-            }
-            TypedRasterQueryProcessor::I8(p) => {
-                QueryProcessorOut(Box::new(TemperatureProcessor::new(p, self.params.clone())))
-            }
-            TypedRasterQueryProcessor::I16(p) => {
-                QueryProcessorOut(Box::new(TemperatureProcessor::new(p, self.params.clone())))
-            }
-            TypedRasterQueryProcessor::I32(p) => {
-                QueryProcessorOut(Box::new(TemperatureProcessor::new(p, self.params.clone())))
-            }
-            TypedRasterQueryProcessor::I64(p) => {
-                QueryProcessorOut(Box::new(TemperatureProcessor::new(p, self.params.clone())))
-            }
-            TypedRasterQueryProcessor::F32(p) => {
-                QueryProcessorOut(Box::new(TemperatureProcessor::new(p, self.params.clone())))
-            }
-            TypedRasterQueryProcessor::F64(p) => {
-                QueryProcessorOut(Box::new(TemperatureProcessor::new(p, self.params.clone())))
-            }
+            TypedRasterQueryProcessor::U8(p) => QueryProcessorOut(Box::new(
+                TemperatureProcessor::new(p, self.result_descriptor.clone(), self.params.clone()),
+            )),
+            TypedRasterQueryProcessor::U16(p) => QueryProcessorOut(Box::new(
+                TemperatureProcessor::new(p, self.result_descriptor.clone(), self.params.clone()),
+            )),
+            TypedRasterQueryProcessor::U32(p) => QueryProcessorOut(Box::new(
+                TemperatureProcessor::new(p, self.result_descriptor.clone(), self.params.clone()),
+            )),
+            TypedRasterQueryProcessor::U64(p) => QueryProcessorOut(Box::new(
+                TemperatureProcessor::new(p, self.result_descriptor.clone(), self.params.clone()),
+            )),
+            TypedRasterQueryProcessor::I8(p) => QueryProcessorOut(Box::new(
+                TemperatureProcessor::new(p, self.result_descriptor.clone(), self.params.clone()),
+            )),
+            TypedRasterQueryProcessor::I16(p) => QueryProcessorOut(Box::new(
+                TemperatureProcessor::new(p, self.result_descriptor.clone(), self.params.clone()),
+            )),
+            TypedRasterQueryProcessor::I32(p) => QueryProcessorOut(Box::new(
+                TemperatureProcessor::new(p, self.result_descriptor.clone(), self.params.clone()),
+            )),
+            TypedRasterQueryProcessor::I64(p) => QueryProcessorOut(Box::new(
+                TemperatureProcessor::new(p, self.result_descriptor.clone(), self.params.clone()),
+            )),
+            TypedRasterQueryProcessor::F32(p) => QueryProcessorOut(Box::new(
+                TemperatureProcessor::new(p, self.result_descriptor.clone(), self.params.clone()),
+            )),
+            TypedRasterQueryProcessor::F64(p) => QueryProcessorOut(Box::new(
+                TemperatureProcessor::new(p, self.result_descriptor.clone(), self.params.clone()),
+            )),
         })
     }
 
@@ -192,6 +192,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     params: TemperatureParams,
     satellite_key: RasterPropertiesKey,
     channel_key: RasterPropertiesKey,
@@ -204,9 +205,14 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
-    pub fn new(source: Q, params: TemperatureParams) -> Self {
+    pub fn new(
+        source: Q,
+        result_descriptor: RasterResultDescriptor,
+        params: TemperatureParams,
+    ) -> Self {
         Self {
             source,
+            result_descriptor,
             params,
             satellite_key: new_satellite_key(),
             channel_key: new_channel_key(),
@@ -273,6 +279,15 @@ fn create_lookup_table(channel: &Channel, offset: f64, slope: f64, _pool: &Threa
             channel.calculate_temperature_from_radiance(radiance) as f32
         })
         .collect::<Vec<f32>>()
+}
+
+impl<Q, P> RasterResultDescriber for TemperatureProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+{
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[async_trait]

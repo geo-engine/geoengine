@@ -9,9 +9,9 @@ use crate::{
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
         InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
-        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
-        TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-        VectorResultDescriptor, WorkflowOperatorPath,
+        RasterOperator, RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor,
+        SingleRasterOrVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+        VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
     },
     error::{self, Error},
     util::Result,
@@ -241,6 +241,7 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
                 MapQueryProcessor::new(
                     source,
+                    self.result_descriptor.clone(),
                     move |query| reproject_query(query, source_srs, target_srs).map_err(From::from),
                     (),
                 )
@@ -385,6 +386,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 let qt = q.get_u8().unwrap();
                 TypedRasterQueryProcessor::U8(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -395,6 +397,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 let qt = q.get_u16().unwrap();
                 TypedRasterQueryProcessor::U16(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -406,6 +409,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 let qt = q.get_u32().unwrap();
                 TypedRasterQueryProcessor::U32(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -416,6 +420,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 let qt = q.get_u64().unwrap();
                 TypedRasterQueryProcessor::U64(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -426,6 +431,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 let qt = q.get_i8().unwrap();
                 TypedRasterQueryProcessor::I8(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -436,6 +442,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 let qt = q.get_i16().unwrap();
                 TypedRasterQueryProcessor::I16(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -446,6 +453,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 let qt = q.get_i32().unwrap();
                 TypedRasterQueryProcessor::I32(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -456,6 +464,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 let qt = q.get_i64().unwrap();
                 TypedRasterQueryProcessor::I64(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -466,6 +475,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 let qt = q.get_f32().unwrap();
                 TypedRasterQueryProcessor::F32(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -476,6 +486,7 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 let qt = q.get_f64().unwrap();
                 TypedRasterQueryProcessor::F64(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -495,6 +506,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     from: SpatialReference,
     to: SpatialReference,
     tiling_spec: TilingSpecification,
@@ -509,6 +521,7 @@ where
 {
     pub fn new(
         source: Q,
+        result_descriptor: RasterResultDescriptor,
         from: SpatialReference,
         to: SpatialReference,
         tiling_spec: TilingSpecification,
@@ -516,12 +529,22 @@ where
     ) -> Self {
         Self {
             source,
+            result_descriptor,
             from,
             to,
             tiling_spec,
             state,
             _phantom_data: PhantomData,
         }
+    }
+}
+
+impl<Q, P> RasterResultDescriber for RasterReprojectionProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+{
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

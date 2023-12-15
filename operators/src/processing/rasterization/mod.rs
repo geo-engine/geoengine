@@ -2,8 +2,9 @@ use crate::engine::TypedVectorQueryProcessor::MultiPoint;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
-    RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
+    RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriber,
+    RasterResultDescriptor, SingleVectorSource, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
@@ -153,6 +154,7 @@ impl InitializedRasterOperator for InitializedGridRasterization {
         Ok(TypedRasterQueryProcessor::F64(
             GridRasterizationQueryProcessor {
                 input: self.source.query_processor()?,
+                result_descriptor: self.result_descriptor.clone(),
                 spatial_resolution: self.spatial_resolution,
                 grid_size_mode: self.grid_size_mode,
                 tiling_specification: self.tiling_specification,
@@ -221,6 +223,7 @@ impl InitializedRasterOperator for InitializedDensityRasterization {
     fn query_processor(&self) -> util::Result<TypedRasterQueryProcessor> {
         Ok(TypedRasterQueryProcessor::F64(
             DensityRasterizationQueryProcessor {
+                result_descriptor: self.result_descriptor.clone(),
                 input: self.source.query_processor()?,
                 tiling_specification: self.tiling_specification,
                 radius: self.radius,
@@ -237,10 +240,17 @@ impl InitializedRasterOperator for InitializedDensityRasterization {
 
 pub struct GridRasterizationQueryProcessor {
     input: TypedVectorQueryProcessor,
+    result_descriptor: RasterResultDescriptor,
     spatial_resolution: SpatialResolution,
     grid_size_mode: GridSizeMode,
     tiling_specification: TilingSpecification,
     origin_coordinate: Coordinate2D,
+}
+
+impl RasterResultDescriber for GridRasterizationQueryProcessor {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[async_trait]
@@ -375,9 +385,16 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
 
 pub struct DensityRasterizationQueryProcessor {
     input: TypedVectorQueryProcessor,
+    result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
     radius: f64,
     stddev: f64,
+}
+
+impl RasterResultDescriber for DensityRasterizationQueryProcessor {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[async_trait]

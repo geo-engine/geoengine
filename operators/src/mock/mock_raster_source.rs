@@ -1,8 +1,8 @@
 use crate::adapters::{FillerTileCacheExpirationStrategy, SparseTilesFillAdapter};
 use crate::engine::{
     CanonicOperatorName, InitializedRasterOperator, OperatorData, OperatorName, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    RasterQueryProcessor, RasterResultDescriber, RasterResultDescriptor, SourceOperator,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -36,9 +36,9 @@ pub struct MockRasterSourceProcessor<T>
 where
     T: Pixel,
 {
+    pub result_descriptor: RasterResultDescriptor,
     pub data: Vec<RasterTile2D<T>>,
     pub tiling_specification: TilingSpecification,
-    pub num_bands: u32,
 }
 
 impl<T> MockRasterSourceProcessor<T>
@@ -46,21 +46,21 @@ where
     T: Pixel,
 {
     fn new_unchecked(
+        result_descriptor: RasterResultDescriptor,
         data: Vec<RasterTile2D<T>>,
         tiling_specification: TilingSpecification,
-        num_bands: u32,
     ) -> Self {
         Self {
+            result_descriptor,
             data,
             tiling_specification,
-            num_bands,
         }
     }
 
     fn _new(
+        result_descriptor: RasterResultDescriptor,
         data: Vec<RasterTile2D<T>>,
         tiling_specification: TilingSpecification,
-        num_bands: u32,
     ) -> Result<Self, MockRasterSourceError> {
         if let Some(tile_shape) =
             first_tile_shape_not_matching_tiling_spec(&data, tiling_specification)
@@ -74,9 +74,9 @@ where
         };
 
         Ok(Self {
+            result_descriptor,
             data,
             tiling_specification,
-            num_bands,
         })
     }
 }
@@ -95,6 +95,15 @@ where
     }
 
     None
+}
+
+impl<T> RasterResultDescriber for MockRasterSourceProcessor<T>
+where
+    T: Pixel,
+{
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[async_trait]
@@ -141,7 +150,7 @@ where
         Ok(SparseTilesFillAdapter::new(
             inner_stream,
             tiling_strategy.tile_grid_box(query.spatial_partition()),
-            self.num_bands,
+            self.result_descriptor.bands.count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::FixedValue(CacheExpiration::max()), // cache forever because we know all mock data
@@ -270,9 +279,9 @@ where
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let processor = TypedRasterQueryProcessor::from(
             MockRasterSourceProcessor::new_unchecked(
+                self.result_descriptor.clone(),
                 self.data.clone(),
                 self.tiling_specification,
-                self.result_descriptor.bands.count(),
             )
             .boxed(),
         );

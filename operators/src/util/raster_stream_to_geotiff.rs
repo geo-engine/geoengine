@@ -1051,13 +1051,14 @@ mod tests {
 
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{DateTime, Duration};
-    use geoengine_datatypes::raster::Grid;
+    use geoengine_datatypes::raster::{Grid, RasterDataType};
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilingSpecification,
         util::test::TestDefault,
     };
 
+    use crate::engine::RasterResultDescriptor;
     use crate::mock::MockRasterSourceProcessor;
     use crate::util::gdal::gdal_open_dataset;
     use crate::{
@@ -1627,9 +1628,12 @@ mod tests {
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
         let processor = MockRasterSourceProcessor {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             data,
             tiling_specification,
-            num_bands: 1,
         }
         .boxed();
         let query_rectangle = RasterQueryRectangle {

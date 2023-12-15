@@ -2,7 +2,7 @@ use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSingleRasterOrVectorOperator, InitializedSources, InitializedVectorOperator,
     Operator, OperatorName, QueryContext, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource,
+    RasterResultDescriber, RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
 };
@@ -404,6 +404,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
         Ok(
             call_on_generic_raster_processor!(source_processor, processor => RasterTimeShiftProcessor {
                 processor,
+                result_descriptor: self.result_descriptor.clone(),
                 shift: self.shift,
             }.boxed().into()),
         )
@@ -419,6 +420,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     processor: Q,
+    result_descriptor: RasterResultDescriptor,
     shift: Shift,
 }
 
@@ -475,6 +477,16 @@ where
         });
 
         Ok(stream.boxed())
+    }
+}
+
+impl<Q, P, Shift> RasterResultDescriber for RasterTimeShiftProcessor<Q, P, Shift>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+    Shift: TimeShiftOperation,
+{
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 
