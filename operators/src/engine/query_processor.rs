@@ -27,7 +27,10 @@ pub trait QueryProcessor: Send + Sync {
     type Output;
     type SpatialBounds: AxisAlignedRectangle + Send + Sync;
     type Selection: QueryAttributeSelection;
-    type ResultDescription: ResultDescriptor;
+    type ResultDescription: ResultDescriptor<
+        QueryRectangleSpatialBounds = Self::SpatialBounds,
+        QueryRectangleAttributeSelection = Self::Selection,
+    >;
 
     /// inner logic of the processor
     async fn _query<'a>(
@@ -41,6 +44,8 @@ pub trait QueryProcessor: Send + Sync {
         query: QueryRectangle<Self::SpatialBounds, Self::Selection>, // TODO: query by reference
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+        self.result_descriptor().validate_query(&query)?;
+
         Ok(Box::pin(
             ctx.abort_registration()
                 .wrap(self._query(query, ctx).await?),
@@ -198,7 +203,7 @@ impl<T, S, U, R> QueryProcessor
 where
     S: AxisAlignedRectangle + Send + Sync,
     U: QueryAttributeSelection,
-    R: ResultDescriptor,
+    R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = U>,
 {
     type Output = T;
     type SpatialBounds = S;

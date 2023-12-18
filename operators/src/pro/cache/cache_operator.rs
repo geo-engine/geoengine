@@ -185,7 +185,7 @@ where
         + Clone,
     E::ResultStream: Stream<Item = Result<E, CacheError>> + Send + Sync + 'static,
     SharedCache: AsyncCache<E>,
-    R: ResultDescriptor,
+    R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = U>,
 {
     type Output = E;
     type SpatialBounds = S;

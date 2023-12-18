@@ -158,7 +158,8 @@ where
     Q: QueryProcessor<Output = T, SpatialBounds = S, Selection = A, ResultDescription = R>,
     S: AxisAlignedRectangle + Send + Sync + 'static,
     A: QueryAttributeSelection + 'static,
-    R: ResultDescriptor + 'static,
+    R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = A>
+        + 'static,
     T: Send,
 {
     type Output = T;
