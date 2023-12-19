@@ -122,3 +122,5 @@ INSERT INTO datasets (
         NULL
     )::"Symbology"
 );
+
+INSERT INTO layer_providers VALUES ('1c01dbb9-e3ab-f9a2-06f5-228ba4b6bf7a', 'GBIF', 'GBIF', '(,"(GBIF,""(localhost,5432,geoengine,gbif,geoengine,geoengine)"",0)",,,,,,)');

@@ -4550,6 +4550,7 @@ mod tests {
                     password: "testpass".to_string(),
                 },
                 cache_ttl: CacheTtlSeconds::new(0),
+                autocomplete_timeout: 3,
             }],
         )
         .await;
@@ -4659,6 +4660,7 @@ mod tests {
                             password: "testpass".to_string(),
                         },
                         cache_ttl: CacheTtlSeconds::new(0),
+                        autocomplete_timeout: 3,
                     },
                 ),
                 TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(

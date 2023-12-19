@@ -47,13 +47,15 @@ pub struct GbifDataProviderDefinition {
     pub db_config: DatabaseConnectionConfig,
     #[serde(default)]
     pub cache_ttl: CacheTtlSeconds,
+    pub autocomplete_timeout: i32,
 }
 
 #[async_trait]
 impl DataProviderDefinition for GbifDataProviderDefinition {
     async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(
-            GbifDataProvider::new(self.db_config, self.cache_ttl).await?,
+            GbifDataProvider::new(self.db_config, self.cache_ttl, self.autocomplete_timeout)
+                .await?,
         ))
     }
 
@@ -75,6 +77,7 @@ pub struct GbifDataProvider {
     db_config: DatabaseConnectionConfig,
     pool: Pool<PostgresConnectionManager<NoTls>>,
     cache_ttl: CacheTtlSeconds,
+    autocomplete_timeout: u64,
 }
 
 impl GbifDataProvider {
@@ -90,7 +93,11 @@ impl GbifDataProvider {
 
     const LISTABLE_RANKS: [&'static str; 3] = ["family", "genus", "species"];
 
-    async fn new(db_config: DatabaseConnectionConfig, cache_ttl: CacheTtlSeconds) -> Result<Self> {
+    async fn new(
+        db_config: DatabaseConnectionConfig,
+        cache_ttl: CacheTtlSeconds,
+        autocomplete_timeout: i32,
+    ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -98,6 +105,7 @@ impl GbifDataProvider {
             db_config,
             pool,
             cache_ttl,
+            autocomplete_timeout: u64::try_from(autocomplete_timeout).unwrap_or(u64::MAX),
         })
     }
 
@@ -322,7 +330,11 @@ impl GbifDataProvider {
         let offset = &i64::from(*offset);
         let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset, &search_string];
         filters.iter().for_each(|(_, value)| params.push(value));
-        let rows = timeout(Duration::from_secs(3), conn.query(&stmt, params.as_slice())).await;
+        let rows = timeout(
+            Duration::from_secs(self.autocomplete_timeout),
+            conn.query(&stmt, params.as_slice()),
+        )
+        .await;
 
         match rows {
             Ok(rows) => Ok(rows?
@@ -430,7 +442,7 @@ impl GbifDataProvider {
         search_string: &str,
     ) -> Result<Vec<String>> {
         let filter_items = timeout(
-            Duration::from_secs(3),
+            Duration::from_secs(self.autocomplete_timeout),
             self.query_filter_items(limit, offset, path, search_string),
         )
         .await;
@@ -1401,6 +1413,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -1482,6 +1495,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -1571,6 +1585,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -1656,6 +1671,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -1723,6 +1739,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -1767,6 +1784,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -1819,6 +1837,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -1867,6 +1886,7 @@ mod tests {
                     name: "GBIF".to_string(),
                     db_config: db_config.clone(),
                     cache_ttl: Default::default(),
+                    autocomplete_timeout: 3,
                 })
                 .initialize()
                 .await
@@ -2086,6 +2106,7 @@ mod tests {
                     name: "GBIF".to_string(),
                     db_config,
                     cache_ttl: Default::default(),
+                    autocomplete_timeout: 3,
                 })
                 .initialize()
                 .await
@@ -2448,6 +2469,7 @@ mod tests {
                     name: "GBIF".to_string(),
                     db_config,
                     cache_ttl: Default::default(),
+                    autocomplete_timeout: 3,
                 })
                     .initialize()
                     .await
@@ -2496,6 +2518,7 @@ mod tests {
                     name: "GBIF".to_string(),
                     db_config,
                     cache_ttl: Default::default(),
+                    autocomplete_timeout: 3,
                 })
                 .initialize()
                 .await
@@ -2557,6 +2580,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -2640,6 +2664,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -2674,6 +2699,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -2819,6 +2845,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -2897,6 +2924,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -3046,6 +3074,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -3124,6 +3153,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await
@@ -3269,6 +3299,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
+                autocomplete_timeout: 3,
             })
             .initialize()
             .await

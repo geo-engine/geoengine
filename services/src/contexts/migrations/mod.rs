@@ -5,6 +5,7 @@ use self::migration_0000_initial::Migration0000Initial;
 mod database_migration;
 pub mod migration_0000_initial;
 pub mod migration_0001_raster_stacks;
+mod migration_0002_gbif_config;
 
 pub use database_migration::{migrate_database, DatabaseVersion, Migration, MigrationResult};
 
