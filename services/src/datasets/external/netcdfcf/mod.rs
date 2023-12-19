@@ -1557,14 +1557,19 @@ mod tests {
         test_data,
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
-    use geoengine_operators::engine::RasterBandDescriptors;
+    use geoengine_operators::engine::{
+        MultipleRasterSources, RasterBandDescriptors, SingleRasterSource,
+    };
+    use geoengine_operators::processing::{
+        RasterStacker, RasterStackerParams, RasterTypeConversion, RasterTypeConversionParams,
+    };
     use geoengine_operators::{
         engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath},
         plot::{
             MeanRasterPixelValuesOverTime, MeanRasterPixelValuesOverTimeParams,
             MeanRasterPixelValuesOverTimePosition,
         },
-        processing::{Expression, ExpressionParams, ExpressionSources},
+        processing::{Expression, ExpressionParams},
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalLoadingInfoTemporalSlice,
@@ -2238,6 +2243,7 @@ mod tests {
     }
 
     #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_irregular_time_series(app_ctx: PostgresContext<NoTls>) {
         let ctx = app_ctx.default_session_context().await.unwrap();
 
@@ -2268,30 +2274,43 @@ mod tests {
                     output_measurement: None,
                     map_no_data: false,
                 },
-                sources: ExpressionSources::new_a_b(
-                    GdalSource {
-                        params: GdalSourceParameters {
-                            data: geoengine_datatypes::dataset::NamedData::with_system_provider(
-                                EBV_PROVIDER_ID.to_string(),
-                                serde_json::json!({
-                                    "fileName": "dataset_irr_ts.nc",
-                                    "groupNames": ["metric_1"],
-                                    "entity": 0
-                                })
-                                .to_string(),
-                            ),
-                        },
-                    }
-                    .boxed(),
-                    GdalSource {
-                        params: GdalSourceParameters {
-                            data: geoengine_datatypes::dataset::NamedData::with_system_name(
-                                land_cover_dataset_id.to_string(),
-                            ),
-                        },
-                    }
-                    .boxed(),
-                ),
+                sources: SingleRasterSource {
+                    raster: RasterStacker {
+                        params: RasterStackerParams {},
+                        sources: MultipleRasterSources {
+                            rasters: vec![
+                                GdalSource {
+                                    params: GdalSourceParameters {
+                                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                            EBV_PROVIDER_ID.to_string(),
+                                            serde_json::json!({
+                                                "fileName": "dataset_irr_ts.nc",
+                                                "groupNames": ["metric_1"],
+                                                "entity": 0
+                                            })
+                                            .to_string(),
+                                        ),
+                                    },
+                                }
+                                .boxed(),
+                                RasterTypeConversion {
+                                    params: RasterTypeConversionParams {
+                                        output_data_type: RasterDataType::I16,
+                                    },
+                                    sources: SingleRasterSource {
+                                        raster: GdalSource {
+                                            params: GdalSourceParameters {
+                                                data: geoengine_datatypes::dataset::NamedData::with_system_name(
+                                                    land_cover_dataset_id.to_string(),
+                                                ),
+                                            },
+                                        }.boxed(),
+                                    }
+                                }.boxed(),
+                            ],
+                         }
+                    }.boxed()
+                }
             }
             .boxed()
             .into(),

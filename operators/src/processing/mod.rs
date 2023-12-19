@@ -19,7 +19,7 @@ mod time_projection;
 mod time_shift;
 mod vector_join;
 
-pub use expression::{Expression, ExpressionError, ExpressionParams, ExpressionSources};
+pub use expression::{Expression, ExpressionError, ExpressionParams};
 pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
 pub use line_simplification::{
     LineSimplification, LineSimplificationError, LineSimplificationParams,
@@ -33,7 +33,9 @@ pub use point_in_polygon::{
     PointInPolygonTester,
 };
 pub use raster_stacker::{RasterStacker, RasterStackerParams};
-pub use raster_type_conversion::{RasterTypeConversionParams, RasterTypeConversionQueryProcessor};
+pub use raster_type_conversion::{
+    RasterTypeConversion, RasterTypeConversionParams, RasterTypeConversionQueryProcessor,
+};
 pub use raster_vector_join::{
     FeatureAggregationMethod, RasterVectorJoin, RasterVectorJoinParams, TemporalAggregationMethod,
 };
