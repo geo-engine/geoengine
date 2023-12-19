@@ -123,11 +123,34 @@ INSERT INTO datasets (
     )::"Symbology"
 );
 
-INSERT INTO layer_providers VALUES (
+INSERT INTO layer_providers (
+    id,
+    type_name,
+    name,
+    definition
+) VALUES (
     '1c01dbb9-e3ab-f9a2-06f5-228ba4b6bf7a',
     'GBIF',
     'GBIF',
-    '(,'
-    || '"(GBIF,""(localhost,5432,geoengine,gbif,geoengine,geoengine)"",0)"'
-    || ',,,,,,)'
+    (
+        NULL, -- noqa: PRS
+        (
+            'GBIF',
+            (
+                'localhost',
+                5432,
+                'geoengine',
+                'gbif',
+                'geoengine',
+                'geoengine'
+            )::"DatabaseConnectionConfig",
+            0
+        )::"GbifDataProviderDefinition",
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+    )::"DataProviderDefinition"
 );
