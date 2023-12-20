@@ -391,8 +391,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processor = a.into_f64();
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processor, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processor,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
 
                 // TODO: We could save prior conversions by monomophizing the differnt expressions
@@ -416,8 +421,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processors = (a.into_f64(), b.into_f64());
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
 
                 // TODO: We could save prior conversions by monomophizing the differnt expressions
@@ -441,8 +451,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processors = [a.into_f64(), b.into_f64(), c.into_f64()];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
             }
             4 => {
@@ -451,8 +466,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processors = [a.into_f64(), b.into_f64(), c.into_f64(), d.into_f64()];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
             }
             5 => {
@@ -467,8 +487,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 ];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
             }
             6 => {
@@ -484,8 +509,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 ];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
             }
 
@@ -503,8 +533,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 ];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
             }
             8 => {
@@ -522,8 +557,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 ];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
             }
             _ => return Err(crate::error::Error::InvalidNumberOfExpressionInputs),

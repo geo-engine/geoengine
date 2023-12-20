@@ -249,6 +249,7 @@ impl RgbInitializedSources {
 impl InitializedRasterOperator for InitializedRgb {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         Ok(RgbQueryProcessor::new(
+            self.result_descriptor.clone(),
             self.sources.red.query_processor()?.into_f64(),
             self.sources.green.query_processor()?.into_f64(),
             self.sources.blue.query_processor()?.into_f64(),
@@ -268,6 +269,7 @@ impl InitializedRasterOperator for InitializedRgb {
 }
 
 pub struct RgbQueryProcessor {
+    result_descriptor: RasterResultDescriptor,
     red: BoxRasterQueryProcessor<f64>,
     green: BoxRasterQueryProcessor<f64>,
     blue: BoxRasterQueryProcessor<f64>,
@@ -276,12 +278,14 @@ pub struct RgbQueryProcessor {
 
 impl RgbQueryProcessor {
     pub fn new(
+        result_descriptor: RasterResultDescriptor,
         red: BoxRasterQueryProcessor<f64>,
         green: BoxRasterQueryProcessor<f64>,
         blue: BoxRasterQueryProcessor<f64>,
         params: RgbParams,
     ) -> Self {
         Self {
+            result_descriptor,
             red,
             green,
             blue,
@@ -295,6 +299,7 @@ impl QueryProcessor for RgbQueryProcessor {
     type Output = RasterTile2D<u32>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -314,6 +319,10 @@ impl QueryProcessor for RgbQueryProcessor {
             .map(move |tiles| Ok(compute_tile(tiles?, &params)));
 
         Ok(Box::pin(stream))
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
     }
 }
 

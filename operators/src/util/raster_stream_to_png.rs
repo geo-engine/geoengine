@@ -117,12 +117,14 @@ mod tests {
 
     use geoengine_datatypes::{
         primitives::{BandSelection, Coordinate2D, SpatialPartition2D, SpatialResolution},
-        raster::TilingSpecification,
+        raster::{RasterDataType, TilingSpecification},
         util::test::TestDefault,
     };
 
     use crate::{
-        engine::MockQueryContext, source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data,
+        engine::{MockQueryContext, RasterResultDescriptor},
+        source::GdalSourceProcessor,
+        util::gdal::create_ndvi_meta_data,
     };
 
     use super::*;
@@ -134,6 +136,10 @@ mod tests {
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(create_ndvi_meta_data()),
             _phantom_data: PhantomData,

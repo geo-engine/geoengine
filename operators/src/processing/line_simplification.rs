@@ -276,6 +276,7 @@ where
         Output = FeatureCollection<G>,
         SpatialBounds = BoundingBox2D,
         Selection = ColumnSelection,
+        ResultDescription = VectorResultDescriptor,
     >,
     G: Geometry + ArrowTyped + 'static,
     for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>
@@ -288,6 +289,7 @@ where
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -309,6 +311,10 @@ where
         });
 
         Ok(simplified_chunks.boxed())
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        self.source.result_descriptor()
     }
 }
 

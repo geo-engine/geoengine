@@ -2,6 +2,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use super::query::QueryContext;
+use super::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
 use crate::processing::RasterTypeConversionQueryProcessor;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -26,6 +27,10 @@ pub trait QueryProcessor: Send + Sync {
     type Output;
     type SpatialBounds: AxisAlignedRectangle + Send + Sync;
     type Selection: QueryAttributeSelection;
+    type ResultDescription: ResultDescriptor<
+        QueryRectangleSpatialBounds = Self::SpatialBounds,
+        QueryRectangleAttributeSelection = Self::Selection,
+    >;
 
     /// inner logic of the processor
     async fn _query<'a>(
@@ -39,11 +44,15 @@ pub trait QueryProcessor: Send + Sync {
         query: QueryRectangle<Self::SpatialBounds, Self::Selection>, // TODO: query by reference
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+        self.result_descriptor().validate_query(&query)?;
+
         Ok(Box::pin(
             ctx.abort_registration()
                 .wrap(self._query(query, ctx).await?),
         ))
     }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription;
 }
 
 /// Advanced methods for query processors
@@ -89,6 +98,8 @@ pub trait RasterQueryProcessor: Sync + Send {
     {
         Box::new(self)
     }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor;
 }
 
 pub type BoxRasterQueryProcessor<P> = Box<dyn RasterQueryProcessor<RasterType = P>>;
@@ -100,6 +111,7 @@ where
             Output = RasterTile2D<T>,
             SpatialBounds = SpatialPartition2D,
             Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
         > + Sync
         + Send,
     T: Pixel,
@@ -111,6 +123,10 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
         self.query(query, ctx).await
+    }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        self.result_descriptor()
     }
 }
 
@@ -130,13 +146,19 @@ pub trait VectorQueryProcessor: Sync + Send {
     {
         Box::new(self)
     }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor;
 }
 
 #[async_trait]
 impl<S, VD> VectorQueryProcessor for S
 where
-    S: QueryProcessor<Output = VD, SpatialBounds = BoundingBox2D, Selection = ColumnSelection>
-        + Sync
+    S: QueryProcessor<
+            Output = VD,
+            SpatialBounds = BoundingBox2D,
+            Selection = ColumnSelection,
+            ResultDescription = VectorResultDescriptor,
+        > + Sync
         + Send,
 {
     type VectorType = VD;
@@ -147,6 +169,10 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         self.query(query, ctx).await
+    }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        self.result_descriptor()
     }
 }
 
@@ -172,15 +198,17 @@ pub trait PlotQueryProcessor: Sync + Send {
 }
 
 #[async_trait]
-impl<T, S, U> QueryProcessor
-    for Box<dyn QueryProcessor<Output = T, SpatialBounds = S, Selection = U>>
+impl<T, S, U, R> QueryProcessor
+    for Box<dyn QueryProcessor<Output = T, SpatialBounds = S, Selection = U, ResultDescription = R>>
 where
     S: AxisAlignedRectangle + Send + Sync,
     U: QueryAttributeSelection,
+    R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = U>,
 {
     type Output = T;
     type SpatialBounds = S;
     type Selection = U;
+    type ResultDescription = R;
 
     async fn _query<'a>(
         &'a self,
@@ -188,6 +216,10 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         self.as_ref().query(query, ctx).await
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        self.as_ref().result_descriptor()
     }
 }
 
@@ -199,6 +231,7 @@ where
     type Output = RasterTile2D<T>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -206,6 +239,10 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         self.as_ref().raster_query(query, ctx).await
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        self.as_ref().raster_result_descriptor()
     }
 }
 
@@ -217,6 +254,7 @@ where
     type Output = V;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -224,6 +262,10 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         self.as_ref().vector_query(query, ctx).await
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        self.as_ref().vector_result_descriptor()
     }
 }
 

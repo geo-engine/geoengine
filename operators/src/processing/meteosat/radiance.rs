@@ -148,36 +148,36 @@ impl InitializedRasterOperator for InitializedRadiance {
         let q = self.source.query_processor()?;
 
         Ok(match q {
-            TypedRasterQueryProcessor::U8(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::U16(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::U32(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::U64(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::I8(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::I16(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::I32(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::I64(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::F32(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::F64(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
+            TypedRasterQueryProcessor::U8(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::U16(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::U32(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::U64(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::I8(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::I16(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::I32(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::I64(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::F32(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::F64(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
         })
     }
 
@@ -191,6 +191,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     offset_key: RasterPropertiesKey,
     slope_key: RasterPropertiesKey,
 }
@@ -200,9 +201,10 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
-    pub fn new(source: Q) -> Self {
+    pub fn new(source: Q, result_descriptor: RasterResultDescriptor) -> Self {
         Self {
             source,
+            result_descriptor,
             offset_key: new_offset_key(),
             slope_key: new_slope_key(),
         }
@@ -239,12 +241,14 @@ where
         Output = RasterTile2D<P>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
     P: Pixel,
 {
     type Output = RasterTile2D<PixelOut>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -254,6 +258,10 @@ where
         let src = self.source.query(query, ctx).await?;
         let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
     }
 }
 

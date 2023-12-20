@@ -248,6 +248,7 @@ where
         Output = RasterTile2D<P>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
     P: Pixel,
     f64: AsPrimitive<P>,
@@ -256,6 +257,8 @@ where
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
+
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -276,6 +279,10 @@ where
         .filter_and_fill(
             crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
         ))
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        self.source.result_descriptor()
     }
 }
 

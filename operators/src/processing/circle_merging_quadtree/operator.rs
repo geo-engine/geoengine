@@ -364,6 +364,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
     type Output = MultiPointCollection;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -474,6 +475,10 @@ impl QueryProcessor for VisualPointClusteringProcessor {
         });
 
         Ok(stream.merge_chunks(ctx.chunk_byte_size().into()).boxed())
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
