@@ -472,7 +472,9 @@ mod tests {
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
         LayerCollectionListing, LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
     };
-    use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider, SearchParameters};
+    use crate::layers::listing::{
+        LayerCollectionId, LayerCollectionProvider, SearchParameters, SearchType,
+    };
     use crate::layers::storage::{
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
@@ -976,7 +978,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(datasets.items.len(), 3);
+        assert_eq!(datasets.items.len(), 3, "{:?}", datasets.items);
     }
 
     #[allow(clippy::too_many_lines)]
@@ -1420,7 +1422,7 @@ mod tests {
             .search(
                 &root_collection_id,
                 SearchParameters {
-                    search_type: "fulltext".to_string(),
+                    search_type: SearchType::Fulltext,
                     search_string: String::new(),
                     limit: 10,
                     offset: 0,
@@ -1496,7 +1498,7 @@ mod tests {
             .search(
                 &root_collection_id,
                 SearchParameters {
-                    search_type: "fulltext".to_string(),
+                    search_type: SearchType::Fulltext,
                     search_string: "lection".to_string(),
                     limit: 10,
                     offset: 0,
@@ -1543,7 +1545,7 @@ mod tests {
             .search(
                 &collection1_id,
                 SearchParameters {
-                    search_type: "fulltext".to_string(),
+                    search_type: SearchType::Fulltext,
                     search_string: String::new(),
                     limit: 10,
                     offset: 0,
@@ -1590,7 +1592,7 @@ mod tests {
             .search(
                 &collection1_id,
                 SearchParameters {
-                    search_type: "fulltext".to_string(),
+                    search_type: SearchType::Fulltext,
                     search_string: "ay".to_string(),
                     limit: 10,
                     offset: 0,
@@ -1626,7 +1628,7 @@ mod tests {
             .search(
                 &collection1_id,
                 SearchParameters {
-                    search_type: "prefix".to_string(),
+                    search_type: SearchType::Prefix,
                     search_string: "ay".to_string(),
                     limit: 10,
                     offset: 0,
@@ -1654,7 +1656,7 @@ mod tests {
             .search(
                 &collection1_id,
                 SearchParameters {
-                    search_type: "prefix".to_string(),
+                    search_type: SearchType::Prefix,
                     search_string: "Lay".to_string(),
                     limit: 10,
                     offset: 0,
@@ -1765,7 +1767,7 @@ mod tests {
             .autocomplete_search(
                 &root_collection_id,
                 SearchParameters {
-                    search_type: "fulltext".to_string(),
+                    search_type: SearchType::Fulltext,
                     search_string: String::new(),
                     limit: 10,
                     offset: 0,
@@ -1789,7 +1791,7 @@ mod tests {
             .autocomplete_search(
                 &root_collection_id,
                 SearchParameters {
-                    search_type: "fulltext".to_string(),
+                    search_type: SearchType::Fulltext,
                     search_string: "lection".to_string(),
                     limit: 10,
                     offset: 0,
@@ -1807,7 +1809,7 @@ mod tests {
             .autocomplete_search(
                 &collection1_id,
                 SearchParameters {
-                    search_type: "fulltext".to_string(),
+                    search_type: SearchType::Fulltext,
                     search_string: String::new(),
                     limit: 10,
                     offset: 0,
@@ -1825,7 +1827,7 @@ mod tests {
             .autocomplete_search(
                 &collection1_id,
                 SearchParameters {
-                    search_type: "fulltext".to_string(),
+                    search_type: SearchType::Fulltext,
                     search_string: "ay".to_string(),
                     limit: 10,
                     offset: 0,
@@ -1840,7 +1842,7 @@ mod tests {
             .autocomplete_search(
                 &collection1_id,
                 SearchParameters {
-                    search_type: "prefix".to_string(),
+                    search_type: SearchType::Prefix,
                     search_string: "ay".to_string(),
                     limit: 10,
                     offset: 0,
@@ -1855,7 +1857,7 @@ mod tests {
             .autocomplete_search(
                 &collection1_id,
                 SearchParameters {
-                    search_type: "prefix".to_string(),
+                    search_type: SearchType::Prefix,
                     search_string: "Lay".to_string(),
                     limit: 10,
                     offset: 0,
@@ -1883,7 +1885,7 @@ mod tests {
                 .search(
                     &root_collection_id,
                     SearchParameters {
-                        search_type: "fulltext".to_string(),
+                        search_type: SearchType::Fulltext,
                         search_string: String::new(),
                         limit: 10,
                         offset: 0,
@@ -1897,7 +1899,7 @@ mod tests {
                     .autocomplete_search(
                         &root_collection_id,
                         SearchParameters {
-                            search_type: "fulltext".to_string(),
+                            search_type: SearchType::Fulltext,
                             search_string: String::new(),
                             limit: 10,
                             offset: 0,
@@ -1910,7 +1912,7 @@ mod tests {
                     .autocomplete_search(
                         &root_collection_id,
                         SearchParameters {
-                            search_type: "fulltext".to_string(),
+                            search_type: SearchType::Fulltext,
                             search_string: String::new(),
                             limit: 10,
                             offset: 0,
@@ -1925,7 +1927,7 @@ mod tests {
                 .search(
                     &root_collection_id,
                     SearchParameters {
-                        search_type: "prefix".to_string(),
+                        search_type: SearchType::Prefix,
                         search_string: String::new(),
                         limit: 10,
                         offset: 0,
@@ -1939,7 +1941,7 @@ mod tests {
                     .autocomplete_search(
                         &root_collection_id,
                         SearchParameters {
-                            search_type: "prefix".to_string(),
+                            search_type: SearchType::Prefix,
                             search_string: String::new(),
                             limit: 10,
                             offset: 0,
@@ -1952,7 +1954,7 @@ mod tests {
                     .autocomplete_search(
                         &root_collection_id,
                         SearchParameters {
-                            search_type: "prefix".to_string(),
+                            search_type: SearchType::Prefix,
                             search_string: String::new(),
                             limit: 10,
                             offset: 0,

@@ -16,6 +16,7 @@ use validator::Validate;
 pub struct LayerCollectionId(pub String);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchCapabilities {
     pub(crate) search_types: SearchTypes,
     pub(crate) autocomplete: bool,
@@ -23,6 +24,7 @@ pub struct SearchCapabilities {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchTypes {
     pub(crate) fulltext: bool,
     pub(crate) prefix: bool,
@@ -31,11 +33,33 @@ pub struct SearchTypes {
 #[derive(
     Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams, Validate,
 )]
+#[serde(rename_all = "camelCase")]
+#[into_params(parameter_in = Query)]
 pub struct SearchParameters {
-    pub(crate) search_type: String,
+    #[param(example = "fulltext")]
+    pub(crate) search_type: SearchType,
+    #[param(example = "test")]
     pub(crate) search_string: String,
+    #[param(example = "20")]
     pub(crate) limit: u32,
+    #[param(example = "0")]
     pub(crate) offset: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SearchType {
+    Fulltext,
+    Prefix,
+}
+
+impl fmt::Display for SearchType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SearchType::Fulltext => write!(f, "fulltext"),
+            SearchType::Prefix => write!(f, "prefix"),
+        }
+    }
 }
 
 impl fmt::Display for LayerCollectionId {

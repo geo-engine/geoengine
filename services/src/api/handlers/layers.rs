@@ -394,7 +394,7 @@ async fn search_capabilities_handler<C: ApplicationContext>(
     Ok(web::Json(caps))
 }
 
-// Searches the contents of the collection of the given provider
+/// Searches the contents of the collection of the given provider
 #[utoipa::path(
     tag = "Layers",
     get,
@@ -436,8 +436,8 @@ async fn search_capabilities_handler<C: ApplicationContext>(
         )
     ),
     params(
-        ("provider" = DataProviderId, description = "Data provider id"),
-        ("collection" = LayerCollectionId, description = "Layer collection id"),
+        ("provider" = DataProviderId, description = "Data provider id", example = "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74"),
+        ("collection" = LayerCollectionId, description = "Layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
         SearchParameters
     ),
     security(
@@ -445,10 +445,10 @@ async fn search_capabilities_handler<C: ApplicationContext>(
     )
 )]
 async fn search_handler<C: ApplicationContext>(
+    session: C::Session,
     app_ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerCollectionId)>,
     options: ValidatedQuery<SearchParameters>,
-    session: C::Session,
 ) -> Result<impl Responder> {
     let (provider, collection) = path.into_inner();
 
@@ -483,7 +483,7 @@ async fn search_handler<C: ApplicationContext>(
     Ok(web::Json(collection))
 }
 
-// Autocompletes the search on the contents of the collection of the given provider
+/// Autocompletes the search on the contents of the collection of the given provider
 #[utoipa::path(
     tag = "Layers",
     get,
@@ -494,8 +494,8 @@ async fn search_handler<C: ApplicationContext>(
         )
     ),
     params(
-        ("provider" = DataProviderId, description = "Data provider id"),
-        ("collection" = LayerCollectionId, description = "Layer collection id"),
+        ("provider" = DataProviderId, description = "Data provider id", example = "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74"),
+        ("collection" = LayerCollectionId, description = "Layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
         SearchParameters
     ),
     security(
@@ -503,10 +503,10 @@ async fn search_handler<C: ApplicationContext>(
     )
 )]
 async fn autocomplete_handler<C: ApplicationContext>(
+    session: C::Session,
     app_ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerCollectionId)>,
     options: ValidatedQuery<SearchParameters>,
-    session: C::Session,
 ) -> Result<impl Responder> {
     let (provider, collection) = path.into_inner();
 
@@ -1537,7 +1537,7 @@ mod tests {
 
         let req = test::TestRequest::get()
             .uri(&format!(
-                "/layers/collections/search/{INTERNAL_PROVIDER_ID}/{root_collection_id}?limit=5&offset=0&search_type=fulltext&search_string=x"
+                "/layers/collections/search/{INTERNAL_PROVIDER_ID}/{root_collection_id}?limit=5&offset=0&searchType=fulltext&searchString=x"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx.clone()).await;
@@ -1555,7 +1555,7 @@ mod tests {
 
         let req = test::TestRequest::get()
             .uri(&format!(
-                "/layers/collections/search/autocomplete/{INTERNAL_PROVIDER_ID}/{root_collection_id}?limit=5&offset=0&search_type=fulltext&search_string=x"
+                "/layers/collections/search/autocomplete/{INTERNAL_PROVIDER_ID}/{root_collection_id}?limit=5&offset=0&searchType=fulltext&searchString=x"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx.clone()).await;

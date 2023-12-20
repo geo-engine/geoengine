@@ -1,7 +1,7 @@
 use super::external::TypedDataProviderDefinition;
+use super::listing::SearchType;
 use crate::contexts::PostgresDb;
 use crate::error;
-use crate::error::Error::NotImplemented;
 use crate::layers::layer::Property;
 use crate::layers::listing::{SearchCapabilities, SearchParameters, SearchTypes};
 use crate::workflows::workflow::WorkflowId;
@@ -659,17 +659,12 @@ where
         let description: String = row.get(1);
         let properties: Vec<Property> = row.get(2);
 
-        let pattern = match search.search_type.as_str() {
-            "fulltext" => {
+        let pattern = match search.search_type {
+            SearchType::Fulltext => {
                 format!("%{}%", search.search_string)
             }
-            "prefix" => {
+            SearchType::Prefix => {
                 format!("{}%", search.search_string)
-            }
-            _ => {
-                return Err(NotImplemented {
-                    message: format!("Search type {} is not supported", search.search_type),
-                })
             }
         };
 
@@ -777,17 +772,12 @@ where
 
         let conn = self.conn_pool.get().await?;
 
-        let pattern = match search.search_type.as_str() {
-            "fulltext" => {
+        let pattern = match search.search_type {
+            SearchType::Fulltext => {
                 format!("%{}%", search.search_string)
             }
-            "prefix" => {
+            SearchType::Prefix => {
                 format!("{}%", search.search_string)
-            }
-            _ => {
-                return Err(NotImplemented {
-                    message: format!("Search type {} is not supported", search.search_type),
-                })
             }
         };
 

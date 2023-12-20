@@ -47,9 +47,7 @@ use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
 };
-use crate::layers::listing::LayerCollectionId;
-use crate::layers::listing::SearchCapabilities;
-use crate::layers::listing::SearchTypes;
+use crate::layers::listing::{LayerCollectionId, SearchCapabilities, SearchType, SearchTypes};
 use crate::pro;
 use crate::pro::api::handlers::users::{Quota, UpdateQuota};
 use crate::pro::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
@@ -254,6 +252,7 @@ use utoipa::{Modify, OpenApi};
             AddLayerCollection,
             SearchCapabilities,
             SearchTypes,
+            SearchType,
 
             Breakpoint,
             ColorParam,
