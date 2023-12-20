@@ -33,7 +33,8 @@ use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 pub use migrations::{
     migrate_database, migration_0000_initial::Migration0000Initial,
-    migration_0001_raster_stacks::Migration0001RasterStacks, DatabaseVersion, Migration,
+    migration_0001_raster_stacks::Migration0001RasterStacks,
+    migration_0002_gbif_config::Migration0002GbifConfig, DatabaseVersion, Migration,
     MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
