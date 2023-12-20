@@ -10,13 +10,13 @@ use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::error::{self, Error, Result};
-use crate::layers::layer::CollectionItem;
 use crate::layers::layer::Layer;
 use crate::layers::layer::LayerCollection;
 use crate::layers::layer::LayerCollectionListOptions;
 use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
+use crate::layers::layer::{CollectionItem, LayerCollectionListing};
 use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
 use crate::layers::storage::INTERNAL_PROVIDER_ID;
 use crate::pro::contexts::ProPostgresDb;
@@ -155,7 +155,8 @@ where
                 d.result_descriptor,
                 d.source_operator,
                 d.symbology,
-                d.provenance
+                d.provenance,
+                d.tags
             FROM 
                 user_permitted_datasets p JOIN datasets d 
                     ON (p.dataset_id = d.id)
@@ -166,10 +167,11 @@ where
             )
             .await?;
 
-        // TODO: throw proper dataset does not exist/no permission error
         let row = conn
-            .query_one(&stmt, &[&self.session.user.id, dataset])
+            .query_opt(&stmt, &[&self.session.user.id, dataset])
             .await?;
+
+        let row = row.ok_or(error::Error::UnknownDatasetId)?;
 
         Ok(Dataset {
             id: row.get(0),
@@ -180,6 +182,7 @@ where
             source_operator: row.get(5),
             symbology: row.get(6),
             provenance: row.get(7),
+            tags: row.get(8),
         })
     }
 
@@ -485,6 +488,12 @@ where
             name: id.to_string(),
         });
 
+        log::info!(
+            "Adding dataset with name: {:?}, tags: {:?}",
+            name,
+            dataset.tags
+        );
+
         self.check_namespace(&name)?;
 
         let typed_meta_data = meta_data.to_typed_metadata()?;
@@ -507,9 +516,10 @@ where
                     result_descriptor,
                     meta_data,
                     symbology,
-                    provenance
+                    provenance,
+                    tags
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::\"Provenance\"[])",
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::\"Provenance\"[], $10::text[])",
             )
             .await?;
 
@@ -525,6 +535,7 @@ where
                 typed_meta_data.meta_data,
                 &dataset.symbology,
                 &dataset.provenance,
+                &dataset.tags,
             ],
         )
         .await?;
@@ -680,23 +691,70 @@ where
     ) -> Result<LayerCollection> {
         let conn = self.conn_pool.get().await?;
 
+        let coll_id = &collection.0;
+
+        if coll_id == "" || coll_id == &DATASET_DB_ROOT_COLLECTION_ID.to_string() {
+            let root_collection_items = vec![
+                CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: DATASET_DB_LAYER_PROVIDER_ID,
+                        collection_id: LayerCollectionId("upload".to_string()),
+                    },
+                    name: "User Uploads".to_string(),
+                    description: "Datasets uploaded by the user.".to_string(),
+                    properties: vec![],
+                }),
+                CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: DATASET_DB_LAYER_PROVIDER_ID,
+                        collection_id: LayerCollectionId("workflow".to_string()),
+                    },
+                    name: "Workflows".to_string(),
+                    description: "Datasets created from workflows.".to_string(),
+                    properties: vec![],
+                }),
+            ];
+
+            return Ok(LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: DATASET_DB_LAYER_PROVIDER_ID,
+                    collection_id: collection.clone(),
+                },
+                name: "Tagged User Datasets".to_string(),
+                description: "User datasets sorted by tags e.g. uploads.".to_string(),
+                items: root_collection_items,
+                entry_label: None,
+                properties: vec![],
+            });
+        }
+
+        let tags = coll_id.split(",").collect::<Vec<_>>();
+
+        if tags.is_empty() {
+            return Err(error::Error::InvalidLayerCollectionId);
+        };
+
+        log::debug!("Loading dataset layer collection with tags: {:?}", tags);
+
         let stmt = conn
             .prepare(
                 "
                 SELECT 
                     concat(d.id, ''), 
                     d.display_name, 
-                    d.description
+                    d.description,
+                    d.tags
                 FROM 
                     user_permitted_datasets p JOIN datasets d 
                         ON (p.dataset_id = d.id)
                 WHERE 
-                    p.user_id = $1
+                    p.user_id = $1 AND d.tags @> $4::text[]
                 ORDER BY d.name ASC
                 LIMIT $2
                 OFFSET $3;",
             )
-            .await?;
+            .await
+            .unwrap();
 
         let rows = conn
             .query(
@@ -705,6 +763,7 @@ where
                     &self.session.user.id,
                     &i64::from(options.limit),
                     &i64::from(options.offset),
+                    &tags,
                 ],
             )
             .await?;

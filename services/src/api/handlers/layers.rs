@@ -147,13 +147,13 @@ async fn get_layer_providers<C: ApplicationContext>(
     if options.offset == 0 && options.limit > 0 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
             id: ProviderLayerCollectionId {
-                provider_id: crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID,
+                provider_id: crate::layers::storage::INTERNAL_PROVIDER_ID,
                 collection_id: LayerCollectionId(
-                    crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID.to_string(),
+                    crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
                 ),
             },
-            name: "Datasets".to_string(),
-            description: "Basic Layers for all Datasets".to_string(),
+            name: "Layers".to_string(),
+            description: "All available Geo Engine layers".to_string(),
             properties: Default::default(),
         }));
 
@@ -162,13 +162,11 @@ async fn get_layer_providers<C: ApplicationContext>(
     if options.offset <= 1 && options.limit > 1 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
             id: ProviderLayerCollectionId {
-                provider_id: crate::layers::storage::INTERNAL_PROVIDER_ID,
-                collection_id: LayerCollectionId(
-                    crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
-                ),
+                provider_id: crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID,
+                collection_id: LayerCollectionId("upload".to_string()),
             },
-            name: "Layers".to_string(),
-            description: "All available Geo Engine layers".to_string(),
+            name: "User Uploads".to_string(),
+            description: "User uploaded datasets".to_string(),
             properties: Default::default(),
         }));
 

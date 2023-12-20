@@ -168,7 +168,8 @@ where
                 result_descriptor,
                 source_operator,
                 symbology,
-                provenance
+                provenance,
+                tags
             FROM 
                 datasets
             WHERE 
@@ -178,8 +179,9 @@ where
             )
             .await?;
 
-        // TODO: throw proper dataset does not exist
-        let row = conn.query_one(&stmt, &[dataset]).await?;
+        let row = conn.query_opt(&stmt, &[dataset]).await?;
+
+        let row = row.ok_or(error::Error::UnknownDatasetId)?;
 
         Ok(Dataset {
             id: row.get(0),
@@ -190,6 +192,7 @@ where
             source_operator: row.get(5),
             symbology: row.get(6),
             provenance: row.get(7),
+            tags: row.get(8),
         })
     }
 
@@ -472,9 +475,10 @@ where
                     result_descriptor,
                     meta_data,
                     symbology,
-                    provenance
+                    provenance,
+                    tags
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[])",
             )
             .await?;
 
@@ -490,6 +494,7 @@ where
                 typed_meta_data.meta_data,
                 &dataset.symbology,
                 &dataset.provenance,
+                &dataset.tags,
             ],
         )
         .await?;
@@ -585,7 +590,8 @@ where
                 SELECT 
                     concat(id, '') AS id, 
                     display_name, 
-                    description
+                    description,
+                    tags
                 FROM 
                    datasets
                 ORDER BY name ASC
@@ -622,7 +628,7 @@ where
                 provider_id: INTERNAL_PROVIDER_ID,
                 collection_id: collection.clone(),
             },
-            name: "Datasets".to_string(),
+            name: "Datasets with tag".to_string(),
             description: "Basic Layers for all Datasets".to_string(),
             items,
             entry_label: None,

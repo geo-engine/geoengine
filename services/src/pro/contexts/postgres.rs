@@ -1096,6 +1096,7 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 wrap,
             )
@@ -1123,7 +1124,7 @@ mod tests {
                 description: "desc".to_owned(),
                 source_operator: "OgrSource".to_owned(),
                 symbology: None,
-                tags: vec![],
+                tags: vec!["upload".to_owned(), "test".to_owned()],
                 result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1271,6 +1272,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = StaticMetaData {
@@ -1344,6 +1346,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = StaticMetaData {
@@ -1397,6 +1400,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = StaticMetaData {
@@ -1456,6 +1460,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = StaticMetaData {
@@ -1515,6 +1520,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = StaticMetaData {
@@ -1594,6 +1600,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let raster_ds = AddDataset {
@@ -1603,6 +1610,7 @@ mod tests {
             source_operator: "GdalSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let gdal_params = GdalDatasetParameters {
@@ -2556,6 +2564,7 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 wrap,
             )
@@ -2647,6 +2656,7 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 wrap,
             )
@@ -3421,6 +3431,7 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 db.wrap_meta_data(meta_data.clone()),
             )
@@ -3446,6 +3457,7 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 db.wrap_meta_data(meta_data),
             )
