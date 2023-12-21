@@ -685,7 +685,7 @@ where
                 FALSE AS is_layer
             FROM layer_collections
                 JOIN (SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)) cc ON (id = cc.child)
-            WHERE name LIKE $4
+            WHERE name ILIKE $4
         ) u UNION (
             SELECT 
                 concat(id, '') AS id, 
@@ -695,7 +695,7 @@ where
                 TRUE AS is_layer
             FROM layers uc
                 JOIN (SELECT DISTINCT layer FROM collection_layers JOIN parents ON (collection = id)) cl ON (id = cl.layer)
-            WHERE name LIKE $4
+            WHERE name ILIKE $4
         )
         ORDER BY is_layer ASC, name ASC
         LIMIT $2 
@@ -794,13 +794,13 @@ where
                 name
             FROM layer_collections
                 JOIN (SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)) cc ON (id = cc.child)
-            WHERE name LIKE $4
+            WHERE name ILIKE $4
         ) u UNION (
             SELECT 
                 name
             FROM layers uc
                 JOIN (SELECT DISTINCT layer FROM collection_layers JOIN parents ON (collection = id)) cl ON (id = cl.layer)
-            WHERE name LIKE $4
+            WHERE name ILIKE $4
         )
         ORDER BY name ASC
         LIMIT $2 

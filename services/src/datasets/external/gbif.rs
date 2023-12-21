@@ -236,7 +236,7 @@ impl GbifDataProvider {
                 (
                     SELECT DISTINCT canonicalname
                     FROM {schema}.species
-                    WHERE taxonrank = '{taxonrank}'{filter} AND canonicalname LIKE $3
+                    WHERE taxonrank = '{taxonrank}'{filter} AND canonicalname ILIKE $3
                 )
             GROUP BY "{taxonrank}"
             ORDER BY "{taxonrank}" 
@@ -306,7 +306,7 @@ impl GbifDataProvider {
                 (
                     SELECT DISTINCT canonicalname
                     FROM {schema}.species
-                    WHERE taxonrank = '{taxonrank}'{filter} AND canonicalname LIKE $3
+                    WHERE taxonrank = '{taxonrank}'{filter} AND canonicalname ILIKE $3
                 )
             GROUP BY {taxonrank}
             ORDER BY {taxonrank} 
@@ -470,7 +470,7 @@ impl GbifDataProvider {
             r#"
             SELECT DISTINCT "{column}"
             FROM {schema}.species
-            WHERE "{column}" IS NOT NULL{filter} AND "{column}" LIKE $3
+            WHERE "{column}" IS NOT NULL{filter} AND "{column}" ILIKE $3
             ORDER BY "{column}"
             LIMIT $1
             OFFSET $2
