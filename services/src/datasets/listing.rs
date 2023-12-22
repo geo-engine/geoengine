@@ -1,5 +1,5 @@
 use super::DatasetName;
-use crate::datasets::storage::Dataset;
+use crate::datasets::storage::{validate_tags, Dataset};
 use crate::error::Result;
 use crate::projects::Symbology;
 use crate::util::config::{get_config_element, DatasetService};
@@ -44,6 +44,9 @@ pub struct DatasetListOptions {
     #[param(example = 2)]
     #[validate(custom = "validate_list_limit")]
     pub limit: u32,
+    #[param(example = "['tag1', 'tag2']")]
+    #[validate(custom = "validate_tags")]
+    pub tags: Option<Vec<String>>,
 }
 
 fn validate_list_limit(value: u32) -> Result<(), ValidationError> {

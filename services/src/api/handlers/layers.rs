@@ -1,6 +1,7 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::api::model::responses::IdResponse;
 use crate::contexts::ApplicationContext;
+use crate::datasets::dataset_listing_provider::DatasetLayerListingProvider;
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::{Error, Result};
 use crate::layers::layer::{
@@ -152,23 +153,18 @@ async fn get_layer_providers<C: ApplicationContext>(
                     crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
                 ),
             },
-            name: "Layers".to_string(),
-            description: "All available Geo Engine layers".to_string(),
+            name: "Data Catalog".to_string(),
+            description: "Catalog of data and workflows".to_string(),
             properties: Default::default(),
         }));
 
         options.limit -= 1;
     }
     if options.offset <= 1 && options.limit > 1 {
-        providers.push(CollectionItem::Collection(LayerCollectionListing {
-            id: ProviderLayerCollectionId {
-                provider_id: crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID,
-                collection_id: LayerCollectionId("upload".to_string()),
-            },
-            name: "User Uploads".to_string(),
-            description: "User uploaded datasets".to_string(),
-            properties: Default::default(),
-        }));
+        let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(
+            app_ctx.session_context(session.clone()).db(),
+        );
+        providers.push(dataset_listing_provider.generate_provider_listing_collection_item());
 
         options.limit -= 1;
     }
@@ -278,6 +274,8 @@ async fn list_collection_handler<C: ApplicationContext>(
     options: ValidatedQuery<LayerCollectionListOptions>,
     session: C::Session,
 ) -> Result<impl Responder> {
+    tracing::debug!("Loading layer collection: {:?}", path);
+
     let (provider, item) = path.into_inner();
 
     if provider == ROOT_PROVIDER_ID && item == LayerCollectionId(ROOT_COLLECTION_ID.to_string()) {
@@ -287,8 +285,9 @@ async fn list_collection_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        let collection = db
+    if provider == crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID.into() {
+        let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(db);
+        let collection = dataset_listing_provider
             .load_dataset_layer_collection(&item, options.into_inner())
             .await?;
 
@@ -483,8 +482,12 @@ async fn layer_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        let collection = db.load_dataset_layer(&item.into()).await?;
+    if provider == crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID.into() {
+        let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(db);
+
+        let collection = dataset_listing_provider
+            .load_dataset_layer(&item.into())
+            .await?;
 
         return Ok(web::Json(collection));
     }
@@ -527,10 +530,11 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
 ) -> Result<web::Json<IdResponse<WorkflowId>>> {
     let (provider, item) = path.into_inner();
 
-    let db = app_ctx.session_context(session).db();
+    let db = app_ctx.session_context(session.clone()).db();
     let layer = match provider.into() {
-        crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID => {
-            db.load_dataset_layer(&item.into()).await?
+        crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID => {
+            let provider = DatasetLayerListingProvider::with_all_datasets(db);
+            provider.load_dataset_layer(&item.into()).await?
         }
         crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item.into()).await?,
         _ => {
@@ -541,6 +545,7 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
         }
     };
 
+    let db = app_ctx.session_context(session).db();
     let workflow_id = db.register_workflow(layer.workflow).await?;
 
     Ok(web::Json(IdResponse::from(workflow_id)))
@@ -579,8 +584,9 @@ async fn layer_to_dataset<C: ApplicationContext>(
     let db = ctx.db();
 
     let layer = match provider.into() {
-        crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID => {
-            db.load_dataset_layer(&item).await?
+        crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID => {
+            let provider = DatasetLayerListingProvider::with_all_datasets(db);
+            provider.load_dataset_layer(&item).await?
         }
         crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item).await?,
         _ => {

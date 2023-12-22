@@ -1109,6 +1109,7 @@ mod tests {
                 order: crate::datasets::listing::OrderBy::NameAsc,
                 offset: 0,
                 limit: 10,
+                tags: None,
             })
             .await
             .unwrap();
@@ -1304,6 +1305,7 @@ mod tests {
                 order: crate::datasets::listing::OrderBy::NameAsc,
                 offset: 0,
                 limit: 1,
+                tags: None,
             })
             .await
             .unwrap();
@@ -1316,6 +1318,7 @@ mod tests {
                 order: crate::datasets::listing::OrderBy::NameAsc,
                 offset: 0,
                 limit: 1,
+                tags: None,
             })
             .await
             .unwrap();
