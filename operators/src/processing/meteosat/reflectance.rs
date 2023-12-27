@@ -157,6 +157,7 @@ impl InitializedRasterOperator for InitializedReflectance {
         if let TypedRasterQueryProcessor::F32(p) = q {
             Ok(QueryProcessorOut(Box::new(ReflectanceProcessor::new(
                 p,
+                self.result_descriptor.clone(),
                 self.params,
             ))))
         } else {
@@ -174,6 +175,7 @@ where
     Q: RasterQueryProcessor<RasterType = PixelOut>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     params: ReflectanceParams,
     channel_key: RasterPropertiesKey,
     satellite_key: RasterPropertiesKey,
@@ -183,9 +185,14 @@ impl<Q> ReflectanceProcessor<Q>
 where
     Q: RasterQueryProcessor<RasterType = PixelOut>,
 {
-    pub fn new(source: Q, params: ReflectanceParams) -> Self {
+    pub fn new(
+        source: Q,
+        result_descriptor: RasterResultDescriptor,
+        params: ReflectanceParams,
+    ) -> Self {
         Self {
             source,
+            result_descriptor,
             params,
             channel_key: new_channel_key(),
             satellite_key: new_satellite_key(),
@@ -282,11 +289,13 @@ where
         Output = RasterTile2D<PixelOut>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
 {
     type Output = RasterTile2D<PixelOut>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -296,6 +305,10 @@ where
         let src = self.source.query(query, ctx).await?;
         let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
     }
 }
 

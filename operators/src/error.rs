@@ -452,6 +452,11 @@ pub enum Error {
     RasterBandNameTooLong,
 
     AtLeastOneRasterBandDescriptorRequired,
+
+    #[snafu(display("Band {band_idx} does not exist."))]
+    BandDoesNotExist {
+        band_idx: u32,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

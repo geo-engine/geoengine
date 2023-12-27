@@ -12,7 +12,7 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{
     QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
-    VectorQueryProcessor,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::processing::raster_vector_join::aggregator::{
     Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
@@ -28,6 +28,7 @@ use super::{create_feature_aggregator, FeatureAggregationMethod};
 
 pub struct RasterVectorAggregateJoinProcessor<G> {
     collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+    result_descriptor: VectorResultDescriptor,
     raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
     feature_aggregation: FeatureAggregationMethod,
@@ -41,8 +42,10 @@ where
     G: Geometry + ArrowTyped,
     FeatureCollection<G>: PixelCoverCreator<G>,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+        result_descriptor: VectorResultDescriptor,
         raster_processors: Vec<TypedRasterQueryProcessor>,
         column_names: Vec<String>,
         feature_aggregation: FeatureAggregationMethod,
@@ -52,6 +55,7 @@ where
     ) -> Self {
         Self {
             collection,
+            result_descriptor,
             raster_processors,
             column_names,
             feature_aggregation,
@@ -224,6 +228,7 @@ where
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -261,6 +266,10 @@ where
             .boxed();
 
         Ok(stream)
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
     }
 }
 

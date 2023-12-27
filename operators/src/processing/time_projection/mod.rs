@@ -130,6 +130,7 @@ impl InitializedVectorOperator for InitializedVectorTimeProjection {
         Ok(
             call_on_generic_vector_processor!(source_processor, processor => VectorTimeProjectionProcessor {
                 processor,
+                result_descriptor: self.result_descriptor.clone(),
                 step: self.step,
                 step_reference: self.step_reference,
             }.boxed().into()),
@@ -146,6 +147,7 @@ where
     G: Geometry,
 {
     processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+    result_descriptor: VectorResultDescriptor,
     step: TimeStep,
     step_reference: TimeInstance,
 }
@@ -172,6 +174,10 @@ where
             })
             .boxed();
         Ok(stream)
+    }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 

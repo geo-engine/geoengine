@@ -138,6 +138,7 @@ where
     type Output = RasterTile2D<POut>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'b>(
         &'b self,
@@ -150,6 +151,10 @@ where
         });
 
         Ok(converted_stream.boxed())
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        self.query_processor.raster_result_descriptor()
     }
 }
 

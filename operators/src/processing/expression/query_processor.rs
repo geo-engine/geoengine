@@ -17,7 +17,7 @@ use num_traits::AsPrimitive;
 
 use crate::{
     adapters::{QueryWrapper, RasterArrayTimeAdapter, RasterTimeAdapter},
-    engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor},
+    engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterResultDescriptor},
     util::Result,
 };
 
@@ -28,6 +28,7 @@ where
     TO: Pixel,
 {
     pub sources: Sources,
+    pub result_descriptor: RasterResultDescriptor,
     pub phantom_data: PhantomData<TO>,
     pub program: Arc<LinkedExpression>,
     pub map_no_data: bool,
@@ -37,9 +38,15 @@ impl<TO, Sources> ExpressionQueryProcessor<TO, Sources>
 where
     TO: Pixel,
 {
-    pub fn new(program: LinkedExpression, sources: Sources, map_no_data: bool) -> Self {
+    pub fn new(
+        program: LinkedExpression,
+        sources: Sources,
+        result_descriptor: RasterResultDescriptor,
+        map_no_data: bool,
+    ) -> Self {
         Self {
             sources,
+            result_descriptor,
             program: Arc::new(program),
             phantom_data: PhantomData,
             map_no_data,
@@ -56,6 +63,7 @@ where
     type Output = RasterTile2D<TO>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'b>(
         &'b self,
@@ -99,6 +107,10 @@ where
             });
 
         Ok(stream.boxed())
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

@@ -233,6 +233,7 @@ impl InitializedVectorOperator for InitializedVectorJoin {
                     TypedVectorQueryProcessor::MultiPoint(left_processor) => {
                         TypedVectorQueryProcessor::MultiPoint(
                             EquiGeoToDataJoinProcessor::new(
+                                self.result_descriptor.clone(),
                                 left_processor,
                                 right_processor,
                                 left_column.clone(),
@@ -245,6 +246,7 @@ impl InitializedVectorOperator for InitializedVectorJoin {
                     TypedVectorQueryProcessor::MultiLineString(left_processor) => {
                         TypedVectorQueryProcessor::MultiLineString(
                             EquiGeoToDataJoinProcessor::new(
+                                self.result_descriptor.clone(),
                                 left_processor,
                                 right_processor,
                                 left_column.clone(),
@@ -257,6 +259,7 @@ impl InitializedVectorOperator for InitializedVectorJoin {
                     TypedVectorQueryProcessor::MultiPolygon(left_processor) => {
                         TypedVectorQueryProcessor::MultiPolygon(
                             EquiGeoToDataJoinProcessor::new(
+                                self.result_descriptor.clone(),
                                 left_processor,
                                 right_processor,
                                 left_column.clone(),

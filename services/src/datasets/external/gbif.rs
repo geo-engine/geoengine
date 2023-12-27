@@ -1758,8 +1758,17 @@ mod tests {
                     .await
                     .map_err(|e| e.to_string())?;
 
-                let processor: OgrSourceProcessor<MultiPoint> =
-                    OgrSourceProcessor::new(meta, vec![]);
+                let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
+                    VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        columns: HashMap::new(),
+                        time: None,
+                        bbox: None,
+                    },
+                    meta,
+                    vec![],
+                );
 
                 let query_rectangle = VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new(

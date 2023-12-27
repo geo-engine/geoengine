@@ -25,6 +25,7 @@ pub struct MockFeatureCollectionSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
+    result_descriptor: VectorResultDescriptor,
     collections: Vec<FeatureCollection<G>>,
 }
 
@@ -52,6 +53,10 @@ where
         );
 
         Ok(stream.boxed())
+    }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -212,6 +217,7 @@ macro_rules! impl_mock_feature_collection_source {
             fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
                 Ok(TypedVectorQueryProcessor::$output(
                     MockFeatureCollectionSourceProcessor {
+                        result_descriptor: self.result_descriptor.clone(),
                         collections: self.collections.clone(),
                     }
                     .boxed(),

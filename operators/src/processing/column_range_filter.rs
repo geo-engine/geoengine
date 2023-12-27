@@ -119,6 +119,7 @@ where
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -175,6 +176,10 @@ where
             FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size().into());
 
         Ok(merged_chunks_stream.boxed())
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        self.source.result_descriptor()
     }
 }
 

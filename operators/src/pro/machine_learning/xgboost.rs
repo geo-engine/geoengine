@@ -174,6 +174,7 @@ impl InitializedRasterOperator for InitializedXgboostOperator {
 
         Ok(QueryProcessorOut(Box::new(XgboostProcessor::new(
             vec_of_rqps,
+            self.result_descriptor.clone(),
             self.model.clone(),
             self.no_data_value,
         ))))
@@ -189,6 +190,7 @@ where
     Q: RasterQueryProcessor<RasterType = f32>,
 {
     sources: Vec<Q>,
+    result_descriptor: RasterResultDescriptor,
     model: String,
     no_data_value: f32,
 }
@@ -197,9 +199,15 @@ impl<Q> XgboostProcessor<Q>
 where
     Q: RasterQueryProcessor<RasterType = f32>,
 {
-    pub fn new(sources: Vec<Q>, model_file_content: String, no_data_value: f32) -> Self {
+    pub fn new(
+        sources: Vec<Q>,
+        result_descriptor: RasterResultDescriptor,
+        model_file_content: String,
+        no_data_value: f32,
+    ) -> Self {
         Self {
             sources,
+            result_descriptor,
             model: model_file_content,
             no_data_value,
         }
@@ -332,11 +340,14 @@ where
         Output = RasterTile2D<f32>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
 {
     type Output = RasterTile2D<PixelOut>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
+
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -362,6 +373,10 @@ where
         });
 
         Ok(rs.boxed())
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

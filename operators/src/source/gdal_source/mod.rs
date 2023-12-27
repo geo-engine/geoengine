@@ -420,6 +420,7 @@ pub struct GdalSourceProcessor<T>
 where
     T: Pixel,
 {
+    pub result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
     pub meta_data: GdalMetaData,
     pub _phantom_data: PhantomData<T>,
@@ -656,6 +657,7 @@ where
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -750,6 +752,10 @@ where
         );
         Ok(filled_stream.boxed())
     }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 pub type GdalSource = SourceOperator<GdalSourceParameters>;
@@ -801,6 +807,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
         Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -809,6 +816,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             ),
             RasterDataType::U16 => TypedRasterQueryProcessor::U16(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -817,6 +825,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             ),
             RasterDataType::U32 => TypedRasterQueryProcessor::U32(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -835,6 +844,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             }
             RasterDataType::I16 => TypedRasterQueryProcessor::I16(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -843,6 +853,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             ),
             RasterDataType::I32 => TypedRasterQueryProcessor::I32(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -856,6 +867,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             }
             RasterDataType::F32 => TypedRasterQueryProcessor::F32(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -864,6 +876,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             ),
             RasterDataType::F64 => TypedRasterQueryProcessor::F64(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
