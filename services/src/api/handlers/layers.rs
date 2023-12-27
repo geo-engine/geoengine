@@ -274,8 +274,6 @@ async fn list_collection_handler<C: ApplicationContext>(
     options: ValidatedQuery<LayerCollectionListOptions>,
     session: C::Session,
 ) -> Result<impl Responder> {
-    tracing::debug!("Loading layer collection: {:?}", path);
-
     let (provider, item) = path.into_inner();
 
     if provider == ROOT_PROVIDER_ID && item == LayerCollectionId(ROOT_COLLECTION_ID.to_string()) {

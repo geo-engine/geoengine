@@ -378,7 +378,7 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
     let upload = db.load_upload(upload_id).await.context(UploadNotFound)?;
 
-    add_upload_tag(&mut definition.properties);
+    add_tag(&mut definition.properties, "upload".to_owned());
 
     adjust_meta_data_path(&mut definition.meta_data, &upload)
         .context(CannotResolveUploadFilePath)?;
@@ -452,13 +452,15 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
     Ok(())
 }
 
-pub fn add_upload_tag(properties: &mut AddDataset) {
+/// Add the upload tag to the dataset properties.
+/// If the tag already exists, it will not be added again.
+pub fn add_tag(properties: &mut AddDataset, tag: String) {
     if let Some(ref mut tags) = properties.tags {
-        if !tags.contains(&"upload".to_owned()) {
-            tags.push("upload".to_owned());
+        if !tags.contains(&tag) {
+            tags.push(tag);
         }
     } else {
-        properties.tags = Some(vec!["upload".to_owned()]);
+        properties.tags = Some(vec![tag]);
     }
 }
 
