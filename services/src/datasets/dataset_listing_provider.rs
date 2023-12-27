@@ -27,6 +27,8 @@ pub const DATASET_LISTING_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x5ad54b5e_e536_47e9_b9df_e729bfc7aaeb);
 
 const TAG_PREFIX: &str = "tags:";
+const TAG_WILDCARD: &str = "*";
+const ROOT_COLLECTION_ID: &str = "root";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -71,7 +73,7 @@ where
             DatasetLayerListingCollection {
                 name: "All Datasets".to_string(),
                 description: "All datasets".to_string(),
-                tags: vec!["*".to_string()],
+                tags: vec![TAG_WILDCARD.to_string()],
             },
         ];
 
@@ -194,7 +196,7 @@ where
     }
 
     pub fn root_collection_id() -> LayerCollectionId {
-        LayerCollectionId("ente-ente-ente-ente".to_string())
+        LayerCollectionId(ROOT_COLLECTION_ID.to_owned())
     }
 }
 
@@ -221,7 +223,7 @@ where
             return Err(crate::error::Error::InvalidLayerCollectionId);
         }
 
-        let tags = if collection.0[TAG_PREFIX.len()..] == *"*" {
+        let tags = if collection.0[TAG_PREFIX.len()..] == *TAG_WILDCARD {
             vec![]
         } else {
             collection.0[TAG_PREFIX.len()..]
