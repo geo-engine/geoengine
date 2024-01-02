@@ -113,7 +113,7 @@ utoipa = { version = "4.0", features = [
   "url",
   "uuid",
 ] }
-utoipa-swagger-ui = { version = "4.0", features = ["actix-web"] }
+utoipa-swagger-ui = { version = "5.0", features = ["actix-web"] }
 uuid = { version = "1.1", features = [
   "serde",
   "v4",
