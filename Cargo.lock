@@ -2483,7 +2483,6 @@ dependencies = [
  "geoengine-operators",
  "geojson",
  "httptest",
- "hyper",
  "image",
  "itertools 0.12.0",
  "lazy_static",
