@@ -83,7 +83,7 @@ where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
-        config::get_config_element::<crate::pro::util::config::User>()?.user_registration,
+        config::get_config_element::<crate::pro::util::config::User>()?.registration,
         error::UserRegistrationDisabled
     );
 
@@ -1617,7 +1617,7 @@ mod tests {
             quota.available,
             crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                 .unwrap()
-                .default_available_quota
+                .default
         );
 
         let update = UpdateQuota { available: 123 };

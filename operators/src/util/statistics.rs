@@ -668,14 +668,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "The desired quantile must be in the interval [0,1]"]
     fn test_bad_quantile() {
         let initial = vec![0.02, 0.15, 0.74, 3.39, 0.83];
         PSquareQuantileEstimator::new(1.2, initial.as_slice()).unwrap();
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "The desired quantile must be in the interval [0,1]"]
     fn test_bad_quantile2() {
         let initial = vec![0.02, 0.15, 0.74, 3.39, 0.83];
         PSquareQuantileEstimator::new(-1.0, initial.as_slice()).unwrap();

@@ -356,7 +356,7 @@ pub enum Error {
     },
 
     #[snafu(context(false))]
-    TaskError {
+    Task {
         source: crate::tasks::TaskError,
     },
 
@@ -402,7 +402,7 @@ pub enum Error {
 
     #[cfg(feature = "pro")]
     #[snafu(context(false))]
-    OidcError {
+    Oidc {
         source: crate::pro::users::OidcError,
     },
 
@@ -445,7 +445,7 @@ pub enum Error {
     // TODO: refactor error
     #[cfg(feature = "pro")]
     #[snafu(context(false))]
-    MachineLearningError {
+    MachineLearning {
         source: crate::pro::machine_learning::ml_error::MachineLearningError,
     },
 

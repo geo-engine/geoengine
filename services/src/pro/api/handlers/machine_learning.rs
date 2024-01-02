@@ -115,7 +115,7 @@ mod tests {
         tile_size_in_pixels: GridShape<[usize; 2]>,
     ) -> SourceOperator<MockRasterSourceParams<i32>> {
         let n_pixels = data
-            .get(0)
+            .first()
             .expect("could not access the first data element")
             .len();
 

@@ -66,7 +66,7 @@ pub struct ExpressionSources {
 
 impl OperatorData for ExpressionSources {
     fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
-        for source in self.iter() {
+        for source in self {
             source.data_names_collect(data_names);
         }
     }
@@ -166,19 +166,16 @@ impl ExpressionSources {
     }
 
     /// Returns all non-empty sources
-    #[allow(clippy::borrowed_box)]
-    fn iter(
-        &self,
-    ) -> std::iter::Flatten<std::array::IntoIter<Option<&Box<dyn RasterOperator>>, 8>> {
+    fn iter(&self) -> std::iter::Flatten<std::array::IntoIter<Option<&dyn RasterOperator>, 8>> {
         [
-            Some(&self.a),
-            self.b.as_ref(),
-            self.c.as_ref(),
-            self.d.as_ref(),
-            self.e.as_ref(),
-            self.f.as_ref(),
-            self.g.as_ref(),
-            self.h.as_ref(),
+            Some(self.a.as_ref()),
+            self.b.as_ref().map(AsRef::as_ref),
+            self.c.as_ref().map(AsRef::as_ref),
+            self.d.as_ref().map(AsRef::as_ref),
+            self.e.as_ref().map(AsRef::as_ref),
+            self.f.as_ref().map(AsRef::as_ref),
+            self.g.as_ref().map(AsRef::as_ref),
+            self.h.as_ref().map(AsRef::as_ref),
         ]
         .into_iter()
         .flatten()
@@ -198,6 +195,16 @@ impl ExpressionSources {
         ]
         .into_iter()
         .map_while(std::convert::identity)
+    }
+}
+
+impl<'s> IntoIterator for &'s ExpressionSources {
+    type Item = &'s dyn RasterOperator;
+
+    type IntoIter = std::iter::Flatten<std::array::IntoIter<Option<Self::Item>, 8>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 

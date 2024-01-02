@@ -398,7 +398,7 @@ impl TryFrom<Oidc> for OidcRequestDb {
             };
             Ok(db)
         } else {
-            Err(Error::OidcError {
+            Err(Error::Oidc {
                 source: OidcError::OidcDisabled,
             })
         }

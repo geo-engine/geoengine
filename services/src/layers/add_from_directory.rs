@@ -53,7 +53,7 @@ pub async fn add_layers_from_directory<L: LayerDb>(layer_db: &mut L, file_path: 
         match entry {
             Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
                 match add_layer_from_dir_entry(layer_db, &entry).await {
-                    Ok(_) => info!("Added layer from directory entry: {:?}", entry),
+                    Ok(()) => info!("Added layer from directory entry: {:?}", entry),
                     Err(e) => warn!(
                         "Skipped adding layer from directory entry: {:?} error: {}",
                         entry,
@@ -141,7 +141,7 @@ pub async fn add_layer_collections_from_directory<L: LayerDb>(db: &mut L, file_p
         };
 
         match ok {
-            Ok(_) => {
+            Ok(()) => {
                 collection_children.insert(def.id, def.collections);
             }
             Err(e) => {

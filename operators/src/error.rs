@@ -336,7 +336,7 @@ pub enum Error {
     SpatialReferenceMustNotBeUnreferenced,
 
     #[snafu(context(false))]
-    RasterKernelError {
+    RasterKernel {
         source: crate::processing::NeighborhoodAggregateError,
     },
 
