@@ -379,7 +379,7 @@ pub enum Error {
         source: crate::pro::xg_error::XGBoostModuleError,
     },
 
-    #[snafu(context(false))]
+    #[snafu(context(false), display("PieChart: {}", source))]
     PieChart {
         source: crate::plot::PieChartError,
     },
