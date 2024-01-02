@@ -1943,6 +1943,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "erased-serde"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4adbf0983fe06bd3a5c19c8477a637c2389feb0994eca7a59e3b961054aa7c0a"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "errno"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2460,7 +2469,7 @@ dependencies = [
  "chrono",
  "config",
  "derive_builder 0.12.0",
- "erased-serde",
+ "erased-serde 0.4.1",
  "fallible-iterator",
  "flexi_logger",
  "float-cmp",
@@ -5970,7 +5979,7 @@ version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "80960fd143d4c96275c0e60b08f14b81fbb468e79bc0ef8fbda69fb0afafae43"
 dependencies = [
- "erased-serde",
+ "erased-serde 0.3.31",
  "inventory",
  "once_cell",
  "serde",
