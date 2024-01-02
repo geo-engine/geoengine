@@ -22,6 +22,7 @@ pub enum Error {
     DataType {
         source: geoengine_datatypes::error::Error,
     },
+    #[snafu(display("Operator: {}", source))]
     Operator {
         source: geoengine_operators::error::Error,
     },
@@ -355,7 +356,7 @@ pub enum Error {
         found: String,
     },
 
-    #[snafu(context(false))]
+    #[snafu(context(false), display("TaskError: {}", source))]
     Task {
         source: crate::tasks::TaskError,
     },
