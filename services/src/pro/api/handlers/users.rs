@@ -1178,7 +1178,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        config::set_config("user.user_registration", false).unwrap();
+        config::set_config("user.registration", false).unwrap();
 
         let user_reg = UserRegistration {
             email: "foo@example.com".to_owned(),
@@ -1192,7 +1192,7 @@ mod tests {
             .set_json(&user_reg);
         let res = send_pro_test_request(req, app_ctx.clone()).await;
 
-        config::set_config("user.user_registration", true).unwrap();
+        config::set_config("user.registration", true).unwrap();
 
         ErrorResponse::assert(
             res,
@@ -1324,7 +1324,7 @@ mod tests {
         ErrorResponse::assert(
             res,
             400,
-            "OidcError",
+            "Oidc",
             "OidcError: ProviderDiscoveryError: Server returned invalid response: HTTP status code 404 Not Found",
         ).await;
     }
@@ -1402,13 +1402,7 @@ mod tests {
 
         let res = oidc_login_test_helper(Method::POST, app_ctx, auth_code_response).await;
 
-        ErrorResponse::assert(
-            res,
-            400,
-            "OidcError",
-            "OidcError: Login failed: Request unknown",
-        )
-        .await;
+        ErrorResponse::assert(res, 400, "Oidc", "OidcError: Login failed: Request unknown").await;
     }
 
     fn oidc_login_fail_oidc_db() -> (Server, impl Fn() -> OidcRequestDb) {
@@ -1454,7 +1448,7 @@ mod tests {
         ErrorResponse::assert(
             res,
             400,
-            "OidcError",
+            "Oidc",
             "OidcError: Verification failed: Request for code to token exchange failed",
         )
         .await;

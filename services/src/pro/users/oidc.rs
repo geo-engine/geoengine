@@ -122,6 +122,7 @@ pub enum OidcError {
     IllegalProviderConfig {
         source: ParseError,
     },
+    #[snafu(display("ProviderDiscoveryError: {}", source))]
     ProviderDiscoveryError {
         source: DiscoveryError<oauth2::reqwest::Error<reqwest::Error>>,
     },

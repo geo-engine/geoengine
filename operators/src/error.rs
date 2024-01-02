@@ -252,6 +252,7 @@ pub enum Error {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    #[snafu(display("CreatingProcessorFailed: {}", source))]
     CreatingProcessorFailed {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
