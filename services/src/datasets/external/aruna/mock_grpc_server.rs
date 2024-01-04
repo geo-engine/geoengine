@@ -125,7 +125,7 @@ impl<
 
 #[macro_export]
 macro_rules! generate_mapping_grpc_service {
-    ($service_name:literal, $struct_name: ident, $($method_name: literal, $request: ty, $response: ty, $field_name: ident, $key_generic: ident, $key_type: tt, $key_func_name: ident, )+) => {
+    ($service_name:literal, $struct_name: ident, $($method_name: literal, $request: ty, $response: ty, $field_name: ident, $key_generic: ident, $key_type: ty, $key_func_name: ident, )+) => {
 
         #[derive(Clone)]
         struct $struct_name<$($key_generic, )+> {
@@ -169,7 +169,7 @@ macro_rules! generate_mapping_grpc_service {
             }
         }
 
-        impl<$($key_generic, )+> tonic::transport::NamedService for $struct_name<$($key_generic, )+> {
+        impl<$($key_generic, )+> tonic::server::NamedService for $struct_name<$($key_generic, )+> {
             const NAME: &'static str = $service_name;
         }
 

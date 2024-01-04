@@ -1,29 +1,35 @@
-pub use self::error::ArunaProviderError;
-use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
-use crate::datasets::listing::ProvenanceOutput;
-use crate::layers::external::{DataProvider, DataProviderDefinition};
-use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
-    ProviderLayerCollectionId, ProviderLayerId,
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::marker::PhantomData;
+use std::path::PathBuf;
+use std::str::FromStr;
+
+use aruna_rust_api::api::storage::models::v2::{
+    Dataset, InternalRelationVariant, KeyValue, KeyValueVariant, Object, ResourceVariant,
 };
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
-use crate::workflows::workflow::Workflow;
-use aruna_rust_api::api::storage::models::v1::{
-    CollectionOverview, KeyValue, LabelFilter, LabelOrIdQuery, Object,
+use aruna_rust_api::api::storage::models::v2::{
+    Relation as ArunaRelationStruct, RelationDirection,
 };
-use aruna_rust_api::api::storage::services::v1::collection_service_client::CollectionServiceClient;
-use aruna_rust_api::api::storage::services::v1::object_group_service_client::ObjectGroupServiceClient;
-use aruna_rust_api::api::storage::services::v1::object_service_client::ObjectServiceClient;
-use aruna_rust_api::api::storage::services::v1::{
-    GetCollectionByIdRequest, GetCollectionsRequest, GetDownloadUrlRequest, GetObjectByIdRequest,
-    GetObjectGroupObjectsRequest, GetObjectGroupsRequest,
-};
+use aruna_rust_api::api::storage::models::v2::relation::Relation as ArunaRelationEnum;
+use aruna_rust_api::api::storage::services::v2::{GetDatasetRequest, GetDatasetsRequest, GetDownloadUrlRequest, GetObjectsRequest, GetProjectRequest};
+use aruna_rust_api::api::storage::services::v2::dataset_service_client::DatasetServiceClient;
+use aruna_rust_api::api::storage::services::v2::object_service_client::ObjectServiceClient;
+use aruna_rust_api::api::storage::services::v2::project_service_client::ProjectServiceClient;
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+use tonic::{Request, Status};
+use tonic::codegen::InterceptedService;
+use tonic::metadata::{AsciiMetadataKey, AsciiMetadataValue};
+use tonic::service::Interceptor;
+use tonic::transport::{Channel, Endpoint};
+
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
-use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, SpatialResolution, VectorQueryRectangle,
 };
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
@@ -37,19 +43,18 @@ use geoengine_operators::source::{
     OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
     OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat,
 };
-use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::marker::PhantomData;
-use std::path::PathBuf;
-use std::str::FromStr;
-use tonic::codegen::InterceptedService;
-use tonic::metadata::{AsciiMetadataKey, AsciiMetadataValue};
-use tonic::service::Interceptor;
-use tonic::transport::{Channel, Endpoint};
-use tonic::{Request, Status};
+
+use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
+use crate::datasets::listing::ProvenanceOutput;
+use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerCollectionId, ProviderLayerId,
+};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::workflows::workflow::Workflow;
+
+pub use self::error::ArunaProviderError;
 
 pub mod error;
 pub mod metadata;
@@ -127,8 +132,7 @@ impl Interceptor for APITokenInterceptor {
 ///
 #[derive(Debug, PartialEq)]
 struct ArunaDatasetIds {
-    collection_id: String,
-    _object_group_id: String,
+    dataset_id: String,
     meta_object_id: String,
     data_object_id: String,
 }
@@ -142,10 +146,10 @@ pub struct ArunaDataProvider {
     name: String,
     id: DataProviderId,
     project_id: String,
-    collection_stub: CollectionServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
-    object_group_stub: ObjectGroupServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
+    project_stub: ProjectServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
+    dataset_stub: DatasetServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
     object_stub: ObjectServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
-    label_filter: Option<LabelOrIdQuery>,
+    label_filter: Option<String>,
     cache_ttl: CacheTtlSeconds,
 }
 
@@ -160,31 +164,21 @@ impl ArunaDataProvider {
 
         let interceptor = APITokenInterceptor::new(&def.api_token[..])?;
 
-        let collection_stub =
-            CollectionServiceClient::with_interceptor(channel.clone(), interceptor.clone());
-        let object_group_stub =
-            ObjectGroupServiceClient::with_interceptor(channel.clone(), interceptor.clone());
+        let project_stub =
+            ProjectServiceClient::with_interceptor(channel.clone(), interceptor.clone());
+        let dataset_stub =
+            DatasetServiceClient::with_interceptor(channel.clone(), interceptor.clone());
 
         let object_stub = ObjectServiceClient::with_interceptor(channel, interceptor);
 
-        let label_filter = Some(LabelOrIdQuery {
-            labels: Some(LabelFilter {
-                labels: vec![KeyValue {
-                    key: def.filter_label.to_string(),
-                    value: String::new(),
-                }],
-                and_or_or: true,
-                keys_only: true,
-            }),
-            ids: vec![],
-        });
+        let label_filter = Some(def.filter_label.to_string());
 
         Ok(ArunaDataProvider {
             name: def.name,
             id: def.id,
             project_id: def.project_id,
-            collection_stub,
-            object_group_stub,
+            project_stub,
+            dataset_stub,
             object_stub,
             label_filter,
             cache_ttl: def.cache_ttl,
@@ -201,91 +195,218 @@ impl ArunaDataProvider {
 
     /// Retrieves information for the dataset with the given id.
     async fn get_dataset_info(&self, id: &DataId) -> Result<ArunaDatasetIds> {
-        self.get_collection_info(Self::dataset_aruna_id(id)?).await
+        self.get_aruna_dataset_ids(Self::dataset_aruna_id(id)?)
+            .await
     }
 
     /// Retrieves information for the dataset with the given id.
     async fn get_dataset_info_from_layer(&self, id: &LayerId) -> Result<ArunaDatasetIds> {
-        self.get_collection_info(id.0.clone()).await
+        self.get_aruna_dataset_ids(id.0.clone()).await
     }
 
-    /// Retrieves all ids in the aruna object storage for the given `collection_id`.
-    async fn get_collection_info(&self, collection_id: String) -> Result<ArunaDatasetIds> {
-        let mut object_group_stub = self.object_group_stub.clone();
-
-        let mut aruna_object_group_overview = object_group_stub
-            .get_object_groups(GetObjectGroupsRequest {
-                collection_id: collection_id.clone(),
-                page_request: None,
-                label_id_filter: self.label_filter.clone(),
-            })
-            .await?
-            .into_inner()
-            .object_groups
-            .ok_or(ArunaProviderError::MissingObjectGroup)?
-            .object_group_overviews;
-
-        if aruna_object_group_overview.is_empty() {
-            return Err(ArunaProviderError::MissingObjectGroup);
-        }
-
-        if aruna_object_group_overview.len() != 1 {
-            return Err(ArunaProviderError::UnexpectedObjectHierarchy);
-        }
-        let object_group_id = aruna_object_group_overview
-            .pop()
-            .expect("Object groups should have size one")
-            .id;
-
-        let aruna_objects = object_group_stub
-            .get_object_group_objects(GetObjectGroupObjectsRequest {
-                collection_id: collection_id.clone(),
-                group_id: object_group_id.clone(),
-                page_request: None,
-                meta_only: false,
-            })
-            .await?
-            .into_inner()
-            .object_group_objects;
-
-        if aruna_objects.len() > 2 {
-            return Err(ArunaProviderError::UnexpectedObjectHierarchy);
-        }
-
-        let mut meta_object_id = None;
-        let mut data_object_id = None;
-        for i in aruna_objects {
-            if i.is_metadata {
-                meta_object_id = Some(i.object.ok_or(ArunaProviderError::MissingMetaObject)?.id);
-            } else {
-                data_object_id = Some(i.object.ok_or(ArunaProviderError::MissingDataObject)?.id);
+    fn get_outgoing_internal_relation_ids(
+        mut relations: Vec<ArunaRelationStruct>,
+        target_resource_variant: ResourceVariant,
+    ) -> Result<Vec<String>> {
+        let mut ids = vec![];
+        for relation in relations {
+            match relation
+                .relation
+                .ok_or(ArunaProviderError::MissingRelation)?
+            {
+                ArunaRelationEnum::External(_) => {}
+                ArunaRelationEnum::Internal(x) => {
+                    if x.direction() == RelationDirection::Outbound
+                        && x.resource_variant() == target_resource_variant
+                    {
+                        ids.push(x.resource_id);
+                    }
+                }
             }
         }
 
+        Ok(ids)
+    }
+
+    async fn has_filter_label(&self, key_values: &Vec<KeyValue>) -> bool {
+        let label = &self.label_filter;
+
+        if let Some(filter) = label {
+            for key_value in key_values {
+                if key_value.variant() == KeyValueVariant::Label
+                    && key_value.key == filter.to_string()
+                    && key_value.value == filter.to_string()
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return true;
+    }
+
+    async fn get_available_labeled_datasets(
+        &self,
+        dataset_ids: Vec<String>,
+    ) -> Result<Vec<Dataset>> {
+        let mut dataset_stub = self.dataset_stub.clone();
+
+        let datasets = dataset_stub
+            .get_datasets(GetDatasetsRequest { dataset_ids })
+            .await?
+            .into_inner()
+            .datasets;
+        // //TODO: Workaround until deleted access permissions are fixed.
+        // let mut datasets = vec![];
+        //
+        // for dataset_id in dataset_ids {
+        //     let dataset_response = dataset_stub
+        //         .get_dataset(GetDatasetRequest {
+        //             dataset_id: dataset_id.clone(),
+        //         })
+        //         .await?;
+        //
+        //     if dataset_response.is_err_and(|x| x.code() == Code::Unauthenticated) {
+        //         log::debug!(
+        //             "Ignoring Code::Unauthenticated Error in Aruna Dataset Request For id={} (Check if Dataset is deleted)",
+        //             dataset_id,
+        //         )
+        //     } else {
+        //         let dataset = dataset_response
+        //             .into_inner()
+        //             .dataset
+        //             .ok_or(ArunaProviderError::MissingDataset)?;
+        //         if dataset.status() == aruna_rust_api::api::storage::models::v2::Status::Available
+        //             && self.has_filter_label(&dataset.key_values)
+        //         {
+        //             datasets.push(dataset);
+        //         }
+        //     }
+        // }
+
+        Ok(datasets)
+    }
+
+    async fn get_available_objects(&self, object_ids: Vec<String>) -> Result<Vec<Object>> {
+        let mut object_stub = self.object_stub.clone();
+
+        let objects = object_stub
+            .get_objects(GetObjectsRequest { object_ids })
+            .await?
+            .into_inner()
+            .objects;
+        // //TODO: Workaround until deleted access permissions are fixed.
+        // let mut objects = vec![];
+        //
+        // for object_id in object_ids {
+        //     let object_response = object_stub.get_object(GetObjectRequest { object_id }).await;
+        //
+        //     if object_response.is_err_and(|x| x.code() == Code::Unauthenticated) {
+        //         log::debug!(
+        //             "Ignoring Code::Unauthenticated Error in Aruna Object Request For id={} (Check if Object is deleted)",
+        //             object_id,
+        //         )
+        //     } else {
+        //         let object = object_response?
+        //             .into_inner()
+        //             .object
+        //             .ok_or(ArunaProviderError::MissingObject)?;
+        //         if object.status() == aruna_rust_api::api::storage::models::v2::Status::Available {
+        //             objects.push(object);
+        //         }
+        //     }
+        // }
+
+        Ok(objects)
+    }
+
+    fn is_metadata(meta_candidate: &Object, data_candidate_id: &String) -> Result<bool> {
+        for relation in &meta_candidate.relations {
+            match relation
+                .relation
+                .clone()
+                .ok_or(ArunaProviderError::MissingRelation)?
+            {
+                ArunaRelationEnum::External(_) => {}
+                ArunaRelationEnum::Internal(x) => {
+                    if x.defined_variant() == InternalRelationVariant::Metadata
+                        && x.direction() == RelationDirection::Outbound
+                        && x.resource_variant() == ResourceVariant::Object
+                        && x.resource_id == data_candidate_id.to_string()
+                    {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+        return Ok(false);
+    }
+
+    /// Retrieves all ids in the aruna object storage for the given `collection_id`.
+    async fn get_aruna_dataset_ids(&self, dataset_id: String) -> Result<ArunaDatasetIds> {
+        let mut dataset_stub = self.dataset_stub.clone();
+
+        let dataset_relations = dataset_stub
+            .get_dataset(GetDatasetRequest {
+                dataset_id: dataset_id.clone(),
+            })
+            .await?
+            .into_inner()
+            .dataset
+            .ok_or(ArunaProviderError::MissingDataset)?
+            .relations;
+
+        let object_ids =
+            Self::get_outgoing_internal_relation_ids(dataset_relations, ResourceVariant::Object)?;
+
+        let mut aruna_objects = self.get_available_objects(object_ids).await?;
+
+        if aruna_objects.len() != 2 {
+            return Err(ArunaProviderError::UnexpectedObjectHierarchy);
+        }
+
+        let object_1 = aruna_objects
+            .pop()
+            .expect("There should be two Objects in the Aruna Dataset");
+        let object_2 = aruna_objects
+            .pop()
+            .expect("There should be two Objects in the Aruna Dataset");
+        let meta_object_id;
+        let data_object_id;
+
+        if Self::is_metadata(&object_1, &object_2.id)? {
+            meta_object_id = object_1.id;
+            data_object_id = object_2.id;
+        } else if Self::is_metadata(&object_2, &object_1.id)? {
+            meta_object_id = object_2.id;
+            data_object_id = object_1.id;
+        } else {
+            return Err(ArunaProviderError::MissingMetaObject);
+        }
+
         Ok(ArunaDatasetIds {
-            collection_id,
-            _object_group_id: object_group_id,
-            meta_object_id: meta_object_id.ok_or(ArunaProviderError::MissingMetaObject)?,
-            data_object_id: data_object_id.ok_or(ArunaProviderError::MissingDataObject)?,
+            dataset_id,
+            meta_object_id,
+            data_object_id,
         })
     }
 
     async fn get_collection_overview(
         &self,
         aruna_dataset_ids: &ArunaDatasetIds,
-    ) -> Result<CollectionOverview> {
-        let mut collection_stub = self.collection_stub.clone();
+    ) -> Result<Dataset> {
+        let mut dataset_stub = self.dataset_stub.clone();
 
-        let collection_overview = collection_stub
-            .get_collection_by_id(GetCollectionByIdRequest {
-                collection_id: aruna_dataset_ids.collection_id.clone(),
+        let dataset = dataset_stub
+            .get_dataset(GetDatasetRequest {
+                dataset_id: aruna_dataset_ids.dataset_id.clone(),
             })
             .await?
             .into_inner()
-            .collection
-            .ok_or(ArunaProviderError::InvalidDataId)?;
+            .dataset
+            .ok_or(ArunaProviderError::MissingDataset)?;
 
-        Ok(collection_overview)
+        Ok(dataset)
     }
 
     /// Extracts the geoengine metadata from a collection in the Aruna Object Storage
@@ -294,13 +415,10 @@ impl ArunaDataProvider {
 
         let download_url = object_stub
             .get_download_url(GetDownloadUrlRequest {
-                collection_id: aruna_dataset_ids.collection_id.clone(),
                 object_id: aruna_dataset_ids.meta_object_id.clone(),
             })
             .await?
             .into_inner()
-            .url
-            .ok_or(ArunaProviderError::MissingURL)?
             .url;
 
         let data_get_response = reqwest::Client::new().get(download_url).send().await?;
@@ -367,25 +485,6 @@ impl ArunaDataProvider {
             )])
             .unwrap(),
         })
-    }
-
-    /// Retrieves a file-object from the aruna object storage. It assumes, that the dataset consists
-    /// only of a single object (the file).
-    async fn get_single_file_object(&self, aruna_dataset_ids: &ArunaDatasetIds) -> Result<Object> {
-        let mut object_stub = self.object_stub.clone();
-
-        object_stub
-            .get_object_by_id(GetObjectByIdRequest {
-                collection_id: aruna_dataset_ids.collection_id.clone(),
-                object_id: aruna_dataset_ids.data_object_id.clone(),
-                with_url: false,
-            })
-            .await?
-            .into_inner()
-            .object
-            .ok_or(ArunaProviderError::MissingDataObject)
-            .map(|x| x.object)?
-            .ok_or(ArunaProviderError::MissingDataObject)
     }
 
     /// Creates the loading template for vector files. This is basically a loading
@@ -557,13 +656,6 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
             }
         })?;
 
-        let aruna_data_object = self
-            .get_single_file_object(&aruna_dataset_ids)
-            .await
-            .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(e),
-            })?;
-
         match meta_data.data_type {
             DataType::SingleVectorFile(info) => {
                 let result_descriptor =
@@ -572,8 +664,8 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                     Self::vector_loading_template(&info, &result_descriptor, self.cache_ttl);
 
                 let res = ArunaMetaData {
-                    collection_id: aruna_dataset_ids.collection_id,
-                    object_id: aruna_data_object.id,
+                    collection_id: aruna_dataset_ids.dataset_id,
+                    object_id: aruna_dataset_ids.data_object_id,
                     template,
                     result_descriptor,
                     _phantom: Default::default(),
@@ -613,13 +705,6 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             }
         })?;
 
-        let aruna_data_object = self
-            .get_single_file_object(&aruna_dataset_ids)
-            .await
-            .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
-                source: Box::new(e),
-            })?;
-
         match &meta_data.data_type {
             DataType::SingleRasterFile(info) => {
                 let result_descriptor =
@@ -627,8 +712,8 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 let template = Self::raster_loading_template(info, self.cache_ttl);
 
                 let res = ArunaMetaData {
-                    collection_id: aruna_dataset_ids.collection_id,
-                    object_id: aruna_data_object.id,
+                    collection_id: aruna_dataset_ids.dataset_id,
+                    object_id: aruna_dataset_ids.data_object_id,
                     template,
                     result_descriptor,
                     _phantom: Default::default(),
@@ -671,20 +756,25 @@ impl LayerCollectionProvider for ArunaDataProvider {
             }
         );
 
-        let mut collection_stub = self.collection_stub.clone();
+        let mut project_stub = self.project_stub.clone();
 
-        let items = collection_stub
-            .get_collections(GetCollectionsRequest {
-                project_id: self.project_id.to_string(),
-                label_or_id_filter: self.label_filter.clone(),
-                page_request: None,
+        let project_relations = project_stub
+            .get_project(GetProjectRequest {
+                project_id: self.project_id.clone(),
             })
             .await
             .map_err(|source| ArunaProviderError::TonicStatus { source })?
             .into_inner()
-            .collections
-            .ok_or(ArunaProviderError::MissingCollection)?
-            .collection_overviews
+            .project
+            .ok_or(ArunaProviderError::MissingProject)?
+            .relations;
+
+        let dataset_ids =
+            Self::get_outgoing_internal_relation_ids(project_relations, ResourceVariant::Dataset)?;
+
+        let items = self
+            .get_available_labeled_datasets(dataset_ids)
+            .await?
             .into_iter()
             .map(|col| {
                 CollectionItem::Layer(LayerListing {
@@ -881,9 +971,9 @@ where
 {
     async fn loading_info(&self, _query: Q) -> geoengine_operators::util::Result<L> {
         let mut object_stub = self.object_stub.clone();
+
         let url = object_stub
             .get_download_url(GetDownloadUrlRequest {
-                collection_id: self.collection_id.clone(),
                 object_id: self.object_id.clone(),
             })
             .await
@@ -892,12 +982,8 @@ where
                 source: Box::new(source),
             })?
             .into_inner()
-            .url
-            .ok_or(ArunaProviderError::MissingURL)
-            .map_err(|source| geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(source),
-            })?;
-        self.template.new_link(url.url)
+            .url;
+        self.template.new_link(url)
     }
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<R> {
@@ -911,30 +997,27 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::datasets::external::aruna::metadata::GEMetadata;
-    use crate::datasets::external::aruna::mock_grpc_server::MockGRPCServer;
-    use crate::datasets::external::aruna::mock_grpc_server::{
-        InfallibleHttpResponseFuture, MapResponseService,
-    };
-    use crate::datasets::external::aruna::{
-        ArunaDataProvider, ArunaDataProviderDefinition, ArunaDatasetIds, ArunaProviderError,
-        ExpiringDownloadLink,
-    };
-    use crate::layers::external::DataProvider;
-    use crate::layers::layer::LayerCollectionListOptions;
-    use crate::layers::listing::LayerCollectionProvider;
-    use aruna_rust_api::api::storage::models::v1::{
-        CollectionOverview, CollectionOverviews, KeyValue, Object, ObjectGroupOverview,
-        ObjectGroupOverviews,
-    };
-    use aruna_rust_api::api::storage::services::v1::{
-        GetCollectionByIdRequest, GetCollectionByIdResponse, GetCollectionsRequest,
-        GetCollectionsResponse, GetDownloadUrlRequest, GetDownloadUrlResponse,
-        GetObjectByIdRequest, GetObjectByIdResponse, GetObjectGroupObjectsRequest,
-        GetObjectGroupObjectsResponse, GetObjectGroupsRequest, GetObjectGroupsResponse,
-        ObjectGroupObject, ObjectWithUrl, Url,
-    };
+    use std::collections::HashMap;
+    use std::convert::Infallible;
+    use std::path::Path;
+    use std::str::FromStr;
+    use std::task::Poll;
+
+    use aruna_rust_api::api::storage::models::v2::{DataClass, Dataset, InternalRelation, InternalRelationVariant, Object, Project, RelationDirection, ResourceVariant, Status};
+    use aruna_rust_api::api::storage::models::v2::Relation as ArunaRelationStruct;
+    use aruna_rust_api::api::storage::models::v2::relation::Relation as ArunaRelationDirection;
+    use aruna_rust_api::api::storage::services::v2::{GetDatasetRequest, GetDatasetResponse, GetDatasetsRequest, GetDatasetsResponse, GetDownloadUrlRequest, GetDownloadUrlResponse, GetObjectsRequest, GetObjectsResponse, GetProjectRequest, GetProjectResponse};
     use futures::StreamExt;
+    use httptest::{Expectation, responders, Server};
+    use httptest::responders::status_code;
+    use serde_json::{json, Value};
+    use tokio::fs::File;
+    use tokio::io::AsyncReadExt;
+    use tonic::Code;
+    use tonic::codegen::{Body, http, Service};
+    use tonic::codegen::http::Request;
+    use tonic::transport::server::Router;
+
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
@@ -947,88 +1030,80 @@ mod tests {
         TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
-    use httptest::responders::status_code;
-    use httptest::{responders, Expectation, Server};
-    use serde_json::{json, Value};
-    use std::collections::HashMap;
-    use std::convert::Infallible;
-    use std::str::FromStr;
-    use std::task::Poll;
-    use tokio::fs::File;
-    use tokio::io::AsyncReadExt;
-    use tonic::codegen::http::Request;
-    use tonic::codegen::{http, Body, Service};
-    use tonic::transport::server::Router;
-    use tonic::Code;
+
+    use crate::datasets::external::aruna::{
+        ArunaDataProvider, ArunaDataProviderDefinition, ArunaDatasetIds, ArunaProviderError,
+        ExpiringDownloadLink,
+    };
+    use crate::datasets::external::aruna::metadata::GEMetadata;
+    use crate::datasets::external::aruna::mock_grpc_server::{
+        InfallibleHttpResponseFuture, MapResponseService,
+    };
+    use crate::datasets::external::aruna::mock_grpc_server::MockGRPCServer;
+    use crate::layers::external::DataProvider;
+    use crate::layers::layer::LayerCollectionListOptions;
+    use crate::layers::listing::LayerCollectionProvider;
 
     generate_mapping_grpc_service!(
-        "aruna.api.storage.services.v1.ObjectService",
+        "aruna.api.storage.services.v2.ObjectService",
         MockMapObjectService,
-        "/aruna.api.storage.services.v1.ObjectService/GetDownloadURL",
+        "/aruna.api.storage.services.v2.ObjectService/GetDownloadURL",
         GetDownloadUrlRequest,
         GetDownloadUrlResponse,
         download_map,
         F,
         String,
         id_extractor_1,
-        "/aruna.api.storage.services.v1.ObjectService/GetObjectByID",
-        GetObjectByIdRequest,
-        GetObjectByIdResponse,
+        "/aruna.api.storage.services.v2.ObjectService/GetObjects",
+        GetObjectsRequest,
+        GetObjectsResponse,
         id_map,
         G,
-        String,
+        Vec<String>,
         id_extractor_2,
     );
 
     generate_mapping_grpc_service!(
-        "aruna.api.storage.services.v1.ObjectGroupService",
-        MockObjectGroupMapService,
-        "/aruna.api.storage.services.v1.ObjectGroupService/GetObjectGroups",
-        GetObjectGroupsRequest,
-        GetObjectGroupsResponse,
-        object_groups,
+        "aruna.api.storage.services.v2.DatasetService",
+        MockDatasetMapService,
+        "/aruna.api.storage.services.v2.DatasetService/GetDataset",
+        GetDatasetRequest,
+        GetDatasetResponse,
+        dataset,
         F,
         String,
-        collection_id_extractor,
-        "/aruna.api.storage.services.v1.ObjectGroupService/GetObjectGroupObjects",
-        GetObjectGroupObjectsRequest,
-        GetObjectGroupObjectsResponse,
-        object_group_objects,
+        dataset_extractor,
+        "/aruna.api.storage.services.v2.DatasetService/GetDatasets",
+        GetDatasetsRequest,
+        GetDatasetsResponse,
+        datasets_overview,
         G,
-        String,
-        group_id_extractor,
+        Vec<String>,
+        datasets_extractor,
     );
 
     generate_mapping_grpc_service!(
-        "aruna.api.storage.services.v1.CollectionService",
-        MockCollectionMapService,
-        "/aruna.api.storage.services.v1.CollectionService/GetCollections",
-        GetCollectionsRequest,
-        GetCollectionsResponse,
-        collection_overview,
+        "aruna.api.storage.services.v2.ProjectService",
+        MockProjectMapService,
+        "/aruna.api.storage.services.v2.ProjectService/GetProject",
+        GetProjectRequest,
+        GetProjectResponse,
+        project,
         F,
         String,
         project_extractor,
-        "/aruna.api.storage.services.v1.CollectionService/GetCollectionByID",
-        GetCollectionByIdRequest,
-        GetCollectionByIdResponse,
-        id_collection_overview,
-        G,
-        String,
-        id_extractor,
     );
 
     const PROVIDER_ID: &str = "86a7f7ce-1bab-4ce9-a32b-172c0f958ee0";
     const TOKEN: &str = "DUMMY_TOKEN";
 
     const PROJECT_ID: &str = "PROJECT_ID";
+    const PROJECT_NAME: &str = "PROJECT_NAME";
+    const PROJECT_DESCRIPTION: &str = "PROJECT_DESCRIPTION";
 
-    const COLLECTION_ID: &str = "COLLECTION_ID";
-    const COLLECTION_NAME: &str = "COLLECTION_NAME";
-    const COLLECTION_DESCRIPTION: &str = "COLLECTION_DESCRIPTION";
-
-    const OBJECT_GROUP_ID: &str = "OBJECT_GROUP_ID";
-    const OBJECT_GROUP_NAME: &str = "OBJECT_GROUP_NAME";
+    const DATASET_ID: &str = "COLLECTION_ID";
+    const DATASET_NAME: &str = "COLLECTION_NAME";
+    const DATASET_DESCRIPTION: &str = "COLLECTION_DESCRIPTION";
 
     const META_OBJECT_ID: &str = "META_ID";
     const META_OBJECT_NAME: &str = "META.json";
@@ -1122,237 +1197,334 @@ mod tests {
     }
 
     #[derive(Clone)]
-    struct DownloadObject {
+    struct DownloadableObject {
         id: String,
         filename: String,
         object_type: ObjectType,
+        meta: bool,
+        link_meta: bool,
         content: Vec<u8>,
-        content_length: usize,
+        content_length: i64,
+        expected_downloads: usize,
         url: Option<String>,
     }
 
-    impl DownloadObject {
+    impl DownloadableObject {
         fn set_url(&mut self, server_path: &str) {
             self.url = Some(format!("{server_path}/{}", self.filename));
         }
     }
 
-    fn json_meta_object(value: &Value) -> DownloadObject {
+    impl Into<Object> for DownloadableObject {
+        fn into(self) -> Object {
+            let relations;
+            if self.link_meta {
+                relations = vec![ArunaRelationStruct{relation: Some(ArunaRelationDirection::Internal(default_meta_relation(self.meta)))}];
+            } else {
+                relations = vec![];
+            }
+            Object{
+                 id: self.id.clone(),
+                 name:  self.filename.clone(),
+                 title: self.filename.clone(),
+                 description: "".to_string(),
+                 key_values: vec![],
+                 relations,
+                 content_len: self.content_length,
+                 data_class: i32::from(DataClass::Private),
+                 created_at: None,
+                 created_by: "Someone".to_string(),
+                 authors: vec![],
+                 status:  i32::from(Status::Available),
+                 dynamic: false,
+                 endpoints: vec![],
+                 hashes: vec![],
+                 metadata_license_tag: "Some Meta License".to_string(),
+                 data_license_tag: "Some Data License".to_string(),
+                 rule_bindings: vec![],
+            }
+        }
+    }
+
+    fn json_meta_object(value: &Value, expected_downloads: usize) -> DownloadableObject {
         let vector_data = value.to_string().into_bytes();
         let vector_length = vector_data.len();
-        DownloadObject {
+        DownloadableObject {
             id: META_OBJECT_ID.to_string(),
             filename: META_OBJECT_NAME.to_string(),
             object_type: ObjectType::Json,
+            meta: true,
+            link_meta: true,
             content: vector_data,
-            content_length: vector_length,
+            content_length: vector_length as i64,
+            expected_downloads,
             url: None,
         }
     }
 
-    async fn raster_data_object() -> DownloadObject {
+    async fn vector_data_object(expected_downloads: usize) -> DownloadableObject {
         let mut data = vec![];
         let mut file = File::open(geoengine_datatypes::test_data!("vector/data/points.fgb"))
             .await
             .unwrap();
         let file_size = file.read_to_end(&mut data).await.unwrap();
-        DownloadObject {
+        DownloadableObject {
             id: DATA_OBJECT_ID.to_string(),
             filename: DATA_OBJECT_NAME.to_string(),
             object_type: ObjectType::Csv,
+            meta: false,
+            link_meta: true,
             content: data,
-            content_length: file_size,
+            content_length: file_size as i64,
+            expected_downloads,
             url: None,
         }
     }
 
-    fn create_object(id: String, filename: String) -> Object {
-        Object {
-            id,
-            filename,
-            labels: vec![],
-            hooks: vec![],
-            created: None,
-            content_len: 0,
-            status: 0,
-            origin: None,
-            data_class: 0,
-            rev_number: 0,
-            source: None,
-            latest: true,
-            auto_update: false,
-            hashes: vec![],
+    fn empty_object(meta: bool, link_meta: bool) -> DownloadableObject {
+        if meta {
+            DownloadableObject {
+                id: META_OBJECT_ID.to_string(),
+                filename: META_OBJECT_NAME.to_string(),
+                object_type: ObjectType::Json,
+                meta,
+                link_meta,
+                content: vec![],
+                content_length: 0,
+                expected_downloads: 0,
+                url: None,
+            }
+        } else {
+            DownloadableObject {
+                id: DATA_OBJECT_ID.to_string(),
+                filename: DATA_OBJECT_NAME.to_string(),
+                object_type: ObjectType::Csv,
+                meta,
+                link_meta,
+                content: vec![],
+                content_length: 0,
+                expected_downloads: 0,
+                url: None,
+            }
         }
     }
 
-    fn default_object_groups() -> HashMap<String, GetObjectGroupsResponse> {
-        let mut groups = HashMap::new();
-        groups.insert(
-            COLLECTION_ID.to_string(),
-            GetObjectGroupsResponse {
-                object_groups: Some(ObjectGroupOverviews {
-                    object_group_overviews: vec![ObjectGroupOverview {
-                        id: OBJECT_GROUP_ID.to_string(),
-                        name: OBJECT_GROUP_NAME.to_string(),
-                        description: String::new(),
-                        labels: vec![KeyValue {
-                            key: FILTER_LABEL.to_string(),
-                            value: String::new(),
-                        }],
-                        hooks: vec![],
-                        stats: None,
-                        rev_number: 0,
-                    }],
-                }),
-            },
-        );
-        groups
+    fn create_object(id: String, filename: String) -> Object {
+        Object{
+            id,
+            name: filename.to_string(),
+            title: filename.to_string(),
+            description: "".to_string(),
+            key_values: vec![],
+            relations: vec![],
+            content_len: 0,
+            data_class: i32::from(DataClass::Private),
+            created_at: None,
+            created_by: "".to_string(),
+            authors: vec![],
+            status: 0,
+            dynamic: false,
+            endpoints: vec![],
+            hashes: vec![],
+            metadata_license_tag: "".to_string(),
+            data_license_tag: "".to_string(),
+            rule_bindings: vec![],
+        }
     }
 
-    fn default_object_group_objects() -> HashMap<String, GetObjectGroupObjectsResponse> {
-        let mut group_objects = HashMap::new();
-        group_objects.insert(
-            OBJECT_GROUP_ID.to_string(),
-            GetObjectGroupObjectsResponse {
-                object_group_objects: vec![
-                    ObjectGroupObject {
-                        object: Some(create_object(
-                            META_OBJECT_ID.to_string(),
-                            META_OBJECT_NAME.to_string(),
-                        )),
-                        is_metadata: true,
-                    },
-                    ObjectGroupObject {
-                        object: Some(create_object(
-                            DATA_OBJECT_ID.to_string(),
-                            DATA_OBJECT_NAME.to_string(),
-                        )),
-                        is_metadata: false,
-                    },
-                ],
-            },
-        );
-        group_objects
+    fn create_belonging_resource_relation(object_id: String, variant: ResourceVariant) -> InternalRelation {
+        InternalRelation {
+            resource_id: object_id.clone(),
+            resource_variant: i32::from(variant),
+            defined_variant: i32::from(InternalRelationVariant::BelongsTo),
+            custom_variant: None,
+            direction: i32::from(RelationDirection::Outbound),
+        }
     }
 
-    fn start_download_server_with(download_objects: &mut Vec<DownloadObject>) -> Server {
+    fn default_project_relations() -> Vec<InternalRelation> {
+        let dataset = create_belonging_resource_relation(DATASET_ID.to_string(), ResourceVariant::Dataset);
+
+        vec![dataset]
+    }
+
+    fn default_dataset_relations() -> Vec<InternalRelation> {
+        let meta = create_belonging_resource_relation(META_OBJECT_ID.to_string(), ResourceVariant::Object);
+        let data = create_belonging_resource_relation(DATA_OBJECT_ID.to_string(), ResourceVariant::Object);
+
+        vec![meta, data]
+    }
+
+    fn default_meta_relation(meta: bool) -> InternalRelation {
+        if meta {
+            InternalRelation {
+                resource_id: DATA_OBJECT_ID.to_string(),
+                resource_variant: i32::from(ResourceVariant::Object),
+                defined_variant: i32::from(InternalRelationVariant::Metadata),
+                custom_variant: None,
+                direction: i32::from(RelationDirection::Outbound),
+            }
+        } else {
+            InternalRelation {
+                resource_id: META_OBJECT_ID.to_string(),
+                resource_variant: i32::from(ResourceVariant::Object),
+                defined_variant: i32::from(InternalRelationVariant::Metadata),
+                custom_variant: None,
+                direction: i32::from(RelationDirection::Inbound),
+            }
+        }
+    }
+
+    fn start_download_server_with(download_objects: &mut Vec<DownloadableObject>) -> Server {
         let download_server = Server::run();
         for i in download_objects {
-            let responder = match i.object_type {
-                ObjectType::Json => status_code(200)
-                    .append_header("content-Type", "application/json")
-                    .body(i.content.clone()),
-                ObjectType::Csv => status_code(200)
-                    .append_header("content-type", "text/csv")
-                    .append_header("content-length", i.content_length)
-                    .body(i.content.clone()),
-            };
-            let object_path = format!("/{}", i.filename);
-            download_server.expect(
-                Expectation::matching(httptest::matchers::request::path(object_path))
-                    .times(1)
-                    .respond_with(responder),
-            );
-            i.set_url(format!("http://{}", download_server.addr()).as_str());
+            if i.expected_downloads > 0 {
+                let responder = match i.object_type {
+                    ObjectType::Json => status_code(200)
+                        .append_header("content-Type", "application/json")
+                        .body(i.content.clone()),
+                    ObjectType::Csv => status_code(200)
+                        .append_header("content-type", "text/csv")
+                        .append_header("content-length", i.content_length)
+                        .body(i.content.clone()),
+                };
+                let object_path = format!("/{}", i.filename);
+                download_server.expect(
+                    Expectation::matching(httptest::matchers::request::path(object_path))
+                        .times(i.expected_downloads)
+                        .respond_with(responder),
+                );
+                i.set_url(format!("http://{}", download_server.addr()).as_str());
+            }
         }
         download_server
     }
 
     async fn mock_server(
         download_server: Option<Server>,
-        download_objects: Vec<DownloadObject>,
-        object_groups: HashMap<String, GetObjectGroupsResponse>,
-        object_group_objects: HashMap<String, GetObjectGroupObjectsResponse>,
+        download_objects: Vec<DownloadableObject>,
+        dataset_relations: Vec<InternalRelation>,
+        project_relations: Vec<InternalRelation>,
     ) -> ArunaMockServer {
         let mut download_map = HashMap::new();
+
+        let mut object_ids = vec![];
+        let mut aruna_objects = vec![];
         let mut id_map = HashMap::new();
+
         for i in download_objects {
-            let url = i.url.unwrap();
-            download_map.insert(
-                i.id.clone(),
-                GetDownloadUrlResponse {
-                    url: Some(Url { url: url.clone() }),
-                },
-            );
-            id_map.insert(
-                i.id.clone(),
-                GetObjectByIdResponse {
-                    object: Some(ObjectWithUrl {
-                        object: Some(create_object(i.id, i.filename)),
-                        url,
-                        paths: vec![],
-                    }),
-                },
-            );
+            let aruna_object = i.clone().into();
+            if let Some(url) = i.url {
+                download_map.insert(
+                    i.id.clone(),
+                    GetDownloadUrlResponse {
+                        url: url.clone(),
+                    },
+                );
+            }
+            object_ids.push(i.id.clone());
+            aruna_objects.push(aruna_object);
         }
+        id_map.insert(object_ids, GetObjectsResponse{ objects: aruna_objects });
+
         let object_service = MockMapObjectService {
             download_map: MapResponseService::new(download_map, |req: GetDownloadUrlRequest| {
                 req.object_id
             }),
-            id_map: MapResponseService::new(id_map, |req: GetObjectByIdRequest| req.object_id),
+            id_map: MapResponseService::new(id_map, |req: GetObjectsRequest| req.object_ids),
         };
 
-        let collection_overview = CollectionOverview {
-            id: COLLECTION_ID.to_string(),
-            name: COLLECTION_NAME.to_string(),
-            description: COLLECTION_DESCRIPTION.to_string(),
-            labels: vec![],
-            hooks: vec![],
-            label_ontology: None,
-            created: None,
+        let mut relations = vec![];
+        for relation in dataset_relations {
+            relations.push(ArunaRelationStruct { relation: Some(ArunaRelationDirection::Internal(relation)) });
+        }
+
+        let dataset = Dataset {
+            id: DATASET_ID.to_string(),
+            name: DATASET_NAME.to_string(),
+            title: DATASET_NAME.to_string(),
+            description: DATASET_DESCRIPTION.to_string(),
+            key_values: vec![],
+            relations,
             stats: None,
-            is_public: false,
-            version: None,
+            data_class: i32::from(DataClass::Private),
+            created_at: None,
+            created_by: "".to_string(),
+            authors: vec![],
+            status: 0,
+            dynamic: false,
+            endpoints: vec![],
+            metadata_license_tag: "".to_string(),
+            default_data_license_tag: "".to_string(),
+            rule_bindings: vec![],
         };
 
-        let mut overview_map = HashMap::new();
-        overview_map.insert(
-            PROJECT_ID.to_string(),
-            GetCollectionsResponse {
-                collections: Some(CollectionOverviews {
-                    collection_overviews: vec![collection_overview.clone()],
-                }),
+        let mut dataset_id_map = HashMap::new();
+        dataset_id_map.insert(
+            DATASET_ID.to_string(),
+            GetDatasetResponse {
+                dataset: Some(dataset.clone()),
             },
         );
+
         let mut collection_id_map = HashMap::new();
         collection_id_map.insert(
-            COLLECTION_ID.to_string(),
-            GetCollectionByIdResponse {
-                collection: Some(collection_overview),
+            vec![DATASET_ID.to_string()],
+            GetDatasetsResponse {
+                datasets: vec![dataset],
             },
         );
 
-        let collection_service = MockCollectionMapService {
-            collection_overview: MapResponseService::new(
-                overview_map,
-                |req: GetCollectionsRequest| req.project_id,
+        let collection_service = MockDatasetMapService {
+            dataset: MapResponseService::new(
+                dataset_id_map,
+                |req: GetDatasetRequest| req.dataset_id,
             ),
-            id_collection_overview: MapResponseService::new(
+            datasets_overview: MapResponseService::new(
                 collection_id_map,
-                |req: GetCollectionByIdRequest| req.collection_id,
-            ),
+                |req: GetDatasetsRequest| req.dataset_ids,
+            )
         };
 
-        let object_group_service = MockObjectGroupMapService {
-            object_groups: MapResponseService::new(object_groups, |req: GetObjectGroupsRequest| {
-                req.collection_id
-            }),
-            object_group_objects: MapResponseService::new(
-                object_group_objects,
-                |req: GetObjectGroupObjectsRequest| req.group_id,
-            ),
+
+        let mut relations = vec![];
+        for relation in project_relations {
+            relations.push(ArunaRelationStruct { relation: Some(ArunaRelationDirection::Internal(relation)) });
+        }
+        let mut project_map = HashMap::new();
+        project_map.insert(PROJECT_ID.to_string(), GetProjectResponse { project: Some(Project{
+            id: PROJECT_ID.to_string(),
+            name: PROJECT_NAME.to_string(),
+            title: PROJECT_NAME.to_string(),
+            description: PROJECT_DESCRIPTION.to_string(),
+            key_values: vec![],
+            relations,
+            stats: None,
+            data_class: i32::from(DataClass::Private),
+            created_at: None,
+            created_by: "".to_string(),
+            authors: vec![],
+            status: i32::from(Status::Available),
+            dynamic: false,
+            endpoints: vec![],
+            metadata_license_tag: "".to_string(),
+            default_data_license_tag: "".to_string(),
+            rule_bindings: vec![],
+        })});
+
+        let project_service = MockProjectMapService {
+            project: MapResponseService::new(project_map, |req: GetProjectRequest| req.project_id),
         };
 
         let builder: Router = tonic::transport::Server::builder()
+            .add_service(project_service)
             .add_service(collection_service)
-            .add_service(object_group_service)
             .add_service(object_service);
         let grpc_server = MockGRPCServer::start_with_router(builder).await.unwrap();
         let grpc_server_address = format!("http://{}", grpc_server.address());
 
         let dataset_ids = ArunaDatasetIds {
-            collection_id: COLLECTION_ID.to_string(),
-            _object_group_id: OBJECT_GROUP_ID.to_string(),
+            dataset_id: DATASET_ID.to_string(),
             meta_object_id: META_OBJECT_ID.to_string(),
             data_object_id: DATA_OBJECT_ID.to_string(),
         };
@@ -1371,21 +1543,20 @@ mod tests {
     async fn extract_aruna_ids_success() {
         let aruna_mock_server = mock_server(
             None,
+            vec![empty_object(true, true), empty_object(false, true)],
+            default_dataset_relations(),
             vec![],
-            default_object_groups(),
-            default_object_group_objects(),
         )
         .await;
 
         let result = aruna_mock_server
             .provider
-            .get_collection_info(COLLECTION_ID.to_string())
+            .get_aruna_dataset_ids(DATASET_ID.to_string())
             .await
             .unwrap();
 
         let expected = ArunaDatasetIds {
-            collection_id: COLLECTION_ID.to_string(),
-            _object_group_id: OBJECT_GROUP_ID.to_string(),
+            dataset_id: DATASET_ID.to_string(),
             meta_object_id: META_OBJECT_ID.to_string(),
             data_object_id: DATA_OBJECT_ID.to_string(),
         };
@@ -1394,41 +1565,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn extract_aruna_ids_no_group() {
-        let aruna_mock_server = mock_server(None, vec![], HashMap::new(), HashMap::new()).await;
-
-        let result = aruna_mock_server
-            .provider
-            .get_collection_info(COLLECTION_ID.to_string())
-            .await;
-
-        assert!(matches!(
-            result,
-            Err(ArunaProviderError::TonicStatus { source: _ })
-        ));
-    }
-
-    #[tokio::test]
-    async fn extract_aruna_ids_no_meta_object() {
-        let mut group_objects = HashMap::new();
-        group_objects.insert(
-            OBJECT_GROUP_ID.to_string(),
-            GetObjectGroupObjectsResponse {
-                object_group_objects: vec![ObjectGroupObject {
-                    object: Some(create_object(
-                        DATA_OBJECT_ID.to_string(),
-                        DATA_OBJECT_NAME.to_string(),
-                    )),
-                    is_metadata: false,
-                }],
-            },
-        );
+    async fn extract_aruna_ids_no_meta_object_relationship() {
         let aruna_mock_server =
-            mock_server(None, vec![], default_object_groups(), group_objects).await;
+            mock_server(None, vec![empty_object(true, false), empty_object(false, false)], default_dataset_relations(), vec![], ).await;
 
         let result = aruna_mock_server
             .provider
-            .get_collection_info(COLLECTION_ID.to_string())
+            .get_aruna_dataset_ids(DATASET_ID.to_string())
             .await;
 
         assert!(matches!(result, Err(ArunaProviderError::MissingMetaObject)));
@@ -1436,38 +1579,26 @@ mod tests {
 
     #[tokio::test]
     async fn extract_aruna_ids_no_data_object() {
-        let mut group_objects = HashMap::new();
-        group_objects.insert(
-            OBJECT_GROUP_ID.to_string(),
-            GetObjectGroupObjectsResponse {
-                object_group_objects: vec![ObjectGroupObject {
-                    object: Some(create_object(
-                        META_OBJECT_ID.to_string(),
-                        META_OBJECT_NAME.to_string(),
-                    )),
-                    is_metadata: true,
-                }],
-            },
-        );
+        let relation = create_belonging_resource_relation(META_OBJECT_ID.to_string(), ResourceVariant::Object);
         let aruna_mock_server =
-            mock_server(None, vec![], default_object_groups(), group_objects).await;
+            mock_server(None, vec![empty_object(true, false)], vec![relation], vec![], ).await;
 
         let result = aruna_mock_server
             .provider
-            .get_collection_info(COLLECTION_ID.to_string())
+            .get_aruna_dataset_ids(DATASET_ID.to_string())
             .await;
 
-        assert!(matches!(result, Err(ArunaProviderError::MissingDataObject)));
+        assert!(matches!(result, Err(ArunaProviderError::UnexpectedObjectHierarchy)));
     }
 
     #[tokio::test]
     async fn test_extract_meta_data_ok() {
-        let mut download_objects = vec![json_meta_object(&vector_meta_data())];
+        let mut download_objects = vec![json_meta_object(&vector_meta_data(), 1)];
         let aruna_mock_server = mock_server(
             Some(start_download_server_with(&mut download_objects)),
             download_objects,
-            HashMap::new(),
-            HashMap::new(),
+            vec![],
+            vec![],
         )
         .await;
 
@@ -1481,7 +1612,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_meta_data_not_present() {
-        let mut object = json_meta_object(&vector_meta_data());
+        let mut object = json_meta_object(&vector_meta_data(), 1);
 
         let download_server = Server::run();
         let object_path = format!("/{}", object.filename);
@@ -1496,8 +1627,8 @@ mod tests {
         let aruna_mock_server = mock_server(
             Some(download_server),
             vec![object],
-            HashMap::new(),
-            HashMap::new(),
+            vec![],
+            vec![],
         )
         .await;
 
@@ -1514,7 +1645,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_meta_data_parse_error() {
-        let mut object = json_meta_object(&vector_meta_data());
+        let mut object = json_meta_object(&vector_meta_data(), 1);
 
         let faulty_meta_data = b"{\"foo\": \"bar\"}".to_vec();
         let download_server = Server::run();
@@ -1532,8 +1663,8 @@ mod tests {
         let aruna_mock_server = mock_server(
             Some(download_server),
             vec![object],
-            HashMap::new(),
-            HashMap::new(),
+            vec![],
+            vec![],
         )
         .await;
 
@@ -1547,16 +1678,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_map_vector_dataset() {
-        let mut download_objects = vec![json_meta_object(&vector_meta_data())];
+        let mut download_objects = vec![json_meta_object(&vector_meta_data(), 1), empty_object(false, true)];
         let aruna_mock_server = mock_server(
             Some(start_download_server_with(&mut download_objects)),
             download_objects,
-            default_object_groups(),
-            default_object_group_objects(),
+            default_dataset_relations(),
+            vec![],
         )
         .await;
 
-        let layer_id = LayerId(COLLECTION_ID.to_string());
+        let layer_id = LayerId(DATASET_ID.to_string());
         let result = aruna_mock_server
             .provider
             .load_layer(&layer_id)
@@ -1581,16 +1712,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_map_raster_dataset() {
-        let mut download_objects = vec![json_meta_object(&raster_meta_data())];
+        let mut download_objects = vec![json_meta_object(&raster_meta_data(), 1), empty_object(false, true)];
         let aruna_mock_server = mock_server(
             Some(start_download_server_with(&mut download_objects)),
             download_objects,
-            default_object_groups(),
-            default_object_group_objects(),
+            default_dataset_relations(),
+            vec![],
         )
         .await;
 
-        let layer_id = LayerId(COLLECTION_ID.to_string());
+        let layer_id = LayerId(DATASET_ID.to_string());
         let result = aruna_mock_server
             .provider
             .load_layer(&layer_id)
@@ -1613,12 +1744,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_vector_loading_template() {
-        let mut download_objects = vec![json_meta_object(&vector_meta_data())];
+        let mut download_objects = vec![json_meta_object(&vector_meta_data(), 1)];
         let aruna_mock_server = mock_server(
             Some(start_download_server_with(&mut download_objects)),
             download_objects,
-            HashMap::new(),
-            HashMap::new(),
+            vec![],
+            vec![],
         )
         .await;
 
@@ -1649,12 +1780,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_raster_loading_template() {
-        let mut download_objects = vec![json_meta_object(&raster_meta_data())];
+        let mut download_objects = vec![json_meta_object(&raster_meta_data(), 1)];
         let aruna_mock_server = mock_server(
             Some(start_download_server_with(&mut download_objects)),
             download_objects,
-            HashMap::new(),
-            HashMap::new(),
+            vec![],
+            vec![],
         )
         .await;
 
@@ -1688,7 +1819,8 @@ mod tests {
 
     #[tokio::test]
     async fn it_lists() {
-        let aruna_mock_server = mock_server(None, vec![], HashMap::new(), HashMap::new()).await;
+        let aruna_mock_server = mock_server(None, vec![], vec![],
+                                            default_project_relations()).await;
         let root = aruna_mock_server
             .provider
             .get_root_layer_collection_id()
@@ -1712,18 +1844,18 @@ mod tests {
 
     #[tokio::test]
     async fn it_loads_provenance() {
-        let mut download_objects = vec![json_meta_object(&raster_meta_data())];
+        let mut download_objects = vec![json_meta_object(&raster_meta_data(), 1), empty_object(false, true)];
         let aruna_mock_server = mock_server(
             Some(start_download_server_with(&mut download_objects)),
             download_objects,
-            default_object_groups(),
-            default_object_group_objects(),
+            default_dataset_relations(),
+            vec![],
         )
         .await;
 
         let id = DataId::External(ExternalDataId {
             provider_id: DataProviderId::from_str(PROVIDER_ID).unwrap(),
-            layer_id: LayerId(COLLECTION_ID.to_string()),
+            layer_id: LayerId(DATASET_ID.to_string()),
         });
 
         let res = aruna_mock_server.provider.provenance(&id).await;
@@ -1737,24 +1869,24 @@ mod tests {
 
     #[tokio::test]
     async fn it_loads_meta_data() {
-        let mut download_objects = vec![json_meta_object(&vector_meta_data())];
+        let mut download_objects = vec![json_meta_object(&vector_meta_data(), 1)];
         let server = start_download_server_with(&mut download_objects);
 
-        let mut raster_object = raster_data_object().await;
+        let mut raster_object = vector_data_object(1).await;
         raster_object.set_url(format!("http://{}", server.addr()).as_str());
         download_objects.push(raster_object);
 
         let aruna_mock_server = mock_server(
             Some(server),
             download_objects,
-            default_object_groups(),
-            default_object_group_objects(),
+            default_dataset_relations(),
+            vec![],
         )
         .await;
 
         let id = DataId::External(ExternalDataId {
             provider_id: DataProviderId::from_str(PROVIDER_ID).unwrap(),
-            layer_id: LayerId(COLLECTION_ID.to_string()),
+            layer_id: LayerId(DATASET_ID.to_string()),
         });
 
         let res: geoengine_operators::util::Result<
@@ -1768,24 +1900,24 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn it_executes_loads() {
         let mut download_objects = vec![
-            json_meta_object(&vector_meta_data()),
-            raster_data_object().await,
+            json_meta_object(&vector_meta_data(), 1),
+            vector_data_object(1).await,
         ];
         let aruna_mock_server = mock_server(
             Some(start_download_server_with(&mut download_objects)),
             download_objects,
-            default_object_groups(),
-            default_object_group_objects(),
+            default_dataset_relations(),
+            vec![],
         )
         .await;
 
         let id = DataId::External(ExternalDataId {
             provider_id: DataProviderId::from_str(PROVIDER_ID).unwrap(),
-            layer_id: LayerId(COLLECTION_ID.to_string()),
+            layer_id: LayerId(DATASET_ID.to_string()),
         });
         let name = geoengine_datatypes::dataset::NamedData::with_system_provider(
             PROVIDER_ID.to_string(),
-            COLLECTION_ID.to_string(),
+            DATASET_ID.to_string(),
         );
 
         let meta: Box<
