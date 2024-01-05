@@ -1,4 +1,4 @@
-use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser};
+use self::codegen::ExpressionAst;
 use crate::{
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
@@ -6,7 +6,7 @@ use crate::{
         RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
         WorkflowOperatorPath,
     },
-    processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
+    processing::expression::query_processor::ExpressionQueryProcessor,
     util::Result,
 };
 use async_trait::async_trait;
@@ -19,7 +19,10 @@ use geoengine_datatypes::{
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
+pub use self::codegen::Parameter;
+pub use self::compiled::LinkedExpression;
 pub use self::error::ExpressionError;
+pub use self::parser::ExpressionParser;
 
 mod codegen;
 mod compiled;

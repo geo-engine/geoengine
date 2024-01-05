@@ -17,9 +17,13 @@ mod rgb;
 mod temporal_raster_aggregation;
 mod time_projection;
 mod time_shift;
+mod vector_expression;
 mod vector_join;
 
-pub use expression::{Expression, ExpressionError, ExpressionParams, ExpressionSources};
+pub use expression::{
+    Expression, ExpressionError, ExpressionParams, ExpressionParser, ExpressionSources,
+    LinkedExpression, Parameter as ExpressionParameter,
+};
 pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
 pub use line_simplification::{
     LineSimplification, LineSimplificationError, LineSimplificationParams,
@@ -46,3 +50,4 @@ pub use temporal_raster_aggregation::{
 };
 pub use time_projection::{TimeProjection, TimeProjectionError, TimeProjectionParams};
 pub use time_shift::{TimeShift, TimeShiftError, TimeShiftParams};
+pub use vector_expression::{VectorExpression, VectorExpressionError, VectorExpressionParams};

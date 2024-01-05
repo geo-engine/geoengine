@@ -314,6 +314,11 @@ pub enum Error {
         source: crate::processing::ExpressionError,
     },
 
+    #[snafu(context(false), display("VectorExpression: {}", source))]
+    VectorExpressionOperator {
+        source: crate::processing::VectorExpressionError,
+    },
+
     #[snafu(context(false))]
     TimeProjectionOperator {
         source: crate::processing::TimeProjectionError,
