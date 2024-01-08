@@ -9,13 +9,16 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionRow};
+use geoengine_datatypes::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+};
 use geoengine_datatypes::primitives::{
-    FeatureDataType, Geometry, GeometryRef, Measurement, MultiPoint, MultiPointRef,
+    FeatureData, FeatureDataRef, FeatureDataType, Geometry, Measurement, MultiPoint,
     VectorQueryRectangle,
 };
+use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+use snafu::{ResultExt, Snafu};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -52,6 +55,8 @@ struct InitializedVectorExpression {
     result_descriptor: VectorResultDescriptor,
     features: Box<dyn InitializedVectorOperator>,
     expression: Arc<LinkedExpression>,
+    input_columns: Vec<String>,
+    output_column: String,
 }
 
 #[typetag::serde]
@@ -95,6 +100,8 @@ impl VectorOperator for VectorExpression {
             result_descriptor,
             features: initialized_source.vector,
             expression,
+            input_columns: self.params.input_columns,
+            output_column: self.params.output_column,
         };
 
         Ok(initialized_operator.boxed())
@@ -167,34 +174,31 @@ impl InitializedVectorOperator for InitializedVectorExpression {
         let source_processor = self.features.query_processor()?;
 
         Ok(
-            call_on_generic_vector_processor!(source_processor, source => VectorExpressionProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-            }.boxed().into()),
-            // match source_processor {
-            //     TypedVectorQueryProcessor::Data(source) => todo!(),
-            //     TypedVectorQueryProcessor::MultiPoint(source) => {
-            //         let processor: VectorExpressionProcessor<
-            //             Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<MultiPoint>>>,
-            //             MultiPoint,
-            //             // MultiPointRef,
-            //         > = VectorExpressionProcessor {
-            //             source,
-            //             result_descriptor: self.result_descriptor.clone(),
-            //             expression: self.expression.clone(),
-            //         };
+            // call_on_generic_vector_processor!(source_processor, source => VectorExpressionProcessor {
+            //     source,
+            //     result_descriptor: self.result_descriptor.clone(),
+            //     expression: self.expression.clone(),
+            // }.boxed().into()),
+            match source_processor {
+                TypedVectorQueryProcessor::Data(source) => todo!(),
+                TypedVectorQueryProcessor::MultiPoint(source) => {
+                    let processor: VectorExpressionProcessor<
+                        Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<MultiPoint>>>,
+                        MultiPoint,
+                        // MultiPointRef,
+                    > = VectorExpressionProcessor {
+                        source,
+                        result_descriptor: self.result_descriptor.clone(),
+                        expression: self.expression.clone(),
+                        input_columns: self.input_columns.clone(),
+                        output_column: self.output_column.clone(),
+                    };
 
-            //         // processor.boxed()
-
-            //         let boxed_processor =
-            //             Box::<dyn VectorQueryProcessor<VectorType = MultiPoint>>::new(processor);
-
-            //         TypedVectorQueryProcessor::MultiPoint(boxed_processor)
-            //     }
-            //     TypedVectorQueryProcessor::MultiLineString(source) => todo!(),
-            //     TypedVectorQueryProcessor::MultiPolygon(source) => todo!(),
-            // },
+                    TypedVectorQueryProcessor::MultiPoint(processor.boxed())
+                }
+                TypedVectorQueryProcessor::MultiLineString(source) => todo!(),
+                TypedVectorQueryProcessor::MultiPolygon(source) => todo!(),
+            },
         )
     }
 
@@ -210,7 +214,7 @@ where
     // GR: GeometryRef<GeometryType = G>,
     // G: Geometry + 'static + Sized,
     // Q: VectorQueryProcessor<VectorType = FeatureCollection<G>> + Sized + 'static,
-    // for<'a> &'a FeatureCollection<G>: IntoIterator<Item = FeatureCollectionRow<'a, GR>> + Sized,
+    // for<'a> &'a FeatureCollection<G>: IntoIterator<Item = FeatureCollectionRow<'a, GR>>,
     // GR: GeometryRef<GeometryType = G>,
     // GR: Sized + 'static,
     // Self: Sized + 'static,
@@ -218,18 +222,27 @@ where
     source: Q,
     result_descriptor: VectorResultDescriptor,
     expression: Arc<LinkedExpression>,
+    input_columns: Vec<String>,
+    output_column: String,
 }
 
 #[async_trait]
-impl<Q, G, GR> VectorQueryProcessor for VectorExpressionProcessor<Q, G>
+impl<Q, G> VectorQueryProcessor for VectorExpressionProcessor<Q, G>
 where
-    G: Geometry + 'static + Sized,
-    Q: VectorQueryProcessor<VectorType = FeatureCollection<G>> + Sized + 'static,
-    for<'a> &'a FeatureCollection<G>: IntoIterator<Item = FeatureCollectionRow<'a, GR>> + Sized,
-    for<'a> <FeatureCollection<G> as IntoIterator>::Item: Sized,
-    GR: GeometryRef<GeometryType = G> + Sized + 'static,
-    // GR: Sized + 'static,
-    // Self: Sized + 'static,
+    // G: Geometry + 'static + Sized + Sync + Send,
+    // Q: VectorQueryProcessor<VectorType = FeatureCollection<G>> + 'static + Sized + Sync + Send,
+    // FeatureCollection<G>: Sized + 'static,
+    // for<'a> &'a FeatureCollection<G>:
+    //     IntoIterator<Item = FeatureCollectionRow<'a, GR>> + Sized + Sync + Send,
+    // // for<'a> <FeatureCollection<G> as IntoIterator>::Item: Sized,
+    // GR: GeometryRef<GeometryType = G> + Sized + 'static + Sync + Send,
+    // Self: Sized + 'static + Sync + Send,
+    Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
+    G: Geometry + ArrowTyped + 'static,
+    // for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>
+    //     + GeoFeatureCollectionModifications<G, Output = FeatureCollection<G>>,
+    // for<'a> &'a FeatureCollection<G>: IntoIterator<Item = FeatureCollectionRow<'a, GR>>,
+    // GR: GeometryRef<GeometryType = G>,
 {
     type VectorType = FeatureCollection<G>;
 
@@ -242,15 +255,50 @@ where
 
         let stream = stream.then(move |collection| async move {
             let collection = collection?;
+            let input_columns = self.input_columns.clone();
+            let output_column = self.output_column.clone();
+            let expression = self.expression.clone();
 
             crate::util::spawn_blocking(move || {
                 // TODO: parallelize
 
-                // for feature in collection.into_iter() {
-                //     dbg!(feature.index());
-                // }
+                let inputs: Vec<FeatureDataRef> = input_columns
+                    .into_iter()
+                    .map(|input_column| {
+                        collection
+                            .data(&input_column)
+                            .expect("was checked durin initialization")
+                    })
+                    .collect();
 
-                Ok(collection)
+                let result: Vec<Option<f64>> = {
+                    let mut float_inputs: Vec<Box<dyn Iterator<Item = Option<f64>>>> = inputs
+                        .iter()
+                        .map(FeatureDataRef::float_options_iter)
+                        .collect::<Vec<_>>();
+
+                    match float_inputs.as_mut_slice() {
+                        [a] => {
+                            let f = unsafe {
+                                expression.function_nary::<fn(Option<f64>) -> Option<f64>>()
+                            }
+                            .context(error::CallingExpression)?;
+
+                            Ok(a.map(*f).collect::<Vec<_>>())
+                        }
+                        // TODO: implement more cases
+                        other => Err(VectorExpressionError::TooManyInputColumns {
+                            max: MAX_INPUT_COLUMNS,
+                            found: other.len(),
+                        }),
+                    }?
+                };
+
+                Ok(collection
+                    .add_column(&output_column, FeatureData::NullableFloat(result))
+                    .context(error::AddColumn {
+                        name: output_column,
+                    })?)
             })
             .await?
         });
@@ -277,4 +325,146 @@ pub enum VectorExpressionError {
 
     #[snafu(display("Output column `{name}` already exists."))]
     OutputColumnCollision { name: String },
+
+    #[snafu(display("Cannot call expression function."))]
+    CallingExpression {
+        source: crate::processing::expression::ExpressionError,
+    },
+
+    #[snafu(display("Cannot add column {name}."))]
+    AddColumn {
+        name: String,
+        source: geoengine_datatypes::error::Error,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor},
+        mock::MockFeatureCollectionSource,
+    };
+    use geoengine_datatypes::{
+        collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection},
+        primitives::{BoundingBox2D, ColumnSelection, SpatialResolution, TimeInterval},
+        util::test::TestDefault,
+    };
+
+    #[test]
+    fn test_json() {
+        let def: Operator<VectorExpressionParams, SingleVectorSource> = VectorExpression {
+            params: VectorExpressionParams {
+                input_columns: vec!["foo".into(), "bar".into()],
+                expression: "foo + bar".into(),
+                output_column: "baz".into(),
+                output_measurement: Measurement::Unitless,
+            },
+            sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
+                .boxed()
+                .into(),
+        };
+
+        let json = serde_json::json!({
+            "params": {
+                "input_columns": ["foo", "bar"],
+                "expression": "foo + bar",
+                "output_column": "baz",
+                "output_measurement": {
+                    "type": "unitless",
+                },
+            },
+            "sources": {
+                "vector": {
+                    "type": "MockFeatureCollectionSourceMultiPoint",
+                    "params": {
+                        "collections": [],
+                        "spatialReference": "EPSG:4326",
+                        "measurements": null,
+                    }
+                }
+            }
+        });
+
+        assert_eq!(serde_json::to_value(&def).unwrap(), json.clone());
+        let _operator: VectorExpression = serde_json::from_value(json).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_unary_float() {
+        let points = MultiPointCollection::from_slices(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)])
+                .unwrap()
+                .as_ref(),
+            &[TimeInterval::new_unchecked(0, 1); 3],
+            &[(
+                "foo",
+                FeatureData::NullableFloat(vec![Some(1.0), None, Some(3.0)]),
+            )],
+        )
+        .unwrap();
+
+        let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
+
+        let operator = VectorExpression {
+            params: VectorExpressionParams {
+                input_columns: vec!["foo".into()],
+                expression: "2 * foo".into(),
+                output_column: "bar".into(),
+                output_measurement: Measurement::Unitless,
+            },
+            sources: point_source.into(),
+        }
+        .boxed()
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
+        .await
+        .unwrap();
+
+        let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
+
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+            attributes: ColumnSelection::all(),
+        };
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+
+        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
+
+        let mut result = query
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPointCollection>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+        let result = result.remove(0);
+
+        let expected_result = MultiPointCollection::from_slices(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)])
+                .unwrap()
+                .as_ref(),
+            &[TimeInterval::new_unchecked(0, 1); 3],
+            &[
+                (
+                    "foo",
+                    FeatureData::NullableFloat(vec![Some(1.0), None, Some(3.0)]),
+                ),
+                (
+                    "bar",
+                    FeatureData::NullableFloat(vec![Some(2.0), None, Some(6.0)]),
+                ),
+            ],
+        )
+        .unwrap();
+
+        // TODO: maybe it is nicer to have something wrapping the actual data that we care about and just adds some cache info
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(&expected_result),
+            "{result:#?} != {expected_result:#?}",
+        );
+    }
 }
