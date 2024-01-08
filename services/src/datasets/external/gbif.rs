@@ -143,6 +143,25 @@ impl GbifDataProvider {
         }
     }
 
+    fn create_taxonrank_filter(taxonranks: &[String]) -> String {
+        format!(
+            "taxonrank IN ({})",
+            taxonranks
+                .iter()
+                .enumerate()
+                .map(|(index, rank)| format!(
+                    "{delimiter}'{rank}'",
+                    delimiter = if index > 0 {
+                        ",".to_string()
+                    } else {
+                        String::new()
+                    }
+                ))
+                .reduce(|a, b| a + &b)
+                .unwrap_or_default()
+        )
+    }
+
     async fn get_datasets_items(
         &self,
         options: &LayerCollectionListOptions,
@@ -310,6 +329,153 @@ impl GbifDataProvider {
                 )
             GROUP BY {taxonrank}
             ORDER BY {taxonrank} 
+            LIMIT $1
+            OFFSET $2;
+            "#,
+            schema = self.db_config.schema,
+            filter = filters
+                .iter()
+                .enumerate()
+                .map(|(index, (column, _))| format!(
+                    r#" AND "{column}" = ${index}"#,
+                    index = index + 4
+                ))
+                .collect::<String>()
+        );
+
+        let stmt = conn.prepare(query).await?;
+
+        let limit = &i64::from(*limit);
+        let offset = &i64::from(*offset);
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset, &search_string];
+        filters.iter().for_each(|(_, value)| params.push(value));
+        let rows = timeout(
+            Duration::from_secs(self.autocomplete_timeout),
+            conn.query(&stmt, params.as_slice()),
+        )
+        .await;
+
+        match rows {
+            Ok(rows) => Ok(rows?
+                .into_iter()
+                .map(|row| row.get::<usize, String>(0))
+                .collect::<Vec<_>>()),
+            Err(_) => Ok(Vec::<String>::new()),
+        }
+    }
+
+    async fn get_all_datasets_search_items(
+        &self,
+        limit: &u32,
+        offset: &u32,
+        path: &str,
+        search_string: &str,
+        taxonranks: Vec<String>,
+    ) -> Result<Vec<CollectionItem>> {
+        let path = path.split_once('/').map_or_else(|| "", |(_, path)| path);
+        let filters = GbifDataProvider::get_filters(path);
+        let taxonrank_filter = Self::create_taxonrank_filter(&taxonranks);
+        let taxonrank_queries = taxonranks
+            .iter()
+            .enumerate()
+            .map(|(index, rank)| {
+                format!(
+                    r#"
+                    {union}
+                    (
+                        SELECT COUNT(*) AS count, "{rank}" as name, '{rank}' AS rank
+                        FROM {schema}.occurrences
+                        WHERE "{rank}" IN (SELECT name FROM names)
+                        GROUP BY name
+                        ORDER BY name
+                    )
+                "#,
+                    schema = self.db_config.schema,
+                    union = if index > 0 {
+                        "UNION".to_string()
+                    } else {
+                        String::new()
+                    }
+                )
+            })
+            .reduce(|a, b| a + &b)
+            .unwrap_or_default();
+        let conn = self.pool.get().await?;
+        let query = &format!(
+            r#"
+            WITH names AS (
+                SELECT DISTINCT canonicalname AS name
+                FROM {schema}.species
+                WHERE {taxonrank_filter}{filter} AND canonicalname ILIKE $3
+            )
+            SELECT count, name, rank
+            FROM (
+                {taxonrank_queries}
+            ) AS T
+            ORDER BY name, rank
+            LIMIT $1
+            OFFSET $2;
+            "#,
+            schema = self.db_config.schema,
+            filter = filters
+                .iter()
+                .enumerate()
+                .map(|(index, (column, _))| format!(
+                    r#" AND "{column}" = ${index}"#,
+                    index = index + 4
+                ))
+                .collect::<String>()
+        );
+
+        let stmt = conn.prepare(query).await?;
+
+        let limit = &i64::from(*limit);
+        let offset = &i64::from(*offset);
+        let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset, &search_string];
+        filters.iter().for_each(|(_, value)| params.push(value));
+        let rows = conn.query(&stmt, params.as_slice()).await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                let num_points = row.get::<usize, i64>(0);
+                let name = row.get::<usize, String>(1);
+                let rank = row.get::<usize, String>(2);
+
+                CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        layer_id: LayerId(rank.clone() + "/" + name.as_str()),
+                    },
+                    name: name.clone(),
+                    description: format!(
+                        "{rank}, {num_points} occurrences",
+                        rank = rank[..1].to_ascii_uppercase().to_string() + &rank[1..]
+                    ),
+                    properties: vec![],
+                })
+            })
+            .collect::<Vec<_>>())
+    }
+
+    async fn get_all_datasets_autocomplete_items(
+        &self,
+        limit: &u32,
+        offset: &u32,
+        path: &str,
+        search_string: &str,
+        taxonranks: Vec<String>,
+    ) -> Result<Vec<String>> {
+        let path = path.split_once('/').map_or_else(|| "", |(_, path)| path);
+        let filters = GbifDataProvider::get_filters(path);
+        let taxonrank_filter = Self::create_taxonrank_filter(&taxonranks);
+        let conn = self.pool.get().await?;
+        let query = &format!(
+            r#"
+            SELECT DISTINCT canonicalname
+            FROM {schema}.species
+            WHERE {taxonrank_filter}{filter} AND canonicalname ILIKE $3
+            ORDER BY canonicalname
             LIMIT $1
             OFFSET $2;
             "#,
@@ -662,14 +828,38 @@ impl LayerCollectionProvider for GbifDataProvider {
 
         let items = match selector.as_str() {
             "datasets" => {
-                self.get_datasets_search_items(&search.limit, &search.offset, path, &search_string)
-                    .await?
+                let taxonrank = path
+                    .split_once('/')
+                    .map_or_else(String::new, |(taxonrank, _)| taxonrank.to_string());
+                ensure!(
+                    Self::LISTABLE_RANKS.contains(&taxonrank.as_str()),
+                    crate::error::InvalidPath
+                );
+                self.get_all_datasets_search_items(
+                    &search.limit,
+                    &search.offset,
+                    path,
+                    &search_string,
+                    vec![taxonrank],
+                )
+                .await?
             }
             "filter" => {
                 self.get_filter_search_items(&search.limit, &search.offset, path, &search_string)
                     .await?
             }
-            "select" => Self::get_select_items(path),
+            "select" => {
+                self.get_all_datasets_search_items(
+                    &search.limit,
+                    &search.offset,
+                    path,
+                    &search_string,
+                    Self::LISTABLE_RANKS
+                        .map(std::string::ToString::to_string)
+                        .to_vec(),
+                )
+                .await?
+            }
             _ => vec![],
         };
 
@@ -707,11 +897,19 @@ impl LayerCollectionProvider for GbifDataProvider {
 
         let items = match selector.as_str() {
             "datasets" => {
-                self.get_datasets_autocomplete_items(
+                let taxonrank = path
+                    .split_once('/')
+                    .map_or_else(String::new, |(taxonrank, _)| taxonrank.to_string());
+                ensure!(
+                    Self::LISTABLE_RANKS.contains(&taxonrank.as_str()),
+                    crate::error::InvalidPath
+                );
+                self.get_all_datasets_autocomplete_items(
                     &search.limit,
                     &search.offset,
                     path,
                     &search_string,
+                    vec![taxonrank],
                 )
                 .await?
             }
@@ -721,6 +919,18 @@ impl LayerCollectionProvider for GbifDataProvider {
                     &search.offset,
                     path,
                     &search_string,
+                )
+                .await?
+            }
+            "select" => {
+                self.get_all_datasets_autocomplete_items(
+                    &search.limit,
+                    &search.offset,
+                    path,
+                    &search_string,
+                    Self::LISTABLE_RANKS
+                        .map(std::string::ToString::to_string)
+                        .to_vec(),
                 )
                 .await?
             }
