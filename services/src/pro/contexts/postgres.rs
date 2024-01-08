@@ -2079,14 +2079,14 @@ mod tests {
             db.quota_available().await.unwrap(),
             crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                 .unwrap()
-                .default
+                .initial_credits
         );
 
         assert_eq!(
             admin_db.quota_available_by_user(&user).await.unwrap(),
             crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                 .unwrap()
-                .default
+                .initial_credits
         );
 
         admin_db

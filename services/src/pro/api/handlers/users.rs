@@ -1611,7 +1611,7 @@ mod tests {
             quota.available,
             crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                 .unwrap()
-                .default
+                .initial_credits
         );
 
         let update = UpdateQuota { available: 123 };

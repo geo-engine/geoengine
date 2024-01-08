@@ -20,7 +20,7 @@ impl ConfigElement for User {
 pub struct Quota {
     pub mode: QuotaTrackingMode,
     #[serde(default)]
-    pub default: i64,
+    pub initial_credits: i64,
     pub increment_quota_buffer_size: usize,
     pub increment_quota_buffer_timeout_seconds: u64,
 }
