@@ -123,7 +123,7 @@ pub enum OidcError {
         source: ParseError,
     },
     #[snafu(display("ProviderDiscoveryError: {}", source))]
-    ProviderDiscoveryError {
+    ProviderDiscovery {
         source: DiscoveryError<oauth2::reqwest::Error<reqwest::Error>>,
     },
     #[snafu(display("Illegal OIDC Provider: {}", reason))]
@@ -148,7 +148,7 @@ pub enum OidcError {
 
 impl From<DiscoveryError<oauth2::reqwest::Error<reqwest::Error>>> for OidcError {
     fn from(source: DiscoveryError<oauth2::reqwest::Error<reqwest::Error>>) -> Self {
-        Self::ProviderDiscoveryError { source }
+        Self::ProviderDiscovery { source }
     }
 }
 
@@ -410,8 +410,7 @@ impl TryFrom<Oidc> for OidcRequestDb {
 mod tests {
     use crate::error::{Error, Result};
     use crate::pro::users::oidc::OidcError::{
-        IllegalProvider, LoginFailed, ProviderDiscoveryError, ResponseFieldError,
-        TokenExchangeError,
+        IllegalProvider, LoginFailed, ProviderDiscovery, ResponseFieldError, TokenExchangeError,
     };
     use crate::pro::users::oidc::{
         AuthCodeResponse, DefaultClient, DefaultJsonWebKeySet, DefaultProviderMetadata,
@@ -572,7 +571,7 @@ mod tests {
 
         let client = request_db.get_client().await;
 
-        assert!(matches!(client, Err(ProviderDiscoveryError { source: _ })));
+        assert!(matches!(client, Err(ProviderDiscovery { source: _ })));
     }
 
     #[tokio::test]
