@@ -32,7 +32,7 @@ admin_password = "admin"
 
 [quota]
 mode = "check"
-default = 9999
+initial_credits = 9999
 increment_quota_buffer_size = 0             # number of quota updates to buffer before sending them to the database
 increment_quota_buffer_timeout_seconds = 60 # number of seconds after which the quota updates are sent to the database
 
