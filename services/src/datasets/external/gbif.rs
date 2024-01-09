@@ -194,14 +194,13 @@ impl GbifDataProvider {
             OFFSET $2;
             "#,
             schema = self.db_config.schema,
-            filter = filters
-                .iter()
-                .enumerate()
-                .map(|(index, (column, _))| format!(
-                    r#" AND "{column}" = ${index}"#,
-                    index = index + 4
-                ))
-                .collect::<String>()
+            filter = filters.iter().enumerate().fold(
+                String::new(),
+                |mut output, (index, (column, _))| {
+                    let _ = write!(output, r#" AND "{column}" = ${index}"#, index = index + 4);
+                    output
+                }
+            )
         );
 
         let stmt = conn.prepare(query).await?;
@@ -284,14 +283,13 @@ impl GbifDataProvider {
             OFFSET $2;
             "#,
             schema = self.db_config.schema,
-            filter = filters
-                .iter()
-                .enumerate()
-                .map(|(index, (column, _))| format!(
-                    r#" AND "{column}" = ${index}"#,
-                    index = index + 4
-                ))
-                .collect::<String>()
+            filter = filters.iter().enumerate().fold(
+                String::new(),
+                |mut output, (index, (column, _))| {
+                    let _ = write!(output, r#" AND "{column}" = ${index}"#, index = index + 4);
+                    output
+                }
+            )
         );
 
         let stmt = conn.prepare(query).await?;
@@ -347,14 +345,13 @@ impl GbifDataProvider {
             OFFSET $2;
             "#,
             schema = self.db_config.schema,
-            filter = filters
-                .iter()
-                .enumerate()
-                .map(|(index, (column, _))| format!(
-                    r#" AND "{column}" = ${index}"#,
-                    index = index + 4
-                ))
-                .collect::<String>()
+            filter = filters.iter().enumerate().fold(
+                String::new(),
+                |mut output, (index, (column, _))| {
+                    let _ = write!(output, r#" AND "{column}" = ${index}"#, index = index + 4);
+                    output
+                }
+            )
         );
 
         let stmt = conn.prepare(query).await?;
@@ -509,14 +506,13 @@ impl GbifDataProvider {
             "#,
             schema = self.db_config.schema,
             column = column,
-            filter = filters
-                .iter()
-                .enumerate()
-                .map(|(index, (column, _))| format!(
-                    r#" AND "{column}" = ${index}"#,
-                    index = index + 4
-                ))
-                .collect::<String>()
+            filter = filters.iter().enumerate().fold(
+                String::new(),
+                |mut output, (index, (column, _))| {
+                    let _ = write!(output, r#" AND "{column}" = ${index}"#, index = index + 4);
+                    output
+                }
+            )
         );
         let stmt = conn.prepare(query).await?;
 

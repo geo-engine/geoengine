@@ -29,11 +29,11 @@ impl Migration for Migration0002GbifConfig {
 
         // as ALTER TYPE ADD ATTRIBUTE does not support default values we manually have to set the default value of the new field in the layer_providers table
         tx.batch_execute(
-            r#"
+            "
                 UPDATE layer_providers
                 SET definition.gbif_data_provider_definition.autocomplete_timeout = 3
                 WHERE NOT ((definition).gbif_data_provider_definition IS NULL)
-            "#,
+            ",
         )
         .await?;
 
@@ -84,11 +84,11 @@ mod tests {
         // verify that the default value for autocomplete_timeout has been set correctly
         let autocomplete_timeout = conn
             .query_one(
-                r#"
+                "
                     SELECT (definition).gbif_data_provider_definition.autocomplete_timeout
                     FROM layer_providers
                     WHERE NOT ((definition).gbif_data_provider_definition IS NULL)
-                "#,
+                ",
                 &[],
             )
             .await?
