@@ -1,6 +1,6 @@
 use crate::datasets::upload::Volume;
 use crate::error::Result;
-use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionProvider};
+use crate::layers::listing::LayerCollectionProvider;
 use crate::layers::storage::{LayerDb, LayerProviderDb};
 use crate::tasks::{TaskContext, TaskManager};
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
@@ -88,13 +88,7 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
 
 /// The trait for accessing all resources
 pub trait GeoEngineDb:
-    DatasetDb
-    + LayerDb
-    + LayerProviderDb
-    + LayerCollectionProvider
-    + DatasetLayerCollectionProvider
-    + ProjectDb
-    + WorkflowRegistry
+    DatasetDb + LayerDb + LayerProviderDb + LayerCollectionProvider + ProjectDb + WorkflowRegistry
 {
 }
 

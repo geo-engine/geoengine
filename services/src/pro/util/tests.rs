@@ -207,6 +207,7 @@ where
                 license: "Sample License".to_owned(),
                 uri: "http://example.org/".to_owned(),
             }]),
+            tags: Some(vec!["raster".to_owned(), "test".to_owned()]),
         },
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
     };
@@ -266,6 +267,7 @@ where
                 license: "Sample License".to_owned(),
                 uri: "http://example.org/".to_owned(),
             }]),
+            tags: Some(vec!["vector".to_owned(), "test".to_owned()]),
         },
         meta_data: MetaDataDefinition::OgrMetaData(create_ports_meta_data()),
     };

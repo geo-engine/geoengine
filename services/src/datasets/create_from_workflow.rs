@@ -283,6 +283,7 @@ async fn create_dataset<C: SessionContext>(
             source_operator: "GdalSource".to_owned(),
             symbology: None,  // TODO add symbology?
             provenance: None, // TODO add provenance that references the workflow
+            tags: Some(vec!["workflow".to_owned()]),
         },
         meta_data,
     };
