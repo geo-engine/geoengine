@@ -8,9 +8,7 @@ use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
     ProviderLayerCollectionId,
 };
-use crate::layers::listing::{
-    DatasetLayerCollectionProvider, LayerCollectionId, LayerCollectionProvider,
-};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::config::get_config_element;
 use crate::util::extractors::ValidatedQuery;
@@ -286,7 +284,7 @@ async fn list_collection_handler<C: ApplicationContext>(
     if provider == crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID.into() {
         let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(db);
         let collection = dataset_listing_provider
-            .load_dataset_layer_collection(&item, options.into_inner())
+            .load_layer_collection(&item, options.into_inner())
             .await?;
 
         return Ok(web::Json(collection));
@@ -483,9 +481,7 @@ async fn layer_handler<C: ApplicationContext>(
     if provider == crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID.into() {
         let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(db);
 
-        let collection = dataset_listing_provider
-            .load_dataset_layer(&item.into())
-            .await?;
+        let collection = dataset_listing_provider.load_layer(&item.into()).await?;
 
         return Ok(web::Json(collection));
     }
@@ -532,7 +528,7 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
     let layer = match provider.into() {
         crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID => {
             let provider = DatasetLayerListingProvider::with_all_datasets(db);
-            provider.load_dataset_layer(&item.into()).await?
+            provider.load_layer(&item.into()).await?
         }
         crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item.into()).await?,
         _ => {
@@ -584,7 +580,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
     let layer = match provider.into() {
         crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID => {
             let provider = DatasetLayerListingProvider::with_all_datasets(db);
-            provider.load_dataset_layer(&item).await?
+            provider.load_layer(&item).await?
         }
         crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item).await?,
         _ => {

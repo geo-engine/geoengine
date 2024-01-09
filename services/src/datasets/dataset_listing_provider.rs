@@ -12,7 +12,7 @@ use crate::{
             CollectionItem, Layer, LayerCollection, LayerCollectionListing, LayerListing,
             ProviderLayerCollectionId, ProviderLayerId,
         },
-        listing::{DatasetLayerCollectionProvider, LayerCollectionId},
+        listing::{LayerCollectionId, LayerCollectionProvider},
     },
     util::operators::source_operator_from_dataset,
     workflows::workflow::Workflow,
@@ -201,11 +201,11 @@ where
 }
 
 #[async_trait]
-impl<D> DatasetLayerCollectionProvider for DatasetLayerListingProvider<D>
+impl<D> LayerCollectionProvider for DatasetLayerListingProvider<D>
 where
     D: DatasetProvider,
 {
-    async fn load_dataset_layer_collection(
+    async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
         options: crate::layers::layer::LayerCollectionListOptions,
@@ -237,11 +237,11 @@ where
             .await;
     }
 
-    async fn get_dataset_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
+    async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Ok(Self::root_collection_id())
     }
 
-    async fn load_dataset_layer(&self, id: &LayerId) -> Result<crate::layers::layer::Layer> {
+    async fn load_layer(&self, id: &LayerId) -> Result<crate::layers::layer::Layer> {
         let dataset_id = DatasetId::from_str(&id.0)?;
 
         let dataset = self.dataset_provider.load_dataset(&dataset_id).await?;
