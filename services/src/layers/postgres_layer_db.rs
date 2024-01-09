@@ -357,6 +357,46 @@ pub async fn delete_layer_collection_from_parent(
     Ok(())
 }
 
+fn create_search_query(full_info: bool) -> String {
+    format!("
+        WITH RECURSIVE parents AS (
+            SELECT $1::uuid as id
+            UNION ALL SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)
+        )
+        SELECT DISTINCT *
+        FROM (
+            SELECT 
+                {}
+            FROM layer_collections
+                JOIN (SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)) cc ON (id = cc.child)
+            WHERE name ILIKE $4
+        ) u UNION (
+            SELECT 
+                {}
+            FROM layers uc
+                JOIN (SELECT DISTINCT layer FROM collection_layers JOIN parents ON (collection = id)) cl ON (id = cl.layer)
+            WHERE name ILIKE $4
+        )
+        ORDER BY {}name ASC
+        LIMIT $2 
+        OFFSET $3;",
+        if full_info {
+            "concat(id, '') AS id,
+            name,
+            description,
+            properties,
+            FALSE AS is_layer"
+        } else { "name" },
+        if full_info {
+            "concat(id, '') AS id,
+            name,
+            description,
+            properties,
+            TRUE AS is_layer"
+        } else { "name" },
+        if full_info { "is_layer ASC," } else { "" })
+}
+
 #[async_trait]
 impl<Tls> LayerDb for PostgresDb<Tls>
 where
@@ -671,41 +711,7 @@ where
             }
         };
 
-        let stmt = conn
-            .prepare(
-                "
-        WITH RECURSIVE parents AS (
-            SELECT $1::uuid as id
-            UNION ALL SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)
-        )
-        SELECT DISTINCT id, name, description, properties, is_layer
-        FROM (
-            SELECT 
-                concat(id, '') AS id, 
-                name, 
-                description, 
-                properties, 
-                FALSE AS is_layer
-            FROM layer_collections
-                JOIN (SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)) cc ON (id = cc.child)
-            WHERE name ILIKE $4
-        ) u UNION (
-            SELECT 
-                concat(id, '') AS id, 
-                name, 
-                description, 
-                properties, 
-                TRUE AS is_layer
-            FROM layers uc
-                JOIN (SELECT DISTINCT layer FROM collection_layers JOIN parents ON (collection = id)) cl ON (id = cl.layer)
-            WHERE name ILIKE $4
-        )
-        ORDER BY is_layer ASC, name ASC
-        LIMIT $2 
-        OFFSET $3;           
-        ",
-            )
-            .await?;
+        let stmt = conn.prepare(&create_search_query(true)).await?;
 
         let rows = conn
             .query(
@@ -784,33 +790,7 @@ where
             }
         };
 
-        let stmt = conn
-            .prepare(
-                "
-        WITH RECURSIVE parents AS (
-            SELECT $1::uuid as id
-            UNION ALL SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)
-        )
-        SELECT DISTINCT name
-        FROM (
-            SELECT 
-                name
-            FROM layer_collections
-                JOIN (SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)) cc ON (id = cc.child)
-            WHERE name ILIKE $4
-        ) u UNION (
-            SELECT 
-                name
-            FROM layers uc
-                JOIN (SELECT DISTINCT layer FROM collection_layers JOIN parents ON (collection = id)) cl ON (id = cl.layer)
-            WHERE name ILIKE $4
-        )
-        ORDER BY name ASC
-        LIMIT $2 
-        OFFSET $3;            
-        ",
-            )
-            .await?;
+        let stmt = conn.prepare(&create_search_query(false)).await?;
 
         let rows = conn
             .query(
