@@ -1876,7 +1876,7 @@ mod tests {
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let capabilities = layer_db.get_search_capabilities().await.unwrap();
+        let capabilities = layer_db.capabilities().search;
 
         let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
 

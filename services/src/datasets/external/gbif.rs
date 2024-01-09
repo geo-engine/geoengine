@@ -6,8 +6,8 @@ use crate::layers::layer::{
     LayerListing, ProviderLayerCollectionId, ProviderLayerId,
 };
 use crate::layers::listing::{
-    LayerCollectionId, LayerCollectionProvider, SearchCapabilities, SearchParameters, SearchType,
-    SearchTypes,
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+    SearchParameters, SearchType, SearchTypes,
 };
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
@@ -662,15 +662,18 @@ impl LayerCollectionProvider for GbifDataProvider {
         })
     }
 
-    async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
-        Ok(SearchCapabilities {
-            search_types: SearchTypes {
-                fulltext: true,
-                prefix: true,
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities {
+                search_types: SearchTypes {
+                    fulltext: true,
+                    prefix: true,
+                },
+                autocomplete: true,
+                filters: None,
             },
-            autocomplete: true,
-            filters: None,
-        })
+        }
     }
 
     async fn search(

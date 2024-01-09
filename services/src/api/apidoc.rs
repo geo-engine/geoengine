@@ -44,7 +44,9 @@ use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
 };
-use crate::layers::listing::{LayerCollectionId, SearchCapabilities, SearchType, SearchTypes};
+use crate::layers::listing::{
+    LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
+};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
@@ -71,7 +73,7 @@ use utoipa::{Modify, OpenApi};
         handlers::layers::list_root_collections_handler,
         handlers::layers::search_handler,
         handlers::layers::autocomplete_handler,
-        handlers::layers::search_capabilities_handler,
+        handlers::layers::provider_capabilities_handler,
         handlers::layers::add_layer,
         handlers::layers::add_collection,
         handlers::layers::remove_collection,
@@ -215,6 +217,7 @@ use utoipa::{Modify, OpenApi};
             AddLayer,
             AddLayerCollection,
             SearchCapabilities,
+            ProviderCapabilities,
             SearchTypes,
             SearchType,
 

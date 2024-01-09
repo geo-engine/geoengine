@@ -17,17 +17,37 @@ pub struct LayerCollectionId(pub String);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams)]
 #[serde(rename_all = "camelCase")]
+pub struct ProviderCapabilities {
+    pub listing: bool,
+    pub search: SearchCapabilities,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchCapabilities {
-    pub(crate) search_types: SearchTypes,
-    pub(crate) autocomplete: bool,
-    pub(crate) filters: Option<Vec<String>>,
+    pub search_types: SearchTypes,
+    pub autocomplete: bool,
+    pub filters: Option<Vec<String>>,
+}
+
+impl SearchCapabilities {
+    pub fn none() -> Self {
+        Self {
+            search_types: SearchTypes {
+                fulltext: false,
+                prefix: false,
+            },
+            autocomplete: false,
+            filters: None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, IntoParams)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchTypes {
-    pub(crate) fulltext: bool,
-    pub(crate) prefix: bool,
+    pub fulltext: bool,
+    pub prefix: bool,
 }
 
 #[derive(
@@ -37,13 +57,13 @@ pub struct SearchTypes {
 #[into_params(parameter_in = Query)]
 pub struct SearchParameters {
     #[param(example = "fulltext")]
-    pub(crate) search_type: SearchType,
+    pub search_type: SearchType,
     #[param(example = "test")]
-    pub(crate) search_string: String,
+    pub search_string: String,
     #[param(example = "20")]
-    pub(crate) limit: u32,
+    pub limit: u32,
     #[param(example = "0")]
-    pub(crate) offset: u32,
+    pub offset: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash, ToSchema)]
@@ -71,17 +91,8 @@ impl fmt::Display for LayerCollectionId {
 #[async_trait]
 /// Listing of layers and layer collections
 pub trait LayerCollectionProvider {
-    /// Get a list of supported search capabilities
-    async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
-        Ok(SearchCapabilities {
-            search_types: SearchTypes {
-                fulltext: false,
-                prefix: false,
-            },
-            autocomplete: false,
-            filters: None,
-        })
-    }
+    /// Retrieve the provider's capabilities
+    fn capabilities(&self) -> ProviderCapabilities;
 
     /// Perform a search
     #[allow(unused_variables)]
@@ -137,15 +148,12 @@ pub trait DatasetLayerCollectionProvider {
     /// get the full contents of the layer with the given `id`
     async fn load_dataset_layer(&self, id: &LayerId) -> Result<Layer>;
 
-    /// Get a list of supported search capabilities
-    async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
-        Ok(SearchCapabilities {
-            search_types: SearchTypes {
-                fulltext: false,
-                prefix: false,
-            },
-            autocomplete: false,
-            filters: None,
+    /// Get a list of supported capabilities
+    // TODO: remove whole provider
+    async fn capabilities(&self) -> Result<ProviderCapabilities> {
+        Ok(ProviderCapabilities {
+            listing: false,
+            search: SearchCapabilities::none(),
         })
     }
 

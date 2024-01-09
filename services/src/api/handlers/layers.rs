@@ -9,7 +9,8 @@ use crate::layers::layer::{
     ProviderLayerCollectionId,
 };
 use crate::layers::listing::{
-    DatasetLayerCollectionProvider, LayerCollectionId, LayerCollectionProvider, SearchParameters,
+    DatasetLayerCollectionProvider, LayerCollectionId, LayerCollectionProvider,
+    ProviderCapabilities, SearchParameters,
 };
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::config::get_config_element;
@@ -44,33 +45,36 @@ where
                     .service(
                         web::scope("/search")
                             .route(
-                                r#"autocomplete/{provider}/{collection}"#,
+                                "/autocomplete/{provider}/{collection}",
                                 web::get().to(autocomplete_handler::<C>),
                             )
                             .route(
-                                r#"capabilities/{provider}"#,
-                                web::get().to(search_capabilities_handler::<C>),
-                            )
-                            .route(
-                                r#"{provider}/{collection}"#,
+                                "/{provider}/{collection}",
                                 web::get().to(search_handler::<C>),
                             ),
                     )
                     .route("", web::get().to(list_root_collections_handler::<C>))
                     .route(
-                        r#"/{provider}/{collection}"#,
+                        "/{provider}/{collection}",
                         web::get().to(list_collection_handler::<C>),
                     ),
             )
-            .route(
-                "/{provider}/{layer:.*}/workflowId",
-                web::post().to(layer_to_workflow_id_handler::<C>),
-            )
-            .route(
-                "/{provider}/{layer:.*}/dataset",
-                web::post().to(layer_to_dataset::<C>),
-            )
-            .route("/{provider}/{layer}", web::get().to(layer_handler::<C>)),
+            .service(
+                web::scope("/{provider}")
+                    .route(
+                        "/capabilities",
+                        web::get().to(provider_capabilities_handler::<C>),
+                    )
+                    .service(
+                        web::scope("/{layer}")
+                            .route(
+                                "/workflowId",
+                                web::post().to(layer_to_workflow_id_handler::<C>),
+                            )
+                            .route("/dataset", web::post().to(layer_to_dataset::<C>))
+                            .route("", web::get().to(layer_handler::<C>)),
+                    ),
+            ),
     )
     .service(
         web::scope("/layerDb").service(
@@ -207,6 +211,10 @@ async fn get_layer_providers<C: ApplicationContext>(
             }
         };
 
+        if !provider.capabilities().listing {
+            continue; // skip providers that do not support listing
+        }
+
         let collection_id = match provider.get_root_layer_collection_id().await {
             Ok(root) => root,
             Err(err) => {
@@ -330,20 +338,23 @@ async fn list_collection_handler<C: ApplicationContext>(
     Ok(web::Json(collection))
 }
 
-// Returns the search capabilities of the given provider
+// Returns the capabilities of the given provider
 #[utoipa::path(
     tag = "Layers",
     get,
-    path = "/layers/collections/search/capabilities/{provider}",
+    path = "/layers/{provider}/capabilities",
     responses(
-        (status = 200, description = "OK", body = SearchCapabilities,
+        (status = 200, description = "OK", body = ProviderCapabilities,
             example = json!({
-                "search_types": {
-                    "fulltext": true,
-                    "prefix": true
-                },
-                "autocomplete": true,
-                "filters": [],
+                "listing": true,
+                "search": {
+                    "search_types": {
+                        "fulltext": true,
+                        "prefix": true
+                    },
+                    "autocomplete": true,
+                    "filters": [],
+                }
             })
         )
     ),
@@ -354,11 +365,11 @@ async fn list_collection_handler<C: ApplicationContext>(
         ("session_token" = [])
     )
 )]
-async fn search_capabilities_handler<C: ApplicationContext>(
+async fn provider_capabilities_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<DataProviderId>,
     session: C::Session,
-) -> Result<impl Responder> {
+) -> Result<web::Json<ProviderCapabilities>> {
     let provider = path.into_inner();
 
     if provider == ROOT_PROVIDER_ID {
@@ -370,24 +381,23 @@ async fn search_capabilities_handler<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
 
     if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        let caps = DatasetLayerCollectionProvider::get_search_capabilities(&db).await?;
+        let capabilities = DatasetLayerCollectionProvider::capabilities(&db).await?;
 
-        return Ok(web::Json(caps));
+        return Ok(web::Json(capabilities));
     }
 
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
-        let caps = LayerCollectionProvider::get_search_capabilities(&db).await?;
+        let capabilities = LayerCollectionProvider::capabilities(&db);
 
-        return Ok(web::Json(caps));
+        return Ok(web::Json(capabilities));
     }
 
-    let caps = db
+    let capabilities = db
         .load_layer_provider(provider.into())
         .await?
-        .get_search_capabilities()
-        .await?;
+        .capabilities();
 
-    Ok(web::Json(caps))
+    Ok(web::Json(capabilities))
 }
 
 /// Searches the contents of the collection of the given provider
@@ -445,7 +455,7 @@ async fn search_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerCollectionId)>,
     options: ValidatedQuery<SearchParameters>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<LayerCollection>> {
     let (provider, collection) = path.into_inner();
 
     if provider == ROOT_PROVIDER_ID {
@@ -503,7 +513,7 @@ async fn autocomplete_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<(DataProviderId, LayerCollectionId)>,
     options: ValidatedQuery<SearchParameters>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<Vec<String>>> {
     let (provider, collection) = path.into_inner();
 
     if provider == ROOT_PROVIDER_ID {
@@ -1514,9 +1524,7 @@ mod tests {
         let session_id = app_ctx.default_session_id().await;
 
         let req = test::TestRequest::get()
-            .uri(&format!(
-                "/layers/collections/search/capabilities/{INTERNAL_PROVIDER_ID}",
-            ))
+            .uri(&format!("/layers/{INTERNAL_PROVIDER_ID}/capabilities",))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx.clone()).await;
 

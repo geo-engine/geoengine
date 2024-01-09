@@ -1,6 +1,7 @@
 use crate::error;
 use crate::layers::external::TypedDataProviderDefinition;
 use crate::layers::layer::Property;
+use crate::layers::listing::{ProviderCapabilities, SearchCapabilities};
 use crate::layers::postgres_layer_db::{
     delete_layer_collection, delete_layer_collection_from_parent, delete_layer_from_collection,
     insert_collection_parent, insert_layer, insert_layer_collection_with_id,
@@ -263,6 +264,13 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities::none(),
+        }
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn load_layer_collection(
         &self,

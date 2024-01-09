@@ -1,5 +1,5 @@
 use super::external::TypedDataProviderDefinition;
-use super::listing::SearchType;
+use super::listing::{ProviderCapabilities, SearchType};
 use crate::contexts::PostgresDb;
 use crate::error;
 use crate::layers::layer::Property;
@@ -505,6 +505,20 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities {
+                search_types: SearchTypes {
+                    fulltext: true,
+                    prefix: true,
+                },
+                autocomplete: true,
+                filters: None,
+            },
+        }
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn load_layer_collection(
         &self,
@@ -616,17 +630,6 @@ where
             items,
             entry_label: None,
             properties,
-        })
-    }
-
-    async fn get_search_capabilities(&self) -> Result<SearchCapabilities> {
-        Ok(SearchCapabilities {
-            search_types: SearchTypes {
-                fulltext: true,
-                prefix: true,
-            },
-            autocomplete: true,
-            filters: None,
         })
     }
 
@@ -956,7 +959,6 @@ where
     }
 
     async fn load_layer_provider(&self, id: DataProviderId) -> Result<Box<dyn DataProvider>> {
-        // TODO: permissions
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
