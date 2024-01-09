@@ -2774,7 +2774,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_ignores_search_on_select_items() {
+    async fn it_performs_global_search_on_select_items() {
         with_temp_schema(|db_config| async {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
@@ -2798,9 +2798,36 @@ mod tests {
                         offset: 0,
                     },
                 )
-                .await;
+                .await
+                .unwrap();
 
-            let collection = collection.unwrap();
+            assert_eq!(
+                collection,
+                LayerCollection {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: root_id.clone(),
+                    },
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    items: vec![],
+                    entry_label: None,
+                    properties: vec![],
+                }
+            );
+
+            let collection = provider
+                .search(
+                    &root_id,
+                    SearchParameters {
+                        search_type: SearchType::Fulltext,
+                        search_string: "i".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
 
             assert_eq!(
                 collection,
@@ -2812,42 +2839,33 @@ mod tests {
                     name: "GBIF".to_string(),
                     description: "GBIF occurrence datasets".to_string(),
                     items: vec![
-                        CollectionItem::Collection(LayerCollectionListing {
-                            id: ProviderLayerCollectionId {
+                        CollectionItem::Layer(LayerListing {
+                            id: ProviderLayerId {
                                 provider_id: GBIF_PROVIDER_ID,
-                                collection_id: LayerCollectionId("filter/".to_string()),
+                                layer_id: LayerId("family/Limoniidae".to_string()),
                             },
-                            name: "Select kingdom".to_string(),
-                            description: "Refine the current filter".to_string(),
-                            properties: Default::default(),
+                            name: "Limoniidae".to_string(),
+                            description: "Family, 3 occurrences".to_string(),
+                            properties: vec![]
                         }),
-                        CollectionItem::Collection(LayerCollectionListing {
-                            id: ProviderLayerCollectionId {
+                        CollectionItem::Layer(LayerListing {
+                            id: ProviderLayerId {
                                 provider_id: GBIF_PROVIDER_ID,
-                                collection_id: LayerCollectionId("datasets/family/".to_string()),
+                                layer_id: LayerId("genus/Rhipidia".to_string()),
                             },
-                            name: "Family datasets".to_string(),
-                            description: "Apply the current filter".to_string(),
-                            properties: Default::default(),
+                            name: "Rhipidia".to_string(),
+                            description: "Genus, 3 occurrences".to_string(),
+                            properties: vec![]
                         }),
-                        CollectionItem::Collection(LayerCollectionListing {
-                            id: ProviderLayerCollectionId {
+                        CollectionItem::Layer(LayerListing {
+                            id: ProviderLayerId {
                                 provider_id: GBIF_PROVIDER_ID,
-                                collection_id: LayerCollectionId("datasets/genus/".to_string()),
+                                layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
                             },
-                            name: "Genus datasets".to_string(),
-                            description: "Apply the current filter".to_string(),
-                            properties: Default::default(),
+                            name: "Rhipidia willistoniana".to_string(),
+                            description: "Species, 3 occurrences".to_string(),
+                            properties: vec![]
                         }),
-                        CollectionItem::Collection(LayerCollectionListing {
-                            id: ProviderLayerCollectionId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                collection_id: LayerCollectionId("datasets/species/".to_string()),
-                            },
-                            name: "Species datasets".to_string(),
-                            description: "Apply the current filter".to_string(),
-                            properties: Default::default(),
-                        })
                     ],
                     entry_label: None,
                     properties: vec![],
@@ -2858,7 +2876,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_ignores_autocomplete_search_on_select_items() {
+    async fn it_performs_global_search_autocomplete_on_select_items() {
         with_temp_schema(|db_config| async {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
@@ -2872,7 +2890,7 @@ mod tests {
 
             let root_id = provider.get_root_layer_collection_id().await.unwrap();
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &root_id,
                     SearchParameters {
@@ -2882,11 +2900,32 @@ mod tests {
                         offset: 0,
                     },
                 )
-                .await;
+                .await
+                .unwrap();
 
-            let collection = collection.unwrap();
+            assert_eq!(autocomplete_items, Vec::<String>::new());
 
-            assert_eq!(collection, Vec::<String>::new());
+            let autocomplete_items = provider
+                .autocomplete_search(
+                    &root_id,
+                    SearchParameters {
+                        search_type: SearchType::Fulltext,
+                        search_string: "i".to_string(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                autocomplete_items,
+                vec![
+                    "Limoniidae".to_string(),
+                    "Rhipidia".to_string(),
+                    "Rhipidia willistoniana".to_string()
+                ]
+            );
         })
         .await;
     }
@@ -3053,7 +3092,7 @@ mod tests {
 
             let layer_collection_id = LayerCollectionId("filter/".to_string());
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &layer_collection_id,
                     SearchParameters {
@@ -3066,9 +3105,9 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(collection, Vec::<String>::new());
+            assert_eq!(autocomplete_items, Vec::<String>::new());
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &layer_collection_id,
                     SearchParameters {
@@ -3081,9 +3120,9 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(collection, vec!["Animalia".to_string()]);
+            assert_eq!(autocomplete_items, vec!["Animalia".to_string()]);
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &layer_collection_id,
                     SearchParameters {
@@ -3096,9 +3135,9 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(collection, Vec::<String>::new());
+            assert_eq!(autocomplete_items, Vec::<String>::new());
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &layer_collection_id,
                     SearchParameters {
@@ -3111,7 +3150,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(collection, vec!["Animalia".to_string()]);
+            assert_eq!(autocomplete_items, vec!["Animalia".to_string()]);
         })
         .await;
     }
@@ -3282,7 +3321,7 @@ mod tests {
 
             let layer_collection_id = LayerCollectionId("filter/Animalia".to_string());
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &layer_collection_id,
                     SearchParameters {
@@ -3295,9 +3334,9 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(collection, Vec::<String>::new());
+            assert_eq!(autocomplete_items, Vec::<String>::new());
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &layer_collection_id,
                     SearchParameters {
@@ -3310,9 +3349,9 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(collection, vec!["Arthropoda".to_string()]);
+            assert_eq!(autocomplete_items, vec!["Arthropoda".to_string()]);
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &layer_collection_id,
                     SearchParameters {
@@ -3325,9 +3364,9 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(collection, Vec::<String>::new());
+            assert_eq!(autocomplete_items, Vec::<String>::new());
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &layer_collection_id,
                     SearchParameters {
@@ -3340,7 +3379,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(collection, vec!["Arthropoda".to_string()]);
+            assert_eq!(autocomplete_items, vec!["Arthropoda".to_string()]);
         })
         .await;
     }
@@ -3417,7 +3456,7 @@ mod tests {
                             layer_id: LayerId("family/Limoniidae".to_string()),
                         },
                         name: "Limoniidae".to_string(),
-                        description: "3 occurrences".to_string(),
+                        description: "Family, 3 occurrences".to_string(),
                         properties: vec![]
                     }),],
                     entry_label: None,
@@ -3481,7 +3520,7 @@ mod tests {
                             layer_id: LayerId("family/Limoniidae".to_string()),
                         },
                         name: "Limoniidae".to_string(),
-                        description: "3 occurrences".to_string(),
+                        description: "Family, 3 occurrences".to_string(),
                         properties: vec![]
                     }),],
                     entry_label: None,
@@ -3507,7 +3546,7 @@ mod tests {
 
             let root_id = LayerCollectionId("datasets/family/".to_string());
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &root_id,
                     SearchParameters {
@@ -3520,9 +3559,9 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(collection, Vec::<String>::new());
+            assert_eq!(autocomplete_items, Vec::<String>::new());
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &root_id,
                     SearchParameters {
@@ -3535,9 +3574,9 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(collection, vec!["Limoniidae".to_string()]);
+            assert_eq!(autocomplete_items, vec!["Limoniidae".to_string()]);
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &root_id,
                     SearchParameters {
@@ -3550,9 +3589,9 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(collection, Vec::<String>::new());
+            assert_eq!(autocomplete_items, Vec::<String>::new());
 
-            let collection = provider
+            let autocomplete_items = provider
                 .autocomplete_search(
                     &root_id,
                     SearchParameters {
@@ -3565,7 +3604,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(collection, vec!["Limoniidae".to_string()]);
+            assert_eq!(autocomplete_items, vec!["Limoniidae".to_string()]);
         })
         .await;
     }
