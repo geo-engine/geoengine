@@ -608,6 +608,7 @@ impl TryFrom<EdrDataProviderDefinitionDbType> for EdrDataProviderDefinition {
 
 #[derive(Debug, ToSql, FromSql)]
 #[postgres(name = "DataProviderDefinition")]
+#[allow(clippy::struct_field_names)] // same postfix because of postgres mapping
 pub struct TypedDataProviderDefinitionDbType {
     aruna_data_provider_definition: Option<ArunaDataProviderDefinition>,
     gbif_data_provider_definition: Option<GbifDataProviderDefinition>,

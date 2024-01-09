@@ -488,8 +488,10 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::CacheTtlSeconds;
-    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
-    use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
+    use geoengine_datatypes::raster::{GridShape2D, RasterDataType, TilingSpecification};
+    use geoengine_operators::engine::{
+        ExecutionContext, RasterQueryProcessor, RasterResultDescriptor,
+    };
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
@@ -618,6 +620,10 @@ mod tests {
         let exe_ctx = ctx.execution_context().unwrap();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification: exe_ctx.tiling_specification(),
             meta_data: Box::new(create_ndvi_meta_data()),
             _phantom_data: PhantomData,

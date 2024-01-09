@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub struct MockPointSourceProcessor {
+    result_descriptor: VectorResultDescriptor,
     points: Vec<Coordinate2D>,
 }
 
@@ -48,6 +49,10 @@ impl VectorQueryProcessor for MockPointSourceProcessor {
                 )?)
             })
             .boxed())
+    }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -101,6 +106,7 @@ impl InitializedVectorOperator for InitializedMockPointSource {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
+                result_descriptor: self.result_descriptor.clone(),
                 points: self.points.clone(),
             }
             .boxed(),

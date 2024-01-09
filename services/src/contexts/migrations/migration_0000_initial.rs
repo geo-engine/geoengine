@@ -85,9 +85,9 @@ impl Migration for Migration0000Initial {
 
         let stmt = tx
             .prepare(
-                r#"
+                "
             INSERT INTO collection_children (parent, child) 
-            VALUES ($1, $2);"#,
+            VALUES ($1, $2);",
             )
             .await?;
 

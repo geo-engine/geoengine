@@ -34,6 +34,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
+use std::fmt::Write;
 use tokio::time::{timeout, Duration};
 use tokio_postgres::NoTls;
 
@@ -198,7 +199,7 @@ impl GbifDataProvider {
                 .enumerate()
                 .map(|(index, (column, _))| format!(
                     r#" AND "{column}" = ${index}"#,
-                    index = index + 3
+                    index = index + 4
                 ))
                 .collect::<String>()
         );
@@ -399,14 +400,13 @@ impl GbifDataProvider {
             "#,
             schema = self.db_config.schema,
             column = column,
-            filter = filters
-                .iter()
-                .enumerate()
-                .map(|(index, (column, _))| format!(
-                    r#" AND "{column}" = ${index}"#,
-                    index = index + 3
-                ))
-                .collect::<String>()
+            filter = filters.iter().enumerate().fold(
+                String::new(),
+                |mut output, (index, (column, _))| {
+                    let _ = write!(output, r#" AND "{column}" = ${index}"#, index = index + 3);
+                    output
+                }
+            )
         );
         let stmt = conn.prepare(query).await?;
         let limit = &i64::from(options.limit);
@@ -2191,8 +2191,17 @@ mod tests {
                     .await
                     .map_err(|e| e.to_string())?;
 
-                let processor: OgrSourceProcessor<MultiPoint> =
-                    OgrSourceProcessor::new(meta, vec![]);
+                let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
+                    VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        columns: HashMap::new(),
+                        time: None,
+                        bbox: None,
+                    },
+                    meta,
+                    vec![],
+                );
 
                 let query_rectangle = VectorQueryRectangle {
                     spatial_bounds: BoundingBox2D::new(

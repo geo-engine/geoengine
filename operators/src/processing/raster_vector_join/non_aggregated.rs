@@ -20,7 +20,7 @@ use geoengine_datatypes::{
 use super::util::{CoveredPixels, PixelCoverCreator};
 use crate::engine::{
     QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
-    VectorQueryProcessor,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
 use crate::{adapters::RasterStreamExt, error::Error};
@@ -33,6 +33,7 @@ use super::FeatureAggregationMethod;
 
 pub struct RasterVectorJoinProcessor<G> {
     collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+    result_descriptor: VectorResultDescriptor,
     raster_processors: Vec<TypedRasterQueryProcessor>,
     raster_bands: Vec<u32>, // TODO: store result descriptors instead? could drive column names from measurement, once there is one measurement for each band
     column_names: Vec<String>,
@@ -47,6 +48,7 @@ where
 {
     pub fn new(
         collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+        result_descriptor: VectorResultDescriptor,
         raster_processors: Vec<TypedRasterQueryProcessor>,
         raster_bands: Vec<u32>,
         column_names: Vec<String>,
@@ -55,6 +57,7 @@ where
     ) -> Self {
         Self {
             collection,
+            result_descriptor,
             raster_processors,
             raster_bands,
             column_names,
@@ -405,6 +408,7 @@ where
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -436,6 +440,10 @@ where
 
         Ok(stream)
     }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[cfg(test)]
@@ -445,22 +453,22 @@ mod tests {
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor,
         RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
-        VectorOperator, WorkflowOperatorPath,
+        VectorColumnInfo, VectorOperator, WorkflowOperatorPath,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
     use crate::util::gdal::add_ndvi_dataset;
     use geoengine_datatypes::collections::{
-        ChunksEqualIgnoringCacheHint, MultiPointCollection, MultiPolygonCollection,
+        ChunksEqualIgnoringCacheHint, MultiPointCollection, MultiPolygonCollection, VectorDataType,
     };
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::{BoundingBox2D, DateTime, FeatureData, MultiPolygon};
+    use geoengine_datatypes::primitives::{CacheHint, Measurement};
     use geoengine_datatypes::primitives::{MultiPoint, TimeInterval};
     use geoengine_datatypes::raster::{
         Grid2D, RasterDataType, TileInformation, TilingSpecification,
     };
-    use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
 
     #[tokio::test]
@@ -513,6 +521,21 @@ mod tests {
 
         let processor = RasterVectorJoinProcessor::new(
             points,
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [(
+                    "ndvi".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
             vec![rasters],
             vec![1],
             vec!["ndvi".to_owned()],
@@ -605,6 +628,21 @@ mod tests {
 
         let processor = RasterVectorJoinProcessor::new(
             points,
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [(
+                    "ndvi".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
             vec![rasters],
             vec![1],
             vec!["ndvi".to_owned()],
@@ -655,6 +693,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn raster_instant() {
         let points = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -707,6 +746,21 @@ mod tests {
 
         let processor = RasterVectorJoinProcessor::new(
             points,
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [(
+                    "ndvi".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
             vec![rasters],
             vec![1],
             vec!["ndvi".to_owned()],
@@ -813,6 +867,21 @@ mod tests {
 
         let processor = RasterVectorJoinProcessor::new(
             points,
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [(
+                    "ndvi".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
             vec![rasters],
             vec![1],
             vec!["ndvi".to_owned()],
@@ -992,6 +1061,21 @@ mod tests {
 
         let processor = RasterVectorJoinProcessor::new(
             points,
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [(
+                    "ndvi".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
             vec![raster],
             vec![1],
             vec!["foo".to_owned()],
@@ -1191,6 +1275,21 @@ mod tests {
 
         let processor = RasterVectorJoinProcessor::new(
             points,
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [(
+                    "ndvi".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
             vec![raster],
             vec![1],
             vec!["foo".to_owned()],
@@ -1488,6 +1587,21 @@ mod tests {
 
         let processor = RasterVectorJoinProcessor::new(
             points,
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [(
+                    "ndvi".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
             vec![raster],
             vec![2],
             vec!["foo".to_owned()],

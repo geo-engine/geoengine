@@ -129,10 +129,10 @@ impl Interceptor for APITokenInterceptor {
 ///
 #[derive(Debug, PartialEq)]
 struct ArunaDatasetIds {
-    collection_id: String,
-    _object_group_id: String,
-    meta_object_id: String,
-    data_object_id: String,
+    collection: String,
+    _object_group: String,
+    meta_object: String,
+    data_object: String,
 }
 
 /// The actual provider implementation. It holds `gRPC` stubs to all relevant
@@ -265,10 +265,10 @@ impl ArunaDataProvider {
         }
 
         Ok(ArunaDatasetIds {
-            collection_id,
-            _object_group_id: object_group_id,
-            meta_object_id: meta_object_id.ok_or(ArunaProviderError::MissingMetaObject)?,
-            data_object_id: data_object_id.ok_or(ArunaProviderError::MissingDataObject)?,
+            collection: collection_id,
+            _object_group: object_group_id,
+            meta_object: meta_object_id.ok_or(ArunaProviderError::MissingMetaObject)?,
+            data_object: data_object_id.ok_or(ArunaProviderError::MissingDataObject)?,
         })
     }
 
@@ -280,7 +280,7 @@ impl ArunaDataProvider {
 
         let collection_overview = collection_stub
             .get_collection_by_id(GetCollectionByIdRequest {
-                collection_id: aruna_dataset_ids.collection_id.clone(),
+                collection_id: aruna_dataset_ids.collection.clone(),
             })
             .await?
             .into_inner()
@@ -296,8 +296,8 @@ impl ArunaDataProvider {
 
         let download_url = object_stub
             .get_download_url(GetDownloadUrlRequest {
-                collection_id: aruna_dataset_ids.collection_id.clone(),
-                object_id: aruna_dataset_ids.meta_object_id.clone(),
+                collection_id: aruna_dataset_ids.collection.clone(),
+                object_id: aruna_dataset_ids.meta_object.clone(),
             })
             .await?
             .into_inner()
@@ -378,8 +378,8 @@ impl ArunaDataProvider {
 
         object_stub
             .get_object_by_id(GetObjectByIdRequest {
-                collection_id: aruna_dataset_ids.collection_id.clone(),
-                object_id: aruna_dataset_ids.data_object_id.clone(),
+                collection_id: aruna_dataset_ids.collection.clone(),
+                object_id: aruna_dataset_ids.data_object.clone(),
                 with_url: false,
             })
             .await?
@@ -574,7 +574,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                     Self::vector_loading_template(&info, &result_descriptor, self.cache_ttl);
 
                 let res = ArunaMetaData {
-                    collection_id: aruna_dataset_ids.collection_id,
+                    collection_id: aruna_dataset_ids.collection,
                     object_id: aruna_data_object.id,
                     template,
                     result_descriptor,
@@ -629,7 +629,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 let template = Self::raster_loading_template(info, self.cache_ttl);
 
                 let res = ArunaMetaData {
-                    collection_id: aruna_dataset_ids.collection_id,
+                    collection_id: aruna_dataset_ids.collection,
                     object_id: aruna_data_object.id,
                     template,
                     result_descriptor,
@@ -1360,10 +1360,10 @@ mod tests {
         let grpc_server_address = format!("http://{}", grpc_server.address());
 
         let dataset_ids = ArunaDatasetIds {
-            collection_id: COLLECTION_ID.to_string(),
-            _object_group_id: OBJECT_GROUP_ID.to_string(),
-            meta_object_id: META_OBJECT_ID.to_string(),
-            data_object_id: DATA_OBJECT_ID.to_string(),
+            collection: COLLECTION_ID.to_string(),
+            _object_group: OBJECT_GROUP_ID.to_string(),
+            meta_object: META_OBJECT_ID.to_string(),
+            data_object: DATA_OBJECT_ID.to_string(),
         };
 
         let provider = new_provider_with_url(grpc_server_address).await;
@@ -1393,10 +1393,10 @@ mod tests {
             .unwrap();
 
         let expected = ArunaDatasetIds {
-            collection_id: COLLECTION_ID.to_string(),
-            _object_group_id: OBJECT_GROUP_ID.to_string(),
-            meta_object_id: META_OBJECT_ID.to_string(),
-            data_object_id: DATA_OBJECT_ID.to_string(),
+            collection: COLLECTION_ID.to_string(),
+            _object_group: OBJECT_GROUP_ID.to_string(),
+            meta_object: META_OBJECT_ID.to_string(),
+            data_object: DATA_OBJECT_ID.to_string(),
         };
 
         assert_eq!(result, expected);

@@ -2881,8 +2881,6 @@ mod tests {
         }))
         .unwrap();
 
-        let update = update;
-
         // run two updates concurrently
         let (r0, r1) = join!(db.update_project(update.clone()), db.update_project(update));
 

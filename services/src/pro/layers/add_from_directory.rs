@@ -62,7 +62,7 @@ pub async fn add_layers_from_directory<L: LayerDb + PermissionDb>(db: &mut L, fi
         match entry {
             Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
                 match add_layer_from_dir_entry(db, &entry).await {
-                    Ok(_) => info!("Added layer from directory entry: {:?}", entry),
+                    Ok(()) => info!("Added layer from directory entry: {:?}", entry),
                     Err(e) => warn!(
                         "Skipped adding layer from directory entry: {:?} error: {}",
                         entry,
@@ -174,7 +174,7 @@ pub async fn add_layer_collections_from_directory<
         };
 
         match ok {
-            Ok(_) => {
+            Ok(()) => {
                 collection_children.insert(def.id, def.collections);
             }
             Err(e) => {
@@ -221,7 +221,7 @@ pub async fn add_pro_providers_from_directory<D: ProLayerProviderDb>(
         match entry {
             Ok(entry) if entry.path().is_file() => {
                 match add_provider_definition_from_dir_entry(db, &entry).await {
-                    Ok(_) => info!("Added pro provider from file `{:?}`", entry.path()),
+                    Ok(()) => info!("Added pro provider from file `{:?}`", entry.path()),
                     Err(e) => {
                         warn!(
                             "Skipped adding pro provider from file `{:?}` error: `{}`",

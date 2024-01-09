@@ -22,6 +22,7 @@ pub enum Error {
     DataType {
         source: geoengine_datatypes::error::Error,
     },
+    #[snafu(display("Operator: {}", source))]
     Operator {
         source: geoengine_operators::error::Error,
     },
@@ -355,8 +356,8 @@ pub enum Error {
         found: String,
     },
 
-    #[snafu(context(false))]
-    TaskError {
+    #[snafu(context(false), display("TaskError: {}", source))]
+    Task {
         source: crate::tasks::TaskError,
     },
 
@@ -401,8 +402,8 @@ pub enum Error {
     },
 
     #[cfg(feature = "pro")]
-    #[snafu(context(false))]
-    OidcError {
+    #[snafu(context(false), display("OidcError: {}", source))]
+    Oidc {
         source: crate::pro::users::OidcError,
     },
 
@@ -445,7 +446,7 @@ pub enum Error {
     // TODO: refactor error
     #[cfg(feature = "pro")]
     #[snafu(context(false))]
-    MachineLearningError {
+    MachineLearning {
         source: crate::pro::machine_learning::ml_error::MachineLearningError,
     },
 

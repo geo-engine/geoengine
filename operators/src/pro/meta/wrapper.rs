@@ -2,8 +2,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::engine::{
     CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
-    QueryContext, QueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorResultDescriptor,
+    WorkflowOperatorPath,
 };
 use crate::pro::adapters::stream_statistics_adapter::StreamStatisticsAdapter;
 use crate::pro::meta::quota::{QuotaChecker, QuotaTracking};
@@ -152,16 +153,19 @@ where
 }
 
 #[async_trait]
-impl<Q, T, S, A> QueryProcessor for QueryProcessorWrapper<Q, T>
+impl<Q, T, S, A, R> QueryProcessor for QueryProcessorWrapper<Q, T>
 where
-    Q: QueryProcessor<Output = T, SpatialBounds = S, Selection = A>,
+    Q: QueryProcessor<Output = T, SpatialBounds = S, Selection = A, ResultDescription = R>,
     S: AxisAlignedRectangle + Send + Sync + 'static,
     A: QueryAttributeSelection + 'static,
+    R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = A>
+        + 'static,
     T: Send,
 {
     type Output = T;
     type SpatialBounds = S;
     type Selection = A;
+    type ResultDescription = R;
 
     async fn _query<'a>(
         &'a self,
@@ -236,5 +240,9 @@ where
                 Err(err)
             }
         }
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        self.processor.result_descriptor()
     }
 }

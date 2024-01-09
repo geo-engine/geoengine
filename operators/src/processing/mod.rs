@@ -19,6 +19,9 @@ mod time_projection;
 mod time_shift;
 mod vector_join;
 
+pub use circle_merging_quadtree::{
+    InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
+};
 pub use expression::{Expression, ExpressionError, ExpressionParams, ExpressionSources};
 pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
 pub use line_simplification::{

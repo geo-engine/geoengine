@@ -153,6 +153,7 @@ impl InitializedRasterOperator for InitializedGridRasterization {
         Ok(TypedRasterQueryProcessor::F64(
             GridRasterizationQueryProcessor {
                 input: self.source.query_processor()?,
+                result_descriptor: self.result_descriptor.clone(),
                 spatial_resolution: self.spatial_resolution,
                 grid_size_mode: self.grid_size_mode,
                 tiling_specification: self.tiling_specification,
@@ -221,6 +222,7 @@ impl InitializedRasterOperator for InitializedDensityRasterization {
     fn query_processor(&self) -> util::Result<TypedRasterQueryProcessor> {
         Ok(TypedRasterQueryProcessor::F64(
             DensityRasterizationQueryProcessor {
+                result_descriptor: self.result_descriptor.clone(),
                 input: self.source.query_processor()?,
                 tiling_specification: self.tiling_specification,
                 radius: self.radius,
@@ -237,6 +239,7 @@ impl InitializedRasterOperator for InitializedDensityRasterization {
 
 pub struct GridRasterizationQueryProcessor {
     input: TypedVectorQueryProcessor,
+    result_descriptor: RasterResultDescriptor,
     spatial_resolution: SpatialResolution,
     grid_size_mode: GridSizeMode,
     tiling_specification: TilingSpecification,
@@ -371,10 +374,15 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
             Ok(generate_zeroed_tiles(self.tiling_specification, &query))
         }
     }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 pub struct DensityRasterizationQueryProcessor {
     input: TypedVectorQueryProcessor,
+    result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
     radius: f64,
     stddev: f64,
@@ -485,6 +493,10 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
         } else {
             Ok(generate_zeroed_tiles(self.tiling_specification, &query))
         }
+    }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

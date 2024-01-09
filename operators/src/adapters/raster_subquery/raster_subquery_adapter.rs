@@ -1,6 +1,6 @@
 use crate::adapters::sparse_tiles_fill_adapter::FillerTileCacheExpirationStrategy;
 use crate::adapters::SparseTilesFillAdapter;
-use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor};
+use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor};
 use crate::error;
 use crate::util::Result;
 use futures::future::BoxFuture;
@@ -216,6 +216,7 @@ where
         Output = RasterTile2D<PixelType>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {
@@ -232,6 +233,7 @@ where
         Output = RasterTile2D<PixelType>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {

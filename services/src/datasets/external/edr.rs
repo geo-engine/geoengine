@@ -206,7 +206,7 @@ impl EdrDataProvider {
                             .try_into()?,
                         },
                         name: collection.title.unwrap_or(collection.id),
-                        description: collection.description.unwrap_or(String::new()),
+                        description: collection.description.unwrap_or_default(),
                         properties: vec![],
                     }))
                 } else {
@@ -219,7 +219,7 @@ impl EdrDataProvider {
                             .try_into()?,
                         },
                         name: collection.title.unwrap_or(collection.id),
-                        description: collection.description.unwrap_or(String::new()),
+                        description: collection.description.unwrap_or_default(),
                         properties: vec![],
                     }))
                 }

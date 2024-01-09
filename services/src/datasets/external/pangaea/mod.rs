@@ -563,7 +563,7 @@ mod tests {
 
         for g in result[0].geometries() {
             assert_eq!(1, g.points().len());
-            assert_eq!(&target, g.points().get(0).unwrap());
+            assert_eq!(&target, g.points().first().unwrap());
         }
     }
 

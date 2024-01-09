@@ -883,7 +883,6 @@ impl TimeCoverage {
 
         let mut time_stamps = Vec::with_capacity(days_since_1860.len());
         for days in days_since_1860 {
-            let days = days;
             let hours = days * 24.;
             let seconds = hours * 60. * 60.;
             let milliseconds = seconds * 1_000.;

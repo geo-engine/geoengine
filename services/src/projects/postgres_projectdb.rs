@@ -361,8 +361,6 @@ where
 
     #[allow(clippy::too_many_lines)]
     async fn update_project(&self, update: UpdateProject) -> Result<(), ProjectDbError> {
-        let update = update;
-
         let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
         let trans = conn

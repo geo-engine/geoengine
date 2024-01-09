@@ -140,11 +140,8 @@ where
             pool,
             volumes: Default::default(),
             tile_cache: Arc::new(
-                SharedCache::new(
-                    cache_config.cache_size_in_mb,
-                    cache_config.landing_zone_ratio,
-                )
-                .expect("tile cache creation should work because the config is valid"),
+                SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
+                    .expect("tile cache creation should work because the config is valid"),
             ),
         })
     }
@@ -188,11 +185,8 @@ where
             pool,
             volumes: Default::default(),
             tile_cache: Arc::new(
-                SharedCache::new(
-                    cache_config.cache_size_in_mb,
-                    cache_config.landing_zone_ratio,
-                )
-                .expect("tile cache creation should work because the config is valid"),
+                SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
+                    .expect("tile cache creation should work because the config is valid"),
             ),
         };
 
@@ -422,7 +416,7 @@ where
                 content: row.get(1),
             }),
             None => Err(
-                error::Error::MachineLearningError { source:
+                error::Error::MachineLearning { source:
                     crate::pro::machine_learning::ml_error::MachineLearningError::UnknownModelIdInPostgres {
                      model_id,
                     }
@@ -2085,14 +2079,14 @@ mod tests {
             db.quota_available().await.unwrap(),
             crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                 .unwrap()
-                .default_available_quota
+                .initial_credits
         );
 
         assert_eq!(
             admin_db.quota_available_by_user(&user).await.unwrap(),
             crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                 .unwrap()
-                .default_available_quota
+                .initial_credits
         );
 
         admin_db
@@ -3335,8 +3329,6 @@ mod tests {
         }))
         .unwrap();
 
-        let update = update;
-
         // run two updates concurrently
         let (r0, r1) = join!(db.update_project(update.clone()), db.update_project(update));
 
@@ -3535,7 +3527,7 @@ mod tests {
         let result = db.load_ml_model(model_id).await;
 
         match result {
-            Err(error::Error::MachineLearningError {
+            Err(error::Error::MachineLearning {
                 source: crate::pro::machine_learning::ml_error::MachineLearningError::UnknownModelIdInPostgres { .. },
             }) => (),
             _ => panic!("Expected UnknownModelId error"),

@@ -788,6 +788,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_loads() {
         async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
             let provider = Box::new(GfbioAbcdDataProviderDefinition {
@@ -816,7 +817,43 @@ mod tests {
                 .await
                 .map_err(|e| e.to_string())?;
 
-            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta, vec![]);
+            let text_column = VectorColumnInfo {
+                data_type: FeatureDataType::Text,
+                measurement: Measurement::Unitless,
+            };
+
+            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns:  [
+                    ("/DataSets/DataSet/Units/Unit/DateLastEdited".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/Agents/GatheringAgent/AgentText".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/Country/ISO3166Code".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/Country/Name".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/DateTime/ISODateTimeBegin".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/LocalityText".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/SiteCoordinateSets/SiteCoordinates/CoordinatesLatLong/SpatialDatum".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonName".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonRank".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/ScientificName/FullScientificNameString".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Creator".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/FileURI".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Format".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Details".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Text".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/URI".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/RecordBasis".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/RecordURI".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/SourceID".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/SourceInstitutionID".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/UnitID".to_owned(), text_column.clone()),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+            },meta, vec![]);
 
             let query_rectangle = VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),

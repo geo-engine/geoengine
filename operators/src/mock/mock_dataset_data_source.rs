@@ -73,6 +73,7 @@ impl MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQu
 // }
 
 pub struct MockDatasetDataSourceProcessor {
+    result_descriptor: VectorResultDescriptor,
     loading_info: Box<
         dyn MetaData<
             MockDatasetDataSourceLoadingInfo,
@@ -104,6 +105,10 @@ impl VectorQueryProcessor for MockDatasetDataSourceProcessor {
             )?)
         })
         .boxed())
+    }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -158,6 +163,7 @@ impl InitializedVectorOperator
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockDatasetDataSourceProcessor {
+                result_descriptor: self.result_descriptor.clone(),
                 loading_info: self.loading_info.clone(),
             }
             .boxed(),

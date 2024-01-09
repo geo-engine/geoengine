@@ -402,7 +402,7 @@ fn clean_up_phase(
         };
 
         match result {
-            Ok(_) => set_status_to_clean_up_completed(&task_handle.status).await,
+            Ok(()) => set_status_to_clean_up_completed(&task_handle.status).await,
             Err(err) => set_status_to_clean_up_failed(&task_handle.status, err).await,
         };
 

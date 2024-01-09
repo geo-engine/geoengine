@@ -79,7 +79,7 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_p
         match entry {
             Ok(entry) if entry.path().is_file() => {
                 match add_provider_definition_from_dir_entry(db, &entry).await {
-                    Ok(_) => info!("Added provider from file `{:?}`", entry.path()),
+                    Ok(()) => info!("Added provider from file `{:?}`", entry.path()),
                     Err(e) => {
                         warn!(
                             "Skipped adding provider from file `{:?}` error: `{}`",
