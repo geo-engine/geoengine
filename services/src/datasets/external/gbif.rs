@@ -197,7 +197,7 @@ impl GbifDataProvider {
             filter = filters.iter().enumerate().fold(
                 String::new(),
                 |mut output, (index, (column, _))| {
-                    let _ = write!(output, r#" AND "{column}" = ${index}"#, index = index + 4);
+                    let _ = write!(output, r#" AND "{column}" = ${index}"#, index = index + 3);
                     output
                 }
             )
