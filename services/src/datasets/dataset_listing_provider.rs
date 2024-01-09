@@ -12,7 +12,9 @@ use crate::{
             CollectionItem, Layer, LayerCollection, LayerCollectionListing, LayerListing,
             ProviderLayerCollectionId, ProviderLayerId,
         },
-        listing::{LayerCollectionId, LayerCollectionProvider},
+        listing::{
+            LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+        },
     },
     util::operators::source_operator_from_dataset,
     workflows::workflow::Workflow,
@@ -205,6 +207,13 @@ impl<D> LayerCollectionProvider for DatasetLayerListingProvider<D>
 where
     D: DatasetProvider,
 {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities::none(),
+        }
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,

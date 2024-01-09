@@ -10,8 +10,7 @@ use crate::layers::layer::{
     ProviderLayerCollectionId,
 };
 use crate::layers::listing::{
-    DatasetLayerCollectionProvider, LayerCollectionId, LayerCollectionProvider,
-    ProviderCapabilities, SearchParameters,
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchParameters,
 };
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::config::get_config_element;
@@ -375,22 +374,14 @@ async fn provider_capabilities_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        let capabilities = DatasetLayerCollectionProvider::capabilities(&db).await?;
-
-        return Ok(web::Json(capabilities));
-    }
-
-    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
-        let capabilities = LayerCollectionProvider::capabilities(&db);
-
-        return Ok(web::Json(capabilities));
-    }
-
-    let capabilities = db
-        .load_layer_provider(provider.into())
-        .await?
-        .capabilities();
+    let capabilities = match provider.into() {
+        crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID => {
+            let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(db);
+            dataset_listing_provider.capabilities()
+        }
+        crate::layers::storage::INTERNAL_PROVIDER_ID => LayerCollectionProvider::capabilities(&db),
+        provider => db.load_layer_provider(provider).await?.capabilities(),
+    };
 
     Ok(web::Json(capabilities))
 }
@@ -461,25 +452,23 @@ async fn search_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        let collection =
-            DatasetLayerCollectionProvider::search(&db, &collection, options.into_inner()).await?;
-
-        return Ok(web::Json(collection));
-    }
-
-    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
-        let collection =
-            LayerCollectionProvider::search(&db, &collection, options.into_inner()).await?;
-
-        return Ok(web::Json(collection));
-    }
-
-    let collection = db
-        .load_layer_provider(provider.into())
-        .await?
-        .search(&collection, options.into_inner())
-        .await?;
+    let collection = match provider.into() {
+        crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID => {
+            let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(db);
+            dataset_listing_provider
+                .search(&collection, options.into_inner())
+                .await?
+        }
+        crate::layers::storage::INTERNAL_PROVIDER_ID => {
+            LayerCollectionProvider::search(&db, &collection, options.into_inner()).await?
+        }
+        provider => {
+            db.load_layer_provider(provider)
+                .await?
+                .search(&collection, options.into_inner())
+                .await?
+        }
+    };
 
     Ok(web::Json(collection))
 }
@@ -519,30 +508,24 @@ async fn autocomplete_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        let suggestions = DatasetLayerCollectionProvider::autocomplete_search(
-            &db,
-            &collection,
-            options.into_inner(),
-        )
-        .await?;
-
-        return Ok(web::Json(suggestions));
-    }
-
-    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
-        let suggestions =
+    let suggestions = match provider.into() {
+        crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID => {
+            let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(db);
+            dataset_listing_provider
+                .autocomplete_search(&collection, options.into_inner())
+                .await?
+        }
+        crate::layers::storage::INTERNAL_PROVIDER_ID => {
             LayerCollectionProvider::autocomplete_search(&db, &collection, options.into_inner())
-                .await?;
-
-        return Ok(web::Json(suggestions));
-    }
-
-    let suggestions = db
-        .load_layer_provider(provider.into())
-        .await?
-        .autocomplete_search(&collection, options.into_inner())
-        .await?;
+                .await?
+        }
+        provider => {
+            db.load_layer_provider(provider)
+                .await?
+                .autocomplete_search(&collection, options.into_inner())
+                .await?
+        }
+    };
 
     Ok(web::Json(suggestions))
 }
