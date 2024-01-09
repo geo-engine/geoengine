@@ -56,10 +56,6 @@ where
                                 web::get().to(search_handler::<C>),
                             ),
                     )
-                    .service(web::scope("/autocomplete").route(
-                        r#"{provider}/{collection}"#,
-                        web::get().to(autocomplete_handler::<C>),
-                    ))
                     .route("", web::get().to(list_root_collections_handler::<C>))
                     .route(
                         r#"/{provider}/{collection}"#,
