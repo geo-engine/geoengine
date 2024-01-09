@@ -5,7 +5,6 @@ use arrow::array::{
     StructBuilder, UInt64Array, UInt64Builder,
 };
 use arrow::buffer::Buffer;
-use arrow::compute::gt_eq_scalar;
 use arrow::compute::kernels::filter::filter;
 use arrow::datatypes::{DataType, Field};
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval};
@@ -698,7 +697,7 @@ fn gt_eq_example() {
 
     // dbg!(&a);
 
-    let b = gt_eq_scalar(&a, 2).unwrap();
+    let b = arrow_ord::cmp::gt_eq(&a, &Int32Array::new_scalar(2)).unwrap();
 
     // dbg!(&b);
 

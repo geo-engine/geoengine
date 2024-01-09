@@ -525,7 +525,7 @@ impl Serialize for DateTime {
 
 impl PartialOrd for DateTime {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.datetime.partial_cmp(&other.datetime)
+        Some(self.cmp(other))
     }
 }
 

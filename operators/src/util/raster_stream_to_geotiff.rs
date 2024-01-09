@@ -1641,7 +1641,7 @@ mod tests {
             generate_time_intervals(base_start_time, time_step, num_time_steps).unwrap();
         let data = vec![
             RasterTile2D {
-                time: *time_intervals.get(0).unwrap(),
+                time: *time_intervals.first().unwrap(),
                 tile_position: [-1, 0].into(),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),

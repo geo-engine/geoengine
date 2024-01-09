@@ -7,7 +7,7 @@ use crate::util::config::ConfigElement;
 
 #[derive(Debug, Deserialize)]
 pub struct User {
-    pub user_registration: bool,
+    pub registration: bool,
     pub admin_email: String,
     pub admin_password: String,
 }
@@ -20,7 +20,7 @@ impl ConfigElement for User {
 pub struct Quota {
     pub mode: QuotaTrackingMode,
     #[serde(default)]
-    pub default_available_quota: i64,
+    pub initial_credits: i64,
     pub increment_quota_buffer_size: usize,
     pub increment_quota_buffer_timeout_seconds: u64,
 }
@@ -64,7 +64,7 @@ impl ConfigElement for OpenTelemetry {
 #[derive(Debug, Deserialize, Clone, Copy)]
 pub struct Cache {
     pub enabled: bool,
-    pub cache_size_in_mb: usize,
+    pub size_in_mb: usize,
     pub landing_zone_ratio: f64,
 }
 
@@ -72,7 +72,7 @@ impl TestDefault for Cache {
     fn test_default() -> Self {
         Self {
             enabled: false,
-            cache_size_in_mb: 1_000, // 1 GB
+            size_in_mb: 1_000,       // 1 GB
             landing_zone_ratio: 0.1, // 10% of cache size
         }
     }

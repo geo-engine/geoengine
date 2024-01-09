@@ -89,6 +89,7 @@ impl<'l> IntoGeometryIterator<'l> for MultiLineStringCollection {
     }
 }
 
+#[allow(clippy::into_iter_without_iter)] // we provide `.geometries()` instead
 impl<'a> IntoIterator for &'a MultiLineStringCollection {
     type Item = FeatureCollectionRow<'a, MultiLineStringRef<'a>>;
     type IntoIter = FeatureCollectionIterator<'a, MultiLineStringIterator<'a>>;
