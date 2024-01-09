@@ -183,7 +183,7 @@ impl GbifDataProvider {
             FROM {schema}.occurrences
             WHERE {taxonrank} IN
                 (
-                    SELECT DISTINCT canonicalname
+                    SELECT canonicalname
                     FROM {schema}.species
                     WHERE taxonrank = '{taxonrank}'{filter}
                 )
@@ -270,7 +270,7 @@ impl GbifDataProvider {
         let query = &format!(
             r#"
             WITH names AS (
-                SELECT DISTINCT canonicalname AS name
+                SELECT canonicalname AS name
                 FROM {schema}.species
                 WHERE {taxonrank_filter}{filter} AND canonicalname ILIKE $3
             )
