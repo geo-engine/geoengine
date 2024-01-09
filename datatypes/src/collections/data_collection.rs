@@ -16,6 +16,7 @@ impl<'i> IntoGeometryOptionsIterator<'i> for DataCollection {
     }
 }
 
+#[allow(clippy::into_iter_without_iter)] // we provide `.geometries()` instead
 impl<'a> IntoIterator for &'a DataCollection {
     type Item = FeatureCollectionRow<'a, NoGeometry>;
     type IntoIter = FeatureCollectionIterator<'a, std::iter::Repeat<NoGeometry>>;

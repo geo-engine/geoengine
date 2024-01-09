@@ -39,7 +39,7 @@ bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.13"
 derive_builder = "0.12"
-erased-serde = "0.3"
+erased-serde = "0.4"
 fallible-iterator = "0.2" # only for postgres-protocol
 flexi_logger = { version = "0.27", features = ["trc"] }
 float-cmp = "0.9"
@@ -80,7 +80,7 @@ serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
 serde_with = "3.0"
-snafu = "0.7"
+snafu = "0.8"
 stream-cancel = "0.8"
 strum = { version = "0.25", features = ["derive"] }
 time = "0.3"
@@ -107,8 +107,13 @@ tracing-subscriber = { version = "0.3", features = [
 ] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
-utoipa = { version = "4.0", features = ["actix_extras", "chrono", "url", "uuid"] }
-utoipa-swagger-ui = { version = "4.0", features = ["actix-web"] }
+utoipa = { version = "4.0", features = [
+  "actix_extras",
+  "chrono",
+  "url",
+  "uuid",
+] }
+utoipa-swagger-ui = { version = "5.0", features = ["actix-web"] }
 uuid = { version = "1.1", features = [
   "serde",
   "v4",
@@ -126,8 +131,7 @@ nix = { version = "0.27", features = ["socket"] }
 [dev-dependencies]
 assert_cmd = "2.0"
 httptest = "0.15.2"
-hyper = "0.14"
-prost = "0.11"
+prost = "0.11"      # must be compatbile with aruna-rust-api
 serial_test = "2.0"
 tempfile = "3.1"
 xml-rs = "0.8"

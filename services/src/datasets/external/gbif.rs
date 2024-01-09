@@ -31,6 +31,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
+use std::fmt::Write;
 use tokio_postgres::NoTls;
 
 pub const GBIF_PROVIDER_ID: DataProviderId =
@@ -160,14 +161,13 @@ impl GbifDataProvider {
             OFFSET $3;
             "#,
             schema = self.db_config.schema,
-            filter = filters
-                .iter()
-                .enumerate()
-                .map(|(index, (column, _))| format!(
-                    r#" AND "{column}" = ${index}"#,
-                    index = index + 4
-                ))
-                .collect::<String>()
+            filter = filters.iter().enumerate().fold(
+                String::new(),
+                |mut output, (index, (column, _))| {
+                    let _ = write!(output, r#" AND "{column}" = ${index}"#, index = index + 4);
+                    output
+                }
+            )
         );
 
         let stmt = conn.prepare(query).await?;
@@ -219,14 +219,13 @@ impl GbifDataProvider {
             "#,
             schema = self.db_config.schema,
             column = column,
-            filter = filters
-                .iter()
-                .enumerate()
-                .map(|(index, (column, _))| format!(
-                    r#" AND "{column}" = ${index}"#,
-                    index = index + 3
-                ))
-                .collect::<String>()
+            filter = filters.iter().enumerate().fold(
+                String::new(),
+                |mut output, (index, (column, _))| {
+                    let _ = write!(output, r#" AND "{column}" = ${index}"#, index = index + 3);
+                    output
+                }
+            )
         );
         let stmt = conn.prepare(query).await?;
         let limit = &i64::from(options.limit);

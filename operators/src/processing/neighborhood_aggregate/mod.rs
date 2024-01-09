@@ -63,7 +63,7 @@ impl NeighborhoodParams {
         match self {
             Self::WeightsMatrix { weights } => {
                 let x_size = weights.len();
-                let y_size = weights.get(0).map_or(0, Vec::len);
+                let y_size = weights.first().map_or(0, Vec::len);
                 GridShape2D::new([x_size, y_size])
             }
             Self::Rectangle { dimensions } => GridShape2D::new(*dimensions),

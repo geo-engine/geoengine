@@ -292,7 +292,7 @@ fn measurement_from_rasterband(dataset: &Dataset, band: isize) -> Result<Measure
         // taken from `pub fn rasterband(&self, band_index: isize) -> Result<RasterBand>`
         let c_band = gdal_sys::GDALGetRasterBand(dataset.c_dataset(), band as std::os::raw::c_int);
         if c_band.is_null() {
-            return Err(_last_null_pointer_err("GDALGetRasterBand"))?;
+            Err(_last_null_pointer_err("GDALGetRasterBand"))?;
         }
 
         let str_ptr = gdal_sys::GDALGetRasterUnitType(c_band);

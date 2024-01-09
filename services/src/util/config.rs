@@ -340,6 +340,7 @@ impl ConfigElement for Plots {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(clippy::struct_field_names)] // TODO: find better group name and remove postfix
 pub struct DataProvider {
     pub dataset_defs_path: PathBuf,
     pub provider_defs_path: PathBuf,

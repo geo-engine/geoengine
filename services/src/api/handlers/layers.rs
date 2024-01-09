@@ -41,7 +41,7 @@ where
                 web::scope("/collections")
                     .route("", web::get().to(list_root_collections_handler::<C>))
                     .route(
-                        r#"/{provider}/{collection}"#,
+                        "/{provider}/{collection}",
                         web::get().to(list_collection_handler::<C>),
                     ),
             )
