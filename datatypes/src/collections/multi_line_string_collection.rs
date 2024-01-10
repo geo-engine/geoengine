@@ -5,6 +5,7 @@ use crate::collections::{
 };
 use crate::primitives::{Coordinate2D, MultiLineString, MultiLineStringAccess, MultiLineStringRef};
 use crate::util::arrow::{downcast_array, ArrowTyped};
+use crate::util::helpers::indices_for_split_at;
 use crate::util::Result;
 use arrow::{
     array::{Array, ArrayData, FixedSizeListArray, Float64Array, ListArray},
@@ -234,26 +235,19 @@ impl<'l> Producer for MultiLineStringParIterator<'l> {
     }
 
     fn split_at(self, index: usize) -> (Self, Self) {
-        // Example:
-        //   Index: 0, Length 3
-        //   Split at 1
-        //   Left: Index: 0, Length: 1 -> Elements: 0
-        //   Right: Index: 1, Length: 3 -> Elements: 1, 2
-
-        // The index is between self.0.index and self.0.length,
-        // so we have to transform it to a global index
-        let global_index = self.0.index + index;
+        let (left_index, left_length_right_index, right_length) =
+            indices_for_split_at(self.0.index, self.0.length, index);
 
         let left = Self(Self::IntoIter {
             geometry_column: self.0.geometry_column,
-            index: self.0.index,
-            length: global_index,
+            index: left_index,
+            length: left_length_right_index,
         });
 
         let right = Self(Self::IntoIter {
             geometry_column: self.0.geometry_column,
-            index: global_index,
-            length: self.0.length,
+            index: left_length_right_index,
+            length: right_length,
         });
 
         (left, right)

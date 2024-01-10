@@ -100,6 +100,29 @@ pub fn equals_or_both_nan<T: PartialEq>(value: &T, no_data_value: &T) -> bool {
     value == no_data_value || (value != value && no_data_value != no_data_value)
 }
 
+/// Helper function for `split_at` of a `rayon::iter::plumbing::Producer`.
+///
+/// It returns `(left_index, left_length_right_index, right_length)`.
+pub fn indices_for_split_at(
+    index: usize,
+    length: usize,
+    split_index: usize,
+) -> (usize, usize, usize) {
+    // Example:
+    //   Index: 0, Length 3
+    //   Split at 1
+    //   Left: Index: 0, Length: 1 -> Elements: 0
+    //   Right: Index: 1, Length: 3 -> Elements: 1, 2
+
+    debug_assert!(index + split_index <= length, "split index out of bounds");
+
+    let left_index = index;
+    let left_length_right_index = left_index + split_index;
+    let right_length = length;
+
+    (left_index, left_length_right_index, right_length)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -199,5 +222,12 @@ mod tests {
         let no_data_value = Some(f32::NAN);
 
         assert!(equals_or_both_nan(&value, &no_data_value));
+    }
+
+    #[test]
+    fn split_at_helper() {
+        let (left_index, left_length_right_index, right_length) = indices_for_split_at(0, 3, 1);
+        assert_eq!((left_index, left_length_right_index), (0, 1));
+        assert_eq!((left_length_right_index, right_length), (1, 3));
     }
 }

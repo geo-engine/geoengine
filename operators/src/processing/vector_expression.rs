@@ -35,6 +35,7 @@ const MAX_INPUT_COLUMNS: usize = 8;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VectorExpressionParams {
     /// The columns to use as variables in the expression.
+    /// TODO: Columns with special characaters? Use `ticks`?
     pub input_columns: Vec<String>,
 
     /// The expression to evaluate.
@@ -317,6 +318,15 @@ where
 
                             Ok(a.map(*f).collect::<Vec<_>>())
                         }
+                        [a, b] => {
+                            let f = unsafe {
+                                expression
+                                    .function_nary::<fn(Option<f64>, Option<f64>) -> Option<f64>>()
+                            }
+                            .context(error::CallingExpression)?;
+
+                            Ok(a.zip(b).map(|(a, b)| f(a, b)).collect::<Vec<_>>())
+                        }
                         // TODO: implement more cases
                         other => Err(VectorExpressionError::TooManyInputColumns {
                             max: MAX_INPUT_COLUMNS,
@@ -487,6 +497,106 @@ mod tests {
                 (
                     "bar",
                     FeatureData::NullableFloat(vec![Some(2.0), None, Some(6.0)]),
+                ),
+            ],
+        )
+        .unwrap();
+
+        // TODO: maybe it is nicer to have something wrapping the actual data that we care about and just adds some cache info
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(&expected_result),
+            "{result:#?} != {expected_result:#?}",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_binary_float() {
+        let points = MultiPointCollection::from_slices(
+            MultiPoint::many(vec![
+                (0.0, 0.1),
+                (1.0, 1.1),
+                (2.0, 2.1),
+                (3.0, 3.1),
+                (4.0, 4.1),
+            ])
+            .unwrap()
+            .as_ref(),
+            &[TimeInterval::new_unchecked(0, 1); 5],
+            &[
+                (
+                    "foo",
+                    FeatureData::NullableFloat(vec![Some(1.0), None, Some(3.0), None, Some(5.0)]),
+                ),
+                (
+                    "bar",
+                    FeatureData::NullableInt(vec![Some(10), None, None, Some(40), Some(50)]),
+                ),
+            ],
+        )
+        .unwrap();
+
+        let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
+
+        let operator = VectorExpression {
+            params: VectorExpressionParams {
+                input_columns: vec!["foo".into(), "bar".into()],
+                expression: "foo + bar".into(),
+                output_column: "baz".into(),
+                output_measurement: Measurement::Unitless,
+            },
+            sources: point_source.into(),
+        }
+        .boxed()
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &MockExecutionContext::test_default(),
+        )
+        .await
+        .unwrap();
+
+        let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
+
+        let query_rectangle = VectorQueryRectangle {
+            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            time_interval: TimeInterval::default(),
+            spatial_resolution: SpatialResolution::zero_point_one(),
+            attributes: ColumnSelection::all(),
+        };
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+
+        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
+
+        let mut result = query
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPointCollection>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+        let result = result.remove(0);
+
+        let expected_result = MultiPointCollection::from_slices(
+            MultiPoint::many(vec![
+                (0.0, 0.1),
+                (1.0, 1.1),
+                (2.0, 2.1),
+                (3.0, 3.1),
+                (4.0, 4.1),
+            ])
+            .unwrap()
+            .as_ref(),
+            &[TimeInterval::new_unchecked(0, 1); 5],
+            &[
+                (
+                    "foo",
+                    FeatureData::NullableFloat(vec![Some(1.0), None, Some(3.0), None, Some(5.0)]),
+                ),
+                (
+                    "bar",
+                    FeatureData::NullableInt(vec![Some(10), None, None, Some(40), Some(50)]),
+                ),
+                (
+                    "baz",
+                    FeatureData::NullableFloat(vec![Some(11.0), None, None, None, Some(55.0)]),
                 ),
             ],
         )
