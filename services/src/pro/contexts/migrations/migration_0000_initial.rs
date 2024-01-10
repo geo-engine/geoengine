@@ -26,11 +26,11 @@ impl ProMigration for ProMigrationImpl<Migration0000Initial> {
 
         let stmt = tx
             .prepare(
-                r#"
+                "
             INSERT INTO roles (id, name) VALUES
                 ($1, 'admin'),
                 ($2, 'user'),
-                ($3, 'anonymous');"#,
+                ($3, 'anonymous');",
             )
             .await?;
 
@@ -46,7 +46,7 @@ impl ProMigration for ProMigrationImpl<Migration0000Initial> {
 
         let stmt = tx
             .prepare(
-                r#"
+                "
             INSERT INTO users (
                 id, 
                 email,
@@ -61,7 +61,7 @@ impl ProMigration for ProMigrationImpl<Migration0000Initial> {
                 'admin',
                 $4,
                 true
-            );"#,
+            );",
             )
             .await?;
 
@@ -79,11 +79,11 @@ impl ProMigration for ProMigrationImpl<Migration0000Initial> {
 
         let stmt = tx
             .prepare(
-                r#"
+                "
             INSERT INTO user_roles 
                 (user_id, role_id)
             VALUES 
-                ($1, $1);"#,
+                ($1, $1);",
             )
             .await?;
 
@@ -91,7 +91,7 @@ impl ProMigration for ProMigrationImpl<Migration0000Initial> {
 
         let stmt = tx
             .prepare(
-                r#"
+                "
             INSERT INTO permissions
              (role_id, layer_collection_id, permission)  
             VALUES 
@@ -100,7 +100,7 @@ impl ProMigration for ProMigrationImpl<Migration0000Initial> {
                 ($3, $4, 'Read'),
                 ($1, $5, 'Owner'),
                 ($2, $5, 'Read'),
-                ($3, $5, 'Read');"#,
+                ($3, $5, 'Read');",
             )
             .await?;
 

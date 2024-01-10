@@ -106,6 +106,7 @@ impl<'l> IntoGeometryIterator<'l> for MultiPolygonCollection {
     }
 }
 
+#[allow(clippy::into_iter_without_iter)] // we provide `.geometries()` instead
 impl<'a> IntoIterator for &'a MultiPolygonCollection {
     type Item = FeatureCollectionRow<'a, MultiPolygonRef<'a>>;
     type IntoIter = FeatureCollectionIterator<'a, MultiPolygonIterator<'a>>;

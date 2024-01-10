@@ -69,7 +69,7 @@ where
                     Ok(raster2d)
                 }
                 (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
-                    Ok(_) => Ok(raster2d),
+                    Ok(()) => Ok(raster2d),
                     Err(error) => Err(error.into()),
                 },
                 (Err(error), _) | (_, Err(error)) => Err(error),

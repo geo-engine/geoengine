@@ -29,8 +29,7 @@ pub struct Link {
     pub rel: String,
     pub title: Option<String>,
     pub method: Option<String>,
-    #[serde(rename = "type")]
-    pub link_type: Option<String>,
+    pub r#type: Option<String>,
     pub href: String,
 }
 

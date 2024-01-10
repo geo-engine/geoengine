@@ -38,6 +38,7 @@ impl<'l> IntoGeometryIterator<'l> for MultiPointCollection {
     }
 }
 
+#[allow(clippy::into_iter_without_iter)] // we provide `.geometries()` instead
 impl<'a> IntoIterator for &'a MultiPointCollection {
     type Item = FeatureCollectionRow<'a, MultiPointRef<'a>>;
     type IntoIter = FeatureCollectionIterator<'a, MultiPointIterator<'a>>;

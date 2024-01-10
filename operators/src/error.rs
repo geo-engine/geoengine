@@ -252,6 +252,7 @@ pub enum Error {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    #[snafu(display("CreatingProcessorFailed: {}", source))]
     CreatingProcessorFailed {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
@@ -341,7 +342,7 @@ pub enum Error {
     SpatialReferenceMustNotBeUnreferenced,
 
     #[snafu(context(false))]
-    RasterKernelError {
+    RasterKernel {
         source: crate::processing::NeighborhoodAggregateError,
     },
 
@@ -384,7 +385,7 @@ pub enum Error {
         source: crate::pro::xg_error::XGBoostModuleError,
     },
 
-    #[snafu(context(false))]
+    #[snafu(context(false), display("PieChart: {}", source))]
     PieChart {
         source: crate::plot::PieChartError,
     },

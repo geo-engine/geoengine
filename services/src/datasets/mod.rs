@@ -1,4 +1,5 @@
 mod create_from_workflow;
+pub(crate) mod dataset_listing_provider;
 pub mod external; // TODO: move to layers/external
 pub mod listing;
 mod name;

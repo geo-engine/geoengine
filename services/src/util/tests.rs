@@ -174,6 +174,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
                 license: "Sample License".to_owned(),
                 uri: "http://example.org/".to_owned(),
             }]),
+            tags: Some(vec!["raster".to_owned(), "test".to_owned()]),
         },
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data_with_cache_ttl(
             cache_ttl,
@@ -204,6 +205,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
             display_name: "Land Cover".to_string(),
             description: "Land Cover derived from MODIS/Terra+Aqua Land Cover".to_string(),
             source_operator: "GdalSource".to_string(),
+            tags: Some(vec!["raster".to_owned(), "test".to_owned()]),
             symbology: Some(Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {

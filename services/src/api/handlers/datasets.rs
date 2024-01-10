@@ -378,6 +378,8 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
     let upload = db.load_upload(upload_id).await.context(UploadNotFound)?;
 
+    add_tag(&mut definition.properties, "upload".to_owned());
+
     adjust_meta_data_path(&mut definition.meta_data, &upload)
         .context(CannotResolveUploadFilePath)?;
 
@@ -450,6 +452,18 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
     Ok(())
 }
 
+/// Add the upload tag to the dataset properties.
+/// If the tag already exists, it will not be added again.
+pub fn add_tag(properties: &mut AddDataset, tag: String) {
+    if let Some(ref mut tags) = properties.tags {
+        if !tags.contains(&tag) {
+            tags.push(tag);
+        }
+    } else {
+        properties.tags = Some(vec![tag]);
+    }
+}
+
 /// Creates a new dataset using previously uploaded files.
 /// The format of the files will be automatically detected when possible.
 #[utoipa::path(
@@ -518,6 +532,7 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
         source_operator: meta_data.source_operator_type().to_owned(),
         symbology: None,
         provenance: None,
+        tags: Some(vec!["upload".to_owned(), "auto".to_owned()]),
     };
 
     let meta_data = db.wrap_meta_data(meta_data);
@@ -1147,6 +1162,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
@@ -1181,6 +1197,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: Some(Symbology::Point(PointSymbology::default())),
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
@@ -1230,7 +1247,7 @@ mod tests {
                 "name": "My_Dataset",
                 "displayName": "OgrDataset",
                 "description": "My Ogr dataset",
-                "tags": [],
+                "tags": ["upload", "test"],
                 "sourceOperator": "OgrSource",
                 "resultDescriptor": {
                     "type": "vector",
@@ -1246,7 +1263,7 @@ mod tests {
                 "name": "My_Dataset2",
                 "displayName": "OgrDataset2",
                 "description": "My Ogr dataset2",
-                "tags": [],
+                "tags": ["upload", "test"],
                 "sourceOperator": "OgrSource",
                 "resultDescriptor": {
                     "type": "vector",
@@ -1513,6 +1530,7 @@ mod tests {
                     source_operator: "GdalSource".to_string(),
                     symbology: None,
                     provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
             },
@@ -2051,6 +2069,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
@@ -2106,6 +2125,7 @@ mod tests {
                 "sourceOperator": "OgrSource",
                 "symbology": null,
                 "provenance": null,
+                "tags": ["upload", "test"],
             })
         );
 
@@ -2306,6 +2326,7 @@ mod tests {
                     source_operator: "GdalSource".to_string(),
                     symbology: None,
                     provenance: None,
+                    tags: None,
                 },
                 meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
             },

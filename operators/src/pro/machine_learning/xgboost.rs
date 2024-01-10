@@ -84,7 +84,7 @@ impl RasterOperator for XgboostOperator {
 
         let init_rasters = initialized_sources.rasters;
 
-        let input = init_rasters.get(0).context(XgModuleError::NoInputData)?;
+        let input = init_rasters.first().context(XgModuleError::NoInputData)?;
 
         let spatial_reference = input.result_descriptor().spatial_reference;
 
@@ -219,7 +219,7 @@ where
         model_content: Arc<String>,
         pool: Arc<ThreadPool>,
     ) -> Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, f32>>, XGBoostModuleError> {
-        let tile = bands_of_tile.get(0).context(XgModuleError::BaseTile)?;
+        let tile = bands_of_tile.first().context(XgModuleError::BaseTile)?;
 
         // gather the data
         let grid_shape = tile.grid_shape();
@@ -475,7 +475,7 @@ mod tests {
         tile_size_in_pixels: GridShape<[usize; 2]>,
     ) -> SourceOperator<MockRasterSourceParams<i32>> {
         let n_pixels = data
-            .get(0)
+            .first()
             .expect("could not access the first data element")
             .len();
 
@@ -831,10 +831,10 @@ mod tests {
                 initial_training_config.insert("num_class".into(), "4".into());
                 initial_training_config.insert("eta".into(), "0.75".into());
 
-                let evals = &[(matrix_vec.get(0).unwrap(), "train")];
+                let evals = &[(matrix_vec.first().unwrap(), "train")];
                 let bst = Booster::train(
                     Some(evals),
-                    matrix_vec.get(0).unwrap(),
+                    matrix_vec.first().unwrap(),
                     initial_training_config,
                     None, // <- No old model yet
                 )
@@ -859,7 +859,10 @@ mod tests {
                 update_training_config.insert("num_class".into(), "4".into());
                 update_training_config.insert("max_depth".into(), "15".into());
 
-                let evals = &[(matrix_vec.get(0).unwrap(), "orig"), (&xg_matrix2, "train")];
+                let evals = &[
+                    (matrix_vec.first().unwrap(), "orig"),
+                    (&xg_matrix2, "train"),
+                ];
                 let bst_updated = Booster::train(
                     Some(evals),
                     &xg_matrix2,

@@ -20,6 +20,9 @@ mod time_shift;
 mod vector_expression;
 mod vector_join;
 
+pub use circle_merging_quadtree::{
+    InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
+};
 pub use expression::{
     Expression, ExpressionError, ExpressionParams, ExpressionParser, ExpressionSources,
     LinkedExpression, Parameter as ExpressionParameter,

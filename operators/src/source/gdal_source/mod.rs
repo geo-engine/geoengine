@@ -155,19 +155,19 @@ pub struct GdalRetryOptions {
 
 #[derive(Debug, PartialEq, Eq)]
 struct GdalReadWindow {
-    read_start_x: isize, // pixelspace origin
-    read_start_y: isize,
-    read_size_x: usize, // pixelspace size
-    read_size_y: usize,
+    start_x: isize, // pixelspace origin
+    start_y: isize,
+    size_x: usize, // pixelspace size
+    size_y: usize,
 }
 
 impl GdalReadWindow {
     fn gdal_window_start(&self) -> (isize, isize) {
-        (self.read_start_x, self.read_start_y)
+        (self.start_x, self.start_y)
     }
 
     fn gdal_window_size(&self) -> (usize, usize) {
-        (self.read_size_x, self.read_size_y)
+        (self.size_x, self.size_y)
     }
 }
 
@@ -290,10 +290,10 @@ impl GdalDatasetGeoTransform {
         let read_size_y = (far_idx_y - near_idx_y) as usize + 1;
 
         GdalReadWindow {
-            read_start_x: near_idx_x,
-            read_start_y: near_idx_y,
-            read_size_x,
-            read_size_y,
+            start_x: near_idx_x,
+            start_y: near_idx_y,
+            size_x: read_size_x,
+            size_y: read_size_y,
         }
     }
 }
@@ -2071,10 +2071,10 @@ mod tests {
         let rw = gt.spatial_partition_to_read_window(&sb);
 
         let exp = GdalReadWindow {
-            read_size_x: 4,
-            read_size_y: 6,
-            read_start_x: 6,
-            read_start_y: 4,
+            size_x: 4,
+            size_y: 6,
+            start_x: 6,
+            start_y: 4,
         };
 
         assert_eq!(rw, exp);
@@ -2094,10 +2094,10 @@ mod tests {
         let rw = gt.spatial_partition_to_read_window(&sb);
 
         let exp = GdalReadWindow {
-            read_size_x: 10,
-            read_size_y: 10,
-            read_start_x: 0,
-            read_start_y: 0,
+            size_x: 10,
+            size_y: 10,
+            start_x: 0,
+            start_y: 0,
         };
 
         assert_eq!(rw, exp);
