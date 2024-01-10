@@ -57,6 +57,11 @@ impl LinkedExpression {
     }
 
     /// Returns a function with 1 input parameters
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the function is called with the correct type of input parameter
+    ///
     #[allow(clippy::type_complexity)]
     pub unsafe fn function_1<A>(&self) -> Result<Symbol<fn(A) -> Option<f64>>> {
         self.library
@@ -66,6 +71,11 @@ impl LinkedExpression {
             })
     }
     /// Returns a function with 3 input parameters
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the function is called with the correct type of input parameter
+    ///
     #[allow(clippy::type_complexity)]
     pub unsafe fn function_2<A, B>(&self) -> Result<Symbol<fn(A, B) -> Option<f64>>> {
         self.library
@@ -76,6 +86,11 @@ impl LinkedExpression {
     }
 
     /// Returns an n-ary function
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the function is called with the correct type of input and output parameters
+    ///
     #[allow(clippy::type_complexity)]
     pub unsafe fn function_nary<F>(&self) -> Result<Symbol<F>> {
         self.library

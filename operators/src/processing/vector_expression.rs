@@ -13,8 +13,8 @@ use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::primitives::{
-    FeatureData, FeatureDataRef, FeatureDataType, Geometry, Measurement, MultiPoint,
-    VectorQueryRectangle,
+    FeatureData, FeatureDataRef, FeatureDataType, Geometry, Measurement, MultiLineString,
+    MultiPoint, MultiPolygon, NoGeometry, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
@@ -74,7 +74,7 @@ impl VectorOperator for VectorExpression {
             Err(VectorExpressionError::TooManyInputColumns {
                 max: MAX_INPUT_COLUMNS,
                 found: self.params.input_columns.len(),
-            })?
+            })?;
         }
 
         let initialized_source = self.sources.initialize_sources(path, context).await?;
@@ -173,33 +173,64 @@ impl InitializedVectorOperator for InitializedVectorExpression {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         let source_processor = self.features.query_processor()?;
 
-        Ok(
-            // call_on_generic_vector_processor!(source_processor, source => VectorExpressionProcessor {
-            //     source,
-            //     result_descriptor: self.result_descriptor.clone(),
-            //     expression: self.expression.clone(),
-            // }.boxed().into()),
-            match source_processor {
-                TypedVectorQueryProcessor::Data(source) => todo!(),
-                TypedVectorQueryProcessor::MultiPoint(source) => {
-                    let processor: VectorExpressionProcessor<
-                        Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<MultiPoint>>>,
-                        MultiPoint,
-                        // MultiPointRef,
-                    > = VectorExpressionProcessor {
-                        source,
-                        result_descriptor: self.result_descriptor.clone(),
-                        expression: self.expression.clone(),
-                        input_columns: self.input_columns.clone(),
-                        output_column: self.output_column.clone(),
-                    };
+        Ok(match source_processor {
+            TypedVectorQueryProcessor::Data(source) => {
+                let processor: VectorExpressionProcessor<
+                    Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<NoGeometry>>>,
+                    NoGeometry,
+                > = VectorExpressionProcessor {
+                    source,
+                    result_descriptor: self.result_descriptor.clone(),
+                    expression: self.expression.clone(),
+                    input_columns: self.input_columns.clone(),
+                    output_column: self.output_column.clone(),
+                };
 
-                    TypedVectorQueryProcessor::MultiPoint(processor.boxed())
-                }
-                TypedVectorQueryProcessor::MultiLineString(source) => todo!(),
-                TypedVectorQueryProcessor::MultiPolygon(source) => todo!(),
-            },
-        )
+                TypedVectorQueryProcessor::Data(processor.boxed())
+            }
+            TypedVectorQueryProcessor::MultiPoint(source) => {
+                let processor: VectorExpressionProcessor<
+                    Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<MultiPoint>>>,
+                    MultiPoint,
+                > = VectorExpressionProcessor {
+                    source,
+                    result_descriptor: self.result_descriptor.clone(),
+                    expression: self.expression.clone(),
+                    input_columns: self.input_columns.clone(),
+                    output_column: self.output_column.clone(),
+                };
+
+                TypedVectorQueryProcessor::MultiPoint(processor.boxed())
+            }
+            TypedVectorQueryProcessor::MultiLineString(source) => {
+                let processor: VectorExpressionProcessor<
+                    Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<MultiLineString>>>,
+                    MultiLineString,
+                > = VectorExpressionProcessor {
+                    source,
+                    result_descriptor: self.result_descriptor.clone(),
+                    expression: self.expression.clone(),
+                    input_columns: self.input_columns.clone(),
+                    output_column: self.output_column.clone(),
+                };
+
+                TypedVectorQueryProcessor::MultiLineString(processor.boxed())
+            }
+            TypedVectorQueryProcessor::MultiPolygon(source) => {
+                let processor: VectorExpressionProcessor<
+                    Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<MultiPolygon>>>,
+                    MultiPolygon,
+                > = VectorExpressionProcessor {
+                    source,
+                    result_descriptor: self.result_descriptor.clone(),
+                    expression: self.expression.clone(),
+                    input_columns: self.input_columns.clone(),
+                    output_column: self.output_column.clone(),
+                };
+
+                TypedVectorQueryProcessor::MultiPolygon(processor.boxed())
+            }
+        })
     }
 
     fn canonic_name(&self) -> CanonicOperatorName {
