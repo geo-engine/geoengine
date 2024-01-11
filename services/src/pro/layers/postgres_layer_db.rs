@@ -480,10 +480,15 @@ where
             )
             .await?;
 
-        let id = provider.id();
+        let id = DataProviderDefinition::<Self>::id(&provider);
         conn.execute(
             &stmt,
-            &[&id, &provider.type_name(), &provider.name(), &provider],
+            &[
+                &id,
+                &DataProviderDefinition::<Self>::type_name(&provider),
+                &DataProviderDefinition::<Self>::name(&provider),
+                &provider,
+            ],
         )
         .await?;
         Ok(id)
@@ -561,11 +566,21 @@ where
         let row = conn.query_one(&stmt, &[&id]).await?;
 
         if let Some(definition) = row.get::<_, Option<TypedDataProviderDefinition>>(0) {
-            return Box::new(definition).initialize().await;
+            return Box::new(definition)
+                .initialize(ProPostgresDb {
+                    conn_pool: self.conn_pool.clone(),
+                    session: self.session.clone(),
+                })
+                .await;
         }
 
         let pro_definition: TypedProDataProviderDefinition = row.get(1);
-        Box::new(pro_definition).initialize().await
+        Box::new(pro_definition)
+            .initialize(ProPostgresDb {
+                conn_pool: self.conn_pool.clone(),
+                session: self.session.clone(),
+            })
+            .await
     }
 }
 
@@ -606,10 +621,15 @@ where
             )
             .await?;
 
-        let id = provider.id();
+        let id = DataProviderDefinition::<Self>::id(&provider);
         conn.execute(
             &stmt,
-            &[&id, &provider.type_name(), &provider.name(), &provider],
+            &[
+                &id,
+                &DataProviderDefinition::<Self>::type_name(&provider),
+                &DataProviderDefinition::<Self>::name(&provider),
+                &provider,
+            ],
         )
         .await?;
         Ok(id)

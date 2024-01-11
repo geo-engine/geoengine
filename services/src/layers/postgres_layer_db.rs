@@ -695,10 +695,15 @@ where
             )
             .await?;
 
-        let id = provider.id();
+        let id = DataProviderDefinition::<Self>::id(&provider);
         conn.execute(
             &stmt,
-            &[&id, &provider.type_name(), &provider.name(), &provider],
+            &[
+                &id,
+                &DataProviderDefinition::<Self>::type_name(&provider),
+                &DataProviderDefinition::<Self>::name(&provider),
+                &provider,
+            ],
         )
         .await?;
         Ok(id)
@@ -763,6 +768,10 @@ where
 
         let definition: TypedDataProviderDefinition = row.get(0);
 
-        Box::new(definition).initialize().await
+        Box::new(definition)
+            .initialize(PostgresDb {
+                conn_pool: self.conn_pool.clone(),
+            })
+            .await
     }
 }

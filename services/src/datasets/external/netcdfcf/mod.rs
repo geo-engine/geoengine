@@ -4,6 +4,7 @@ use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
+use crate::contexts::GeoEngineDb;
 use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::MetaDataDefinition;
@@ -93,8 +94,8 @@ pub struct NetCdfCfDataProvider {
 }
 
 #[async_trait]
-impl DataProviderDefinition for NetCdfCfDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for NetCdfCfDataProviderDefinition {
+    async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(NetCdfCfDataProvider {
             name: self.name,
             path: self.path,
@@ -1727,15 +1728,15 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_listing() {
+    #[ge_context::test]
+    async fn test_listing(app_ctx: PostgresContext<NoTls>) {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             path: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize()
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
         .await
         .unwrap();
 
@@ -1796,15 +1797,15 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_listing_from_netcdf_m() {
+    #[ge_context::test]
+    async fn test_listing_from_netcdf_m(app_ctx: PostgresContext<NoTls>) {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             path: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize()
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
         .await
         .unwrap();
 
@@ -1841,9 +1842,9 @@ mod tests {
                 }), CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
-                        collection_id: LayerCollectionId("dataset_m.nc/metric_2".to_string()) 
+                        collection_id: LayerCollectionId("dataset_m.nc/metric_2".to_string())
                     },
-                    name: "Random metric 2".to_string(), 
+                    name: "Random metric 2".to_string(),
                     description: "Randomly created data".to_string(),
                     properties: Default::default(),
                 })],
@@ -1853,15 +1854,15 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_listing_from_netcdf_sm() {
+    #[ge_context::test]
+    async fn test_listing_from_netcdf_sm(app_ctx: PostgresContext<NoTls>) {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             path: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize()
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
         .await
         .unwrap();
 
@@ -1908,7 +1909,7 @@ mod tests {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string())
                     },
-                    name: "Regional Rivalry".to_string(), 
+                    name: "Regional Rivalry".to_string(),
                     description: "SSP3-RCP6.0".to_string(),
                     properties: Default::default(),
                 }), CollectionItem::Collection(LayerCollectionListing {
@@ -2151,8 +2152,8 @@ mod tests {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_listing_from_netcdf_sm_from_index() {
+    #[ge_context::test]
+    async fn test_listing_from_netcdf_sm_from_index(app_ctx: PostgresContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -2163,7 +2164,7 @@ mod tests {
             overviews: overview_folder.path().to_path_buf(),
             cache_ttl: Default::default(),
         })
-        .initialize()
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
         .await
         .unwrap();
 
@@ -2224,9 +2225,9 @@ mod tests {
                 }), CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
-                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string()) 
+                        collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string())
                     },
-                    name: "Fossil-fueled Development".to_string(), 
+                    name: "Fossil-fueled Development".to_string(),
                     description: "SSP5-RCP8.5".to_string(),
                     properties: Default::default(),
                 })],

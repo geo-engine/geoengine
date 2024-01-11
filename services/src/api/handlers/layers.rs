@@ -1,7 +1,6 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::api::model::responses::IdResponse;
 use crate::contexts::ApplicationContext;
-use crate::datasets::dataset_listing_provider::DatasetLayerListingProvider;
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::{Error, Result};
 use crate::layers::layer::{
@@ -158,14 +157,7 @@ async fn get_layer_providers<C: ApplicationContext>(
 
         options.limit -= 1;
     }
-    if options.offset <= 1 && options.limit > 1 {
-        let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(
-            app_ctx.session_context(session.clone()).db(),
-        );
-        providers.push(dataset_listing_provider.generate_provider_listing_collection_item());
 
-        options.limit -= 1;
-    }
     let external = app_ctx.session_context(session).db();
     for provider_listing in external
         .list_layer_providers(LayerProviderListingOptions {
@@ -280,15 +272,6 @@ async fn list_collection_handler<C: ApplicationContext>(
     }
 
     let db = app_ctx.session_context(session).db();
-
-    if provider == crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID.into() {
-        let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(db);
-        let collection = dataset_listing_provider
-            .load_layer_collection(&item, options.into_inner())
-            .await?;
-
-        return Ok(web::Json(collection));
-    }
 
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
         let collection = db
@@ -478,14 +461,6 @@ async fn layer_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    if provider == crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID.into() {
-        let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(db);
-
-        let collection = dataset_listing_provider.load_layer(&item.into()).await?;
-
-        return Ok(web::Json(collection));
-    }
-
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
         let collection = db.load_layer(&item.into()).await?;
 
@@ -526,10 +501,6 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session.clone()).db();
     let layer = match provider.into() {
-        crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID => {
-            let provider = DatasetLayerListingProvider::with_all_datasets(db);
-            provider.load_layer(&item.into()).await?
-        }
         crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item.into()).await?,
         _ => {
             db.load_layer_provider(provider.into())
@@ -578,10 +549,6 @@ async fn layer_to_dataset<C: ApplicationContext>(
     let db = ctx.db();
 
     let layer = match provider.into() {
-        crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID => {
-            let provider = DatasetLayerListingProvider::with_all_datasets(db);
-            provider.load_layer(&item).await?
-        }
         crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item).await?,
         _ => {
             db.load_layer_provider(provider.into())

@@ -1,0 +1,23 @@
+{
+  "type": "DatasetLayerListingProviderDefinition",
+  "id": "cbb21ee3-d15d-45c5-a175-66964adf4e85",
+  "name": "User Data Listing",
+  "description": "User specific datasets grouped by tags.",
+  "collections": [
+    {
+      "name": "User Uploads",
+      "description": "Datasets uploaded by the user.",
+      "tags": ["upload"]
+    },
+    {
+      "name": "Workflows",
+      "description": "Datasets created from workflows.",
+      "tags": ["workflow"]
+    },
+    {
+      "name": "All Datasets",
+      "description": "All datasets",
+      "tags": ["*"]
+    }
+  ]
+}

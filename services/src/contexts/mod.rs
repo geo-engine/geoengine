@@ -33,8 +33,9 @@ use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 pub use migrations::{
     migrate_database, migration_0000_initial::Migration0000Initial,
-    migration_0001_raster_stacks::Migration0001RasterStacks, DatabaseVersion, Migration,
-    MigrationResult,
+    migration_0001_raster_stacks::Migration0001RasterStacks,
+    migration_0002_dataset_listing_provider::Migration0002DatasetListingProvider, DatabaseVersion,
+    Migration, MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};

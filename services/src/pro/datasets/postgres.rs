@@ -1,9 +1,7 @@
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::listing::{OrderBy, ProvenanceOutput};
 use crate::datasets::postgres::resolve_dataset_name_to_id;
-use crate::datasets::storage::{
-    Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
-};
+use crate::datasets::storage::{Dataset, DatasetDb, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
@@ -442,18 +440,8 @@ where
 }
 
 pub struct DatasetMetaData<'m> {
-    meta_data: &'m MetaDataDefinition,
-    result_descriptor: TypedResultDescriptor,
-}
-
-impl<Tls> DatasetStorer for ProPostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    type StorageType = Box<dyn PostgresStorable<Tls>>;
+    pub meta_data: &'m MetaDataDefinition,
+    pub result_descriptor: TypedResultDescriptor,
 }
 
 impl<Tls> PostgresStorable<Tls> for MetaDataDefinition
@@ -504,7 +492,7 @@ where
     async fn add_dataset(
         &self,
         dataset: AddDataset,
-        meta_data: Box<dyn PostgresStorable<Tls>>,
+        meta_data: MetaDataDefinition,
     ) -> Result<DatasetIdAndName> {
         let id = DatasetId::new();
         let name = dataset.name.unwrap_or_else(|| DatasetName {
@@ -520,7 +508,7 @@ where
 
         self.check_namespace(&name)?;
 
-        let typed_meta_data = meta_data.to_typed_metadata()?;
+        let typed_meta_data = meta_data.to_typed_metadata();
 
         let mut conn = self.conn_pool.get().await?;
 
@@ -625,10 +613,6 @@ where
         tx.commit().await?;
 
         Ok(())
-    }
-
-    fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {
-        Box::new(meta)
     }
 }
 
