@@ -576,7 +576,7 @@ where
         let stmt = conn
             .prepare(
                 "
-        SELECT DISTINCT name, description, properties
+        SELECT name, description, properties
         FROM layer_collections
         WHERE id = $1;",
             )
@@ -690,7 +690,7 @@ where
         let stmt = conn
             .prepare(
                 "
-        SELECT DISTINCT name, description, properties
+        SELECT name, description, properties
         FROM layer_collections
         WHERE id = $1;",
             )
