@@ -1478,7 +1478,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -1560,7 +1560,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -1650,7 +1650,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -1736,7 +1736,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -1804,7 +1804,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -1849,7 +1849,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -1902,7 +1902,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -1951,7 +1951,7 @@ mod tests {
                     name: "GBIF".to_string(),
                     db_config: db_config.clone(),
                     cache_ttl: Default::default(),
-                    autocomplete_timeout: 3,
+                    autocomplete_timeout: 5,
                 })
                 .initialize()
                 .await
@@ -2171,7 +2171,7 @@ mod tests {
                     name: "GBIF".to_string(),
                     db_config,
                     cache_ttl: Default::default(),
-                    autocomplete_timeout: 3,
+                    autocomplete_timeout: 5,
                 })
                 .initialize()
                 .await
@@ -2543,7 +2543,7 @@ mod tests {
                     name: "GBIF".to_string(),
                     db_config,
                     cache_ttl: Default::default(),
-                    autocomplete_timeout: 3,
+                    autocomplete_timeout: 5,
                 })
                     .initialize()
                     .await
@@ -2592,7 +2592,7 @@ mod tests {
                     name: "GBIF".to_string(),
                     db_config,
                     cache_ttl: Default::default(),
-                    autocomplete_timeout: 3,
+                    autocomplete_timeout: 5,
                 })
                 .initialize()
                 .await
@@ -2654,7 +2654,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -2756,7 +2756,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -2812,7 +2812,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -2958,7 +2958,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -3037,7 +3037,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -3187,7 +3187,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -3266,7 +3266,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await
@@ -3412,7 +3412,7 @@ mod tests {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
-                autocomplete_timeout: 3,
+                autocomplete_timeout: 5,
             })
             .initialize()
             .await

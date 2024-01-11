@@ -31,7 +31,7 @@ impl Migration for Migration0002GbifConfig {
         tx.batch_execute(
             "
                 UPDATE layer_providers
-                SET definition.gbif_data_provider_definition.autocomplete_timeout = 3
+                SET definition.gbif_data_provider_definition.autocomplete_timeout = 5
                 WHERE NOT ((definition).gbif_data_provider_definition IS NULL)
             ",
         )
@@ -94,7 +94,7 @@ mod tests {
             .await?
             .get::<usize, i32>(0);
 
-        assert_eq!(autocomplete_timeout, 3);
+        assert_eq!(autocomplete_timeout, 5);
 
         // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
         drop(conn);
