@@ -28,7 +28,8 @@ pub use datetime::{DateTime, DateTimeError, DateTimeParseFormat, Duration};
 pub(crate) use error::PrimitivesError;
 pub use feature_data::{
     BoolDataRef, CategoryDataRef, DataRef, DateTimeDataRef, FeatureData, FeatureDataRef,
-    FeatureDataType, FeatureDataValue, FloatDataRef, IntDataRef, TextDataRef,
+    FeatureDataType, FeatureDataValue, FloatDataRef, FloatOptionsIter, FloatOptionsParIter,
+    IntDataRef, TextDataRef,
 };
 pub use geometry::{Geometry, GeometryRef, TypedGeometry};
 pub use line::Line;

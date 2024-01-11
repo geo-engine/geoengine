@@ -13,10 +13,11 @@ use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::primitives::{
-    FeatureData, FeatureDataRef, FeatureDataType, Geometry, Measurement, MultiLineString,
-    MultiPoint, MultiPolygon, NoGeometry, VectorQueryRectangle,
+    FeatureData, FeatureDataRef, FeatureDataType, FloatOptionsParIter, Geometry, Measurement,
+    MultiLineString, MultiPoint, MultiPolygon, NoGeometry, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use std::collections::HashMap;
@@ -30,7 +31,7 @@ impl OperatorName for VectorExpression {
     const TYPE_NAME: &'static str = "VectorExpression";
 }
 
-const MAX_INPUT_COLUMNS: usize = 8;
+const MAX_INPUT_COLUMNS: usize = 2;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VectorExpressionParams {
@@ -291,7 +292,7 @@ where
             let output_column = self.output_column.clone();
             let expression = self.expression.clone();
 
-            crate::util::spawn_blocking(move || {
+            crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
                 // TODO: parallelize
 
                 let inputs: Vec<FeatureDataRef> = input_columns
@@ -304,13 +305,15 @@ where
                     .collect();
 
                 let result: Vec<Option<f64>> = {
-                    let mut float_inputs: Vec<Box<dyn Iterator<Item = Option<f64>>>> = inputs
+                    let float_inputs: Vec<FloatOptionsParIter> = inputs
                         .iter()
-                        .map(FeatureDataRef::float_options_iter)
+                        .map(FeatureDataRef::float_options_par_iter)
                         .collect::<Vec<_>>();
 
-                    match float_inputs.as_mut_slice() {
-                        [a] => {
+                    match float_inputs.len() {
+                        1 => {
+                            let [a] = <[_; 1]>::try_from(float_inputs)
+                                .expect("it matches the match condition");
                             let f = unsafe {
                                 expression.function_nary::<fn(Option<f64>) -> Option<f64>>()
                             }
@@ -318,19 +321,24 @@ where
 
                             Ok(a.map(*f).collect::<Vec<_>>())
                         }
-                        [a, b] => {
+                        2 => {
+                            let [a, b] = <[_; 2]>::try_from(float_inputs)
+                                .expect("it matches the match condition");
                             let f = unsafe {
                                 expression
                                     .function_nary::<fn(Option<f64>, Option<f64>) -> Option<f64>>()
                             }
                             .context(error::CallingExpression)?;
 
-                            Ok(a.zip(b).map(|(a, b)| f(a, b)).collect::<Vec<_>>())
+                            Ok((a, b)
+                                .into_par_iter()
+                                .map(|(a, b)| f(a, b))
+                                .collect::<Vec<_>>())
                         }
                         // TODO: implement more cases
                         other => Err(VectorExpressionError::TooManyInputColumns {
                             max: MAX_INPUT_COLUMNS,
-                            found: other.len(),
+                            found: other,
                         }),
                     }?
                 };

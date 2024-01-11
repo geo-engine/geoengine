@@ -151,20 +151,7 @@ impl<'f> FeatureDataRef<'f> {
 
     /// Creates an iterator over all values as [`Option<f64>`]
     /// Null values or non-convertible values are [`None`]
-    pub fn float_options_iter(&self) -> Box<dyn Iterator<Item = Option<f64>> + '_> {
-        match self {
-            FeatureDataRef::Text(data_ref) => Box::new(data_ref.float_options_iter()),
-            FeatureDataRef::Float(data_ref) => Box::new(data_ref.float_options_iter()),
-            FeatureDataRef::Int(data_ref) => Box::new(data_ref.float_options_iter()),
-            FeatureDataRef::Category(data_ref) => Box::new(data_ref.float_options_iter()),
-            FeatureDataRef::Bool(data_ref) => Box::new(data_ref.float_options_iter()),
-            FeatureDataRef::DateTime(data_ref) => Box::new(data_ref.float_options_iter()),
-        }
-    }
-
-    /// Creates a parallel iterator over all values as [`Option<f64>`]
-    /// Null values or non-convertible values are [`None`]
-    pub fn float_options_par_iter(&self) -> FloatOptionsParIter {
+    pub fn float_options_iter(&self) -> FloatOptionsIter {
         match self {
             FeatureDataRef::Text(data_ref) => FloatOptionsIter::Text(data_ref.float_options_iter()),
             FeatureDataRef::Float(data_ref) => {
@@ -179,7 +166,12 @@ impl<'f> FeatureDataRef<'f> {
                 FloatOptionsIter::DateTime(data_ref.float_options_iter())
             }
         }
-        .into()
+    }
+
+    /// Creates a parallel iterator over all values as [`Option<f64>`]
+    /// Null values or non-convertible values are [`None`]
+    pub fn float_options_par_iter(&self) -> FloatOptionsParIter {
+        self.float_options_iter().into()
     }
 }
 
@@ -244,6 +236,7 @@ where
     fn float_options_iter(&'r self) -> Self::FloatOptionsIter;
 }
 
+#[derive(Debug, Clone)]
 pub enum FloatOptionsIter<'f> {
     Category(<CategoryDataRef<'f> as DataRef<'f, u8>>::FloatOptionsIter),
     Int(<IntDataRef<'f> as DataRef<'f, i64>>::FloatOptionsIter),
@@ -253,6 +246,7 @@ pub enum FloatOptionsIter<'f> {
     DateTime(<DateTimeDataRef<'f> as DataRef<'f, TimeInstance>>::FloatOptionsIter),
 }
 
+#[derive(Debug, Clone)]
 pub struct FloatOptionsParIter<'f>(FloatOptionsIter<'f>);
 
 impl<'f> From<FloatOptionsIter<'f>> for FloatOptionsParIter<'f> {
@@ -295,9 +289,9 @@ impl<'f> DoubleEndedIterator for FloatOptionsIter<'f> {
             Self::Category(iter) => iter.next_back(),
             Self::Int(iter) => iter.next_back(),
             Self::Float(iter) => iter.next_back(),
-            Self::Text(iter) => todo!(),
-            Self::Bool(iter) => todo!(),
-            Self::DateTime(iter) => todo!(),
+            Self::Text(iter) => iter.next_back(),
+            Self::Bool(iter) => iter.next_back(),
+            Self::DateTime(iter) => iter.next_back(),
         }
     }
 }
@@ -343,15 +337,15 @@ impl<'f> Producer for FloatOptionsParIter<'f> {
                 )
             }
             FloatOptionsIter::Text(iter) => {
-                let (left, right) = todo!();
+                let (left, right) = iter.split_at(index);
                 (FloatOptionsIter::Text(left), FloatOptionsIter::Text(right))
             }
             FloatOptionsIter::Bool(iter) => {
-                let (left, right) = todo!();
+                let (left, right) = iter.split_at(index);
                 (FloatOptionsIter::Bool(left), FloatOptionsIter::Bool(right))
             }
             FloatOptionsIter::DateTime(iter) => {
-                let (left, right) = todo!();
+                let (left, right) = iter.split_at(index);
                 (
                     FloatOptionsIter::DateTime(left),
                     FloatOptionsIter::DateTime(right),
@@ -481,6 +475,7 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct NumberDataRefFloatOptionIter<'r, D, T>
 where
     D: DataRef<'r, T>,
@@ -813,14 +808,20 @@ impl<'f> From<BoolDataRef<'f>> for FeatureDataRef<'f> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct BoolDataRefFloatOptionIter<'f> {
     data_ref: &'f BoolDataRef<'f>,
-    i: usize,
+    index: usize,
+    length: usize,
 }
 
 impl<'f> BoolDataRefFloatOptionIter<'f> {
     pub fn new(data_ref: &'f BoolDataRef<'f>) -> Self {
-        Self { data_ref, i: 0 }
+        Self {
+            data_ref,
+            index: 0,
+            length: data_ref.len(),
+        }
     }
 }
 
@@ -828,12 +829,36 @@ impl<'f> Iterator for BoolDataRefFloatOptionIter<'f> {
     type Item = Option<f64>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.i >= self.data_ref.len() {
+        if self.index >= self.length {
             return None;
         }
 
-        let i = self.i;
-        self.i += 1;
+        let i = self.index;
+        self.index += 1;
+
+        Some(if self.data_ref.is_null(i) {
+            None
+        } else {
+            Some(f64::from(u8::from(self.data_ref.as_ref()[i])))
+        })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.length - self.index;
+        (remaining, Some(remaining))
+    }
+}
+
+impl<'f> ExactSizeIterator for BoolDataRefFloatOptionIter<'f> {}
+
+impl<'f> DoubleEndedIterator for BoolDataRefFloatOptionIter<'f> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.index >= self.length {
+            return None;
+        }
+
+        let i = self.length - 1;
+        self.length -= 1; // decrement!
 
         Some(if self.data_ref.is_null(i) {
             None
@@ -854,20 +879,49 @@ impl<'f> ParallelIterator for BoolDataRefFloatOptionIter<'f> {
     }
 }
 
+impl<'f> Producer for BoolDataRefFloatOptionIter<'f> {
+    type Item = Option<f64>;
+
+    type IntoIter = Self;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self
+    }
+
+    fn split_at(self, index: usize) -> (Self, Self) {
+        let (left_index, left_length_right_index, right_length) =
+            indices_for_split_at(self.index, self.length, index);
+
+        let left = Self::IntoIter {
+            data_ref: self.data_ref,
+            index: left_index,
+            length: left_length_right_index,
+        };
+
+        let right = Self::IntoIter {
+            data_ref: self.data_ref,
+            index: left_length_right_index,
+            length: right_length,
+        };
+
+        (left, right)
+    }
+}
+
 impl<'f> IndexedParallelIterator for BoolDataRefFloatOptionIter<'f> {
     fn len(&self) -> usize {
-        todo!()
+        ExactSizeIterator::len(self)
     }
 
     fn drive<C: rayon::iter::plumbing::Consumer<Self::Item>>(self, consumer: C) -> C::Result {
-        todo!()
+        rayon::iter::plumbing::bridge(self, consumer)
     }
 
     fn with_producer<CB: rayon::iter::plumbing::ProducerCallback<Self::Item>>(
         self,
         callback: CB,
     ) -> CB::Output {
-        todo!()
+        callback.callback(self)
     }
 }
 
@@ -946,14 +1000,20 @@ impl<'f> From<DateTimeDataRef<'f>> for FeatureDataRef<'f> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct DateTimeDataRefFloatOptionIter<'f> {
     data_ref: &'f DateTimeDataRef<'f>,
-    i: usize,
+    index: usize,
+    length: usize,
 }
 
 impl<'f> DateTimeDataRefFloatOptionIter<'f> {
     pub fn new(data_ref: &'f DateTimeDataRef<'f>) -> Self {
-        Self { data_ref, i: 0 }
+        Self {
+            data_ref,
+            index: 0,
+            length: data_ref.len(),
+        }
     }
 }
 
@@ -961,12 +1021,36 @@ impl<'f> Iterator for DateTimeDataRefFloatOptionIter<'f> {
     type Item = Option<f64>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.i >= self.data_ref.len() {
+        if self.index >= self.length {
             return None;
         }
 
-        let i = self.i;
-        self.i += 1;
+        let i = self.index;
+        self.index += 1;
+
+        Some(if self.data_ref.is_null(i) {
+            None
+        } else {
+            Some(self.data_ref.as_ref()[i].inner() as f64)
+        })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.length - self.index;
+        (remaining, Some(remaining))
+    }
+}
+
+impl<'f> ExactSizeIterator for DateTimeDataRefFloatOptionIter<'f> {}
+
+impl<'f> DoubleEndedIterator for DateTimeDataRefFloatOptionIter<'f> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.index >= self.length {
+            return None;
+        }
+
+        let i = self.length - 1;
+        self.length -= 1; // decrement!
 
         Some(if self.data_ref.is_null(i) {
             None
@@ -987,20 +1071,49 @@ impl<'f> ParallelIterator for DateTimeDataRefFloatOptionIter<'f> {
     }
 }
 
+impl<'f> Producer for DateTimeDataRefFloatOptionIter<'f> {
+    type Item = Option<f64>;
+
+    type IntoIter = Self;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self
+    }
+
+    fn split_at(self, index: usize) -> (Self, Self) {
+        let (left_index, left_length_right_index, right_length) =
+            indices_for_split_at(self.index, self.length, index);
+
+        let left = Self::IntoIter {
+            data_ref: self.data_ref,
+            index: left_index,
+            length: left_length_right_index,
+        };
+
+        let right = Self::IntoIter {
+            data_ref: self.data_ref,
+            index: left_length_right_index,
+            length: right_length,
+        };
+
+        (left, right)
+    }
+}
+
 impl<'f> IndexedParallelIterator for DateTimeDataRefFloatOptionIter<'f> {
     fn len(&self) -> usize {
-        todo!()
+        ExactSizeIterator::len(self)
     }
 
     fn drive<C: rayon::iter::plumbing::Consumer<Self::Item>>(self, consumer: C) -> C::Result {
-        todo!()
+        rayon::iter::plumbing::bridge(self, consumer)
     }
 
     fn with_producer<CB: rayon::iter::plumbing::ProducerCallback<Self::Item>>(
         self,
         callback: CB,
     ) -> CB::Output {
-        todo!()
+        callback.callback(self)
     }
 }
 
@@ -1250,14 +1363,20 @@ impl<'r> Iterator for TextDataRefStringIter<'r> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct TextDataRefFloatOptionIter<'r> {
     data_ref: &'r TextDataRef<'r>,
-    i: usize,
+    index: usize,
+    length: usize,
 }
 
 impl<'r> TextDataRefFloatOptionIter<'r> {
     pub fn new(data_ref: &'r TextDataRef<'r>) -> Self {
-        Self { data_ref, i: 0 }
+        Self {
+            data_ref,
+            index: 0,
+            length: data_ref.len(),
+        }
     }
 }
 
@@ -1265,8 +1384,38 @@ impl<'r> Iterator for TextDataRefFloatOptionIter<'r> {
     type Item = Option<f64>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let i = self.i;
-        self.i += 1;
+        if self.index >= self.length {
+            return None;
+        }
+
+        let i = self.index;
+        self.index += 1;
+
+        self.data_ref
+            .text_at(i)
+            .map(|text_option| match text_option {
+                Some(text) => text.parse().ok(),
+                None => None,
+            })
+            .ok()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.length - self.index;
+        (remaining, Some(remaining))
+    }
+}
+
+impl<'f> ExactSizeIterator for TextDataRefFloatOptionIter<'f> {}
+
+impl<'f> DoubleEndedIterator for TextDataRefFloatOptionIter<'f> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.index >= self.length {
+            return None;
+        }
+
+        let i = self.length - 1;
+        self.length -= 1; // decrement!
 
         self.data_ref
             .text_at(i)
@@ -1289,20 +1438,49 @@ impl<'f> ParallelIterator for TextDataRefFloatOptionIter<'f> {
     }
 }
 
+impl<'f> Producer for TextDataRefFloatOptionIter<'f> {
+    type Item = Option<f64>;
+
+    type IntoIter = Self;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self
+    }
+
+    fn split_at(self, index: usize) -> (Self, Self) {
+        let (left_index, left_length_right_index, right_length) =
+            indices_for_split_at(self.index, self.length, index);
+
+        let left = Self::IntoIter {
+            data_ref: self.data_ref,
+            index: left_index,
+            length: left_length_right_index,
+        };
+
+        let right = Self::IntoIter {
+            data_ref: self.data_ref,
+            index: left_length_right_index,
+            length: right_length,
+        };
+
+        (left, right)
+    }
+}
+
 impl<'f> IndexedParallelIterator for TextDataRefFloatOptionIter<'f> {
     fn len(&self) -> usize {
-        todo!()
+        ExactSizeIterator::len(self)
     }
 
     fn drive<C: rayon::iter::plumbing::Consumer<Self::Item>>(self, consumer: C) -> C::Result {
-        todo!()
+        rayon::iter::plumbing::bridge(self, consumer)
     }
 
     fn with_producer<CB: rayon::iter::plumbing::ProducerCallback<Self::Item>>(
         self,
         callback: CB,
     ) -> CB::Output {
-        todo!()
+        callback.callback(self)
     }
 }
 
@@ -1833,50 +2011,45 @@ mod tests {
                         Some(TimeInstance::from_millis_unchecked(1_636_448_729_000)),
                     ]),
                 ),
+                (
+                    "categories",
+                    FeatureData::NullableCategory(vec![Some(1), None, Some(3)]),
+                ),
             ],
         )
         .unwrap();
 
-        let from_ints: Vec<Option<f64>> = collection
-            .data("ints")
-            .unwrap()
-            .float_options_iter()
-            .collect();
-        let from_ints_cmp: Vec<Option<f64>> = vec![Some(1.0), Some(2.0), Some(3.0)];
-        assert_eq!(from_ints, from_ints_cmp);
-
-        let from_floats: Vec<Option<f64>> = collection
-            .data("floats")
-            .unwrap()
-            .float_options_iter()
-            .collect();
-        let from_floats_cmp: Vec<Option<f64>> = vec![Some(1.0), None, Some(3.0)];
-        assert_eq!(from_floats, from_floats_cmp);
-
-        let from_strings: Vec<Option<f64>> = collection
-            .data("texts")
-            .unwrap()
-            .float_options_iter()
-            .collect();
-        let from_strings_cmp: Vec<Option<f64>> = vec![Some(1.0), None, None];
-        assert_eq!(from_strings, from_strings_cmp);
-
-        let from_bools: Vec<Option<f64>> = collection
-            .data("bools")
-            .unwrap()
-            .float_options_iter()
-            .collect();
-        let from_bools_cmp: Vec<Option<f64>> = vec![Some(1.0), Some(0.0), None];
-        assert_eq!(from_bools, from_bools_cmp);
-
-        let from_dates: Vec<Option<f64>> = collection
-            .data("dates")
-            .unwrap()
-            .float_options_iter()
-            .collect();
-        let from_dates_cmp: Vec<Option<f64>> =
-            vec![Some(946_681_200_000.0), None, Some(1_636_448_729_000.0)];
-        assert_eq!(from_dates, from_dates_cmp);
+        for (column, mut expected_vec_result) in [
+            ("ints", vec![Some(1.), Some(2.), Some(3.)]),
+            ("floats", vec![Some(1.), None, Some(3.)]),
+            ("texts", vec![Some(1.), None, None]),
+            ("bools", vec![Some(1.), Some(0.), None]),
+            (
+                "dates",
+                vec![Some(946_681_200_000.0), None, Some(1_636_448_729_000.0)],
+            ),
+            ("categories", vec![Some(1.), None, Some(3.)]),
+        ] {
+            let data_ref = collection.data(column).unwrap();
+            assert_eq!(
+                data_ref.float_options_iter().collect::<Vec<_>>(),
+                expected_vec_result
+            );
+            assert_eq!(
+                data_ref.float_options_iter().len(),
+                expected_vec_result.len()
+            );
+            expected_vec_result.reverse();
+            assert_eq!(
+                data_ref
+                    .float_options_iter()
+                    .rfold(Vec::new(), |mut acc, x| {
+                        acc.push(x);
+                        acc
+                    }),
+                expected_vec_result
+            );
+        }
     }
 
     #[test]
@@ -1910,17 +2083,39 @@ mod tests {
                         Some(TimeInstance::from_millis_unchecked(1_636_448_729_000)),
                     ]),
                 ),
+                (
+                    "categories",
+                    FeatureData::NullableCategory(vec![Some(1), None, Some(3)]),
+                ),
             ],
         )
         .unwrap();
 
-        let data = collection.data("floats").unwrap();
-        let float_iter = data.float_options_par_iter();
-        assert_eq!(float_iter.len(), 3);
-        assert_approx_eq!(f64, float_iter.filter_map(|x| x).sum::<f64>(), 4.0);
-
-        todo!("test par iters");
-        todo!("backwarts iteration");
-        todo!("size()");
+        for (column, vec_result, sum_result) in [
+            ("ints", vec![Some(1.), Some(2.), Some(3.)], 6.0),
+            ("floats", vec![Some(1.), None, Some(3.)], 4.0),
+            ("texts", vec![Some(1.), None, None], 1.0),
+            ("bools", vec![Some(1.), Some(0.), None], 1.0),
+            (
+                "dates",
+                vec![Some(946_681_200_000.0), None, Some(1_636_448_729_000.0)],
+                946_681_200_000. + 1_636_448_729_000.,
+            ),
+            ("categories", vec![Some(1.), None, Some(3.)], 4.),
+        ] {
+            let data = collection.data(column).unwrap();
+            let float_iter = data.float_options_par_iter();
+            assert_eq!(float_iter.len(), 3);
+            assert_eq!(
+                <[_; 2]>::from(float_iter.clone().split_at(1)).map(|d| d.len()),
+                [1, 2]
+            );
+            assert_eq!(float_iter.clone().collect::<Vec<_>>(), vec_result);
+            assert_approx_eq!(
+                f64,
+                float_iter.filter_map(std::convert::identity).sum::<f64>(),
+                sum_result
+            );
+        }
     }
 }
