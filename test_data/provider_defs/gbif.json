@@ -9,5 +9,6 @@
     "database": "geoengine",
     "schema": "gbif"
   },
-  "cacheTtl": 0
+  "cacheTtl": 0,
+  "autocompleteTimeout": 5
 }

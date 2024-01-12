@@ -6,7 +6,9 @@ use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
 };
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::layers::listing::{
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+};
 use crate::workflows::workflow::Workflow;
 use aruna_rust_api::api::storage::models::v1::{
     CollectionOverview, KeyValue, LabelFilter, LabelOrIdQuery, Object,
@@ -659,6 +661,13 @@ impl DataProvider for ArunaDataProvider {
 
 #[async_trait::async_trait]
 impl LayerCollectionProvider for ArunaDataProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities::none(),
+        }
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,

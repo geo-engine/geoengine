@@ -17,8 +17,8 @@ use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::ProviderLayerId;
 use crate::layers::layer::{CollectionItem, LayerCollection};
-use crate::layers::listing::LayerCollectionId;
 use crate::layers::listing::LayerCollectionProvider;
+use crate::layers::listing::{LayerCollectionId, ProviderCapabilities, SearchCapabilities};
 use crate::projects::RasterSymbology;
 use crate::projects::Symbology;
 use crate::tasks::TaskContext;
@@ -1385,6 +1385,13 @@ async fn listing_from_netcdf_file(
 
 #[async_trait]
 impl LayerCollectionProvider for NetCdfCfDataProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities::none(),
+        }
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
