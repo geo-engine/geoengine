@@ -9,5 +9,4 @@ mod quadtree;
 
 pub use operator::{
     InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
-    VisualPointClusteringProcessor,
 };

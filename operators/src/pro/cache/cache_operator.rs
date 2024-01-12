@@ -4,7 +4,8 @@ use super::shared_cache::CacheElement;
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
     CanonicOperatorName, ChunkByteSize, InitializedRasterOperator, InitializedVectorOperator,
-    QueryContext, QueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+    QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    TypedRasterQueryProcessor,
 };
 use crate::error::Error;
 use crate::pro::cache::shared_cache::{AsyncCache, SharedCache};
@@ -148,19 +149,19 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
 }
 
 /// A cache operator that caches the results of its source operator
-struct CacheQueryProcessor<P, E, Q, U>
+struct CacheQueryProcessor<P, E, Q, U, R>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U>,
+    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U, ResultDescription = R>,
 {
     processor: P,
     cache_key: CanonicOperatorName,
 }
 
-impl<P, E, Q, U> CacheQueryProcessor<P, E, Q, U>
+impl<P, E, Q, U, R> CacheQueryProcessor<P, E, Q, U, R>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U> + Sized,
+    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U, ResultDescription = R> + Sized,
 {
     pub fn new(processor: P, cache_key: CanonicOperatorName) -> Self {
         CacheQueryProcessor {
@@ -171,9 +172,9 @@ where
 }
 
 #[async_trait]
-impl<P, E, S, U> QueryProcessor for CacheQueryProcessor<P, E, S, U>
+impl<P, E, S, U, R> QueryProcessor for CacheQueryProcessor<P, E, S, U, R>
 where
-    P: QueryProcessor<Output = E, SpatialBounds = S, Selection = U> + Sized,
+    P: QueryProcessor<Output = E, SpatialBounds = S, Selection = U, ResultDescription = R> + Sized,
     S: AxisAlignedRectangle + Send + Sync + 'static,
     U: QueryAttributeSelection,
     E: CacheElement<Query = QueryRectangle<S, U>>
@@ -184,10 +185,12 @@ where
         + Clone,
     E::ResultStream: Stream<Item = Result<E, CacheError>> + Send + Sync + 'static,
     SharedCache: AsyncCache<E>,
+    R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = U>,
 {
     type Output = E;
     type SpatialBounds = S;
     type Selection = U;
+    type ResultDescription = R;
 
     async fn _query<'a>(
         &'a self,
@@ -271,6 +274,10 @@ where
         };
 
         Ok(Box::pin(output_stream))
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        self.processor.result_descriptor()
     }
 }
 

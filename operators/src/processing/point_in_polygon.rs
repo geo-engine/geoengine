@@ -157,7 +157,12 @@ impl InitializedVectorOperator for InitializedPointInPolygonFilter {
             .expect("checked in `PointInPolygonFilter` constructor");
 
         Ok(TypedVectorQueryProcessor::MultiPoint(
-            PointInPolygonFilterProcessor::new(point_processor, polygon_processor).boxed(),
+            PointInPolygonFilterProcessor::new(
+                self.result_descriptor.clone(),
+                point_processor,
+                polygon_processor,
+            )
+            .boxed(),
         ))
     }
 
@@ -171,16 +176,22 @@ impl InitializedVectorOperator for InitializedPointInPolygonFilter {
 }
 
 pub struct PointInPolygonFilterProcessor {
+    result_descriptor: VectorResultDescriptor,
     points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
     polygons: Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>,
 }
 
 impl PointInPolygonFilterProcessor {
     pub fn new(
+        result_descriptor: VectorResultDescriptor,
         points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
         polygons: Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>,
     ) -> Self {
-        Self { points, polygons }
+        Self {
+            result_descriptor,
+            points,
+            polygons,
+        }
     }
 
     fn filter_parallel(
@@ -327,6 +338,10 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
             FeatureCollectionChunkMerger::new(filtered_stream.fuse(), ctx.chunk_byte_size().into())
                 .boxed(),
         )
+    }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 

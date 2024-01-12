@@ -256,7 +256,7 @@ fn projected_coordinate_grid_parallel(
                 }
                 Result::<(), crate::error::Error>::Ok(())
             });
-        res.map(|_| coord_grid)
+        res.map(|()| coord_grid)
     });
     debug!(
         "projected_coordinate_grid_parallel took {} (ns)",

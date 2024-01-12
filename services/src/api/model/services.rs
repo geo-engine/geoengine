@@ -77,6 +77,7 @@ pub struct AddDataset {
     pub source_operator: String,
     pub symbology: Option<Symbology>,
     pub provenance: Option<Vec<Provenance>>,
+    pub tags: Option<Vec<String>>,
 }
 
 impl From<AddDataset> for crate::datasets::storage::AddDataset {
@@ -88,6 +89,7 @@ impl From<AddDataset> for crate::datasets::storage::AddDataset {
             source_operator: value.source_operator,
             symbology: value.symbology,
             provenance: value.provenance,
+            tags: value.tags,
         }
     }
 }
@@ -101,6 +103,7 @@ impl From<crate::datasets::storage::AddDataset> for AddDataset {
             source_operator: value.source_operator,
             symbology: value.symbology,
             provenance: value.provenance,
+            tags: value.tags,
         }
     }
 }

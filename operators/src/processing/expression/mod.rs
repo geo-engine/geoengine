@@ -137,7 +137,7 @@ pub struct InitializedExpression {
 
 /// Macro for generating the match cases for number of bands to the `ExpressionInput` struct.
 macro_rules! generate_match_cases {
-    ($num_bands:expr, $output_type:expr, $expression:expr, $source_processor:expr, $map_no_data:expr, $($x:expr),*) => {
+    ($num_bands:expr, $output_type:expr, $expression:expr, $source_processor:expr, $result_descriptor:expr, $map_no_data:expr, $($x:expr),*) => {
         match $num_bands {
             $(
                 $x => call_generic_raster_processor!(
@@ -147,6 +147,7 @@ macro_rules! generate_match_cases {
                         ExpressionInput::<$x> {
                             raster: $source_processor,
                         },
+                        $result_descriptor,
                         $map_no_data.clone(),
                     )
                     .boxed()
@@ -170,6 +171,7 @@ impl InitializedRasterOperator for InitializedExpression {
             output_type,
             expression,
             source_processor,
+            self.result_descriptor.clone(),
             self.map_no_data,
             1,
             2,

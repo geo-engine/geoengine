@@ -72,7 +72,7 @@ pub async fn abortable_query_execution<F: Future<Output = Result<T>> + Send, T>(
 
     let (result, _, _) = futures::future::select_all([
         execution,
-        Box::pin(abort_future.map(|_| Err(error::Error::QueryCanceled))),
+        Box::pin(abort_future.map(|()| Err(error::Error::QueryCanceled))),
     ])
     .await;
 

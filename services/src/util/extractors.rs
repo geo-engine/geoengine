@@ -47,7 +47,7 @@ where
             .map(|res: Result<web::Json<T>, _>| match res {
                 Ok(data) => data
                     .validate()
-                    .map(|_| ValidatedJson(data.into_inner()))
+                    .map(|()| ValidatedJson(data.into_inner()))
                     .map_err(|validation_errors| {
                         ErrorResponse {
                             error: "ValidationError".to_string(),
@@ -123,7 +123,7 @@ where
             .map(|res: Result<web::Query<T>, _>| match res {
                 Ok(data) => data
                     .validate()
-                    .map(|_| ValidatedQuery(data.into_inner()))
+                    .map(|()| ValidatedQuery(data.into_inner()))
                     .map_err(|validation_errors| {
                         ErrorResponse {
                             error: "ValidationError".to_string(),

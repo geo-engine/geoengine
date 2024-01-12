@@ -381,6 +381,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedVectorOperator
         Ok(
             call_on_generic_vector_processor!(source_processor, processor => VectorTimeShiftProcessor {
                 processor,
+                result_descriptor: self.result_descriptor.clone(),
                 shift: self.shift,
             }.boxed().into()),
         )
@@ -404,6 +405,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
         Ok(
             call_on_generic_raster_processor!(source_processor, processor => RasterTimeShiftProcessor {
                 processor,
+                result_descriptor: self.result_descriptor.clone(),
                 shift: self.shift,
             }.boxed().into()),
         )
@@ -419,6 +421,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     processor: Q,
+    result_descriptor: RasterResultDescriptor,
     shift: Shift,
 }
 
@@ -428,6 +431,7 @@ where
     Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
     processor: Q,
+    result_descriptor: VectorResultDescriptor,
     shift: Shift,
 }
 
@@ -476,6 +480,10 @@ where
 
         Ok(stream.boxed())
     }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[async_trait]
@@ -511,6 +519,10 @@ where
         });
 
         Ok(Box::pin(stream))
+    }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

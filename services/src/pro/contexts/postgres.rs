@@ -140,11 +140,8 @@ where
             pool,
             volumes: Default::default(),
             tile_cache: Arc::new(
-                SharedCache::new(
-                    cache_config.cache_size_in_mb,
-                    cache_config.landing_zone_ratio,
-                )
-                .expect("tile cache creation should work because the config is valid"),
+                SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
+                    .expect("tile cache creation should work because the config is valid"),
             ),
         })
     }
@@ -188,11 +185,8 @@ where
             pool,
             volumes: Default::default(),
             tile_cache: Arc::new(
-                SharedCache::new(
-                    cache_config.cache_size_in_mb,
-                    cache_config.landing_zone_ratio,
-                )
-                .expect("tile cache creation should work because the config is valid"),
+                SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
+                    .expect("tile cache creation should work because the config is valid"),
             ),
         };
 
@@ -422,7 +416,7 @@ where
                 content: row.get(1),
             }),
             None => Err(
-                error::Error::MachineLearningError { source:
+                error::Error::MachineLearning { source:
                     crate::pro::machine_learning::ml_error::MachineLearningError::UnknownModelIdInPostgres {
                      model_id,
                     }
@@ -1096,6 +1090,7 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 wrap,
             )
@@ -1108,6 +1103,7 @@ mod tests {
                 order: crate::datasets::listing::OrderBy::NameAsc,
                 offset: 0,
                 limit: 10,
+                tags: None,
             })
             .await
             .unwrap();
@@ -1123,7 +1119,7 @@ mod tests {
                 description: "desc".to_owned(),
                 source_operator: "OgrSource".to_owned(),
                 symbology: None,
-                tags: vec![],
+                tags: vec!["upload".to_owned(), "test".to_owned()],
                 result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1271,6 +1267,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = StaticMetaData {
@@ -1302,6 +1299,7 @@ mod tests {
                 order: crate::datasets::listing::OrderBy::NameAsc,
                 offset: 0,
                 limit: 1,
+                tags: None,
             })
             .await
             .unwrap();
@@ -1314,6 +1312,7 @@ mod tests {
                 order: crate::datasets::listing::OrderBy::NameAsc,
                 offset: 0,
                 limit: 1,
+                tags: None,
             })
             .await
             .unwrap();
@@ -1344,6 +1343,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = StaticMetaData {
@@ -1397,6 +1397,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = StaticMetaData {
@@ -1456,6 +1457,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = StaticMetaData {
@@ -1515,6 +1517,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let meta = StaticMetaData {
@@ -1594,6 +1597,7 @@ mod tests {
             source_operator: "OgrSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let raster_ds = AddDataset {
@@ -1603,6 +1607,7 @@ mod tests {
             source_operator: "GdalSource".to_string(),
             symbology: None,
             provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
         };
 
         let gdal_params = GdalDatasetParameters {
@@ -2085,14 +2090,14 @@ mod tests {
             db.quota_available().await.unwrap(),
             crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                 .unwrap()
-                .default_available_quota
+                .initial_credits
         );
 
         assert_eq!(
             admin_db.quota_available_by_user(&user).await.unwrap(),
             crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                 .unwrap()
-                .default_available_quota
+                .initial_credits
         );
 
         admin_db
@@ -2556,6 +2561,7 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 wrap,
             )
@@ -2647,6 +2653,7 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 wrap,
             )
@@ -3335,8 +3342,6 @@ mod tests {
         }))
         .unwrap();
 
-        let update = update;
-
         // run two updates concurrently
         let (r0, r1) = join!(db.update_project(update.clone()), db.update_project(update));
 
@@ -3421,6 +3426,7 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 db.wrap_meta_data(meta_data.clone()),
             )
@@ -3446,6 +3452,7 @@ mod tests {
                         license: "license".to_owned(),
                         uri: "uri".to_owned(),
                     }]),
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 db.wrap_meta_data(meta_data),
             )
@@ -3535,7 +3542,7 @@ mod tests {
         let result = db.load_ml_model(model_id).await;
 
         match result {
-            Err(error::Error::MachineLearningError {
+            Err(error::Error::MachineLearning {
                 source: crate::pro::machine_learning::ml_error::MachineLearningError::UnknownModelIdInPostgres { .. },
             }) => (),
             _ => panic!("Expected UnknownModelId error"),

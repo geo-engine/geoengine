@@ -138,12 +138,14 @@ impl InitializedRasterOperator for InitializedInterpolation {
             source_processor, p => match self.interpolation_method  {
                 InterpolationMethod::NearestNeighbor => InterploationProcessor::<_,_, NearestNeighbor>::new(
                         p,
+                        self.result_descriptor.clone(),
                         self.input_resolution,
                         self.tiling_specification,
                     ).boxed()
                     .into(),
                 InterpolationMethod::BiLinear =>InterploationProcessor::<_,_, Bilinear>::new(
                         p,
+                        self.result_descriptor.clone(),
                         self.input_resolution,
                         self.tiling_specification,
                     ).boxed()
@@ -170,6 +172,7 @@ where
     I: InterpolationAlgorithm<P>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     input_resolution: SpatialResolution,
     tiling_specification: TilingSpecification,
     interpolation: PhantomData<I>,
@@ -183,11 +186,13 @@ where
 {
     pub fn new(
         source: Q,
+        result_descriptor: RasterResultDescriptor,
         input_resolution: SpatialResolution,
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
             source,
+            result_descriptor,
             input_resolution,
             tiling_specification,
             interpolation: PhantomData,
@@ -202,6 +207,7 @@ where
         Output = RasterTile2D<P>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
     P: Pixel,
     I: InterpolationAlgorithm<P>,
@@ -209,6 +215,7 @@ where
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -241,6 +248,10 @@ where
         .filter_and_fill(
             crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
         ))
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

@@ -257,6 +257,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                 TypedVectorQueryProcessor::MultiPoint(match self.state.temporal_aggregation {
                     TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
                         points,
+                        self.result_descriptor.clone(),
                         typed_raster_processors,
                         self.raster_sources_bands.clone(),
                         self.state.names.clone(),
@@ -267,6 +268,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
                         RasterVectorAggregateJoinProcessor::new(
                             points,
+                            self.result_descriptor.clone(),
                             typed_raster_processors,
                             self.state.names.clone(),
                             self.state.feature_aggregation,
@@ -282,6 +284,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                 TypedVectorQueryProcessor::MultiPolygon(match self.state.temporal_aggregation {
                     TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
                         polygons,
+                        self.result_descriptor.clone(),
                         typed_raster_processors,
                         self.raster_sources_bands.clone(),
                         self.state.names.clone(),
@@ -292,6 +295,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
                         RasterVectorAggregateJoinProcessor::new(
                             polygons,
+                            self.result_descriptor.clone(),
                             typed_raster_processors,
                             self.state.names.clone(),
                             self.state.feature_aggregation,

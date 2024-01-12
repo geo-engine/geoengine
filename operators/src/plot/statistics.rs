@@ -108,7 +108,7 @@ impl PlotOperator for Statistics {
                 let initialized_operator = InitializedStatistics::new(
                     name,
                     PlotResultDescriptor {
-                        spatial_reference: rasters.get(0).map_or_else(
+                        spatial_reference: rasters.first().map_or_else(
                             || SpatialReferenceOption::Unreferenced,
                             |r| r.result_descriptor().spatial_reference,
                         ),

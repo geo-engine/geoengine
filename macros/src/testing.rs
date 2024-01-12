@@ -163,7 +163,7 @@ impl TestConfig {
     }
 
     pub fn expect_panic(&self) -> TokenStream {
-        self.expect_panic.clone().unwrap_or_else(TokenStream::new)
+        self.expect_panic.clone().unwrap_or_default()
     }
 }
 

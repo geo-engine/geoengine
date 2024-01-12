@@ -35,20 +35,3 @@ pub trait LayerCollectionProvider {
     /// get the full contents of the layer with the given `id`
     async fn load_layer(&self, id: &LayerId) -> Result<Layer>;
 }
-
-#[async_trait]
-/// Listing of layers and layer collections
-pub trait DatasetLayerCollectionProvider {
-    /// get the given `collection`
-    async fn load_dataset_layer_collection(
-        &self,
-        collection: &LayerCollectionId,
-        options: LayerCollectionListOptions,
-    ) -> Result<LayerCollection>;
-
-    /// get the id of the root collection
-    async fn get_dataset_root_layer_collection_id(&self) -> Result<LayerCollectionId>;
-
-    /// get the full contents of the layer with the given `id`
-    async fn load_dataset_layer(&self, id: &LayerId) -> Result<Layer>;
-}

@@ -147,7 +147,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let cache_config: crate::pro::util::config::Cache = get_config_element()?;
     let quota_config: crate::pro::util::config::Quota = get_config_element()?;
 
-    if user_config.user_registration {
+    if user_config.registration {
         info!("User Registration: enabled");
     } else {
         info!("User Registration: disabled");
@@ -174,7 +174,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     }
 
     if cache_config.enabled {
-        info!("Cache: enabled ({} MB)", cache_config.cache_size_in_mb);
+        info!("Cache: enabled ({} MB)", cache_config.size_in_mb);
     } else {
         info!("Cache: disabled");
     }

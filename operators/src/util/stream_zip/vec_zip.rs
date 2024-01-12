@@ -48,7 +48,7 @@ impl<St: Stream, const N: usize> StreamArrayZip<St, N> {
     /// Since `St::Item` is not copy, we cannot use `[None; N]`
     #[inline]
     fn array_of_none() -> [Option<St::Item>; N] {
-        [(); N].map(|_| None)
+        [(); N].map(|()| None)
     }
 }
 

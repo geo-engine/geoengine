@@ -158,6 +158,7 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
         let res = call_on_generic_raster_processor!(
             source_processor, p =>
             TemporalRasterAggregationProcessor::new(
+                self.result_descriptor.clone(),
                 self.aggregation_type,
                 self.window,
                 self.window_reference,
@@ -180,6 +181,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
+    result_descriptor: RasterResultDescriptor,
     aggregation_type: Aggregation,
     window: TimeStep,
     window_reference: TimeInstance,
@@ -194,10 +196,12 @@ where
             Output = RasterTile2D<P>,
             SpatialBounds = SpatialPartition2D,
             Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
     fn new(
+        result_descriptor: RasterResultDescriptor,
         aggregation_type: Aggregation,
         window: TimeStep,
         window_reference: TimeInstance,
@@ -205,6 +209,7 @@ where
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
+            result_descriptor,
             aggregation_type,
             window,
             window_reference,
@@ -408,12 +413,15 @@ where
         Output = RasterTile2D<P>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
+
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -444,6 +452,10 @@ where
             .collect::<Vec<_>>();
 
         Ok(Box::pin(SimpleRasterStackerAdapter::new(band_streams)?))
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
     }
 }
 
