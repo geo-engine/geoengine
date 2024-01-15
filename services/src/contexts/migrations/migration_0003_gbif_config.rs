@@ -6,16 +6,16 @@ use crate::error::Result;
 use super::database_migration::{DatabaseVersion, Migration};
 
 /// This migration adds the autocomplete timeout field to the GBIF provider config
-pub struct Migration0002GbifConfig;
+pub struct Migration0003GbifConfig;
 
 #[async_trait]
-impl Migration for Migration0002GbifConfig {
+impl Migration for Migration0003GbifConfig {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some("0001_raster_stacks".into())
+        Some("0002_dataset_listing_provider".into())
     }
 
     fn version(&self) -> DatabaseVersion {
-        "0002_gbif_config".into()
+        "0003_gbif_config".into()
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
@@ -47,7 +47,7 @@ mod tests {
     use geoengine_datatypes::test_data;
     use tokio_postgres::NoTls;
 
-    use crate::contexts::Migration0001RasterStacks;
+    use crate::contexts::{Migration0001RasterStacks, Migration0002DatasetListingProvider};
     use crate::datasets::external::gbif::GBIF_PROVIDER_ID;
     use crate::layers::storage::LayerProviderDb;
     use crate::{
@@ -76,10 +76,17 @@ mod tests {
         conn.batch_execute(&test_data_sql).await?;
 
         // perform the previous migration
-        migrate_database(&mut conn, &[Box::new(Migration0001RasterStacks)]).await?;
+        migrate_database(
+            &mut conn,
+            &[
+                Box::new(Migration0001RasterStacks),
+                Box::new(Migration0002DatasetListingProvider),
+            ],
+        )
+        .await?;
 
-        // perform the current migration
-        migrate_database(&mut conn, &[Box::new(Migration0002GbifConfig)]).await?;
+        // perform the current migrations
+        migrate_database(&mut conn, &[Box::new(Migration0003GbifConfig)]).await?;
 
         // verify that the default value for autocomplete_timeout has been set correctly
         let autocomplete_timeout = conn

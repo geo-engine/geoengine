@@ -2677,14 +2677,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_performs_global_search_on_select_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -2779,14 +2779,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_performs_global_search_autocomplete_on_select_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -2835,14 +2835,14 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_searches_on_filter_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -2981,14 +2981,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_autocompletes_search_on_filter_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -3060,14 +3060,14 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_searches_on_filtered_filter_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -3210,14 +3210,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_autocompletes_search_on_filtered_filter_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -3289,14 +3289,14 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_searches_result_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -3435,14 +3435,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_autocompletes_search_on_result_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 

@@ -358,10 +358,6 @@ async fn provider_capabilities_handler<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
 
     let capabilities = match provider.into() {
-        crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID => {
-            let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(db);
-            dataset_listing_provider.capabilities()
-        }
         crate::layers::storage::INTERNAL_PROVIDER_ID => LayerCollectionProvider::capabilities(&db),
         provider => db.load_layer_provider(provider).await?.capabilities(),
     };
@@ -436,12 +432,6 @@ async fn search_handler<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
 
     let collection = match provider.into() {
-        crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID => {
-            let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(db);
-            dataset_listing_provider
-                .search(&collection, options.into_inner())
-                .await?
-        }
         crate::layers::storage::INTERNAL_PROVIDER_ID => {
             LayerCollectionProvider::search(&db, &collection, options.into_inner()).await?
         }
@@ -492,12 +482,6 @@ async fn autocomplete_handler<C: ApplicationContext>(
     let db = app_ctx.session_context(session).db();
 
     let suggestions = match provider.into() {
-        crate::datasets::dataset_listing_provider::DATASET_LISTING_PROVIDER_ID => {
-            let dataset_listing_provider = DatasetLayerListingProvider::with_all_datasets(db);
-            dataset_listing_provider
-                .autocomplete_search(&collection, options.into_inner())
-                .await?
-        }
         crate::layers::storage::INTERNAL_PROVIDER_ID => {
             LayerCollectionProvider::autocomplete_search(&db, &collection, options.into_inner())
                 .await?
