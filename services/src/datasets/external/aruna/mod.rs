@@ -1,4 +1,5 @@
 pub use self::error::ArunaProviderError;
+use crate::contexts::GeoEngineDb;
 use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -77,8 +78,8 @@ pub struct ArunaDataProviderDefinition {
 }
 
 #[async_trait::async_trait]
-impl DataProviderDefinition for ArunaDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for ArunaDataProviderDefinition {
+    async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(ArunaDataProvider::new(self).await?))
     }
 

@@ -1075,7 +1075,6 @@ mod tests {
         let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
 
         let db = app_ctx.session_context(session.clone()).db();
-        let wrap = db.wrap_meta_data(meta_data);
         let DatasetIdAndName {
             id: dataset_id,
             name: dataset_name,
@@ -1094,7 +1093,7 @@ mod tests {
                     }]),
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
-                wrap,
+                meta_data,
             )
             .await
             .unwrap();
@@ -1291,9 +1290,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-        let _id = db1.add_dataset(ds, meta).await.unwrap();
+        let _id = db1.add_dataset(ds, meta.into()).await.unwrap();
 
         let list1 = db1
             .list_datasets(DatasetListOptions {
@@ -1367,9 +1364,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-        let id = db1.add_dataset(ds, meta).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
 
         assert!(db1.load_provenance(&id).await.is_ok());
 
@@ -1421,9 +1416,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-        let id = db1.add_dataset(ds, meta).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
 
         assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1481,9 +1474,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-        let id = db1.add_dataset(ds, meta).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
 
         assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1541,9 +1532,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-        let id = db1.add_dataset(ds, meta).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -1650,9 +1639,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let meta = db.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-        let id = db.add_dataset(vector_ds, meta).await.unwrap().id;
+        let id = db.add_dataset(vector_ds, meta.into()).await.unwrap().id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -1672,9 +1659,11 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataRegular(meta));
-
-        let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
+        let id = db
+            .add_dataset(raster_ds.clone(), meta.into())
+            .await
+            .unwrap()
+            .id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -1689,9 +1678,11 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let meta = db.wrap_meta_data(MetaDataDefinition::GdalStatic(meta));
-
-        let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
+        let id = db
+            .add_dataset(raster_ds.clone(), meta.into())
+            .await
+            .unwrap()
+            .id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -1704,9 +1695,11 @@ mod tests {
             params: vec![],
         };
 
-        let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataList(meta));
-
-        let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
+        let id = db
+            .add_dataset(raster_ds.clone(), meta.into())
+            .await
+            .unwrap()
+            .id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -1727,9 +1720,11 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetadataNetCdfCf(meta));
-
-        let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
+        let id = db
+            .add_dataset(raster_ds.clone(), meta.into())
+            .await
+            .unwrap()
+            .id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -3950,7 +3945,6 @@ mod tests {
         let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
 
         let db = app_ctx.session_context(session.clone()).db();
-        let wrap = db.wrap_meta_data(meta_data);
         let dataset_id = db
             .add_dataset(
                 AddDataset {
@@ -3966,7 +3960,7 @@ mod tests {
                     }]),
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
-                wrap,
+                meta_data,
             )
             .await
             .unwrap()
@@ -4042,7 +4036,6 @@ mod tests {
         let session = admin_login(&app_ctx).await;
 
         let db = app_ctx.session_context(session).db();
-        let wrap = db.wrap_meta_data(meta_data);
         let dataset_id = db
             .add_dataset(
                 AddDataset {
@@ -4058,7 +4051,7 @@ mod tests {
                     }]),
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
-                wrap,
+                meta_data,
             )
             .await
             .unwrap()
@@ -4831,7 +4824,7 @@ mod tests {
                     }]),
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
-                db.wrap_meta_data(meta_data.clone()),
+                meta_data.clone(),
             )
             .await
             .unwrap();
@@ -4857,7 +4850,7 @@ mod tests {
                     }]),
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
-                db.wrap_meta_data(meta_data),
+                meta_data,
             )
             .await
             .unwrap();

@@ -1,13 +1,24 @@
 use std::{collections::HashMap, str::FromStr};
 
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::LayerId;
+use geoengine_datatypes::{
+    dataset::{DataId, LayerId},
+    primitives::{RasterQueryRectangle, VectorQueryRectangle},
+};
+use geoengine_operators::{
+    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
+    mock::MockDatasetDataSourceLoadingInfo,
+    source::{GdalLoadingInfo, OgrSourceDataset},
+};
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    contexts::GeoEngineDb,
     datasets::listing::DatasetProvider,
     error::Result,
     layers::{
+        external::{DataProvider, DataProviderDefinition},
         layer::{
             CollectionItem, Layer, LayerCollection, LayerCollectionListing, LayerListing,
             ProviderLayerCollectionId, ProviderLayerId,
@@ -22,95 +33,77 @@ use crate::{
 
 use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
 
-use super::listing::DatasetListOptions;
-
-/// Singleton Provider with id `5ad54b5e_e536_47e9_b9df_e729bfc7aaeb`
-pub const DATASET_LISTING_PROVIDER_ID: DataProviderId =
-    DataProviderId::from_u128(0x5ad54b5e_e536_47e9_b9df_e729bfc7aaeb);
+use super::listing::{DatasetListOptions, ProvenanceOutput};
 
 const TAG_PREFIX: &str = "tags:";
 const TAG_WILDCARD: &str = "*";
 const ROOT_COLLECTION_ID: &str = "root";
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
-pub struct DatasetLayerListingDefinition {
-    pub name: String,
-    pub description: String,
-    pub collection: Vec<DatasetLayerListingCollection>,
-}
-
-#[derive(Debug)]
-pub struct DatasetLayerListingProvider<D> {
-    pub dataset_provider: D,
+pub struct DatasetLayerListingProviderDefinition {
+    pub id: DataProviderId,
     pub name: String,
     pub description: String,
     pub collections: Vec<DatasetLayerListingCollection>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct DatasetLayerListingProvider<D> {
+    pub dataset_provider: D,
+    pub id: DataProviderId,
+    pub name: String,
+    pub description: String,
+    pub collections: Vec<DatasetLayerListingCollection>,
+}
+
+// manual Debug implementations because `DataProvider` requires it but `DatasetProvider` doesn't provide it
+#[allow(clippy::missing_fields_in_debug)]
+impl<D> std::fmt::Debug for DatasetLayerListingProvider<D> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DatasetLayerListingProvider")
+            .field("name", &self.name)
+            .field("description", &self.description)
+            .field("collections", &self.collections)
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, FromSql, ToSql)]
 pub struct DatasetLayerListingCollection {
     pub name: String,
     pub description: String,
     pub tags: Vec<String>,
 }
 
+#[async_trait]
+impl<D: GeoEngineDb> DataProviderDefinition<D> for DatasetLayerListingProviderDefinition {
+    async fn initialize(self: Box<Self>, db: D) -> Result<Box<dyn DataProvider>> {
+        Ok(Box::new(DatasetLayerListingProvider {
+            dataset_provider: db,
+            id: self.id,
+            name: self.name,
+            description: self.description,
+            collections: self.collections,
+        }))
+    }
+
+    fn type_name(&self) -> &'static str {
+        "DatasetLayerListingProviderDefinition"
+    }
+
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn id(&self) -> DataProviderId {
+        self.id
+    }
+}
+
 impl<D> DatasetLayerListingProvider<D>
 where
-    D: DatasetProvider,
+    D: DatasetProvider + Send + Sync + 'static,
 {
-    /// Creates a new `DatasetLayerListingProvider` with the following collections:
-    pub fn with_all_datasets(dataset_provider: D) -> Self {
-        let collections = vec![
-            DatasetLayerListingCollection {
-                name: "User Uploads".to_string(),
-                description: "Datasets uploaded by the user.".to_string(),
-                tags: vec!["upload".to_string()],
-            },
-            DatasetLayerListingCollection {
-                name: "Workflows".to_string(),
-                description: "Datasets created from workflows.".to_string(),
-                tags: vec!["workflow".to_string()],
-            },
-            DatasetLayerListingCollection {
-                name: "All Datasets".to_string(),
-                description: "All datasets".to_string(),
-                tags: vec![TAG_WILDCARD.to_string()],
-            },
-        ];
-
-        let definition = DatasetLayerListingDefinition {
-            name: "User Data Listing".to_string(),
-            description: "User specific datasets grouped by tags".to_string(),
-            collection: collections,
-        };
-
-        Self::new(dataset_provider, definition)
-    }
-
-    /// Creates a new `DatasetLayerListingProvider` with provided tag collections
-    pub fn new(dataset_provider: D, definition: DatasetLayerListingDefinition) -> Self {
-        Self {
-            dataset_provider,
-            name: definition.name,
-            description: definition.description,
-            collections: definition.collection,
-        }
-    }
-
-    /// Generates a provider listing collection item for this provider
-    pub fn generate_provider_listing_collection_item(&self) -> CollectionItem {
-        CollectionItem::Collection(LayerCollectionListing {
-            id: ProviderLayerCollectionId {
-                provider_id: DATASET_LISTING_PROVIDER_ID,
-                collection_id: Self::root_collection_id(),
-            },
-            name: self.name.clone(),
-            description: self.description.clone(),
-            properties: Default::default(),
-        })
-    }
-
     /// Generates the root collection for this provider
     pub fn generate_root_collection(&self, offset: u32, limit: u32) -> LayerCollection {
         let collection_items = self
@@ -121,7 +114,7 @@ where
             .map(|c| {
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
-                        provider_id: DATASET_LISTING_PROVIDER_ID,
+                        provider_id: self.id,
                         collection_id: LayerCollectionId(
                             TAG_PREFIX.to_owned() + &c.tags.join(",").clone(),
                         ),
@@ -135,7 +128,7 @@ where
 
         LayerCollection {
             id: ProviderLayerCollectionId {
-                provider_id: DATASET_LISTING_PROVIDER_ID,
+                provider_id: self.id,
                 collection_id: Self::root_collection_id(),
             },
             name: self.name.clone(),
@@ -174,7 +167,7 @@ where
             .map(|d| {
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
-                        provider_id: DATASET_LISTING_PROVIDER_ID,
+                        provider_id: self.id,
                         layer_id: LayerId(d.id.to_string()),
                     },
                     name: d.display_name.clone(),
@@ -186,7 +179,7 @@ where
 
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
-                provider_id: DATASET_LISTING_PROVIDER_ID,
+                provider_id: self.id,
                 collection_id: LayerCollectionId(tags.join(",").to_string()),
             },
             name: tags.join(","),
@@ -205,7 +198,7 @@ where
 #[async_trait]
 impl<D> LayerCollectionProvider for DatasetLayerListingProvider<D>
 where
-    D: DatasetProvider,
+    D: DatasetProvider + Send + Sync + 'static,
 {
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
@@ -260,7 +253,7 @@ where
 
         Ok(Layer {
             id: ProviderLayerId {
-                provider_id: DATASET_LISTING_PROVIDER_ID,
+                provider_id: self.id,
                 layer_id: id.clone(),
             },
             name: dataset.display_name,
@@ -270,5 +263,79 @@ where
             properties: vec![],
             metadata: HashMap::new(),
         })
+    }
+}
+
+#[async_trait]
+impl<D> DataProvider for DatasetLayerListingProvider<D>
+where
+    D: DatasetProvider + Send + Sync + 'static,
+{
+    async fn provenance(&self, _id: &DataId) -> Result<ProvenanceOutput> {
+        // never called but handled by the dataset provider
+        Err(crate::error::Error::NotImplemented {
+            message: "provenance output is available via the Dataset DB".to_string(),
+        })
+    }
+}
+
+#[async_trait]
+impl<D>
+    MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
+    for DatasetLayerListingProvider<D>
+where
+    D: DatasetProvider + Send + Sync + 'static,
+{
+    async fn meta_data(
+        &self,
+        _id: &geoengine_datatypes::dataset::DataId,
+    ) -> Result<
+        Box<
+            dyn MetaData<
+                MockDatasetDataSourceLoadingInfo,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            >,
+        >,
+        geoengine_operators::error::Error,
+    > {
+        // never called but handled by the dataset provider
+        Err(geoengine_operators::error::Error::NotImplemented)
+    }
+}
+
+#[async_trait]
+impl<D> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for DatasetLayerListingProvider<D>
+where
+    D: DatasetProvider + Send + Sync + 'static,
+{
+    async fn meta_data(
+        &self,
+        _id: &geoengine_datatypes::dataset::DataId,
+    ) -> Result<
+        Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        geoengine_operators::error::Error,
+    > {
+        // never called but handled by the dataset provider
+        Err(geoengine_operators::error::Error::NotImplemented)
+    }
+}
+
+#[async_trait]
+impl<D> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for DatasetLayerListingProvider<D>
+where
+    D: DatasetProvider + Send + Sync + 'static,
+{
+    async fn meta_data(
+        &self,
+        _id: &geoengine_datatypes::dataset::DataId,
+    ) -> Result<
+        Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+        geoengine_operators::error::Error,
+    > {
+        // never called but handled by the dataset provider
+        Err(geoengine_operators::error::Error::NotImplemented)
     }
 }

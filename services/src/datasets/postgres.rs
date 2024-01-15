@@ -3,9 +3,7 @@ use super::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
-use crate::datasets::storage::{
-    Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
-};
+use crate::datasets::storage::{Dataset, DatasetDb, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error::{self, Result};
@@ -80,16 +78,25 @@ where
 
         let filter_sql = if options.filter.is_some() {
             pos += 1;
-            format!("AND (name).name ILIKE ${pos} ESCAPE '\\'")
+            Some(format!("(name).name ILIKE ${pos} ESCAPE '\\'"))
         } else {
-            String::new()
+            None
         };
 
         let (filter_tags_sql, filter_tags_list) = if let Some(filter_tags) = &options.tags {
             pos += 1;
-            (format!("AND d.tags @> ${pos}::text[]"), filter_tags.clone())
+            (Some(format!("tags @> ${pos}::text[]")), filter_tags.clone())
         } else {
-            (String::new(), vec![])
+            (None, vec![])
+        };
+
+        let where_clause_sql = match (filter_sql, filter_tags_sql) {
+            (Some(filter_sql), Some(filter_tags_sql)) => {
+                format!("WHERE {filter_sql} AND {filter_tags_sql}")
+            }
+            (Some(filter_sql), None) => format!("WHERE {filter_sql}"),
+            (None, Some(filter_tags_sql)) => format!("WHERE {filter_tags_sql}"),
+            (None, None) => String::new(),
         };
 
         let stmt = conn
@@ -106,8 +113,7 @@ where
                 symbology
             FROM 
                 datasets
-            {filter_sql}
-            {filter_tags_sql}
+            {where_clause_sql}
             ORDER BY {order_sql}
             LIMIT $1
             OFFSET $2;"
@@ -406,55 +412,8 @@ where
 }
 
 pub struct DatasetMetaData<'m> {
-    meta_data: &'m MetaDataDefinition,
-    result_descriptor: TypedResultDescriptor,
-}
-
-impl<Tls> DatasetStorer for PostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    type StorageType = Box<dyn PostgresStorable<Tls>>;
-}
-
-impl<Tls> PostgresStorable<Tls> for MetaDataDefinition
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    fn to_typed_metadata(&self) -> Result<DatasetMetaData> {
-        match self {
-            MetaDataDefinition::MockMetaData(d) => Ok(DatasetMetaData {
-                meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
-            }),
-            MetaDataDefinition::OgrMetaData(d) => Ok(DatasetMetaData {
-                meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
-            }),
-            MetaDataDefinition::GdalMetaDataRegular(d) => Ok(DatasetMetaData {
-                meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
-            }),
-            MetaDataDefinition::GdalStatic(d) => Ok(DatasetMetaData {
-                meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
-            }),
-            MetaDataDefinition::GdalMetadataNetCdfCf(d) => Ok(DatasetMetaData {
-                meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
-            }),
-            MetaDataDefinition::GdalMetaDataList(d) => Ok(DatasetMetaData {
-                meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
-            }),
-        }
-    }
+    pub meta_data: &'m MetaDataDefinition,
+    pub result_descriptor: TypedResultDescriptor,
 }
 
 #[async_trait]
@@ -468,7 +427,7 @@ where
     async fn add_dataset(
         &self,
         dataset: AddDataset,
-        meta_data: Box<dyn PostgresStorable<Tls>>,
+        meta_data: MetaDataDefinition,
     ) -> Result<DatasetIdAndName> {
         let id = DatasetId::new();
         let name = dataset.name.unwrap_or_else(|| DatasetName {
@@ -478,7 +437,7 @@ where
 
         Self::check_namespace(&name)?;
 
-        let typed_meta_data = meta_data.to_typed_metadata()?;
+        let typed_meta_data = meta_data.to_typed_metadata();
 
         let conn = self.conn_pool.get().await?;
 
@@ -531,10 +490,6 @@ where
         conn.execute(&stmt, &[&dataset_id]).await?;
 
         Ok(())
-    }
-
-    fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {
-        Box::new(meta)
     }
 }
 

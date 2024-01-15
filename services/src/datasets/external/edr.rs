@@ -1,3 +1,4 @@
+use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -78,8 +79,8 @@ pub struct EdrVectorSpec {
 }
 
 #[async_trait]
-impl DataProviderDefinition for EdrDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for EdrDataProviderDefinition {
+    async fn initialize(self: Box<Self>, _db: D) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(EdrDataProvider {
             id: self.id,
             base_url: self.base_url,
@@ -1178,6 +1179,11 @@ pub enum EdrProviderError {
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        contexts::{PostgresContext, PostgresDb, SessionContext, SimpleApplicationContext},
+        ge_context,
+    };
+
     use super::*;
     use geoengine_datatypes::{
         dataset::ExternalDataId,
@@ -1187,6 +1193,7 @@ mod tests {
     use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
     use httptest::{matchers::*, responders::status_code, Expectation, Server};
     use std::{ops::Range, path::PathBuf};
+    use tokio_postgres::NoTls;
 
     const DEMO_PROVIDER_ID: DataProviderId =
         DataProviderId::from_u128(0xdc2d_dc34_b0d9_4ee0_bf3e_414f_01a8_05ad);
@@ -1195,7 +1202,7 @@ mod tests {
         crate::test_data!(String::from("edr/") + file_name).into()
     }
 
-    async fn create_provider(server: &Server) -> Box<dyn DataProvider> {
+    async fn create_provider<D: GeoEngineDb>(server: &Server, db: D) -> Box<dyn DataProvider> {
         Box::new(EdrDataProviderDefinition {
             name: "EDR".to_string(),
             id: DEMO_PROVIDER_ID,
@@ -1209,7 +1216,7 @@ mod tests {
             discrete_vrs: vec!["between-depth".to_string()],
             provenance: None,
         })
-        .initialize()
+        .initialize(db)
         .await
         .unwrap()
     }
@@ -1236,7 +1243,10 @@ mod tests {
         );
     }
 
-    async fn load_layer_collection(collection: &LayerCollectionId) -> LayerCollection {
+    async fn load_layer_collection<D: GeoEngineDb>(
+        collection: &LayerCollectionId,
+        db: D,
+    ) -> Result<LayerCollection> {
         let mut server = Server::run();
 
         if collection.0 == "collections" {
@@ -1245,7 +1255,7 @@ mod tests {
                 "/collections",
                 "application/json",
                 "edr_collections.json",
-                1..2,
+                0..2,
             )
             .await;
         } else {
@@ -1255,12 +1265,12 @@ mod tests {
                 &format!("/collections/{collection_name}"),
                 "application/json",
                 &format!("edr_{collection_name}.json"),
-                1..2,
+                0..2,
             )
             .await;
         }
 
-        let provider = create_provider(&server).await;
+        let provider = create_provider(&server, db).await;
 
         let datasets = provider
             .load_layer_collection(
@@ -1270,17 +1280,20 @@ mod tests {
                     limit: 20,
                 },
             )
-            .await
-            .unwrap();
+            .await?;
         server.verify_and_clear();
 
-        datasets
+        Ok(datasets)
     }
 
-    #[tokio::test]
-    async fn it_loads_root_collection() {
+    #[ge_context::test]
+    async fn it_loads_root_collection(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let root_collection_id = LayerCollectionId("collections".to_string());
-        let datasets = load_layer_collection(&root_collection_id).await;
+        let datasets = load_layer_collection(
+            &root_collection_id,
+            app_ctx.default_session_context().await.unwrap().db(),
+        )
+        .await?;
 
         assert_eq!(
             datasets,
@@ -1352,12 +1365,18 @@ mod tests {
                 properties: vec![]
             }
         );
+
+        Ok(())
     }
 
-    #[tokio::test]
-    async fn it_loads_raster_parameter_collection() {
+    #[ge_context::test]
+    async fn it_loads_raster_parameter_collection(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let collection_id = LayerCollectionId("collections!GFS_isobaric".to_string());
-        let datasets = load_layer_collection(&collection_id).await;
+        let datasets = load_layer_collection(
+            &collection_id,
+            app_ctx.default_session_context().await.unwrap().db(),
+        )
+        .await?;
 
         assert_eq!(
             datasets,
@@ -1383,12 +1402,18 @@ mod tests {
                 properties: vec![]
             }
         );
+
+        Ok(())
     }
 
-    #[tokio::test]
-    async fn it_loads_vector_height_collection() {
+    #[ge_context::test]
+    async fn it_loads_vector_height_collection(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let collection_id = LayerCollectionId("collections!PointsInFrance".to_string());
-        let datasets = load_layer_collection(&collection_id).await;
+        let datasets = load_layer_collection(
+            &collection_id,
+            app_ctx.default_session_context().await.unwrap().db(),
+        )
+        .await?;
 
         assert_eq!(
             datasets,
@@ -1423,19 +1448,30 @@ mod tests {
                 properties: vec![]
             }
         );
+
+        Ok(())
     }
 
-    #[tokio::test]
-    #[should_panic(expected = "InvalidLayerCollectionId")]
-    async fn vector_without_height_collection_invalid() {
+    #[ge_context::test]
+    async fn vector_without_height_collection_invalid(app_ctx: PostgresContext<NoTls>) {
         let collection_id = LayerCollectionId("collections!PointsInGermany".to_string());
-        load_layer_collection(&collection_id).await;
+        let res = load_layer_collection(
+            &collection_id,
+            app_ctx.default_session_context().await.unwrap().db(),
+        )
+        .await;
+
+        assert!(res.is_err());
     }
 
-    #[tokio::test]
-    async fn it_loads_raster_height_collection() {
+    #[ge_context::test]
+    async fn it_loads_raster_height_collection(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let collection_id = LayerCollectionId("collections!GFS_isobaric!temperature".to_string());
-        let datasets = load_layer_collection(&collection_id).await;
+        let datasets = load_layer_collection(
+            &collection_id,
+            app_ctx.default_session_context().await.unwrap().db(),
+        )
+        .await?;
 
         assert_eq!(
             datasets,
@@ -1474,34 +1510,64 @@ mod tests {
                 properties: vec![]
             }
         );
+
+        Ok(())
     }
 
-    #[tokio::test]
-    #[should_panic(expected = "InvalidLayerCollectionId")]
-    async fn vector_with_parameter_collection_invalid() {
+    #[ge_context::test]
+    async fn vector_with_parameter_collection_invalid(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
         let collection_id = LayerCollectionId("collections!PointsInGermany!ID".to_string());
-        load_layer_collection(&collection_id).await;
+        let res = load_layer_collection(
+            &collection_id,
+            app_ctx.default_session_context().await.unwrap().db(),
+        )
+        .await;
+
+        assert!(res.is_err());
+
+        Ok(())
     }
 
-    #[tokio::test]
-    #[should_panic(expected = "InvalidLayerCollectionId")]
-    async fn raster_with_parameter_without_height_collection_invalid() {
+    #[ge_context::test]
+    async fn raster_with_parameter_without_height_collection_invalid(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
         let collection_id =
             LayerCollectionId("collections!GFS_single-level!temperature_max-wind".to_string());
-        load_layer_collection(&collection_id).await;
+        let res = load_layer_collection(
+            &collection_id,
+            app_ctx.default_session_context().await.unwrap().db(),
+        )
+        .await;
+
+        assert!(res.is_err());
+
+        Ok(())
     }
 
-    #[tokio::test]
-    #[should_panic(expected = "InvalidLayerCollectionId")]
-    async fn collection_with_parameter_and_height_invalid() {
+    #[ge_context::test]
+    async fn collection_with_parameter_and_height_invalid(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
         let collection_id =
             LayerCollectionId("collections!GFS_isobaric!temperature!1000".to_string());
-        load_layer_collection(&collection_id).await;
+        let res = load_layer_collection(
+            &collection_id,
+            app_ctx.default_session_context().await.unwrap().db(),
+        )
+        .await;
+
+        assert!(res.is_err());
+
+        Ok(())
     }
 
-    async fn load_metadata<L, R, Q>(
+    async fn load_metadata<L, R, Q, D: GeoEngineDb>(
         server: &mut Server,
         collection: &'static str,
+        db: D,
     ) -> Box<dyn MetaData<L, R, Q>>
     where
         R: ResultDescriptor,
@@ -1517,7 +1583,7 @@ mod tests {
         )
         .await;
 
-        let provider = create_provider(server).await;
+        let provider = create_provider(server, db).await;
 
         let meta: Box<dyn MetaData<L, R, Q>> = provider
             .meta_data(&DataId::External(ExternalDataId {
@@ -1530,12 +1596,18 @@ mod tests {
         meta
     }
 
-    #[tokio::test]
-    async fn generate_ogr_metadata() {
+    #[ge_context::test]
+    async fn generate_ogr_metadata(app_ctx: PostgresContext<NoTls>) {
         let mut server = Server::run();
-        let meta = load_metadata::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+        let meta = load_metadata::<
+            OgrSourceDataset,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+            PostgresDb<NoTls>,
+        >(
             &mut server,
             "PointsInGermany",
+            app_ctx.default_session_context().await.unwrap().db(),
         )
         .await;
         let loading_info = meta
@@ -1609,9 +1681,9 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn generate_gdal_metadata() {
+    async fn generate_gdal_metadata(app_ctx: PostgresContext<NoTls>) {
         hide_gdal_errors(); //hide GTIFF_HONOUR_NEGATIVE_SCALEY warning
 
         let mut server = Server::run();
@@ -1634,9 +1706,15 @@ mod tests {
             .times(0..2)
             .respond_with(status_code(404)),
         );
-        let meta = load_metadata::<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>(
+        let meta = load_metadata::<
+            GdalLoadingInfo,
+            RasterResultDescriptor,
+            RasterQueryRectangle,
+            PostgresDb<NoTls>,
+        >(
             &mut server,
             "GFS_isobaric!temperature!1000",
+            app_ctx.default_session_context().await.unwrap().db(),
         )
         .await;
 

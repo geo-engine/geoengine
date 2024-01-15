@@ -1,3 +1,4 @@
+use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::{Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -52,8 +53,8 @@ pub struct GbifDataProviderDefinition {
 }
 
 #[async_trait]
-impl DataProviderDefinition for GbifDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for GbifDataProviderDefinition {
+    async fn initialize(self: Box<Self>, _db: D) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(
             GbifDataProvider::new(self.db_config, self.cache_ttl, self.autocomplete_timeout)
                 .await?,
@@ -1368,10 +1369,15 @@ impl DataProvider for GbifDataProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::PostgresContext;
+    use crate::contexts::SessionContext;
+    use crate::contexts::SimpleApplicationContext;
     use crate::layers::layer::Layer;
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
     use crate::util::config::{get_config_element, Postgres};
+    use crate::util::tests::setup_db;
+    use crate::util::tests::tear_down_db;
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
@@ -1437,7 +1443,10 @@ mod tests {
 
     async fn with_temp_schema<F, Fut>(f: F)
     where
-        F: FnOnce(DatabaseConnectionConfig) -> Fut + std::panic::UnwindSafe + Send + 'static,
+        F: FnOnce(PostgresContext<NoTls>, DatabaseConnectionConfig) -> Fut
+            + std::panic::UnwindSafe
+            + Send
+            + 'static,
         Fut: Future<Output = ()> + Send,
     {
         let pg_config = get_config_element::<Postgres>().unwrap();
@@ -1451,19 +1460,32 @@ mod tests {
             password: pg_config.password.clone(),
         };
 
+        let (_permit, ge_pg_config, ge_schema) = setup_db().await;
+
         // catch all panics and clean up first…
         let executed_fn = {
             let db_config = db_config.clone();
+            let ge_pg_config = ge_pg_config.clone();
             std::panic::catch_unwind(move || {
                 tokio::task::block_in_place(move || {
                     Handle::current().block_on(async move {
-                        f(db_config).await;
+                        let ctx = PostgresContext::new_with_context_spec(
+                            ge_pg_config.clone(),
+                            tokio_postgres::NoTls,
+                            TestDefault::test_default(),
+                            TestDefault::test_default(),
+                        )
+                        .await
+                        .unwrap();
+                        f(ctx, db_config).await;
                     });
                 });
             })
         };
 
         cleanup_test_data(&pg_config, schema).await;
+
+        tear_down_db(ge_pg_config, &ge_schema).await;
 
         // then throw errors afterwards
         if let Err(err) = executed_fn {
@@ -1473,14 +1495,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_select_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -1555,14 +1577,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_select_items_filtered() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -1645,14 +1667,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_correct_select_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -1731,14 +1753,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_result_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -1799,14 +1821,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_result_items_filtered() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -1844,14 +1866,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_filter_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -1897,14 +1919,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_lists_filter_items_filtered() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -1943,8 +1965,11 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_creates_meta_data() {
-        with_temp_schema(|db_config| async {
-            async fn test(db_config: DatabaseConnectionConfig) -> Result<(), String> {
+        with_temp_schema(|app_ctx, db_config| async {
+            async fn test(
+                app_ctx: PostgresContext<NoTls>,
+                db_config: DatabaseConnectionConfig,
+            ) -> Result<(), String> {
                 let ogr_pg_string = db_config.ogr_pg_config();
 
                 let provider = Box::new(GbifDataProviderDefinition {
@@ -1953,7 +1978,7 @@ mod tests {
                     cache_ttl: Default::default(),
                     autocomplete_timeout: 5,
                 })
-                .initialize()
+                .initialize(app_ctx.default_session_context().await.unwrap().db())
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -2155,7 +2180,7 @@ mod tests {
                 Ok(())
             }
 
-            let test = test(db_config).await;
+            let test = test(app_ctx, db_config).await;
 
             assert!(test.is_ok());
         })
@@ -2165,15 +2190,18 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_loads() {
-        with_temp_schema(|db_config| async {
-            async fn test(db_config: DatabaseConnectionConfig) -> Result<(), String> {
+        with_temp_schema(|app_ctx, db_config| async {
+            async fn test(
+                app_ctx: PostgresContext<NoTls>,
+                db_config: DatabaseConnectionConfig,
+            ) -> Result<(), String> {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
                     db_config,
                     cache_ttl: Default::default(),
                     autocomplete_timeout: 5,
                 })
-                .initialize()
+                .initialize(app_ctx.default_session_context().await.unwrap().db())
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -2528,7 +2556,7 @@ mod tests {
                 Ok(())
             }
 
-            let result = test(db_config).await;
+            let result = test(app_ctx, db_config).await;
 
             assert!(result.is_ok());
         })
@@ -2537,15 +2565,15 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_cites() {
-        with_temp_schema(|db_config| async {
-            async fn test(db_config: DatabaseConnectionConfig) -> Result<(), String> {
+        with_temp_schema(|app_ctx, db_config| async {
+            async fn test(app_ctx: PostgresContext<NoTls>, db_config: DatabaseConnectionConfig) -> Result<(), String> {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
                     db_config,
                     cache_ttl: Default::default(),
                     autocomplete_timeout: 5,
                 })
-                    .initialize()
+                    .initialize(app_ctx.default_session_context().await.unwrap().db())
                     .await
                     .map_err(|e| e.to_string())?;
 
@@ -2578,7 +2606,7 @@ mod tests {
                 Ok(())
             }
 
-            let result = test(db_config).await;
+            let result = test(app_ctx, db_config).await;
 
             assert!(result.is_ok());
         }).await;
@@ -2586,15 +2614,15 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_creates_layer() {
-        with_temp_schema(|db_config| async {
-            async fn test(db_config: DatabaseConnectionConfig) -> Result<(), String> {
+        with_temp_schema(|app_ctx, db_config| async {
+            async fn test(app_ctx: PostgresContext<NoTls>, db_config: DatabaseConnectionConfig) -> Result<(), String> {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
                     db_config,
                     cache_ttl: Default::default(),
                     autocomplete_timeout: 5,
                 })
-                .initialize()
+                .initialize(app_ctx.default_session_context().await.unwrap().db())
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -2640,7 +2668,7 @@ mod tests {
                 Ok(())
             }
 
-            let result = test(db_config).await;
+            let result = test(app_ctx, db_config).await;
 
             assert!(result.is_ok());
         })
@@ -2649,14 +2677,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_performs_global_search_on_select_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -2751,14 +2779,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_performs_global_search_autocomplete_on_select_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -2807,14 +2835,14 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_searches_on_filter_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -2953,14 +2981,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_autocompletes_search_on_filter_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -3032,14 +3060,14 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_searches_on_filtered_filter_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -3182,14 +3210,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_autocompletes_search_on_filtered_filter_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -3261,14 +3289,14 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn it_searches_result_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 
@@ -3407,14 +3435,14 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_autocompletes_search_on_result_items() {
-        with_temp_schema(|db_config| async {
+        with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .unwrap();
 

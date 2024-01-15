@@ -183,7 +183,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
 
     let db = &app_ctx.default_session_context().await.unwrap().db();
     let dataset_id = db
-        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
+        .add_dataset(ndvi.properties, ndvi.meta_data)
         .await
         .expect("dataset db access")
         .id;
@@ -296,7 +296,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
         }),
     };
 
-    db.add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
+    db.add_dataset(ndvi.properties, ndvi.meta_data)
         .await
         .expect("dataset db access")
         .id
