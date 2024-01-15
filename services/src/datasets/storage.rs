@@ -1,4 +1,5 @@
 use super::listing::Provenance;
+use super::postgres::DatasetMetaData;
 use super::{DatasetIdAndName, DatasetName};
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
@@ -148,6 +149,40 @@ pub enum MetaDataDefinition {
     GdalMetaDataList(GdalMetaDataList),
 }
 
+impl From<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>
+    for MetaDataDefinition
+{
+    fn from(
+        meta_data: StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+    ) -> Self {
+        MetaDataDefinition::OgrMetaData(meta_data)
+    }
+}
+
+impl From<GdalMetaDataRegular> for MetaDataDefinition {
+    fn from(meta_data: GdalMetaDataRegular) -> Self {
+        MetaDataDefinition::GdalMetaDataRegular(meta_data)
+    }
+}
+
+impl From<GdalMetaDataStatic> for MetaDataDefinition {
+    fn from(meta_data: GdalMetaDataStatic) -> Self {
+        MetaDataDefinition::GdalStatic(meta_data)
+    }
+}
+
+impl From<GdalMetadataNetCdfCf> for MetaDataDefinition {
+    fn from(meta_data: GdalMetadataNetCdfCf) -> Self {
+        MetaDataDefinition::GdalMetadataNetCdfCf(meta_data)
+    }
+}
+
+impl From<GdalMetaDataList> for MetaDataDefinition {
+    fn from(meta_data: GdalMetaDataList) -> Self {
+        MetaDataDefinition::GdalMetaDataList(meta_data)
+    }
+}
+
 impl MetaDataDefinition {
     pub fn source_operator_type(&self) -> &str {
         match self {
@@ -205,30 +240,50 @@ impl MetaDataDefinition {
                 .context(error::Operator),
         }
     }
+
+    pub fn to_typed_metadata(&self) -> DatasetMetaData {
+        match self {
+            MetaDataDefinition::MockMetaData(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+            MetaDataDefinition::OgrMetaData(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+            MetaDataDefinition::GdalMetaDataRegular(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+            MetaDataDefinition::GdalStatic(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+            MetaDataDefinition::GdalMetadataNetCdfCf(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+            MetaDataDefinition::GdalMetaDataList(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+        }
+    }
 }
 
 /// Handling of datasets provided by geo engine internally, staged and by external providers
 #[async_trait]
 pub trait DatasetDb: DatasetStore + DatasetProvider + UploadDb + Send + Sync {}
 
-/// Defines the type of meta data a `DatasetDB` is able to store
-pub trait DatasetStorer: Send + Sync {
-    type StorageType: Send + Sync;
-}
-
 /// Allow storage of meta data of a particular storage type, e.g. `HashMapStorable` meta data for
 /// `HashMapDatasetDB`
 #[async_trait]
-pub trait DatasetStore: DatasetStorer {
+pub trait DatasetStore {
     async fn add_dataset(
         &self,
         dataset: AddDataset,
-        meta_data: Self::StorageType,
+        meta_data: MetaDataDefinition,
     ) -> Result<DatasetIdAndName>;
 
     async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
-
-    /// turn given `meta` data definition into the corresponding `StorageType` for the `DatasetStore`
-    /// for use in the `add_dataset` method
-    fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType;
 }

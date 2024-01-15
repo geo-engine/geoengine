@@ -1141,7 +1141,7 @@ x;y
 
         let db = app_ctx.default_session_context().await.unwrap().db();
 
-        db.add_dataset(def.properties, Box::new(def.meta_data))
+        db.add_dataset(def.properties, def.meta_data)
             .await
             .unwrap()
             .id

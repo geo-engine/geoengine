@@ -1,4 +1,5 @@
 pub use self::error::ArunaProviderError;
+use crate::contexts::GeoEngineDb;
 use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -6,7 +7,9 @@ use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
 };
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::layers::listing::{
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+};
 use crate::workflows::workflow::Workflow;
 use aruna_rust_api::api::storage::models::v1::{
     CollectionOverview, KeyValue, LabelFilter, LabelOrIdQuery, Object,
@@ -75,8 +78,8 @@ pub struct ArunaDataProviderDefinition {
 }
 
 #[async_trait::async_trait]
-impl DataProviderDefinition for ArunaDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for ArunaDataProviderDefinition {
+    async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(ArunaDataProvider::new(self).await?))
     }
 
@@ -659,6 +662,13 @@ impl DataProvider for ArunaDataProvider {
 
 #[async_trait::async_trait]
 impl LayerCollectionProvider for ArunaDataProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities::none(),
+        }
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,

@@ -1,5 +1,6 @@
 use super::gfbio_abcd::GfbioAbcdDataProvider;
 use super::pangaea::{PangaeaDataProvider, PangaeaMetaData};
+use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error::ProviderDoesNotSupportBrowsing;
 use crate::error::{Error, Result};
@@ -8,7 +9,9 @@ use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
 };
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::layers::listing::{
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+};
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -60,8 +63,8 @@ pub struct GfbioCollectionsDataProviderDefinition {
 }
 
 #[async_trait]
-impl DataProviderDefinition for GfbioCollectionsDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for GfbioCollectionsDataProviderDefinition {
+    async fn initialize(self: Box<Self>, _db: D) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(
             GfbioCollectionsDataProvider::new(
                 self.collection_api_url,
@@ -569,6 +572,13 @@ impl GfbioCollectionsDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for GfbioCollectionsDataProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: false,
+            search: SearchCapabilities::none(),
+        }
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,

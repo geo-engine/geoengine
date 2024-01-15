@@ -104,10 +104,9 @@ where
         .context(CannotResolveUploadFilePath)?;
 
     let db = app_ctx.session_context(session).db();
-    let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let dataset = db
-        .add_dataset(definition.properties.into(), meta_data)
+        .add_dataset(definition.properties.into(), definition.meta_data.into())
         .await
         .context(DatabaseAccess)?;
 
