@@ -1,9 +1,9 @@
 use crate::error::{AtLeastOneStreamRequired, Error};
 use crate::util::Result;
 use futures::ready;
-use futures::stream::Stream;
-use geoengine_datatypes::primitives::TimeInterval;
-use geoengine_datatypes::raster::RasterTile2D;
+use futures::stream::{BoxStream, Stream};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
+use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::pin_project;
 use snafu::ensure;
 use std::pin::Pin;
@@ -126,6 +126,39 @@ where
 
         Poll::Ready(Some(item))
     }
+}
+
+/// A helper method that computes a function on multiple bands individually and then stacks the result into a multi-band raster.
+pub fn stack_individual_raster_bands<'a, F, P>(
+    query: &RasterQueryRectangle,
+    ctx: &'a dyn crate::engine::QueryContext,
+    f: F,
+) -> Result<BoxStream<'a, Result<RasterTile2D<P>>>>
+where
+    F: Fn(
+        RasterQueryRectangle,
+        u32,
+        &'a dyn crate::engine::QueryContext,
+    ) -> BoxStream<'a, Result<RasterTile2D<P>>>,
+    P: Pixel,
+{
+    if query.attributes.count() == 1 {
+        // special case of single band query requires no tile stacking
+        return Ok(f(query.clone(), query.attributes.as_slice()[0], ctx));
+    }
+
+    // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
+    let band_streams = query
+        .attributes
+        .as_slice()
+        .iter()
+        .map(|band| SimpleRasterStackerSource {
+            stream: f(query.clone(), *band, ctx),
+            num_bands: 1,
+        })
+        .collect::<Vec<_>>();
+
+    Ok(Box::pin(SimpleRasterStackerAdapter::new(band_streams)?))
 }
 
 #[cfg(test)]

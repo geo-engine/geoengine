@@ -136,6 +136,16 @@ impl RasterQueryRectangle {
             attributes: bands,
         }
     }
+
+    #[must_use]
+    pub fn select_bands(&self, bands: BandSelection) -> Self {
+        Self {
+            spatial_bounds: self.spatial_bounds,
+            time_interval: self.time_interval,
+            spatial_resolution: self.spatial_resolution,
+            attributes: bands,
+        }
+    }
 }
 
 impl SpatialPartitioned for QueryRectangle<BoundingBox2D, ColumnSelection> {

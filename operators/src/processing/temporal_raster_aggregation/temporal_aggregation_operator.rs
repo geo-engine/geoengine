@@ -8,7 +8,7 @@ use super::aggregators::{
 use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
-use crate::adapters::{SimpleRasterStackerAdapter, SimpleRasterStackerSource};
+use crate::adapters::stack_individual_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
     RasterOperator, SingleRasterSource, WorkflowOperatorPath,
@@ -427,31 +427,9 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
-        if query.attributes.count() == 1 {
-            // special case of single band query requires no tile stacking
-            return Ok(self.create_subquery_adapter_stream_for_single_band(
-                query.clone(),
-                query.attributes.as_slice()[0],
-                ctx,
-            ));
-        }
-
-        // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
-        let band_streams = query
-            .attributes
-            .as_slice()
-            .iter()
-            .map(|band| SimpleRasterStackerSource {
-                stream: self.create_subquery_adapter_stream_for_single_band(
-                    query.clone(),
-                    *band,
-                    ctx,
-                ),
-                num_bands: 1,
-            })
-            .collect::<Vec<_>>();
-
-        Ok(Box::pin(SimpleRasterStackerAdapter::new(band_streams)?))
+        stack_individual_raster_bands(&query, ctx, |query, band_index, ctx| {
+            self.create_subquery_adapter_stream_for_single_band(query, band_index, ctx)
+        })
     }
 
     fn result_descriptor(&self) -> &Self::ResultDescription {
