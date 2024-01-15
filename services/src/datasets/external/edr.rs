@@ -6,7 +6,9 @@ use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
     LayerListing, ProviderLayerCollectionId, ProviderLayerId,
 };
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::layers::listing::{
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+};
 use crate::util::parsing::deserialize_base_url;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -885,6 +887,13 @@ impl TryFrom<EdrCollectionId> for LayerId {
 
 #[async_trait]
 impl LayerCollectionProvider for EdrDataProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities::none(),
+        }
+    }
+
     async fn load_layer_collection(
         &self,
         collection_id: &LayerCollectionId,

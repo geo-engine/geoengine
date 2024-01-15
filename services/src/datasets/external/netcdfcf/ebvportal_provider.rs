@@ -12,7 +12,9 @@ use crate::{
             CollectionItem, Layer, LayerCollection, LayerCollectionListOptions,
             LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
         },
-        listing::{LayerCollectionId, LayerCollectionProvider},
+        listing::{
+            LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+        },
     },
 };
 use async_trait::async_trait;
@@ -539,6 +541,13 @@ impl EbvPortalDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for EbvPortalDataProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities::none(),
+        }
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
