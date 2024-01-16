@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::adapters::stack_individual_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
@@ -10,7 +11,6 @@ use crate::util::Result;
 use async_trait::async_trait;
 use rayon::ThreadPool;
 
-use snafu::ensure;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
@@ -71,44 +71,38 @@ impl RasterOperator for Temperature {
 
         let in_desc = input.result_descriptor();
 
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            in_desc.bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: Temperature::TYPE_NAME
+        for band in in_desc.bands.iter() {
+            match &band.measurement {
+                Measurement::Continuous(ContinuousMeasurement {
+                    measurement: m,
+                    unit: _,
+                }) if m != "raw" => {
+                    return Err(Error::InvalidMeasurement {
+                        expected: "raw".into(),
+                        found: m.clone(),
+                    })
+                }
+                Measurement::Classification(ClassificationMeasurement {
+                    measurement: m,
+                    classes: _,
+                }) => {
+                    return Err(Error::InvalidMeasurement {
+                        expected: "raw".into(),
+                        found: m.clone(),
+                    })
+                }
+                Measurement::Unitless => {
+                    return Err(Error::InvalidMeasurement {
+                        expected: "raw".into(),
+                        found: "unitless".into(),
+                    })
+                }
+                // OK Case
+                Measurement::Continuous(ContinuousMeasurement {
+                    measurement: _,
+                    unit: _,
+                }) => {}
             }
-        );
-
-        match &in_desc.bands[0].measurement {
-            Measurement::Continuous(ContinuousMeasurement {
-                measurement: m,
-                unit: _,
-            }) if m != "raw" => {
-                return Err(Error::InvalidMeasurement {
-                    expected: "raw".into(),
-                    found: m.clone(),
-                })
-            }
-            Measurement::Classification(ClassificationMeasurement {
-                measurement: m,
-                classes: _,
-            }) => {
-                return Err(Error::InvalidMeasurement {
-                    expected: "raw".into(),
-                    found: m.clone(),
-                })
-            }
-            Measurement::Unitless => {
-                return Err(Error::InvalidMeasurement {
-                    expected: "raw".into(),
-                    found: "unitless".into(),
-                })
-            }
-            // OK Case
-            Measurement::Continuous(ContinuousMeasurement {
-                measurement: _,
-                unit: _,
-            }) => {}
         }
 
         let out_desc = RasterResultDescriptor {
@@ -117,14 +111,19 @@ impl RasterOperator for Temperature {
             time: in_desc.time,
             bbox: in_desc.bbox,
             resolution: in_desc.resolution,
-            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                in_desc.bands[0].name.clone(),
-                Measurement::Continuous(ContinuousMeasurement {
-                    measurement: "temperature".into(),
-                    unit: Some("k".into()),
-                }),
-            )])
-            .unwrap(),
+            bands: RasterBandDescriptors::new(
+                in_desc
+                    .bands
+                    .iter()
+                    .map(|b| RasterBandDescriptor {
+                        name: b.name.clone(),
+                        measurement: Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "temperature".into(),
+                            unit: Some("k".into()),
+                        }),
+                    })
+                    .collect::<Vec<_>>(),
+            )?,
         };
 
         let initialized_operator = InitializedTemperature {
@@ -302,9 +301,13 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let src = self.source.query(query, ctx).await?;
-        let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
-        Ok(rs.boxed())
+        stack_individual_raster_bands(&query, ctx, |query, ctx| async move {
+            let src = self.source.query(query, ctx).await?;
+            let rs =
+                src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
+            Ok(rs.boxed())
+        })
+        .await
     }
 
     fn result_descriptor(&self) -> &Self::ResultDescription {
