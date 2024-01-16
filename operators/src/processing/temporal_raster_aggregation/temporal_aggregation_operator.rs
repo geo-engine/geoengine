@@ -257,14 +257,18 @@ where
     #[allow(clippy::too_many_lines)]
     fn create_subquery_adapter_stream_for_single_band<'a>(
         &'a self,
-        query_rect_to_answer: RasterQueryRectangle,
-        band_idx: u32,
+        query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> futures::stream::BoxStream<'a, Result<RasterTile2D<P>>> {
-        let mut query = query_rect_to_answer;
-        query.attributes = band_idx.into();
+    ) -> Result<futures::stream::BoxStream<'a, Result<RasterTile2D<P>>>> {
+        ensure!(
+            query.attributes.count() == 1,
+            error::InvalidBandCount {
+                expected: 1u32,
+                found: query.attributes.count()
+            }
+        );
 
-        match self.aggregation_type {
+        Ok(match self.aggregation_type {
             Aggregation::Min {
                 ignore_no_data: true,
             } => self
@@ -402,7 +406,7 @@ where
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Sum"),
-        }
+        })
     }
 }
 
@@ -427,9 +431,10 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
-        stack_individual_raster_bands(&query, ctx, |query, band_index, ctx| {
-            self.create_subquery_adapter_stream_for_single_band(query, band_index, ctx)
+        stack_individual_raster_bands(&query, ctx, |query, ctx| async {
+            self.create_subquery_adapter_stream_for_single_band(query, ctx)
         })
+        .await
     }
 
     fn result_descriptor(&self) -> &Self::ResultDescription {

@@ -223,7 +223,7 @@ where
             return self.source.query(query, ctx).await;
         }
 
-        stack_individual_raster_bands(&query, ctx, |query, band_index, ctx| {
+        stack_individual_raster_bands(&query, ctx, |query, ctx| async {
             let sub_query = InterpolationSubQuery::<_, P, I> {
                 input_resolution: self.input_resolution,
                 fold_fn: fold_future,
@@ -232,19 +232,18 @@ where
                 _phantom_pixel_type: PhantomData,
             };
 
-            let single_band_query = query.select_bands(BandSelection::new_single(band_index));
-
-            RasterSubQueryAdapter::<'a, P, _, _>::new(
+            Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
                 &self.source,
-                single_band_query,
+                query,
                 self.tiling_specification,
                 ctx,
                 sub_query,
             )
             .filter_and_fill(
                 crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-            )
+            ))
         })
+        .await
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {

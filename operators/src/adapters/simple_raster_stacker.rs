@@ -1,8 +1,9 @@
 use crate::error::{AtLeastOneStreamRequired, Error};
 use crate::util::Result;
-use futures::ready;
+use futures::future::join_all;
 use futures::stream::{BoxStream, Stream};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
+use futures::{ready, Future};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::pin_project;
 use snafu::ensure;
@@ -129,34 +130,35 @@ where
 }
 
 /// A helper method that computes a function on multiple bands individually and then stacks the result into a multi-band raster.
-pub fn stack_individual_raster_bands<'a, F, P>(
+pub async fn stack_individual_raster_bands<'a, F, Fut, P>(
     query: &RasterQueryRectangle,
     ctx: &'a dyn crate::engine::QueryContext,
-    f: F,
+    create_single_bands_stream_fn: F,
 ) -> Result<BoxStream<'a, Result<RasterTile2D<P>>>>
 where
-    F: Fn(
-        RasterQueryRectangle,
-        u32,
-        &'a dyn crate::engine::QueryContext,
-    ) -> BoxStream<'a, Result<RasterTile2D<P>>>,
+    F: Fn(RasterQueryRectangle, &'a dyn crate::engine::QueryContext) -> Fut,
+    Fut: Future<Output = Result<BoxStream<'a, Result<RasterTile2D<P>>>>>,
     P: Pixel,
 {
     if query.attributes.count() == 1 {
         // special case of single band query requires no tile stacking
-        return Ok(f(query.clone(), query.attributes.as_slice()[0], ctx));
+        return create_single_bands_stream_fn(query.clone(), ctx).await;
     }
 
     // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
-    let band_streams = query
-        .attributes
-        .as_slice()
-        .iter()
-        .map(|band| SimpleRasterStackerSource {
-            stream: f(query.clone(), *band, ctx),
-            num_bands: 1,
-        })
-        .collect::<Vec<_>>();
+    let band_streams = join_all(query.attributes.as_slice().iter().map(|band| {
+        let query = query.select_bands(BandSelection::new_single(*band));
+
+        async {
+            Ok(SimpleRasterStackerSource {
+                stream: create_single_bands_stream_fn(query, ctx).await?,
+                num_bands: 1,
+            })
+        }
+    }))
+    .await
+    .into_iter()
+    .collect::<Result<Vec<_>>>()?;
 
     Ok(Box::pin(SimpleRasterStackerAdapter::new(band_streams)?))
 }

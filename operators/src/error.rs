@@ -439,6 +439,12 @@ pub enum Error {
         operation: &'static str,
     },
 
+    #[snafu(display("Invalid band count. Expected {}, found {}", expected, found))]
+    InvalidBandCount {
+        expected: u32,
+        found: u32,
+    },
+
     RasterInputsMustHaveSameSpatialReferenceAndDatatype,
 
     GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet,
