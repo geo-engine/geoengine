@@ -76,7 +76,6 @@ pub trait DatasetProvider: Send
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 {
-    // TODO: filter, paging
     async fn list_datasets(&self, options: DatasetListOptions) -> Result<Vec<DatasetListing>>;
 
     async fn load_dataset(&self, dataset: &DatasetId) -> Result<Dataset>;
@@ -84,6 +83,14 @@ pub trait DatasetProvider: Send
     async fn load_provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
 
     async fn resolve_dataset_name_to_id(&self, name: &DatasetName) -> Result<Option<DatasetId>>;
+
+    async fn dataset_autocomplete_search(
+        &self,
+        tags: Option<Vec<String>>,
+        search_string: String,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<String>>;
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
