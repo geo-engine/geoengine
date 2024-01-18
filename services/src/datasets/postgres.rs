@@ -69,16 +69,16 @@ where
         let conn = self.conn_pool.get().await?;
 
         let order_sql = if options.order == OrderBy::NameAsc {
-            "name ASC"
+            "display_name ASC"
         } else {
-            "name DESC"
+            "display_name DESC"
         };
 
         let mut pos = 2;
 
         let filter_sql = if options.filter.is_some() {
             pos += 1;
-            Some(format!("(name).name ILIKE ${pos} ESCAPE '\\'"))
+            Some(format!("display_name ILIKE ${pos} ESCAPE '\\'"))
         } else {
             None
         };
@@ -254,6 +254,52 @@ where
     ) -> Result<Option<DatasetId>> {
         let conn = self.conn_pool.get().await?;
         resolve_dataset_name_to_id(&conn, dataset_name).await
+    }
+
+    async fn dataset_autocomplete_search(
+        &self,
+        tags: Option<Vec<String>>,
+        search_string: String,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<String>> {
+        let connection = self.conn_pool.get().await?;
+
+        let limit = i64::from(limit);
+        let offset = i64::from(offset);
+        let search_string = format!(
+            "%{}%",
+            search_string.replace('%', "\\%").replace('_', "\\_")
+        );
+
+        let mut query_params: Vec<&(dyn ToSql + Sync)> = vec![&limit, &offset, &search_string];
+
+        let tags_clause = if let Some(tags) = &tags {
+            query_params.push(tags);
+            " AND tags @> $4::text[]".to_string()
+        } else {
+            String::new()
+        };
+
+        let stmt = connection
+            .prepare(&format!(
+                "
+            SELECT 
+                display_name
+            FROM 
+                datasets
+            WHERE
+                display_name ILIKE $3 ESCAPE '\\'
+                {tags_clause}
+            ORDER BY display_name ASC
+            LIMIT $1
+            OFFSET $2;"
+            ))
+            .await?;
+
+        let rows = connection.query(&stmt, &query_params).await?;
+
+        Ok(rows.iter().map(|row| row.get(0)).collect())
     }
 }
 
