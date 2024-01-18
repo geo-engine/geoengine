@@ -104,7 +104,12 @@ pub enum Error {
 
     InvalidExpression,
 
-    InvalidNumberOfExpressionInputs,
+    #[snafu(display(
+        "The expression operator only supports inputs with up to 8 bands. Found {found} bands.",
+    ))]
+    InvalidNumberOfExpressionInputBands {
+        found: usize,
+    },
     InvalidNumberOfRasterStackerInputs,
 
     InvalidNoDataValueValueForOutputDataType,

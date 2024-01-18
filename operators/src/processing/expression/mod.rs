@@ -9,7 +9,7 @@ use crate::{
         RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
         WorkflowOperatorPath,
     },
-    error::InvalidNumberOfRasterStackerInputs,
+    error::InvalidNumberOfExpressionInputBands,
     processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::Result,
 };
@@ -77,7 +77,9 @@ impl RasterOperator for Expression {
 
         ensure!(
             !in_descriptor.bands.is_empty() && in_descriptor.bands.len() <= 8,
-            InvalidNumberOfRasterStackerInputs
+            InvalidNumberOfExpressionInputBands {
+                found: in_descriptor.bands.len()
+            }
         );
 
         // we refer to raster bands by A, B, C, …
