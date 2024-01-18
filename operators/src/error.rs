@@ -429,8 +429,13 @@ pub enum Error {
 
     AtLeastOneStreamRequired,
 
-    #[snafu(display("Operator {operator:?} does not support sources with multiple bands."))]
+    #[snafu(display("Operator {operator:?} does not support sources with multiple bands yet."))]
     OperatorDoesNotSupportMultiBandsSourcesYet {
+        operator: &'static str,
+    },
+
+    #[snafu(display("Operator {operator:?} does not support sources with multiple bands."))]
+    OperatorDoesNotSupportMultiBandsSources {
         operator: &'static str,
     },
 

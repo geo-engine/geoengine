@@ -8,6 +8,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
 
+use crate::adapters::stack_individual_raster_bands;
 use geoengine_datatypes::raster::{
     CheckedMulThenAddTransformation, CheckedSubThenDivTransformation, ElementScaling,
     ScalingTransformation,
@@ -20,7 +21,6 @@ use num::FromPrimitive;
 use num_traits::AsPrimitive;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -98,14 +98,6 @@ impl RasterOperator for RasterScaling {
 
         let input = self.sources.initialize_sources(path, context).await?;
         let in_desc = input.raster.result_descriptor();
-
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            in_desc.bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: RasterScaling::TYPE_NAME
-            }
-        );
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
@@ -260,9 +252,13 @@ where
             Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>,
         >,
     > {
-        let src = self.source.raster_query(query, ctx).await?;
-        let rs = src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
-        Ok(rs.boxed())
+        stack_individual_raster_bands(&query, ctx, |query, ctx| async move {
+            let src = self.source.raster_query(query, ctx).await?;
+            let rs =
+                src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
+            Ok(rs.boxed())
+        })
+        .await
     }
 
     fn raster_result_descriptor(&self) -> &RasterResultDescriptor {

@@ -1,3 +1,4 @@
+use crate::adapters::stack_individual_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSingleRasterOrVectorOperator, InitializedSources, InitializedVectorOperator,
@@ -266,14 +267,6 @@ impl RasterOperator for TimeShift {
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
-                // TODO: implement multi-band functionality and remove this check
-                ensure!(
-                    result_descriptor.bands.len() == 1,
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: TimeShift::TYPE_NAME
-                    }
-                );
-
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
                     source,
@@ -294,14 +287,6 @@ impl RasterOperator for TimeShift {
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
-                // TODO: implement multi-band functionality and remove this check
-                ensure!(
-                    result_descriptor.bands.len() == 1,
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: TimeShift::TYPE_NAME
-                    }
-                );
-
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
                     source,
@@ -316,14 +301,6 @@ impl RasterOperator for TimeShift {
                 let shift = AbsoluteShift { time_interval };
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
-
-                // TODO: implement multi-band functionality and remove this check
-                ensure!(
-                    result_descriptor.bands.len() == 1,
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: TimeShift::TYPE_NAME
-                    }
-                );
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
@@ -425,6 +402,47 @@ where
     shift: Shift,
 }
 
+impl<Q, P, Shift: TimeShiftOperation> RasterTimeShiftProcessor<Q, P, Shift>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
+    Shift: TimeShiftOperation,
+{
+    async fn query_single_band<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<RasterTile2D<P>>>> {
+        ensure!(
+            query.attributes.count() == 1,
+            crate::error::InvalidBandCount {
+                expected: 1u32,
+                found: query.attributes.count()
+            }
+        );
+
+        let (time_interval, state) = self.shift.shift(query.time_interval)?;
+        let query = RasterQueryRectangle {
+            spatial_bounds: query.spatial_bounds,
+            time_interval,
+            spatial_resolution: query.spatial_resolution,
+            attributes: BandSelection::first(),
+        };
+        let stream = self.processor.raster_query(query, ctx).await?;
+
+        let stream = stream.map(move |raster| {
+            // reverse time shift for results
+            let mut raster = raster?;
+
+            raster.time = self.shift.reverse_shift(raster.time, state)?;
+
+            Ok(raster)
+        });
+
+        Ok(Box::pin(stream))
+    }
+}
+
 pub struct VectorTimeShiftProcessor<Q, G, Shift: TimeShiftOperation>
 where
     G: Geometry,
@@ -500,25 +518,10 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
-        let (time_interval, state) = self.shift.shift(query.time_interval)?;
-        let query = RasterQueryRectangle {
-            spatial_bounds: query.spatial_bounds,
-            time_interval,
-            spatial_resolution: query.spatial_resolution,
-            attributes: BandSelection::first(),
-        };
-        let stream = self.processor.raster_query(query, ctx).await?;
-
-        let stream = stream.map(move |raster| {
-            // reverse time shift for results
-            let mut raster = raster?;
-
-            raster.time = self.shift.reverse_shift(raster.time, state)?;
-
-            Ok(raster)
-        });
-
-        Ok(Box::pin(stream))
+        stack_individual_raster_bands(&query, ctx, |query, ctx| async move {
+            self.query_single_band(query, ctx).await
+        })
+        .await
     }
 
     fn raster_result_descriptor(&self) -> &RasterResultDescriptor {

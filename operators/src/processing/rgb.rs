@@ -161,12 +161,12 @@ impl RasterOperator for Rgb {
 
         let sources = self.sources.initialize_sources(path, context).await?;
 
-        // TODO: implement multi-band functionality and remove this check
+        // This operator only ever outputs a single band
         ensure!(
             sources
                 .iter()
                 .all(|r| r.result_descriptor().bands.len() == 1),
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+            crate::error::OperatorDoesNotSupportMultiBandsSources {
                 operator: Rgb::TYPE_NAME
             }
         );

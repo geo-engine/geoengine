@@ -5,8 +5,8 @@ use geoengine_datatypes::{
     raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
 };
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 
+use crate::adapters::stack_individual_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
@@ -46,14 +46,6 @@ impl RasterOperator for RasterTypeConversion {
 
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
         let in_desc = initialized_sources.raster.result_descriptor();
-
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            in_desc.bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: RasterTypeConversion::TYPE_NAME
-            }
-        );
 
         let out_data_type = self.params.output_data_type;
 
@@ -145,12 +137,15 @@ where
         query: RasterQueryRectangle,
         ctx: &'b dyn QueryContext,
     ) -> Result<BoxStream<'b, Result<Self::Output>>> {
-        let stream = self.query_processor.raster_query(query, ctx).await?;
-        let converted_stream = stream.and_then(move |tile| {
-            crate::util::spawn_blocking(|| tile.convert_data_type()).map_err(Into::into)
-        });
+        stack_individual_raster_bands(&query, ctx, |query, ctx| async move {
+            let stream = self.query_processor.raster_query(query, ctx).await?;
+            let converted_stream = stream.and_then(move |tile| {
+                crate::util::spawn_blocking(|| tile.convert_data_type()).map_err(Into::into)
+            });
 
-        Ok(converted_stream.boxed())
+            Ok(converted_stream.boxed())
+        })
+        .await
     }
 
     fn result_descriptor(&self) -> &Self::ResultDescription {

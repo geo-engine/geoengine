@@ -3,6 +3,7 @@ mod tile_sub_query;
 
 use self::aggregate::{AggregateFunction, Neighborhood, StandardDeviation, Sum};
 use self::tile_sub_query::NeighborhoodAggregateTileNeighborhood;
+use crate::adapters::stack_individual_raster_bands;
 use crate::adapters::RasterSubQueryAdapter;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
@@ -150,14 +151,6 @@ impl RasterOperator for NeighborhoodAggregate {
         let initialized_source = self.sources.initialize_sources(path, context).await?;
         let raster_source = initialized_source.raster;
 
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            raster_source.result_descriptor().bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: NeighborhoodAggregate::TYPE_NAME
-            }
-        );
-
         let initialized_operator = InitializedNeighborhoodAggregate {
             name,
             result_descriptor: raster_source.result_descriptor().clone(),
@@ -264,21 +257,24 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let sub_query = NeighborhoodAggregateTileNeighborhood::<P, A>::new(
-            self.neighborhood.clone(),
-            self.tiling_specification,
-        );
+        stack_individual_raster_bands(&query, ctx, |query, ctx| async move {
+            let sub_query = NeighborhoodAggregateTileNeighborhood::<P, A>::new(
+                self.neighborhood.clone(),
+                self.tiling_specification,
+            );
 
-        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
-            &self.source,
-            query,
-            self.tiling_specification,
-            ctx,
-            sub_query,
-        )
-        .filter_and_fill(
-            crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-        ))
+            Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+                &self.source,
+                query,
+                self.tiling_specification,
+                ctx,
+                sub_query,
+            )
+            .filter_and_fill(
+                crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+            ))
+        })
+        .await
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
