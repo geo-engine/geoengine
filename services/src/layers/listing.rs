@@ -94,6 +94,16 @@ pub trait LayerCollectionProvider {
     /// Retrieve the provider's capabilities
     fn capabilities(&self) -> ProviderCapabilities;
 
+    /// get the name of the provider
+    fn name(&self) -> &str;
+
+    /// get the description of the provider
+    fn description(&self) -> &str;
+
+    /// get the priority of the provider
+    // higher priority providers are preferred over lower priority providers
+    // fn priority(&self) -> i8;
+
     /// Perform a search
     #[allow(unused_variables)]
     async fn search(

@@ -79,6 +79,8 @@ pub const NETCDF_CF_PROVIDER_ID: DataProviderId =
 #[serde(rename_all = "camelCase")]
 pub struct NetCdfCfDataProviderDefinition {
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub path: PathBuf,
     pub overviews: PathBuf,
     #[serde(default)]
@@ -88,6 +90,7 @@ pub struct NetCdfCfDataProviderDefinition {
 #[derive(Debug)]
 pub struct NetCdfCfDataProvider {
     pub name: String,
+    pub description: String,
     pub path: PathBuf,
     pub overviews: PathBuf,
     pub cache_ttl: CacheTtlSeconds,
@@ -98,6 +101,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for NetCdfCfDataProviderDefinitio
     async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(NetCdfCfDataProvider {
             name: self.name,
+            description: self.description,
             path: self.path,
             overviews: self.overviews,
             cache_ttl: self.cache_ttl,
@@ -114,6 +118,10 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for NetCdfCfDataProviderDefinitio
 
     fn id(&self) -> DataProviderId {
         NETCDF_CF_PROVIDER_ID
+    }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
     }
 }
 
@@ -1393,6 +1401,14 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
         }
     }
 
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        &self.description
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
@@ -1739,6 +1755,8 @@ mod tests {
     async fn test_listing(app_ctx: PostgresContext<NoTls>) {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
+            description: "NetCdfCfProviderDefinition".to_string(),
+            priority: Some(-2),
             path: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
@@ -1808,6 +1826,8 @@ mod tests {
     async fn test_listing_from_netcdf_m(app_ctx: PostgresContext<NoTls>) {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
+            description: "NetCdfCfProviderDefinition".to_string(),
+            priority: Some(-3),
             path: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
@@ -1865,6 +1885,8 @@ mod tests {
     async fn test_listing_from_netcdf_sm(app_ctx: PostgresContext<NoTls>) {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
+            description: "NetCdfCfProviderDefinition".to_string(),
+            priority: Some(-4),
             path: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
@@ -1946,6 +1968,7 @@ mod tests {
     async fn test_metadata_from_netcdf_sm() {
         let provider = NetCdfCfDataProvider {
             name: "Test Provider".to_string(),
+            description: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
             cache_ttl: Default::default(),
@@ -2043,6 +2066,7 @@ mod tests {
     fn list_files() {
         let provider = NetCdfCfDataProvider {
             name: "Test Provider".to_string(),
+            description: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
             cache_ttl: Default::default(),
@@ -2067,6 +2091,7 @@ mod tests {
 
         let provider = NetCdfCfDataProvider {
             name: "Test Provider".to_string(),
+            description: "Test Provider".to_string(),
             path: test_data!("netcdf4d/").to_path_buf(),
             overviews: overview_folder.path().to_path_buf(),
             cache_ttl: Default::default(),
@@ -2167,6 +2192,8 @@ mod tests {
 
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
+            description: "NetCdfCfProviderDefinition".to_string(),
+            priority: Some(-5),
             path: test_data!("netcdf4d").into(),
             overviews: overview_folder.path().to_path_buf(),
             cache_ttl: Default::default(),
@@ -2252,6 +2279,8 @@ mod tests {
 
         let provider_definition = EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
+            description: "EBV Portal".to_string(),
+            priority: Some(-1),
             path: test_data!("netcdf4d/").into(),
             base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
             overviews: test_data!("netcdf4d/overviews/").into(),

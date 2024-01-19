@@ -48,6 +48,8 @@ pub const GFBIO_PROVIDER_ID: DataProviderId =
 #[serde(rename_all = "camelCase")]
 pub struct GfbioAbcdDataProviderDefinition {
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub db_config: DatabaseConnectionConfig,
     #[serde(default)]
     pub cache_ttl: CacheTtlSeconds,
@@ -57,7 +59,8 @@ pub struct GfbioAbcdDataProviderDefinition {
 impl<D: GeoEngineDb> DataProviderDefinition<D> for GfbioAbcdDataProviderDefinition {
     async fn initialize(self: Box<Self>, _db: D) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(
-            GfbioAbcdDataProvider::new(self.db_config, self.cache_ttl).await?,
+            GfbioAbcdDataProvider::new(self.name, self.description, self.db_config, self.cache_ttl)
+                .await?,
         ))
     }
 
@@ -72,11 +75,17 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for GfbioAbcdDataProviderDefiniti
     fn id(&self) -> DataProviderId {
         GFBIO_PROVIDER_ID
     }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
+    }
 }
 
 // TODO: make schema, table names and column names configurable like in crawler
 #[derive(Debug)]
 pub struct GfbioAbcdDataProvider {
+    name: String,
+    description: String,
     db_config: DatabaseConnectionConfig,
     pool: Pool<PostgresConnectionManager<NoTls>>,
     column_hash_to_name: HashMap<String, String>,
@@ -88,7 +97,12 @@ impl GfbioAbcdDataProvider {
     const COLUMN_NAME_LONGITUDE: &'static str = "e9eefbe81d4343c6a114b7d522017bf493b89cef";
     const COLUMN_NAME_LATITUDE: &'static str = "506e190d0ad979d1c7a816223d1ded3604907d91";
 
-    async fn new(db_config: DatabaseConnectionConfig, cache_ttl: CacheTtlSeconds) -> Result<Self> {
+    async fn new(
+        name: String,
+        description: String,
+        db_config: DatabaseConnectionConfig,
+        cache_ttl: CacheTtlSeconds,
+    ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -96,6 +110,8 @@ impl GfbioAbcdDataProvider {
             Self::resolve_columns(&pool.get().await?, &db_config.schema).await?;
 
         Ok(Self {
+            name,
+            description,
             db_config,
             pool,
             column_hash_to_name,
@@ -196,6 +212,14 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
             listing: true,
             search: SearchCapabilities::none(),
         }
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        &self.description
     }
 
     async fn load_layer_collection(
@@ -550,6 +574,8 @@ mod tests {
 
         let provider = Box::new(GfbioAbcdDataProviderDefinition {
             name: "GFBio".to_string(),
+            description: "GFBio".to_string(),
+            priority: None,
             db_config: DatabaseConnectionConfig {
                 host: db_config.host.clone(),
                 port: db_config.port,
@@ -625,6 +651,8 @@ mod tests {
 
             let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                priority: None,
                 db_config: provider_db_config,
                 cache_ttl: Default::default(),
             })
@@ -803,6 +831,8 @@ mod tests {
         ) -> Result<(), String> {
             let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                priority: None,
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
                     port: db_config.port,
@@ -949,6 +979,8 @@ mod tests {
         ) -> Result<(), String> {
             let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                priority: None,
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
                     port: db_config.port,

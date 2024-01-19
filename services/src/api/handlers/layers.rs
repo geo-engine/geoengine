@@ -187,6 +187,10 @@ async fn get_layer_providers<C: ApplicationContext>(
         })
         .await?
     {
+        if provider_listing.priority == i16::MIN {
+            continue; // skip providers that are disabled
+        };
+
         // TODO: resolve providers in parallel
         let provider = match external.load_layer_provider(provider_listing.id).await {
             Ok(provider) => provider,
@@ -217,7 +221,7 @@ async fn get_layer_providers<C: ApplicationContext>(
                 collection_id,
             },
             name: provider_listing.name,
-            description: provider_listing.description,
+            description: provider.description().to_owned(),
             properties: Default::default(),
         }));
     }

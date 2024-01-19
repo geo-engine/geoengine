@@ -1,8 +1,9 @@
 {
   "type": "DatasetLayerListingProviderDefinition",
   "id": "cbb21ee3-d15d-45c5-a175-66964adf4e85",
-  "name": "User Data Listing",
-  "description": "User specific datasets grouped by tags.",
+  "name": "Personal Data Catalog",
+  "description": "Catalog of your personal data and workflows.",
+  "priority": 100,
   "collections": [
     {
       "name": "User Uploads",

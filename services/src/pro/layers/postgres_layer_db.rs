@@ -322,6 +322,14 @@ where
         }
     }
 
+    fn name(&self) -> &str {
+        "Postgres Layer Collection Provider (Pro)"
+    }
+
+    fn description(&self) -> &str {
+        "Layer collection provider for Postgres (Pro)"
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn load_layer_collection(
         &self,
@@ -693,9 +701,10 @@ where
                   id, 
                   type_name, 
                   name,
-                  definition
+                  definition,
+                  priority
               )
-              VALUES ($1, $2, $3, $4)",
+              VALUES ($1, $2, $3, $4, $5)",
             )
             .await?;
 
@@ -707,6 +716,7 @@ where
                 &DataProviderDefinition::<Self>::type_name(&provider),
                 &DataProviderDefinition::<Self>::name(&provider),
                 &provider,
+                &DataProviderDefinition::<Self>::priority(&provider),
             ],
         )
         .await?;
@@ -726,18 +736,20 @@ where
                     SELECT 
                         id, 
                         name,
-                        type_name
+                        type_name,
+                        priority
                     FROM 
                         layer_providers
                     UNION ALL
                     SELECT 
                         id, 
                         name,
-                        type_name
+                        type_name,
+                        priority
                     FROM 
                         pro_layer_providers
                 )
-                ORDER BY name ASC
+                ORDER BY priority desc, name ASC
                 LIMIT $1 
                 OFFSET $2;",
             )
@@ -755,7 +767,7 @@ where
             .map(|row| LayerProviderListing {
                 id: row.get(0),
                 name: row.get(1),
-                description: row.get(2),
+                priority: row.get(3),
             })
             .collect())
     }
@@ -834,9 +846,10 @@ where
                   id, 
                   type_name, 
                   name,
-                  definition
+                  definition,
+                  priority
               )
-              VALUES ($1, $2, $3, $4)",
+              VALUES ($1, $2, $3, $4, $5)",
             )
             .await?;
 
@@ -848,6 +861,7 @@ where
                 &DataProviderDefinition::<Self>::type_name(&provider),
                 &DataProviderDefinition::<Self>::name(&provider),
                 &provider,
+                &DataProviderDefinition::<Self>::priority(&provider),
             ],
         )
         .await?;

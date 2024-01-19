@@ -1203,6 +1203,8 @@ mod tests {
 
         let provider = NetCdfCfDataProviderDefinition {
             name: "netcdfcf".to_string(),
+            description: "NetCdfCfProviderDefinition".to_string(),
+            priority: Some(33),
             path: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
             cache_ttl: CacheTtlSeconds::new(0),
@@ -1225,7 +1227,7 @@ mod tests {
             LayerProviderListing {
                 id: provider_id,
                 name: "netcdfcf".to_owned(),
-                description: "NetCdfCfProviderDefinition".to_owned(),
+                priority: 33,
             }
         );
 

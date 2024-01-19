@@ -45,6 +45,7 @@ pub struct DatasetLayerListingProviderDefinition {
     pub id: DataProviderId,
     pub name: String,
     pub description: String,
+    pub priority: Option<i16>,
     pub collections: Vec<DatasetLayerListingCollection>,
 }
 
@@ -97,6 +98,10 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for DatasetLayerListingProviderDe
 
     fn id(&self) -> DataProviderId {
         self.id
+    }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
     }
 }
 
@@ -205,6 +210,14 @@ where
             listing: true,
             search: SearchCapabilities::none(),
         }
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        &self.description
     }
 
     async fn load_layer_collection(
