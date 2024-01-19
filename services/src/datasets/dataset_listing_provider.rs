@@ -481,6 +481,7 @@ mod tests {
             id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
             name: "User Data Listing".to_string(),
             description: "User specific datasets grouped by tags.".to_string(),
+            priority: None,
             collections: vec![
                 DatasetLayerListingCollection {
                     name: "User Uploads".to_string(),
@@ -598,6 +599,7 @@ mod tests {
             id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
             name: "User Data Listing".to_string(),
             description: "User specific datasets grouped by tags.".to_string(),
+            priority: None,
             collections: vec![
                 DatasetLayerListingCollection {
                     name: "User Uploads".to_string(),
