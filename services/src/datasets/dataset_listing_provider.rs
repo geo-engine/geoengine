@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{borrow::Cow, collections::HashMap, str::FromStr};
 
 use async_trait::async_trait;
 use geoengine_datatypes::{
@@ -25,6 +25,7 @@ use crate::{
         },
         listing::{
             LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+            SearchParameters, SearchType, SearchTypes,
         },
     },
     util::operators::source_operator_from_dataset,
@@ -33,7 +34,7 @@ use crate::{
 
 use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
 
-use super::listing::{DatasetListOptions, ProvenanceOutput};
+use super::listing::{DatasetListOptions, DatasetListing, OrderBy, ProvenanceOutput};
 
 const TAG_PREFIX: &str = "tags:";
 const TAG_WILDCARD: &str = "*";
@@ -147,27 +148,50 @@ where
     /// Generates a collection for the given tags
     pub async fn generate_tags_collection(
         &self,
-        tags: Vec<String>,
+        tags: Option<Vec<String>>,
         offset: u32,
         limit: u32,
     ) -> Result<LayerCollection> {
-        let query_tags = if tags.is_empty() {
-            None
-        } else {
-            Some(tags.clone())
-        };
+        let tags_str = tags
+            .as_ref()
+            .map_or_else(String::new, |tags| tags.join(","));
 
         let query: DatasetListOptions = DatasetListOptions {
             filter: None,
             order: crate::datasets::listing::OrderBy::NameAsc,
             offset,
             limit,
-            tags: query_tags,
+            tags,
         };
 
-        let datasets = self.dataset_provider.list_datasets(query).await.unwrap();
+        let datasets = self.dataset_provider.list_datasets(query).await?;
 
-        let collection_items = datasets
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: self.id,
+                collection_id: LayerCollectionId(tags_str.clone()),
+            },
+            name: tags_str,
+            description: String::new(),
+            items: self.datasets_to_collection_items(&datasets),
+            entry_label: None,
+            properties: vec![],
+        })
+    }
+
+    pub fn root_collection_id() -> LayerCollectionId {
+        LayerCollectionId(ROOT_COLLECTION_ID.to_owned())
+    }
+
+    fn is_root_collection(collection_id: &LayerCollectionId) -> bool {
+        let collection_str = &collection_id.0;
+        collection_str == ROOT_COLLECTION_ID
+            || collection_str.is_empty()
+            || collection_str == TAG_PREFIX
+    }
+
+    fn datasets_to_collection_items(&self, datasets: &[DatasetListing]) -> Vec<CollectionItem> {
+        datasets
             .iter()
             .map(|d| {
                 CollectionItem::Layer(LayerListing {
@@ -180,23 +204,7 @@ where
                     properties: vec![],
                 })
             })
-            .collect();
-
-        Ok(LayerCollection {
-            id: ProviderLayerCollectionId {
-                provider_id: self.id,
-                collection_id: LayerCollectionId(tags.join(",").to_string()),
-            },
-            name: tags.join(","),
-            description: String::new(),
-            items: collection_items,
-            entry_label: None,
-            properties: vec![],
-        })
-    }
-
-    pub fn root_collection_id() -> LayerCollectionId {
-        LayerCollectionId(ROOT_COLLECTION_ID.to_owned())
+            .collect()
     }
 }
 
@@ -208,7 +216,14 @@ where
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             listing: true,
-            search: SearchCapabilities::none(),
+            search: SearchCapabilities {
+                search_types: SearchTypes {
+                    fulltext: true,
+                    prefix: false,
+                },
+                autocomplete: true,
+                filters: None,
+            },
         }
     }
 
@@ -227,25 +242,11 @@ where
     ) -> Result<LayerCollection, crate::error::Error> {
         tracing::debug!("Loading dataset layer collection: {:?}", collection);
 
-        if collection == &Self::root_collection_id()
-            || collection.0.is_empty()
-            || collection.0 == TAG_PREFIX
-        {
+        if Self::is_root_collection(collection) {
             return Ok(self.generate_root_collection(options.offset, options.limit));
         }
 
-        if !collection.0.starts_with(TAG_PREFIX) {
-            return Err(crate::error::Error::InvalidLayerCollectionId);
-        }
-
-        let tags = if collection.0[TAG_PREFIX.len()..] == *TAG_WILDCARD {
-            vec![]
-        } else {
-            collection.0[TAG_PREFIX.len()..]
-                .split(',')
-                .map(std::string::ToString::to_string)
-                .collect()
-        };
+        let tags = tags_from_collection_id(collection)?;
 
         return self
             .generate_tags_collection(tags, options.offset, options.limit)
@@ -276,6 +277,71 @@ where
             properties: vec![],
             metadata: HashMap::new(),
         })
+    }
+
+    async fn search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<LayerCollection> {
+        capabilities_check(&search)?;
+
+        let tags = if Self::is_root_collection(collection_id) {
+            None
+        } else {
+            tags_from_collection_id(collection_id)?
+        };
+
+        let layer_collection_name = format!("Search results for '{}'", search.search_string);
+        let layer_collection_description = format!(
+            "Searched in {}",
+            if let Some(tags) = &tags {
+                Cow::from(tags.join(","))
+            } else {
+                Cow::from("root")
+            }
+        );
+
+        let datasets = self
+            .dataset_provider
+            .list_datasets(DatasetListOptions {
+                filter: Some(search.search_string),
+                order: OrderBy::NameAsc,
+                offset: search.offset,
+                limit: search.limit,
+                tags,
+            })
+            .await?;
+
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: self.id,
+                collection_id: LayerCollectionId("search".to_string()),
+            },
+            name: layer_collection_name,
+            description: layer_collection_description,
+            items: self.datasets_to_collection_items(&datasets),
+            entry_label: None,
+            properties: vec![],
+        })
+    }
+
+    async fn autocomplete_search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<Vec<String>> {
+        capabilities_check(&search)?;
+
+        let tags = if Self::is_root_collection(collection_id) {
+            None
+        } else {
+            tags_from_collection_id(collection_id)?
+        };
+
+        self.dataset_provider
+            .dataset_autocomplete_search(tags, search.search_string, search.limit, search.offset)
+            .await
     }
 }
 
@@ -350,5 +416,372 @@ where
     > {
         // never called but handled by the dataset provider
         Err(geoengine_operators::error::Error::NotImplemented)
+    }
+}
+
+fn tags_from_collection_id(collection_id: &LayerCollectionId) -> Result<Option<Vec<String>>> {
+    let collection_str = &collection_id.0;
+
+    if !collection_str.starts_with(TAG_PREFIX) {
+        return Err(crate::error::Error::InvalidLayerCollectionId);
+    }
+
+    if collection_str[TAG_PREFIX.len()..] == *TAG_WILDCARD {
+        return Ok(None);
+    }
+
+    Ok(Some(
+        collection_str[TAG_PREFIX.len()..]
+            .split(',')
+            .map(std::string::ToString::to_string)
+            .collect(),
+    ))
+}
+
+fn capabilities_check(search_params: &SearchParameters) -> Result<()> {
+    if search_params.search_type != SearchType::Fulltext {
+        return Err(crate::error::Error::NotImplemented {
+            message: "Only fulltext search is supported".to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        contexts::{PostgresContext, PostgresDb, SessionContext, SimpleApplicationContext},
+        datasets::{storage::DatasetStore, AddDataset},
+        ge_context,
+        layers::storage::LayerProviderDb,
+    };
+    use geoengine_datatypes::{
+        collections::VectorDataType,
+        primitives::{CacheTtlSeconds, TimeGranularity, TimeStep},
+        raster::RasterDataType,
+        spatial_reference::SpatialReferenceOption,
+    };
+    use geoengine_operators::{
+        engine::{RasterBandDescriptors, StaticMetaData},
+        source::{
+            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+            GdalMetaDataRegular, OgrSourceErrorSpec,
+        },
+    };
+    use tokio_postgres::NoTls;
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_searches(app_ctx: PostgresContext<NoTls>) {
+        let db = app_ctx.default_session_context().await.unwrap().db();
+
+        let provider = DatasetLayerListingProviderDefinition {
+            id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
+            name: "User Data Listing".to_string(),
+            description: "User specific datasets grouped by tags.".to_string(),
+            collections: vec![
+                DatasetLayerListingCollection {
+                    name: "User Uploads".to_string(),
+                    description: "Datasets uploaded by the user.".to_string(),
+                    tags: vec!["upload".to_string()],
+                },
+                DatasetLayerListingCollection {
+                    name: "Workflows".to_string(),
+                    description: "Datasets created from workflows.".to_string(),
+                    tags: vec!["workflow".to_string()],
+                },
+                DatasetLayerListingCollection {
+                    name: "All Datasets".to_string(),
+                    description: "All datasets".to_string(),
+                    tags: vec!["*".to_string()],
+                },
+            ],
+        };
+
+        let provider_id = db.add_layer_provider(provider.into()).await.unwrap();
+
+        add_two_datasets(&db).await;
+
+        let provider = db.load_layer_provider(provider_id).await.unwrap();
+
+        let layer_collection_id_root = provider.get_root_layer_collection_id().await.unwrap();
+        let layer_collection_id_star = LayerCollectionId("tags:*".to_string());
+        let layer_collection_id_tag = LayerCollectionId("tags:upload".to_string());
+
+        let result = provider
+            .search(
+                &layer_collection_id_star,
+                SearchParameters {
+                    search_string: "dataset".to_string(),
+                    search_type: SearchType::Fulltext,
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result
+                .items
+                .iter()
+                .map(CollectionItem::name)
+                .collect::<Vec<_>>(),
+            vec!["GdalDataset", "OgrDataset"]
+        );
+
+        let result = provider
+            .search(
+                &layer_collection_id_tag,
+                SearchParameters {
+                    search_string: "dataset".to_string(),
+                    search_type: SearchType::Fulltext,
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result
+                .items
+                .iter()
+                .map(CollectionItem::name)
+                .collect::<Vec<_>>(),
+            vec!["OgrDataset"]
+        );
+
+        let result = provider
+            .search(
+                &layer_collection_id_root,
+                SearchParameters {
+                    search_string: "Gdal".to_string(),
+                    search_type: SearchType::Fulltext,
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result
+                .items
+                .iter()
+                .map(CollectionItem::name)
+                .collect::<Vec<_>>(),
+            vec!["GdalDataset"]
+        );
+
+        assert!(provider
+            .search(
+                &layer_collection_id_root,
+                SearchParameters {
+                    search_string: "Gdal".to_string(),
+                    search_type: SearchType::Prefix,
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await
+            .is_err());
+    }
+
+    #[ge_context::test]
+    async fn it_autocompletes(app_ctx: PostgresContext<NoTls>) {
+        let db = app_ctx.default_session_context().await.unwrap().db();
+
+        let provider = DatasetLayerListingProviderDefinition {
+            id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
+            name: "User Data Listing".to_string(),
+            description: "User specific datasets grouped by tags.".to_string(),
+            collections: vec![
+                DatasetLayerListingCollection {
+                    name: "User Uploads".to_string(),
+                    description: "Datasets uploaded by the user.".to_string(),
+                    tags: vec!["upload".to_string()],
+                },
+                DatasetLayerListingCollection {
+                    name: "Workflows".to_string(),
+                    description: "Datasets created from workflows.".to_string(),
+                    tags: vec!["workflow".to_string()],
+                },
+                DatasetLayerListingCollection {
+                    name: "All Datasets".to_string(),
+                    description: "All datasets".to_string(),
+                    tags: vec!["*".to_string()],
+                },
+            ],
+        };
+
+        let provider_id = db.add_layer_provider(provider.into()).await.unwrap();
+
+        add_two_datasets(&db).await;
+
+        let provider = db.load_layer_provider(provider_id).await.unwrap();
+
+        let layer_collection_id_root = provider.get_root_layer_collection_id().await.unwrap();
+        let layer_collection_id_star = LayerCollectionId("tags:*".to_string());
+        let layer_collection_id_tag = LayerCollectionId("tags:upload".to_string());
+
+        assert_eq!(
+            provider
+                .autocomplete_search(
+                    &layer_collection_id_star,
+                    SearchParameters {
+                        search_string: "dataset".to_string(),
+                        search_type: SearchType::Fulltext,
+                        offset: 0,
+                        limit: 10,
+                    },
+                )
+                .await
+                .unwrap(),
+            vec!["GdalDataset", "OgrDataset"]
+        );
+
+        assert_eq!(
+            provider
+                .autocomplete_search(
+                    &layer_collection_id_tag,
+                    SearchParameters {
+                        search_string: "dataset".to_string(),
+                        search_type: SearchType::Fulltext,
+                        offset: 0,
+                        limit: 10,
+                    },
+                )
+                .await
+                .unwrap(),
+            vec!["OgrDataset"]
+        );
+
+        assert_eq!(
+            provider
+                .autocomplete_search(
+                    &layer_collection_id_root,
+                    SearchParameters {
+                        search_string: "Gdal".to_string(),
+                        search_type: SearchType::Fulltext,
+                        offset: 0,
+                        limit: 10,
+                    },
+                )
+                .await
+                .unwrap(),
+            vec!["GdalDataset"]
+        );
+
+        assert!(provider
+            .autocomplete_search(
+                &layer_collection_id_root,
+                SearchParameters {
+                    search_string: "Gdal".to_string(),
+                    search_type: SearchType::Prefix,
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await
+            .is_err());
+    }
+
+    async fn add_two_datasets(db: &PostgresDb<NoTls>) {
+        let vector_descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
+        let raster_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            time: None,
+            bbox: None,
+            resolution: None,
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
+        let vector_ds = AddDataset {
+            name: None,
+            display_name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+        };
+
+        let raster_ds = AddDataset {
+            name: None,
+            display_name: "GdalDataset".to_string(),
+            description: "My Gdal dataset".to_string(),
+            source_operator: "GdalSource".to_string(),
+            symbology: None,
+            provenance: None,
+            tags: Some(vec!["test".to_owned()]),
+        };
+
+        let gdal_params = GdalDatasetParameters {
+            file_path: Default::default(),
+            rasterband_channel: 0,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: Default::default(),
+                x_pixel_size: 0.0,
+                y_pixel_size: 0.0,
+            },
+            width: 0,
+            height: 0,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: false,
+            retry: None,
+        };
+
+        let vector_meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: vector_descriptor.clone(),
+            phantom: Default::default(),
+        };
+
+        let raster_meta = GdalMetaDataRegular {
+            result_descriptor: raster_descriptor.clone(),
+            params: gdal_params.clone(),
+            time_placeholders: Default::default(),
+            data_time: Default::default(),
+            step: TimeStep {
+                granularity: TimeGranularity::Millis,
+                step: 0,
+            },
+            cache_ttl: CacheTtlSeconds::default(),
+        };
+
+        let _ = db.add_dataset(vector_ds, vector_meta.into()).await.unwrap();
+
+        let _ = db
+            .add_dataset(raster_ds.clone(), raster_meta.into())
+            .await
+            .unwrap();
     }
 }
