@@ -187,7 +187,7 @@ async fn get_layer_providers<C: ApplicationContext>(
         })
         .await?
     {
-        if provider_listing.priority == i16::MIN {
+        if provider_listing.priority <= -1000 {
             continue; // skip providers that are disabled
         };
 

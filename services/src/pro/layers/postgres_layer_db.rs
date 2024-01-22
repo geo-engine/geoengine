@@ -694,6 +694,18 @@ where
 
         let conn = self.conn_pool.get().await?;
 
+        let prio = DataProviderDefinition::<Self>::priority(&provider);
+        let clamp_prio = prio.clamp(-1000, 1000);
+
+        if prio != clamp_prio {
+            log::warn!(
+                "The priority of the provider {} is out of range! --> clamped {} to {}",
+                DataProviderDefinition::<Self>::name(&provider),
+                prio,
+                clamp_prio
+            );
+        }
+
         let stmt = conn
             .prepare(
                 "
@@ -716,7 +728,7 @@ where
                 &DataProviderDefinition::<Self>::type_name(&provider),
                 &DataProviderDefinition::<Self>::name(&provider),
                 &provider,
-                &DataProviderDefinition::<Self>::priority(&provider),
+                &clamp_prio,
             ],
         )
         .await?;
@@ -839,6 +851,18 @@ where
 
         let conn = self.conn_pool.get().await?;
 
+        let prio = DataProviderDefinition::<Self>::priority(&provider);
+        let clamp_prio = prio.clamp(-1000, 1000);
+
+        if prio != clamp_prio {
+            log::warn!(
+                "The priority of the provider {} is out of range! --> clamped {} to {}",
+                DataProviderDefinition::<Self>::name(&provider),
+                prio,
+                clamp_prio
+            );
+        }
+
         let stmt = conn
             .prepare(
                 "
@@ -861,7 +885,7 @@ where
                 &DataProviderDefinition::<Self>::type_name(&provider),
                 &DataProviderDefinition::<Self>::name(&provider),
                 &provider,
-                &DataProviderDefinition::<Self>::priority(&provider),
+                &clamp_prio,
             ],
         )
         .await?;

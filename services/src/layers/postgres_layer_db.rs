@@ -899,6 +899,19 @@ where
             )
             .await?;
 
+        // clamp the priority to a reasonable range
+        let prio = DataProviderDefinition::<Self>::priority(&provider);
+        let clamp_prio = prio.clamp(-1000, 1000);
+
+        if prio != clamp_prio {
+            log::warn!(
+                "The priority of the provider {} is out of range! --> clamped {} to {}",
+                DataProviderDefinition::<Self>::name(&provider),
+                prio,
+                clamp_prio
+            );
+        }
+
         let id = DataProviderDefinition::<Self>::id(&provider);
         conn.execute(
             &stmt,
@@ -907,7 +920,7 @@ where
                 &DataProviderDefinition::<Self>::type_name(&provider),
                 &DataProviderDefinition::<Self>::name(&provider),
                 &provider,
-                &DataProviderDefinition::<Self>::priority(&provider),
+                &clamp_prio,
             ],
         )
         .await?;
