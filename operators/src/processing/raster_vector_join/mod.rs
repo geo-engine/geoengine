@@ -142,17 +142,6 @@ impl VectorOperator for RasterVectorJoin {
             .map(InitializedRasterOperator::result_descriptor)
             .collect::<Vec<_>>();
 
-        // TODO: implement multi-band functionality for aggregated join and remove this check
-        ensure!(
-            matches!(
-                self.params.temporal_aggregation,
-                TemporalAggregationMethod::None
-            ) || source_descriptors.iter().all(|rd| rd.bands.len() == 1),
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: "RasterVectorAggregateJoin"
-            }
-        );
-
         let spatial_reference = vector_rd.spatial_reference;
 
         for other_spatial_reference in source_descriptors
@@ -270,6 +259,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                             points,
                             self.result_descriptor.clone(),
                             typed_raster_processors,
+                            self.raster_sources_bands.clone(),
                             self.state.names.clone(),
                             self.state.feature_aggregation,
                             self.state.feature_aggregation_ignore_no_data,
@@ -297,6 +287,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                             polygons,
                             self.result_descriptor.clone(),
                             typed_raster_processors,
+                            self.raster_sources_bands.clone(),
                             self.state.names.clone(),
                             self.state.feature_aggregation,
                             self.state.feature_aggregation_ignore_no_data,
