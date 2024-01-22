@@ -220,7 +220,7 @@ async fn get_layer_providers<C: ApplicationContext>(
                 provider_id: provider_listing.id,
                 collection_id,
             },
-            name: provider_listing.name,
+            name: provider.name().to_owned(),
             description: provider.description().to_owned(),
             properties: Default::default(),
         }));
