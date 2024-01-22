@@ -102,14 +102,6 @@ mod tests {
         // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
         drop(conn);
 
-        /* Note: this only works if the rust type is
-        // create `PostgresDb` on migrated database and test methods
-        let db = PostgresDb::new(pool.clone());
-
-        // verify provider is loaded correctly
-        let _ = db.load_layer_provider(GBIF_PROVIDER_ID).await.unwrap();
-        */
-
         Ok(())
     }
 }
