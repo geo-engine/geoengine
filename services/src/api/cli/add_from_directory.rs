@@ -18,11 +18,8 @@ pub async fn add_datasets_from_directory<D: DatasetDb>(dataset_db: &mut D, file_
         let def: DatasetDefinition =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
-        db.add_dataset(
-            def.properties.clone(),
-            db.wrap_meta_data(def.meta_data.clone()),
-        )
-        .await?;
+        db.add_dataset(def.properties.clone(), def.meta_data.clone())
+            .await?;
 
         Ok(())
     }

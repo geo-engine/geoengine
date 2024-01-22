@@ -1,9 +1,7 @@
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::listing::{OrderBy, ProvenanceOutput};
 use crate::datasets::postgres::resolve_dataset_name_to_id;
-use crate::datasets::storage::{
-    Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
-};
+use crate::datasets::storage::{Dataset, DatasetDb, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
@@ -243,6 +241,54 @@ where
         let conn = self.conn_pool.get().await?;
         resolve_dataset_name_to_id(&conn, dataset_name).await
     }
+
+    async fn dataset_autocomplete_search(
+        &self,
+        tags: Option<Vec<String>>,
+        search_string: String,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<String>> {
+        let connection = self.conn_pool.get().await?;
+
+        let limit = i64::from(limit);
+        let offset = i64::from(offset);
+        let search_string = format!(
+            "%{}%",
+            search_string.replace('%', "\\%").replace('_', "\\_")
+        );
+
+        let mut query_params: Vec<&(dyn ToSql + Sync)> =
+            vec![&self.session.user.id, &limit, &offset, &search_string];
+
+        let tags_clause = if let Some(tags) = &tags {
+            query_params.push(tags);
+            " AND tags @> $5::text[]".to_string()
+        } else {
+            String::new()
+        };
+
+        let stmt = connection
+            .prepare(&format!(
+                "
+            SELECT 
+                display_name
+            FROM 
+                user_permitted_datasets p JOIN datasets d ON (p.dataset_id = d.id)
+            WHERE 
+                p.user_id = $1
+                AND display_name ILIKE $4 ESCAPE '\\'
+                {tags_clause}
+            ORDER BY display_name ASC
+            LIMIT $2
+            OFFSET $3;"
+            ))
+            .await?;
+
+        let rows = connection.query(&stmt, &query_params).await?;
+
+        Ok(rows.iter().map(|row| row.get(0)).collect())
+    }
 }
 
 #[async_trait]
@@ -442,18 +488,8 @@ where
 }
 
 pub struct DatasetMetaData<'m> {
-    meta_data: &'m MetaDataDefinition,
-    result_descriptor: TypedResultDescriptor,
-}
-
-impl<Tls> DatasetStorer for ProPostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    type StorageType = Box<dyn PostgresStorable<Tls>>;
+    pub meta_data: &'m MetaDataDefinition,
+    pub result_descriptor: TypedResultDescriptor,
 }
 
 impl<Tls> PostgresStorable<Tls> for MetaDataDefinition
@@ -504,7 +540,7 @@ where
     async fn add_dataset(
         &self,
         dataset: AddDataset,
-        meta_data: Box<dyn PostgresStorable<Tls>>,
+        meta_data: MetaDataDefinition,
     ) -> Result<DatasetIdAndName> {
         let id = DatasetId::new();
         let name = dataset.name.unwrap_or_else(|| DatasetName {
@@ -520,7 +556,7 @@ where
 
         self.check_namespace(&name)?;
 
-        let typed_meta_data = meta_data.to_typed_metadata()?;
+        let typed_meta_data = meta_data.to_typed_metadata();
 
         let mut conn = self.conn_pool.get().await?;
 
@@ -626,10 +662,6 @@ where
 
         Ok(())
     }
-
-    fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {
-        Box::new(meta)
-    }
 }
 
 #[async_trait]
@@ -734,5 +766,149 @@ impl From<FileUpload> for crate::datasets::upload::FileUpload {
             name: upload.name,
             byte_size: upload.byte_size as u64,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+    use crate::{
+        contexts::{ApplicationContext, SessionContext},
+        pro::{
+            contexts::ProPostgresContext,
+            ge_context,
+            users::{UserAuth, UserSession},
+        },
+    };
+    use geoengine_datatypes::{
+        collections::VectorDataType,
+        primitives::{CacheTtlSeconds, FeatureDataType, Measurement},
+        spatial_reference::SpatialReference,
+    };
+    use geoengine_operators::{
+        engine::{StaticMetaData, VectorColumnInfo},
+        source::{
+            CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDatasetTimeType,
+            OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
+        },
+    };
+    use tokio_postgres::NoTls;
+
+    #[ge_context::test]
+    async fn it_autocompletes_datasets(app_ctx: ProPostgresContext<NoTls>) {
+        let session_a = app_ctx.create_anonymous_session().await.unwrap();
+        let session_b = app_ctx.create_anonymous_session().await.unwrap();
+
+        let db_a = app_ctx.session_context(session_a.clone()).db();
+        let db_b = app_ctx.session_context(session_b.clone()).db();
+
+        add_single_dataset(&db_a, &session_a).await;
+
+        assert_eq!(
+            db_a.dataset_autocomplete_search(None, "Ogr".to_owned(), 10, 0)
+                .await
+                .unwrap(),
+            vec!["Ogr Test"]
+        );
+        assert_eq!(
+            db_a.dataset_autocomplete_search(
+                Some(vec!["upload".to_string()]),
+                "Ogr".to_owned(),
+                10,
+                0
+            )
+            .await
+            .unwrap(),
+            vec!["Ogr Test"]
+        );
+
+        // check that other user B cannot access datasets of user A
+
+        assert!(db_b
+            .dataset_autocomplete_search(None, "Ogr".to_owned(), 10, 0)
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(db_b
+            .dataset_autocomplete_search(Some(vec!["upload".to_string()]), "Ogr".to_owned(), 10, 0)
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    async fn add_single_dataset(db: &ProPostgresDb<NoTls>, session: &UserSession) {
+        let loading_info = OgrSourceDataset {
+            file_name: PathBuf::from("test.csv"),
+            layer_name: "test.csv".to_owned(),
+            data_type: Some(VectorDataType::MultiPoint),
+            time: OgrSourceDatasetTimeType::Start {
+                start_field: "start".to_owned(),
+                start_format: OgrSourceTimeFormat::Auto,
+                duration: OgrSourceDurationSpec::Zero,
+            },
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(FormatSpecifics::Csv {
+                    header: CsvHeader::Auto,
+                }),
+                x: "x".to_owned(),
+                y: None,
+                int: vec![],
+                float: vec![],
+                text: vec![],
+                bool: vec![],
+                datetime: vec![],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
+        };
+
+        let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+            OgrSourceDataset,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        > {
+            loading_info: loading_info.clone(),
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: [(
+                    "foo".to_owned(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
+            phantom: Default::default(),
+        });
+
+        let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
+
+        db.add_dataset(
+            AddDataset {
+                name: Some(dataset_name.clone()),
+                display_name: "Ogr Test".to_owned(),
+                description: "desc".to_owned(),
+                source_operator: "OgrSource".to_owned(),
+                symbology: None,
+                provenance: None,
+                tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+            },
+            meta_data,
+        )
+        .await
+        .unwrap();
     }
 }

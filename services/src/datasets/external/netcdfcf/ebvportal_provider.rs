@@ -3,6 +3,7 @@ use super::{
     layer_from_netcdf_overview, NetCdfCfDataProvider,
 };
 use crate::{
+    contexts::GeoEngineDb,
     datasets::external::netcdfcf::find_group,
     error::{Error, Result},
     layers::{
@@ -11,7 +12,9 @@ use crate::{
             CollectionItem, Layer, LayerCollection, LayerCollectionListOptions,
             LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
         },
-        listing::{LayerCollectionId, LayerCollectionProvider},
+        listing::{
+            LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+        },
     },
 };
 use async_trait::async_trait;
@@ -52,8 +55,8 @@ pub struct EbvPortalDataProvider {
 }
 
 #[async_trait]
-impl DataProviderDefinition for EbvPortalDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefinition {
+    async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(EbvPortalDataProvider {
             name: self.name.clone(),
             ebv_api: EbvPortalApi::new(self.base_url),
@@ -538,6 +541,13 @@ impl EbvPortalDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for EbvPortalDataProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities::none(),
+        }
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
@@ -668,6 +678,12 @@ mod tests {
 
     use geoengine_datatypes::test_data;
     use httptest::{matchers::request, responders::status_code, Expectation};
+    use tokio_postgres::NoTls;
+
+    use crate::{
+        contexts::{PostgresContext, SessionContext, SimpleApplicationContext},
+        ge_context,
+    };
 
     use super::*;
 
@@ -770,9 +786,9 @@ mod tests {
         assert_eq!(id.to_string(), "classes/FooClass/BarEbv/10/group1/7.entity");
     }
 
-    #[tokio::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_get_classes() {
+    #[ge_context::test]
+    async fn test_get_classes(app_ctx: PostgresContext<NoTls>) {
         let mock_server = httptest::Server::run();
         mock_server.expect(
             Expectation::matching(request::method_path("GET", "/api/v1/ebv-map")).respond_with(
@@ -822,7 +838,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize()
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
         .await
         .unwrap();
 
@@ -908,9 +924,9 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_get_class() {
+    async fn test_get_class(app_ctx: PostgresContext<NoTls>) {
         let mock_server = httptest::Server::run();
         mock_server.expect(
             Expectation::matching(request::method_path("GET", "/api/v1/ebv-map")).respond_with(
@@ -960,7 +976,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize()
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
         .await
         .unwrap();
 
@@ -1021,9 +1037,9 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_get_ebv() {
+    async fn test_get_ebv(app_ctx: PostgresContext<NoTls>) {
         let mock_server = httptest::Server::run();
 
         mock_server.expect(
@@ -1126,7 +1142,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize()
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
         .await
         .unwrap();
 
@@ -1154,7 +1170,7 @@ mod tests {
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
-                        collection_id: LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology/10".into()) 
+                        collection_id: LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology/10".into())
                     },
                     name: "Vegetation Phenology in Finland".to_string(),
                     description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(),
@@ -1165,9 +1181,9 @@ mod tests {
         });
     }
 
-    #[tokio::test]
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_get_dataset() {
+    async fn test_get_dataset(app_ctx: PostgresContext<NoTls>) {
         let mock_server = httptest::Server::run();
 
         mock_server.expect(
@@ -1363,7 +1379,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize()
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
         .await
         .unwrap();
 
@@ -1413,13 +1429,13 @@ mod tests {
                 })],
                 entry_label: Some("Metric".to_string()),
                 properties: vec![("by".to_string(), "Kristin Böttcher (The Finnish Environment Institute (SYKE))".to_string()).into(),
-                    ("with license".to_string(), "https://creativecommons.org/licenses/by/4.0".to_string()).into()]              
+                    ("with license".to_string(), "https://creativecommons.org/licenses/by/4.0".to_string()).into()]
         });
     }
 
-    #[tokio::test]
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_get_groups() {
+    async fn test_get_groups(app_ctx: PostgresContext<NoTls>) {
         let mock_server = httptest::Server::run();
 
         mock_server.expect(
@@ -1522,7 +1538,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize()
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
         .await
         .unwrap();
 
