@@ -17,7 +17,7 @@ use crate::util::Result;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterTypeConversionParams {
-    output_data_type: RasterDataType,
+    pub output_data_type: RasterDataType,
 }
 
 /// This operator converts the type of raster data into another type. This may cause precision loss as e.g. `3.1_f32` converted to `u8` will result in `3_u8`.

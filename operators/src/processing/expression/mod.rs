@@ -1,21 +1,20 @@
-use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser};
+use self::{
+    codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser,
+    query_processor::ExpressionInput,
+};
 use crate::{
     engine::{
-        CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-        Operator, OperatorData, OperatorName, RasterBandDescriptor, RasterBandDescriptors,
-        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+        CanonicOperatorName, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
+        RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
         WorkflowOperatorPath,
     },
+    error::InvalidNumberOfExpressionInputBands,
     processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::Result,
 };
 use async_trait::async_trait;
-use futures::try_join;
-use geoengine_datatypes::{
-    dataset::NamedData,
-    primitives::{partitions_extent, time_interval_extent, Measurement, SpatialResolution},
-    raster::RasterDataType,
-};
+use geoengine_datatypes::{primitives::Measurement, raster::RasterDataType};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -34,9 +33,6 @@ mod query_processor;
 /// * `output_type` is the data type of the produced raster tiles.
 /// * `output_no_data_value` is the no data value of the output raster
 /// * `output_measurement` is the measurement description of the output
-///
-/// # Warning // TODO
-/// The operator *currently* only temporally aligns the inputs when there are exactly two sources
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ExpressionParams {
@@ -45,168 +41,9 @@ pub struct ExpressionParams {
     pub output_measurement: Option<Measurement>,
     pub map_no_data: bool,
 }
-
-// TODO: rename to `Expression`
-/// The `Expression` operator calculates an expression for all pixels of the input rasters and
+/// The `Expression` operator calculates an expression for all pixels of the input rasters bands and
 /// produces raster tiles of a given output type
-pub type Expression = Operator<ExpressionParams, ExpressionSources>;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(clippy::unsafe_derive_deserialize)] // TODO: remove if this warning is a glitch
-pub struct ExpressionSources {
-    a: Box<dyn RasterOperator>,
-    b: Option<Box<dyn RasterOperator>>,
-    c: Option<Box<dyn RasterOperator>>,
-    d: Option<Box<dyn RasterOperator>>,
-    e: Option<Box<dyn RasterOperator>>,
-    f: Option<Box<dyn RasterOperator>>,
-    g: Option<Box<dyn RasterOperator>>,
-    h: Option<Box<dyn RasterOperator>>,
-}
-
-impl OperatorData for ExpressionSources {
-    fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
-        for source in self {
-            source.data_names_collect(data_names);
-        }
-    }
-}
-
-impl ExpressionSources {
-    pub fn new_a(a: Box<dyn RasterOperator>) -> Self {
-        Self {
-            a,
-            b: None,
-            c: None,
-            d: None,
-            e: None,
-            f: None,
-            g: None,
-            h: None,
-        }
-    }
-
-    pub fn new_a_b(a: Box<dyn RasterOperator>, b: Box<dyn RasterOperator>) -> Self {
-        Self {
-            a,
-            b: Some(b),
-            c: None,
-            d: None,
-            e: None,
-            f: None,
-            g: None,
-            h: None,
-        }
-    }
-
-    pub fn new_a_b_c(
-        a: Box<dyn RasterOperator>,
-        b: Box<dyn RasterOperator>,
-        c: Box<dyn RasterOperator>,
-    ) -> Self {
-        Self {
-            a,
-            b: Some(b),
-            c: Some(c),
-            d: None,
-            e: None,
-            f: None,
-            g: None,
-            h: None,
-        }
-    }
-
-    fn number_of_sources(&self) -> usize {
-        self.iter().count()
-    }
-
-    #[allow(clippy::many_single_char_names)]
-    async fn initialize(
-        self,
-        path: WorkflowOperatorPath,
-        context: &dyn ExecutionContext,
-    ) -> Result<ExpressionInitializedSources> {
-        if self.iter().count() != self.iter_consecutive().count() {
-            return Err(ExpressionError::SourcesMustBeConsecutive.into());
-        }
-
-        let (a, b, c, d, e, f, g, h) = try_join!(
-            self.a.initialize(path.clone_and_append(0), context),
-            Self::initialize_source(self.b, path.clone_and_append(1), context),
-            Self::initialize_source(self.c, path.clone_and_append(2), context),
-            Self::initialize_source(self.d, path.clone_and_append(3), context),
-            Self::initialize_source(self.e, path.clone_and_append(4), context),
-            Self::initialize_source(self.f, path.clone_and_append(5), context),
-            Self::initialize_source(self.g, path.clone_and_append(6), context),
-            Self::initialize_source(self.h, path.clone_and_append(7), context),
-        )?;
-
-        Ok(ExpressionInitializedSources {
-            a,
-            b,
-            c,
-            d,
-            e,
-            f,
-            g,
-            h,
-        })
-    }
-
-    async fn initialize_source(
-        source: Option<Box<dyn RasterOperator>>,
-        path: WorkflowOperatorPath,
-        context: &dyn ExecutionContext,
-    ) -> Result<Option<Box<dyn InitializedRasterOperator>>> {
-        if let Some(source) = source {
-            Ok(Some(source.initialize(path, context).await?))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Returns all non-empty sources
-    fn iter(&self) -> std::iter::Flatten<std::array::IntoIter<Option<&dyn RasterOperator>, 8>> {
-        [
-            Some(self.a.as_ref()),
-            self.b.as_ref().map(AsRef::as_ref),
-            self.c.as_ref().map(AsRef::as_ref),
-            self.d.as_ref().map(AsRef::as_ref),
-            self.e.as_ref().map(AsRef::as_ref),
-            self.f.as_ref().map(AsRef::as_ref),
-            self.g.as_ref().map(AsRef::as_ref),
-            self.h.as_ref().map(AsRef::as_ref),
-        ]
-        .into_iter()
-        .flatten()
-    }
-
-    /// Returns all sources until the first one is empty
-    fn iter_consecutive(&self) -> impl Iterator<Item = &Box<dyn RasterOperator>> {
-        [
-            Some(&self.a),
-            self.b.as_ref(),
-            self.c.as_ref(),
-            self.d.as_ref(),
-            self.e.as_ref(),
-            self.f.as_ref(),
-            self.g.as_ref(),
-            self.h.as_ref(),
-        ]
-        .into_iter()
-        .map_while(std::convert::identity)
-    }
-}
-
-impl<'s> IntoIterator for &'s ExpressionSources {
-    type Item = &'s dyn RasterOperator;
-
-    type IntoIter = std::iter::Flatten<std::array::IntoIter<Option<Self::Item>, 8>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
-}
+pub type Expression = Operator<ExpressionParams, SingleRasterSource>;
 
 /// Create a parameter name from an index.
 /// Starts with `A`.
@@ -232,19 +69,21 @@ impl RasterOperator for Expression {
         path: WorkflowOperatorPath,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
-        // TODO: handle more then 2 inputs, i.e. 1-8
+        let name = CanonicOperatorName::from(&self);
+
+        let source = self.sources.initialize_sources(path, context).await?.raster;
+
+        let in_descriptor = source.result_descriptor();
+
         ensure!(
-            (1..=8).contains(&self.sources.number_of_sources()),
-            crate::error::InvalidNumberOfRasterInputs {
-                expected: 1..9,
-                found: self.sources.number_of_sources()
+            !in_descriptor.bands.is_empty() && in_descriptor.bands.len() <= 8,
+            InvalidNumberOfExpressionInputBands {
+                found: in_descriptor.bands.len()
             }
         );
 
-        let name = CanonicOperatorName::from(&self);
-
-        // we refer to rasters by A, B, C, …
-        let parameters = (0..self.sources.number_of_sources())
+        // we refer to raster bands by A, B, C, …
+        let parameters = (0..in_descriptor.bands.len())
             .map(|i| {
                 let parameter = index_to_parameter(i);
                 Parameter::Number(parameter.into())
@@ -256,56 +95,14 @@ impl RasterOperator for Expression {
             &self.params.expression,
         )?;
 
-        let sources = self.sources.initialize_sources(path, context).await?;
-
-        let spatial_reference = sources.a.result_descriptor().spatial_reference;
-
-        let in_descriptors = sources
-            .iter()
-            .map(InitializedRasterOperator::result_descriptor)
-            .collect::<Vec<_>>();
-
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            in_descriptors.iter().all(|r| r.bands.len() == 1),
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: Expression::TYPE_NAME
-            }
-        );
-
-        for other_spatial_reference in in_descriptors.iter().skip(1).map(|rd| rd.spatial_reference)
-        {
-            ensure!(
-                spatial_reference == other_spatial_reference,
-                crate::error::InvalidSpatialReference {
-                    expected: spatial_reference,
-                    found: other_spatial_reference,
-                }
-            );
-        }
-
-        let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
-        let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
-
-        let resolution = in_descriptors
-            .iter()
-            .map(|d| d.resolution)
-            .reduce(|a, b| match (a, b) {
-                (Some(a), Some(b)) => {
-                    Some(SpatialResolution::new_unchecked(a.x.min(b.x), a.y.min(b.y)))
-                }
-                _ => None,
-            })
-            .flatten();
-
         let result_descriptor = RasterResultDescriptor {
             data_type: self.params.output_type,
-            spatial_reference,
-            time,
-            bbox,
-            resolution,
+            spatial_reference: in_descriptor.spatial_reference,
+            time: in_descriptor.time,
+            bbox: in_descriptor.bbox,
+            resolution: in_descriptor.resolution,
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                "band".into(), // TODO: how to name the band?
+                "expression".into(), // TODO: how to name the band?
                 self.params
                     .output_measurement
                     .as_ref()
@@ -317,7 +114,7 @@ impl RasterOperator for Expression {
         let initialized_operator = InitializedExpression {
             name,
             result_descriptor,
-            sources,
+            source,
             expression,
             map_no_data: self.params.map_no_data,
         };
@@ -335,246 +132,58 @@ impl OperatorName for Expression {
 pub struct InitializedExpression {
     name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
-    sources: ExpressionInitializedSources,
+    source: Box<dyn InitializedRasterOperator>,
     expression: ExpressionAst,
     map_no_data: bool,
 }
 
-pub struct ExpressionInitializedSources {
-    a: Box<dyn InitializedRasterOperator>,
-    b: Option<Box<dyn InitializedRasterOperator>>,
-    c: Option<Box<dyn InitializedRasterOperator>>,
-    d: Option<Box<dyn InitializedRasterOperator>>,
-    e: Option<Box<dyn InitializedRasterOperator>>,
-    f: Option<Box<dyn InitializedRasterOperator>>,
-    g: Option<Box<dyn InitializedRasterOperator>>,
-    h: Option<Box<dyn InitializedRasterOperator>>,
+/// Macro for generating the match cases for number of bands to the `ExpressionInput` struct.
+macro_rules! generate_match_cases {
+    ($num_bands:expr, $output_type:expr, $expression:expr, $source_processor:expr, $result_descriptor:expr, $map_no_data:expr, $($x:expr),*) => {
+        match $num_bands {
+            $(
+                $x => call_generic_raster_processor!(
+                    $output_type,
+                    ExpressionQueryProcessor::new(
+                        $expression,
+                        ExpressionInput::<$x> {
+                            raster: $source_processor,
+                        },
+                        $result_descriptor,
+                        $map_no_data.clone(),
+                    )
+                    .boxed()
+                ),
+            )*
+            _ => unreachable!("number of bands was checked to be between 1 and 8"),
+        }
+    };
 }
 
-impl ExpressionInitializedSources {
-    fn iter(&self) -> impl Iterator<Item = &Box<dyn InitializedRasterOperator>> {
-        [
-            Some(&self.a),
-            self.b.as_ref(),
-            self.c.as_ref(),
-            self.d.as_ref(),
-            self.e.as_ref(),
-            self.f.as_ref(),
-            self.g.as_ref(),
-            self.h.as_ref(),
-        ]
-        .into_iter()
-        .flatten()
-    }
-}
-
-#[async_trait]
-impl InitializedSources<ExpressionInitializedSources> for ExpressionSources {
-    async fn initialize_sources(
-        self,
-        path: WorkflowOperatorPath,
-        context: &dyn ExecutionContext,
-    ) -> Result<ExpressionInitializedSources> {
-        self.initialize(path, context).await
-    }
-}
-
-#[allow(clippy::many_single_char_names, clippy::too_many_lines)]
 impl InitializedRasterOperator for InitializedExpression {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let output_type = self.result_descriptor().data_type;
 
         let expression = LinkedExpression::new(&self.expression)?;
 
-        let query_processors: Vec<TypedRasterQueryProcessor> = self
-            .sources
-            .iter()
-            .map(InitializedRasterOperator::query_processor)
-            .collect::<Result<_>>()?;
+        let source_processor = self.source.query_processor()?.into_f64();
 
-        Ok(match query_processors.len() {
-            1 => {
-                let [a] = <[_; 1]>::try_from(query_processors).expect("len previously checked");
-                let query_processor = a.into_f64();
-                call_generic_raster_processor!(
-                    output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processor,
-                        self.result_descriptor.clone(),
-                        self.map_no_data
-                    )
-                    .boxed()
-                )
-
-                // TODO: We could save prior conversions by monomophizing the differnt expressions
-                //       However, this would lead to lots of compile symbols and to different results than using the
-                //       variants with more than one raster.
-                //
-                // call_on_generic_raster_processor!(a, p_a => {
-                //     call_generic_raster_processor!(
-                //         output_type,
-                //         ExpressionQueryProcessor::new(
-                //             expression,
-                //             p_a,
-                //             output_no_data_value.as_(),
-                //             self.map_no_data,
-                //         ).boxed()
-                //     )
-                // })
-            }
-            2 => {
-                let [a, b] = <[_; 2]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = (a.into_f64(), b.into_f64());
-                call_generic_raster_processor!(
-                    output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        self.result_descriptor.clone(),
-                        self.map_no_data
-                    )
-                    .boxed()
-                )
-
-                // TODO: We could save prior conversions by monomophizing the differnt expressions
-                //       However, this would lead to lots of compile symbols, e.g., 10x10x10 for this case
-                //
-                // call_on_bi_generic_raster_processor!(a, b, (p_a, p_b) => {
-                //     call_generic_raster_processor!(
-                //         output_type,
-                //         ExpressionQueryProcessor::new(
-                //             expression,
-                //             (p_a, p_b),
-                //             output_no_data_value.as_(),
-                //             self.map_no_data,
-                //         ).boxed()
-                //     )
-                // })
-            }
-            3 => {
-                let [a, b, c] =
-                    <[_; 3]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = [a.into_f64(), b.into_f64(), c.into_f64()];
-                call_generic_raster_processor!(
-                    output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        self.result_descriptor.clone(),
-                        self.map_no_data
-                    )
-                    .boxed()
-                )
-            }
-            4 => {
-                let [a, b, c, d] =
-                    <[_; 4]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = [a.into_f64(), b.into_f64(), c.into_f64(), d.into_f64()];
-                call_generic_raster_processor!(
-                    output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        self.result_descriptor.clone(),
-                        self.map_no_data
-                    )
-                    .boxed()
-                )
-            }
-            5 => {
-                let [a, b, c, d, e] =
-                    <[_; 5]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = [
-                    a.into_f64(),
-                    b.into_f64(),
-                    c.into_f64(),
-                    d.into_f64(),
-                    e.into_f64(),
-                ];
-                call_generic_raster_processor!(
-                    output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        self.result_descriptor.clone(),
-                        self.map_no_data
-                    )
-                    .boxed()
-                )
-            }
-            6 => {
-                let [a, b, c, d, e, f] =
-                    <[_; 6]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = [
-                    a.into_f64(),
-                    b.into_f64(),
-                    c.into_f64(),
-                    d.into_f64(),
-                    e.into_f64(),
-                    f.into_f64(),
-                ];
-                call_generic_raster_processor!(
-                    output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        self.result_descriptor.clone(),
-                        self.map_no_data
-                    )
-                    .boxed()
-                )
-            }
-
-            7 => {
-                let [a, b, c, d, e, f, g] =
-                    <[_; 7]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = [
-                    a.into_f64(),
-                    b.into_f64(),
-                    c.into_f64(),
-                    d.into_f64(),
-                    e.into_f64(),
-                    f.into_f64(),
-                    g.into_f64(),
-                ];
-                call_generic_raster_processor!(
-                    output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        self.result_descriptor.clone(),
-                        self.map_no_data
-                    )
-                    .boxed()
-                )
-            }
-            8 => {
-                let [a, b, c, d, e, f, g, h] =
-                    <[_; 8]>::try_from(query_processors).expect("len previously checked");
-                let query_processors = [
-                    a.into_f64(),
-                    b.into_f64(),
-                    c.into_f64(),
-                    d.into_f64(),
-                    e.into_f64(),
-                    f.into_f64(),
-                    g.into_f64(),
-                    h.into_f64(),
-                ];
-                call_generic_raster_processor!(
-                    output_type,
-                    ExpressionQueryProcessor::new(
-                        expression,
-                        query_processors,
-                        self.result_descriptor.clone(),
-                        self.map_no_data
-                    )
-                    .boxed()
-                )
-            }
-            _ => return Err(crate::error::Error::InvalidNumberOfExpressionInputs),
-        })
+        Ok(generate_match_cases!(
+            self.source.result_descriptor().bands.len(),
+            output_type,
+            expression,
+            source_processor,
+            self.result_descriptor.clone(),
+            self.map_no_data,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+        ))
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -589,8 +198,11 @@ impl InitializedRasterOperator for InitializedExpression {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
+    use crate::engine::{
+        MockExecutionContext, MockQueryContext, MultipleRasterSources, QueryProcessor,
+    };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use crate::processing::{RasterStacker, RasterStackerParams};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::primitives::{
@@ -672,16 +284,7 @@ mod tests {
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
-            sources: ExpressionSources {
-                a: raster_a,
-                b: None,
-                c: None,
-                d: None,
-                e: None,
-                f: None,
-                g: None,
-                h: None,
-            },
+            sources: SingleRasterSource { raster: raster_a },
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
@@ -742,16 +345,7 @@ mod tests {
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: true,
             },
-            sources: ExpressionSources {
-                a: raster_a,
-                b: None,
-                c: None,
-                d: None,
-                e: None,
-                f: None,
-                g: None,
-                h: None,
-            },
+            sources: SingleRasterSource { raster: raster_a },
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
@@ -813,15 +407,14 @@ mod tests {
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
-            sources: ExpressionSources {
-                a: raster_a,
-                b: Some(raster_b),
-                c: None,
-                d: None,
-                e: None,
-                f: None,
-                g: None,
-                h: None,
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![raster_a, raster_b],
+                    },
+                }
+                .boxed(),
             },
         }
         .boxed()
@@ -887,15 +480,14 @@ mod tests {
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: true,
             },
-            sources: ExpressionSources {
-                a: raster_a,
-                b: Some(raster_b),
-                c: None,
-                d: None,
-                e: None,
-                f: None,
-                g: None,
-                h: None,
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![raster_a, raster_b],
+                    },
+                }
+                .boxed(),
             },
         }
         .boxed()
@@ -962,15 +554,14 @@ mod tests {
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
-            sources: ExpressionSources {
-                a: raster_a,
-                b: Some(raster_b),
-                c: Some(raster_c),
-                d: None,
-                e: None,
-                f: None,
-                g: None,
-                h: None,
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![raster_a, raster_b, raster_c],
+                    },
+                }
+                .boxed(),
             },
         }
         .boxed()
@@ -1047,15 +638,17 @@ mod tests {
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
-            sources: ExpressionSources {
-                a: raster_a,
-                b: Some(raster_b),
-                c: Some(raster_c),
-                d: Some(raster_d),
-                e: Some(raster_e),
-                f: Some(raster_f),
-                g: Some(raster_g),
-                h: Some(raster_h),
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![
+                            raster_a, raster_b, raster_c, raster_d, raster_e, raster_f, raster_g,
+                            raster_h,
+                        ],
+                    },
+                }
+                .boxed(),
             },
         }
         .boxed()
@@ -1114,15 +707,14 @@ mod tests {
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
-            sources: ExpressionSources {
-                a: raster_a,
-                b: None,
-                c: None,
-                d: None,
-                e: None,
-                f: None,
-                g: None,
-                h: None,
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![raster_a],
+                    },
+                }
+                .boxed(),
             },
         }
         .boxed()
@@ -1228,15 +820,14 @@ mod tests {
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
-            sources: ExpressionSources {
-                a: raster_a,
-                b: None,
-                c: None,
-                d: None,
-                e: None,
-                f: None,
-                g: None,
-                h: None,
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![raster_a],
+                    },
+                }
+                .boxed(),
             },
         }
         .boxed()
@@ -1298,15 +889,14 @@ mod tests {
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
-            sources: ExpressionSources {
-                a: raster_a,
-                b: Some(raster_b),
-                c: None,
-                d: None,
-                e: None,
-                f: None,
-                g: None,
-                h: None,
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![raster_a, raster_b],
+                    },
+                }
+                .boxed(),
             },
         }
         .boxed()
@@ -1370,15 +960,14 @@ mod tests {
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
-            sources: ExpressionSources {
-                a: raster_a,
-                b: Some(raster_b),
-                c: Some(raster_c),
-                d: None,
-                e: None,
-                f: None,
-                g: None,
-                h: None,
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![raster_a, raster_b, raster_c],
+                    },
+                }
+                .boxed(),
             },
         }
         .boxed()

@@ -534,9 +534,12 @@ mod tests {
     use super::*;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterBandDescriptors},
+        engine::{
+            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            SingleRasterSource,
+        },
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
-        processing::{Expression, ExpressionParams, ExpressionSources},
+        processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
         util::{gdal::add_ndvi_dataset, input::RasterOrVectorOperator},
     };
@@ -1211,7 +1214,15 @@ mod tests {
                 output_measurement: None,
                 map_no_data: false,
             },
-            sources: ExpressionSources::new_a_b(ndvi_source, shifted_ndvi_source),
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![ndvi_source, shifted_ndvi_source],
+                    },
+                }
+                .boxed(),
+            },
         }
         .boxed();
 

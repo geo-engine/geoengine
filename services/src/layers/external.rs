@@ -121,6 +121,12 @@ impl From<EdrDataProviderDefinition> for TypedDataProviderDefinition {
     }
 }
 
+impl From<DatasetLayerListingProviderDefinition> for TypedDataProviderDefinition {
+    fn from(def: DatasetLayerListingProviderDefinition) -> Self {
+        Self::DatasetLayerListingProviderDefinition(def)
+    }
+}
+
 impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderDefinition<D>> {
     fn from(typed: TypedDataProviderDefinition) -> Self {
         match typed {
