@@ -458,7 +458,9 @@ pub fn display_raster_tile_2d<P: Pixel + std::fmt::Debug>(
 
                 let last_value_index = values.len() - 1;
                 for (i, value) in values.into_iter().enumerate() {
-                    let str_ref = s.last_mut().unwrap();
+                    let str_ref = s
+                        .last_mut()
+                        .expect("it shouldn't be empty since it was populated before the loop");
 
                     str_ref.push_str(&format!("{value:max_digits$}"));
 

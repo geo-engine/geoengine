@@ -887,17 +887,18 @@ where
     type Item = FeatureCollectionRow<'a, GeometryRef>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let res = self
-            .time_intervals
-            .next()
-            .map(|time_interval| FeatureCollectionRow {
-                geometry: self.geometries.next().unwrap(),
-                time_interval: *time_interval,
-                data: Rc::clone(&self.data),
-                row_num: self.row_num,
-            });
+        let row_num = self.row_num;
         self.row_num += 1;
-        res
+
+        let time_interval = self.time_intervals.next()?;
+        let geometry = self.geometries.next()?;
+
+        Some(FeatureCollectionRow {
+            geometry,
+            time_interval: *time_interval,
+            data: Rc::clone(&self.data),
+            row_num,
+        })
     }
 }
 
