@@ -1,4 +1,4 @@
-use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
+use crate::adapters::{QueryProcessorWrapper, RasterStackerAdapter, RasterStackerSource};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptors,
@@ -309,7 +309,7 @@ where
             let mut source_query = query.clone();
             source_query.attributes = bands.clone();
             sources.push(RasterStackerSource {
-                queryable: QueryWrapper { p: source, ctx },
+                queryable: QueryProcessorWrapper { p: source, ctx },
                 band_idxs: bands.as_vec(),
             });
         }

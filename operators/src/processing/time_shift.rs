@@ -1,4 +1,3 @@
-use crate::adapters::stack_individual_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSingleRasterOrVectorOperator, InitializedSources, InitializedVectorOperator,
@@ -23,7 +22,7 @@ use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, Snafu};
+use snafu::Snafu;
 
 /// Project the query rectangle to a new time interval.
 pub type TimeShift = Operator<TimeShiftParams, SingleRasterOrVectorSource>;
@@ -402,47 +401,6 @@ where
     shift: Shift,
 }
 
-impl<Q, P, Shift: TimeShiftOperation> RasterTimeShiftProcessor<Q, P, Shift>
-where
-    Q: RasterQueryProcessor<RasterType = P>,
-    P: Pixel,
-    Shift: TimeShiftOperation,
-{
-    async fn query_single_band<'a>(
-        &'a self,
-        query: RasterQueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<RasterTile2D<P>>>> {
-        ensure!(
-            query.attributes.count() == 1,
-            crate::error::InvalidBandCount {
-                expected: 1u32,
-                found: query.attributes.count()
-            }
-        );
-
-        let (time_interval, state) = self.shift.shift(query.time_interval)?;
-        let query = RasterQueryRectangle {
-            spatial_bounds: query.spatial_bounds,
-            time_interval,
-            spatial_resolution: query.spatial_resolution,
-            attributes: BandSelection::first(),
-        };
-        let stream = self.processor.raster_query(query, ctx).await?;
-
-        let stream = stream.map(move |raster| {
-            // reverse time shift for results
-            let mut raster = raster?;
-
-            raster.time = self.shift.reverse_shift(raster.time, state)?;
-
-            Ok(raster)
-        });
-
-        Ok(Box::pin(stream))
-    }
-}
-
 pub struct VectorTimeShiftProcessor<Q, G, Shift: TimeShiftOperation>
 where
     G: Geometry,
@@ -518,10 +476,25 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
-        stack_individual_raster_bands(&query, ctx, |query, ctx| async move {
-            self.query_single_band(query, ctx).await
-        })
-        .await
+        let (time_interval, state) = self.shift.shift(query.time_interval)?;
+        let query = RasterQueryRectangle {
+            spatial_bounds: query.spatial_bounds,
+            time_interval,
+            spatial_resolution: query.spatial_resolution,
+            attributes: BandSelection::first(),
+        };
+        let stream = self.processor.raster_query(query, ctx).await?;
+
+        let stream = stream.map(move |raster| {
+            // reverse time shift for results
+            let mut raster = raster?;
+
+            raster.time = self.shift.reverse_shift(raster.time, state)?;
+
+            Ok(raster)
+        });
+
+        Ok(Box::pin(stream))
     }
 
     fn raster_result_descriptor(&self) -> &RasterResultDescriptor {

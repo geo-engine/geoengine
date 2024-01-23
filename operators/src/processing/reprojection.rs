@@ -1,7 +1,6 @@
 use std::marker::PhantomData;
 
 use super::map_query::MapQueryProcessor;
-use crate::adapters::stack_individual_raster_bands;
 use crate::{
     adapters::{
         fold_by_coordinate_lookup_future, FillerTileCacheExpirationStrategy, RasterSubQueryAdapter,
@@ -35,7 +34,6 @@ use geoengine_datatypes::{
     util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -570,20 +568,29 @@ where
             _phantom_data: PhantomData,
         }
     }
+}
 
-    fn query_single_band<'a>(
+#[async_trait]
+impl<Q, P> QueryProcessor for RasterReprojectionProcessor<Q, P>
+where
+    Q: QueryProcessor<
+        Output = RasterTile2D<P>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
+    >,
+    P: Pixel,
+{
+    type Output = RasterTile2D<P>;
+    type SpatialBounds = SpatialPartition2D;
+    type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
+
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<RasterTile2D<P>>>> {
-        ensure!(
-            query.attributes.count() == 1,
-            error::InvalidBandCount {
-                expected: 1u32,
-                found: query.attributes.count()
-            }
-        );
-
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         if let Some(state) = &self.state {
             let valid_bounds_in = state.valid_in_bounds;
             let valid_bounds_out = state.valid_out_bounds;
@@ -632,34 +639,6 @@ where
                 FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
             )))
         }
-    }
-}
-
-#[async_trait]
-impl<Q, P> QueryProcessor for RasterReprojectionProcessor<Q, P>
-where
-    Q: QueryProcessor<
-        Output = RasterTile2D<P>,
-        SpatialBounds = SpatialPartition2D,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
-    P: Pixel,
-{
-    type Output = RasterTile2D<P>;
-    type SpatialBounds = SpatialPartition2D;
-    type Selection = BandSelection;
-    type ResultDescription = RasterResultDescriptor;
-
-    async fn _query<'a>(
-        &'a self,
-        query: RasterQueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        stack_individual_raster_bands(&query, ctx, |query, ctx| async move {
-            self.query_single_band(query, ctx)
-        })
-        .await
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {

@@ -6,7 +6,6 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::stack_individual_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
@@ -137,15 +136,12 @@ where
         query: RasterQueryRectangle,
         ctx: &'b dyn QueryContext,
     ) -> Result<BoxStream<'b, Result<Self::Output>>> {
-        stack_individual_raster_bands(&query, ctx, |query, ctx| async move {
-            let stream = self.query_processor.raster_query(query, ctx).await?;
-            let converted_stream = stream.and_then(move |tile| {
-                crate::util::spawn_blocking(|| tile.convert_data_type()).map_err(Into::into)
-            });
+        let stream = self.query_processor.raster_query(query, ctx).await?;
+        let converted_stream = stream.and_then(move |tile| {
+            crate::util::spawn_blocking(|| tile.convert_data_type()).map_err(Into::into)
+        });
 
-            Ok(converted_stream.boxed())
-        })
-        .await
+        Ok(converted_stream.boxed())
     }
 
     fn result_descriptor(&self) -> &Self::ResultDescription {

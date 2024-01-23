@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::adapters::stack_individual_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
@@ -254,13 +253,9 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        stack_individual_raster_bands(&query, ctx, |query, ctx| async move {
-            let src = self.source.query(query, ctx).await?;
-            let rs =
-                src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
-            Ok(rs.boxed())
-        })
-        .await
+        let src = self.source.query(query, ctx).await?;
+        let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
+        Ok(rs.boxed())
     }
 
     fn result_descriptor(&self) -> &Self::ResultDescription {

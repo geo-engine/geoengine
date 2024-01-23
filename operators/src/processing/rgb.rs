@@ -1,5 +1,5 @@
 use crate::{
-    adapters::{QueryWrapper, RasterArrayTimeAdapter},
+    adapters::{QueryProcessorWrapper, RasterArrayTimeAdapter},
     engine::{
         BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
         InitializedSources, Operator, OperatorData, OperatorName, QueryContext, QueryProcessor,
@@ -306,12 +306,12 @@ impl QueryProcessor for RgbQueryProcessor {
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let red = QueryWrapper { p: &self.red, ctx };
-        let green = QueryWrapper {
+        let red = QueryProcessorWrapper { p: &self.red, ctx };
+        let green = QueryProcessorWrapper {
             p: &self.green,
             ctx,
         };
-        let blue = QueryWrapper { p: &self.blue, ctx };
+        let blue = QueryProcessorWrapper { p: &self.blue, ctx };
 
         let params = self.params;
 

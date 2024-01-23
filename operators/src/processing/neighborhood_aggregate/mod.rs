@@ -3,7 +3,7 @@ mod tile_sub_query;
 
 use self::aggregate::{AggregateFunction, Neighborhood, StandardDeviation, Sum};
 use self::tile_sub_query::NeighborhoodAggregateTileNeighborhood;
-use crate::adapters::stack_individual_raster_bands;
+use crate::adapters::stack_individual_aligned_raster_bands;
 use crate::adapters::RasterSubQueryAdapter;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
@@ -257,7 +257,7 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        stack_individual_raster_bands(&query, ctx, |query, ctx| async move {
+        stack_individual_aligned_raster_bands(&query, ctx, |query, ctx| async move {
             let sub_query = NeighborhoodAggregateTileNeighborhood::<P, A>::new(
                 self.neighborhood.clone(),
                 self.tiling_specification,

@@ -129,8 +129,8 @@ where
     }
 }
 
-/// A helper method that computes a function on multiple bands individually and then stacks the result into a multi-band raster.
-pub async fn stack_individual_raster_bands<'a, F, Fut, P>(
+/// A helper method that computes a function on multiple bands (that are already aligned) individually and then stacks the result into a multi-band raster.
+pub async fn stack_individual_aligned_raster_bands<'a, F, Fut, P>(
     query: &RasterQueryRectangle,
     ctx: &'a dyn crate::engine::QueryContext,
     create_single_bands_stream_fn: F,

@@ -2,8 +2,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use crate::adapters::{
-    stack_individual_raster_bands, FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter,
-    SubQueryTileAggregator,
+    FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
 };
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
@@ -223,27 +222,24 @@ where
             return self.source.query(query, ctx).await;
         }
 
-        stack_individual_raster_bands(&query, ctx, |query, ctx| async {
-            let sub_query = InterpolationSubQuery::<_, P, I> {
-                input_resolution: self.input_resolution,
-                fold_fn: fold_future,
-                tiling_specification: self.tiling_specification,
-                phantom: PhantomData,
-                _phantom_pixel_type: PhantomData,
-            };
+        let sub_query = InterpolationSubQuery::<_, P, I> {
+            input_resolution: self.input_resolution,
+            fold_fn: fold_future,
+            tiling_specification: self.tiling_specification,
+            phantom: PhantomData,
+            _phantom_pixel_type: PhantomData,
+        };
 
-            Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
-                &self.source,
-                query,
-                self.tiling_specification,
-                ctx,
-                sub_query,
-            )
-            .filter_and_fill(
-                crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-            ))
-        })
-        .await
+        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+            &self.source,
+            query,
+            self.tiling_specification,
+            ctx,
+            sub_query,
+        )
+        .filter_and_fill(
+            crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+        ))
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {

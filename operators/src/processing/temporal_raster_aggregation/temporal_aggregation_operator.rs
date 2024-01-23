@@ -8,7 +8,7 @@ use super::aggregators::{
 use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
-use crate::adapters::stack_individual_raster_bands;
+use crate::adapters::stack_individual_aligned_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
     RasterOperator, SingleRasterSource, WorkflowOperatorPath,
@@ -431,7 +431,7 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
-        stack_individual_raster_bands(&query, ctx, |query, ctx| async {
+        stack_individual_aligned_raster_bands(&query, ctx, |query, ctx| async {
             self.create_subquery_adapter_stream_for_single_band(query, ctx)
         })
         .await

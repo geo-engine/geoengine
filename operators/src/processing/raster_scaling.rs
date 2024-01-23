@@ -8,7 +8,6 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
 
-use crate::adapters::stack_individual_raster_bands;
 use geoengine_datatypes::raster::{
     CheckedMulThenAddTransformation, CheckedSubThenDivTransformation, ElementScaling,
     ScalingTransformation,
@@ -252,13 +251,9 @@ where
             Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>,
         >,
     > {
-        stack_individual_raster_bands(&query, ctx, |query, ctx| async move {
-            let src = self.source.raster_query(query, ctx).await?;
-            let rs =
-                src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
-            Ok(rs.boxed())
-        })
-        .await
+        let src = self.source.raster_query(query, ctx).await?;
+        let rs = src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
+        Ok(rs.boxed())
     }
 
     fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
