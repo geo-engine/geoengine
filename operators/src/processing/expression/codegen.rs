@@ -332,12 +332,13 @@ impl ToTokens for Assignment {
 #[derive(Debug, Clone)]
 pub enum Parameter {
     Number(Identifier),
+    Geometry(Identifier),
 }
 
 impl AsRef<str> for Parameter {
     fn as_ref(&self) -> &str {
         match self {
-            Self::Number(identifier) => identifier.as_ref(),
+            Self::Number(identifier) | Self::Geometry(identifier) => identifier.as_ref(),
         }
     }
 }
