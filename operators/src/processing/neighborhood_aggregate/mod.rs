@@ -289,10 +289,11 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor,
+            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            RasterOperator, RasterResultDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
+        processing::{RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
         util::{gdal::add_ndvi_dataset, raster_stream_to_png::raster_stream_to_png_bytes},
     };
@@ -798,5 +799,86 @@ mod tests {
 
         // Use for getting the image to compare against
         // save_test_bytes(&bytes, "sobel_filter.png");
+    }
+
+    #[tokio::test]
+    async fn test_mean_convolution_multi_bands() {
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 3].into(),
+        ));
+
+        let operator = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::WeightsMatrix {
+                    weights: vec![vec![1. / 9.; 3]; 3],
+                },
+                aggregate_function: AggregateFunctionParams::Sum,
+            },
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![make_raster(), make_raster(), make_raster()],
+                    },
+                }
+                .boxed(),
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap();
+
+        let processor = operator.query_processor().unwrap().get_i8().unwrap();
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new((0., 3.).into(), (6., 0.).into()).unwrap(),
+            time_interval: TimeInterval::new_unchecked(0, 20),
+            spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::new(vec![0, 2]).unwrap(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
+
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        let mut times: Vec<TimeInterval> = vec![TimeInterval::new_unchecked(0, 10); 4];
+        times.append(&mut vec![TimeInterval::new_unchecked(10, 20); 4]);
+
+        let data = vec![
+            vec![0, 0, 0, 0, 8, 9, 0, 0, 0],
+            vec![0, 0, 0, 10, 11, 0, 0, 0, 0],
+            vec![0, 0, 0, 0, 10, 10, 0, 0, 0],
+            vec![0, 0, 0, 9, 7, 0, 0, 0, 0],
+        ];
+        let data = data
+            .clone()
+            .into_iter()
+            .zip(data)
+            .flat_map(|(a, b)| vec![a, b])
+            .collect::<Vec<_>>();
+
+        let valid = vec![
+            vec![false, false, false, false, true, true, false, false, false],
+            vec![false, false, false, true, true, false, false, false, false],
+            vec![false, false, false, false, true, true, false, false, false],
+            vec![false, false, false, true, true, false, false, false, false],
+        ];
+        let valid = valid
+            .clone()
+            .into_iter()
+            .zip(valid)
+            .flat_map(|(a, b)| vec![a, b])
+            .collect::<Vec<_>>();
+
+        for (i, tile) in result.into_iter().enumerate() {
+            let tile = tile.into_materialized_tile();
+            assert_eq!(tile.time, times[i]);
+            assert_eq!(tile.grid_array.inner_grid.data, data[i]);
+            assert_eq!(tile.grid_array.validity_mask.data, valid[i]);
+        }
     }
 }
