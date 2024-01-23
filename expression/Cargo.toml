@@ -1,0 +1,12 @@
+[package]
+name = "geoengine-expression"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cargo = "0.76"
+libloading = "0.8"
+proc-macro2 = "1.0"
+quote = "1.0"
+snafu = "0.8"
+tempfile = "3.2"
