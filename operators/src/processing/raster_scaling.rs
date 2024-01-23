@@ -105,12 +105,20 @@ impl RasterOperator for RasterScaling {
             bbox: in_desc.bbox,
             time: in_desc.time,
             resolution: in_desc.resolution,
-            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                in_desc.bands[0].name.clone(),
-                self.params
-                    .output_measurement
-                    .unwrap_or_else(|| in_desc.bands[0].measurement.clone()),
-            )])?,
+            bands: in_desc
+                .bands
+                .iter()
+                .map(|b| {
+                    RasterBandDescriptor::new(
+                        b.name.clone(),
+                        self.params
+                            .output_measurement
+                            .clone()
+                            .unwrap_or_else(|| b.measurement.clone()),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .try_into()?,
         };
 
         let initialized_operator = InitializedRasterScalingOperator {

@@ -30,7 +30,7 @@ pub struct RasterVectorAggregateJoinProcessor<G> {
     collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     result_descriptor: VectorResultDescriptor,
     raster_processors: Vec<TypedRasterQueryProcessor>,
-    raster_bands: Vec<u32>, // TODO: store result descriptors instead? could drive column names from measurement, once there is one measurement for each band
+    raster_bands: Vec<u32>,
     column_names: Vec<String>,
     feature_aggregation: FeatureAggregationMethod,
     feature_aggregation_ignore_no_data: bool,
