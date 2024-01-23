@@ -500,7 +500,7 @@ impl NetCdfCfDataProvider {
                 "band".into(),
                 derive_measurement(data_array.unit()),
             )])
-            .unwrap(),
+            .context(error::GeneratingResultDescriptorFromDataset)?,
         };
 
         let params = GdalDatasetParameters {

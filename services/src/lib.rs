@@ -24,7 +24,8 @@
     clippy::dbg_macro,
     clippy::print_stderr,
     clippy::print_stdout,
-    clippy::unimplemented
+    clippy::unimplemented,
+    clippy::unwrap_used
 )]
 
 pub mod api;

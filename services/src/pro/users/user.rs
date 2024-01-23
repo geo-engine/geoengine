@@ -54,7 +54,10 @@ impl From<UserRegistration> for User {
         Self {
             id,
             email: user_registration.email,
-            password_hash: bcrypt::hash(&user_registration.password).unwrap(),
+
+            password_hash: bcrypt::hash(&user_registration.password)
+                // TODO: use error instead to be sure
+                .expect("the random number generator should always be accessible"),
             real_name: user_registration.real_name,
             active: true,
             roles: vec![id.into(), Role::registered_user_role_id()],

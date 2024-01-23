@@ -352,7 +352,10 @@ impl OidcRequestDb {
                     field: "name".to_string(),
                     reason: "missing".to_string(),
                 }),
-                Some(x) => Ok(x.get(None).unwrap().to_string()), //TODO: There is no Local logic.
+                Some(x) => Ok(x
+                    .get(None)
+                    .expect("`None` should always have a return value")
+                    .to_string()), //TODO: There is no Local logic.
             }?,
         };
 

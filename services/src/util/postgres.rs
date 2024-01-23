@@ -57,8 +57,12 @@ pub async fn assert_sql_type<T>(
         let stmt = conn
             .prepare(&format!("SELECT $1::{quote}{sql_type}{quote}"))
             .await
-            .unwrap();
-        let result: T = conn.query_one(&stmt, &[&value]).await.unwrap().get(0);
+            .expect("it should panic since this is an assertion");
+        let result: T = conn
+            .query_one(&stmt, &[&value])
+            .await
+            .expect("it should panic since this is an assertion")
+            .get(0);
 
         assert_eq!(value, result);
     }
