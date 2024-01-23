@@ -17,12 +17,13 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{
-    MetaData, RasterBandDescriptors, RasterResultDescriptor, SingleRasterOrVectorSource,
-    WorkflowOperatorPath,
+    MetaData, MultipleRasterSources, RasterBandDescriptors, RasterResultDescriptor,
+    SingleRasterOrVectorSource, SingleRasterSource, WorkflowOperatorPath,
 };
 use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
 use geoengine_operators::processing::{
-    Expression, ExpressionParams, ExpressionSources, Reprojection, ReprojectionParams,
+    Expression, ExpressionParams, RasterStacker, RasterStackerParams, Reprojection,
+    ReprojectionParams,
 };
 use geoengine_operators::source::GdalSource;
 use geoengine_operators::{
@@ -418,10 +419,18 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
-            sources: ExpressionSources::new_a_b(
-                mock_raster_operator.clone().boxed(),
-                mock_raster_operator.boxed(),
-            ),
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![
+                            mock_raster_operator.clone().boxed(),
+                            mock_raster_operator.boxed(),
+                        ],
+                    },
+                }
+                .boxed(),
+            },
         }
         .boxed()
     }
@@ -708,7 +717,15 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
             output_measurement: Some(Measurement::Unitless),
             map_no_data: false,
         },
-        sources: ExpressionSources::new_a_b(gdal_operator.clone().boxed(), gdal_operator.boxed()),
+        sources: SingleRasterSource {
+            raster: RasterStacker {
+                params: RasterStackerParams {},
+                sources: MultipleRasterSources {
+                    rasters: vec![gdal_operator.clone().boxed(), gdal_operator.boxed()],
+                },
+            }
+            .boxed(),
+        },
     }
     .boxed();
 

@@ -479,7 +479,7 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{
             raster_stacker::{RasterStacker, RasterStackerParams},
-            Expression, ExpressionParams, ExpressionSources,
+            Expression, ExpressionParams,
         },
     };
 
@@ -2016,8 +2016,8 @@ mod tests {
                         output_measurement: Some(Measurement::Unitless),
                         map_no_data: true,
                     },
-                    sources: ExpressionSources::new_a(
-                        MockRasterSource {
+                    sources: SingleRasterSource {
+                        raster: MockRasterSource {
                             params: MockRasterSourceParams {
                                 data: make_raster(),
                                 result_descriptor: RasterResultDescriptor {
@@ -2031,7 +2031,7 @@ mod tests {
                             },
                         }
                         .boxed(),
-                    ),
+                    },
                 }
                 .boxed(),
             },

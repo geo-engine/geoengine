@@ -62,7 +62,16 @@ impl RasterOperator for RasterStacker {
             in_descriptors.iter().all(|d| d.spatial_reference
                 == in_descriptors[0].spatial_reference
                 && d.data_type == in_descriptors[0].data_type),
-            RasterInputsMustHaveSameSpatialReferenceAndDatatype
+            RasterInputsMustHaveSameSpatialReferenceAndDatatype {
+                datatypes: in_descriptors
+                    .iter()
+                    .map(|d| d.data_type)
+                    .collect::<Vec<_>>(),
+                spatial_references: in_descriptors
+                    .iter()
+                    .map(|d| d.spatial_reference)
+                    .collect::<Vec<_>>(),
+            }
         );
 
         let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
@@ -330,9 +339,10 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
+            SingleRasterSource,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
-        processing::{Expression, ExpressionParams, ExpressionSources},
+        processing::{Expression, ExpressionParams},
         source::{GdalSource, GdalSourceParameters},
         util::gdal::add_ndvi_dataset,
     };
@@ -973,14 +983,14 @@ mod tests {
                 output_measurement: None,
                 map_no_data: false,
             },
-            sources: ExpressionSources::new_a(
-                GdalSource {
+            sources: SingleRasterSource {
+                raster: GdalSource {
                     params: GdalSourceParameters {
                         data: ndvi_id.clone(),
                     },
                 }
                 .boxed(),
-            ),
+            },
         }
         .boxed();
 
