@@ -943,6 +943,8 @@ where
                 priority
             FROM 
                 layer_providers
+            WHERE
+                priority > -1000
             ORDER BY priority DESC, name ASC
             LIMIT $1 
             OFFSET $2;",

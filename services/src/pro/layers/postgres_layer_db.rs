@@ -752,6 +752,8 @@ where
                         priority
                     FROM 
                         layer_providers
+                    WHERE
+                        priority > -1000
                     UNION ALL
                     SELECT 
                         id, 
@@ -760,6 +762,8 @@ where
                         priority
                     FROM 
                         pro_layer_providers
+                    WHERE
+                        priority > -1000
                 )
                 ORDER BY priority desc, name ASC
                 LIMIT $1 
