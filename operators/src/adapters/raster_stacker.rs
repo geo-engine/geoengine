@@ -1,6 +1,6 @@
 use crate::util::Result;
-use futures::future::{join_all, BoxFuture, JoinAll};
-use futures::stream::{BoxStream, Fuse, FusedStream, Stream};
+use futures::future::JoinAll;
+use futures::stream::{Fuse, FusedStream, Stream};
 use futures::{ready, Future, StreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
@@ -355,47 +355,6 @@ where
     }
 }
 
-/// A helper method that computes a function on multiple bands individually and then stacks the result into a multi-band raster.
-pub async fn stack_individual_raster_bands<'a, F, Fut, P, Q>(
-    query: &RasterQueryRectangle,
-    ctx: &'a dyn crate::engine::QueryContext,
-    create_single_band_queryable_fn: F,
-) -> Result<BoxStream<'a, Result<RasterTile2D<P>>>>
-where
-    F: Fn(RasterQueryRectangle, &'a dyn crate::engine::QueryContext) -> Fut,
-    Fut: Future<Output = Result<Q>>,
-    P: Pixel,
-    Q: Queryable<
-            P,
-            Stream = BoxStream<'a, Result<RasterTile2D<P>>>,
-            Output = BoxFuture<'a, Result<BoxStream<'a, Result<RasterTile2D<P>>>>>,
-        > + Send
-        + Sync
-        + 'static,
-{
-    if query.attributes.count() == 1 {
-        // special case of single band query requires no tile stacking
-        let q = create_single_band_queryable_fn(query.clone(), ctx).await?;
-        return Ok(q.query(query.clone()).await?.boxed());
-    }
-
-    // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
-    let queryables = join_all(query.attributes.as_slice().iter().map(|band| async {
-        let query = query.select_bands(BandSelection::new_single(*band));
-        Ok(RasterStackerSource {
-            queryable: create_single_band_queryable_fn(query.clone(), ctx).await?,
-            band_idxs: vec![0],
-        })
-    }))
-    .await
-    .into_iter()
-    .collect::<Result<Vec<_>>>()?;
-
-    let a = RasterStackerAdapter::new(queryables, query.clone().into());
-
-    Ok(Box::pin(a))
-}
-
 #[cfg(test)]
 mod tests {
     use futures::StreamExt;
@@ -407,7 +366,7 @@ mod tests {
     };
 
     use crate::{
-        adapters::QueryProcessorWrapper,
+        adapters::QueryWrapper,
         engine::{
             MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
             RasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
@@ -566,7 +525,7 @@ mod tests {
         let stacker = RasterStackerAdapter::new(
             vec![
                 (
-                    QueryProcessorWrapper {
+                    QueryWrapper {
                         p: &qp1,
                         ctx: &query_ctx,
                     },
@@ -574,7 +533,7 @@ mod tests {
                 )
                     .into(),
                 (
-                    QueryProcessorWrapper {
+                    QueryWrapper {
                         p: &qp2,
                         ctx: &query_ctx,
                     },
@@ -681,7 +640,7 @@ mod tests {
 
         let stacker = RasterStackerAdapter::new(
             vec![(
-                QueryProcessorWrapper {
+                QueryWrapper {
                     p: &qp1,
                     ctx: &query_ctx,
                 },
@@ -942,7 +901,7 @@ mod tests {
         let stacker = RasterStackerAdapter::new(
             vec![
                 (
-                    QueryProcessorWrapper {
+                    QueryWrapper {
                         p: &qp1,
                         ctx: &query_ctx,
                     },
@@ -950,7 +909,7 @@ mod tests {
                 )
                     .into(),
                 (
-                    QueryProcessorWrapper {
+                    QueryWrapper {
                         p: &qp2,
                         ctx: &query_ctx,
                     },
@@ -1228,7 +1187,7 @@ mod tests {
         let stacker = RasterStackerAdapter::new(
             vec![
                 (
-                    QueryProcessorWrapper {
+                    QueryWrapper {
                         p: &qp1,
                         ctx: &query_ctx,
                     },
@@ -1236,7 +1195,7 @@ mod tests {
                 )
                     .into(),
                 (
-                    QueryProcessorWrapper {
+                    QueryWrapper {
                         p: &qp2,
                         ctx: &query_ctx,
                     },
@@ -1869,7 +1828,7 @@ mod tests {
         let stacker = RasterStackerAdapter::new(
             vec![
                 (
-                    QueryProcessorWrapper {
+                    QueryWrapper {
                         p: &qp1,
                         ctx: &query_ctx,
                     },
@@ -1877,7 +1836,7 @@ mod tests {
                 )
                     .into(),
                 (
-                    QueryProcessorWrapper {
+                    QueryWrapper {
                         p: &qp2,
                         ctx: &query_ctx,
                     },
@@ -1885,7 +1844,7 @@ mod tests {
                 )
                     .into(),
                 (
-                    QueryProcessorWrapper {
+                    QueryWrapper {
                         p: &qp3,
                         ctx: &query_ctx,
                     },

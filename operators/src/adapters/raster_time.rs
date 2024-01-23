@@ -526,7 +526,7 @@ where
 
 /// A wrapper around a `QueryProcessor` and a `QueryContext` that allows querying
 /// with only a `QueryRectangle`.
-pub struct QueryProcessorWrapper<'a, P, T>
+pub struct QueryWrapper<'a, P, T>
 where
     P: RasterQueryProcessor<RasterType = T>,
     T: Pixel,
@@ -552,7 +552,7 @@ where
     fn query(&self, rect: RasterQueryRectangle) -> Self::Output;
 }
 
-impl<'a, P, T> Queryable<T> for QueryProcessorWrapper<'a, P, T>
+impl<'a, P, T> Queryable<T> for QueryWrapper<'a, P, T>
 where
     P: RasterQueryProcessor<RasterType = T>,
     T: Pixel,
@@ -562,33 +562,6 @@ where
 
     fn query(&self, rect: RasterQueryRectangle) -> Self::Output {
         self.p.raster_query(rect, self.ctx)
-    }
-}
-
-/// A wrapper around a `query` function and a `QueryContext` that allows querying
-/// with only a `QueryRectangle`.
-pub struct QueryFunctionWrapper<'a, F, Fut, T>
-where
-    F: Fn(RasterQueryRectangle, &'a dyn crate::engine::QueryContext) -> Fut,
-    Fut: Future<Output = Result<BoxStream<'a, Result<RasterTile2D<T>>>>>,
-    T: Pixel,
-{
-    pub f: F,
-    pub ctx: &'a dyn QueryContext,
-}
-
-impl<'a, F, Fut, T> Queryable<T> for QueryFunctionWrapper<'a, F, Fut, T>
-where
-    F: Fn(RasterQueryRectangle, &'a dyn crate::engine::QueryContext) -> Fut,
-    Fut: Future<Output = Result<BoxStream<'a, Result<RasterTile2D<T>>>>> + Send,
-    T: Pixel,
-{
-    type Stream = BoxStream<'a, Result<RasterTile2D<T>>>;
-    type Output = BoxFuture<'a, Result<Self::Stream>>;
-
-    fn query(&self, _rect: RasterQueryRectangle) -> Self::Output {
-        // (self.f)(rect, self.ctx).boxed()
-        todo!()
     }
 }
 
@@ -782,12 +755,12 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let source_a = QueryProcessorWrapper {
+        let source_a = QueryWrapper {
             p: &qp1,
             ctx: &query_ctx,
         };
 
-        let source_b = QueryProcessorWrapper {
+        let source_b = QueryWrapper {
             p: &qp2,
             ctx: &query_ctx,
         };
@@ -1014,12 +987,12 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let source_a = QueryProcessorWrapper {
+        let source_a = QueryWrapper {
             p: &qp1,
             ctx: &query_ctx,
         };
 
-        let source_b = QueryProcessorWrapper {
+        let source_b = QueryWrapper {
             p: &qp2,
             ctx: &query_ctx,
         };
@@ -1224,12 +1197,12 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let source_a = QueryProcessorWrapper {
+        let source_a = QueryWrapper {
             p: &qp1,
             ctx: &query_ctx,
         };
 
-        let source_b = QueryProcessorWrapper {
+        let source_b = QueryWrapper {
             p: &qp2,
             ctx: &query_ctx,
         };
@@ -1418,12 +1391,12 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let source_a = QueryProcessorWrapper {
+        let source_a = QueryWrapper {
             p: &qp1,
             ctx: &query_ctx,
         };
 
-        let source_b = QueryProcessorWrapper {
+        let source_b = QueryWrapper {
             p: &qp2,
             ctx: &query_ctx,
         };
@@ -1586,12 +1559,12 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let source_a = QueryProcessorWrapper {
+        let source_a = QueryWrapper {
             p: &qp1,
             ctx: &query_ctx,
         };
 
-        let source_b = QueryProcessorWrapper {
+        let source_b = QueryWrapper {
             p: &qp2,
             ctx: &query_ctx,
         };
@@ -1753,12 +1726,12 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let source_a = QueryProcessorWrapper {
+        let source_a = QueryWrapper {
             p: &qp1,
             ctx: &query_ctx,
         };
 
-        let source_b = QueryProcessorWrapper {
+        let source_b = QueryWrapper {
             p: &qp2,
             ctx: &query_ctx,
         };
@@ -1933,12 +1906,12 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let source_a = QueryProcessorWrapper {
+        let source_a = QueryWrapper {
             p: &qp1,
             ctx: &query_ctx,
         };
 
-        let source_b = QueryProcessorWrapper {
+        let source_b = QueryWrapper {
             p: &qp2,
             ctx: &query_ctx,
         };
@@ -2123,12 +2096,12 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let source_a = QueryProcessorWrapper {
+        let source_a = QueryWrapper {
             p: &qp1,
             ctx: &query_ctx,
         };
 
-        let source_b = QueryProcessorWrapper {
+        let source_b = QueryWrapper {
             p: &qp2,
             ctx: &query_ctx,
         };
@@ -2289,12 +2262,12 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let source_a = QueryProcessorWrapper {
+        let source_a = QueryWrapper {
             p: &query_processor_a,
             ctx: &query_ctx,
         };
 
-        let source_b = QueryProcessorWrapper {
+        let source_b = QueryWrapper {
             p: &query_processor_b,
             ctx: &query_ctx,
         };
