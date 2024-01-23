@@ -50,8 +50,10 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
     let no_data_value = Some(0.); // TODO: is it really 0?
     GdalMetaDataRegular {
         data_time: TimeInterval::new_unchecked(
-            TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
-            TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+            TimeInstance::from_str("2014-01-01T00:00:00.000Z")
+                .expect("it should only be used in tests"),
+            TimeInstance::from_str("2014-07-01T00:00:00.000Z")
+                .expect("it should only be used in tests"),
         ),
         step: TimeStep {
             granularity: TimeGranularity::Months,
@@ -85,8 +87,10 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: Some(TimeInterval::new_unchecked(
-                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
-                TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z")
+                    .expect("it should only be used in tests"),
+                TimeInstance::from_str("2014-07-01T00:00:00.000Z")
+                    .expect("it should only be used in tests"),
             )),
             bbox: Some(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),

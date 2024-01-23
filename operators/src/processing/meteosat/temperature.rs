@@ -123,8 +123,7 @@ impl RasterOperator for Temperature {
                     measurement: "temperature".into(),
                     unit: Some("k".into()),
                 }),
-            )])
-            .unwrap(),
+            )])?,
         };
 
         let initialized_operator = InitializedTemperature {

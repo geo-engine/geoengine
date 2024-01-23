@@ -355,7 +355,10 @@ where
     let mut last = iter.next();
 
     iter.map(move |item| {
-        let output = (last.unwrap(), item);
+        let output = (
+            last.expect("it should have a first tuple in a two-tuple window"),
+            item,
+        );
         last = Some(item);
         output
     })

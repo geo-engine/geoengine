@@ -418,7 +418,9 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
 
         Ok(match self.result_descriptor.data_type {
             geoengine_datatypes::raster::RasterDataType::U8 => {
-                let qt = q.get_u8().unwrap();
+                let qt = q
+                    .get_u8()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::U8(Box::new(RasterReprojectionProcessor::new(
                     qt,
                     self.result_descriptor.clone(),
@@ -429,7 +431,9 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U16 => {
-                let qt = q.get_u16().unwrap();
+                let qt = q
+                    .get_u16()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::U16(Box::new(RasterReprojectionProcessor::new(
                     qt,
                     self.result_descriptor.clone(),
@@ -441,7 +445,9 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
             }
 
             geoengine_datatypes::raster::RasterDataType::U32 => {
-                let qt = q.get_u32().unwrap();
+                let qt = q
+                    .get_u32()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::U32(Box::new(RasterReprojectionProcessor::new(
                     qt,
                     self.result_descriptor.clone(),
@@ -452,7 +458,9 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U64 => {
-                let qt = q.get_u64().unwrap();
+                let qt = q
+                    .get_u64()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::U64(Box::new(RasterReprojectionProcessor::new(
                     qt,
                     self.result_descriptor.clone(),
@@ -463,7 +471,9 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I8 => {
-                let qt = q.get_i8().unwrap();
+                let qt = q
+                    .get_i8()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::I8(Box::new(RasterReprojectionProcessor::new(
                     qt,
                     self.result_descriptor.clone(),
@@ -474,7 +484,9 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I16 => {
-                let qt = q.get_i16().unwrap();
+                let qt = q
+                    .get_i16()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::I16(Box::new(RasterReprojectionProcessor::new(
                     qt,
                     self.result_descriptor.clone(),
@@ -485,7 +497,9 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I32 => {
-                let qt = q.get_i32().unwrap();
+                let qt = q
+                    .get_i32()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::I32(Box::new(RasterReprojectionProcessor::new(
                     qt,
                     self.result_descriptor.clone(),
@@ -496,7 +510,9 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I64 => {
-                let qt = q.get_i64().unwrap();
+                let qt = q
+                    .get_i64()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::I64(Box::new(RasterReprojectionProcessor::new(
                     qt,
                     self.result_descriptor.clone(),
@@ -507,7 +523,9 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F32 => {
-                let qt = q.get_f32().unwrap();
+                let qt = q
+                    .get_f32()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::F32(Box::new(RasterReprojectionProcessor::new(
                     qt,
                     self.result_descriptor.clone(),
@@ -518,7 +536,9 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F64 => {
-                let qt = q.get_f64().unwrap();
+                let qt = q
+                    .get_f64()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::F64(Box::new(RasterReprojectionProcessor::new(
                     qt,
                     self.result_descriptor.clone(),

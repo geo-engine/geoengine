@@ -128,8 +128,7 @@ impl RasterOperator for Reflectance {
                     measurement: "reflectance".into(),
                     unit: Some("fraction".into()),
                 }),
-            )])
-            .unwrap(),
+            )])?,
         };
 
         let initialized_operator = InitializedReflectance {

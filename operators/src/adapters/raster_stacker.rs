@@ -317,7 +317,7 @@ where
                             *current_spatial_tile += 1;
                         }
 
-                        if *current_spatial_tile >= num_spatial_tiles.unwrap() {
+                        if *current_spatial_tile >= num_spatial_tiles.unwrap_or_default() {
                             *current_spatial_tile = 0;
                             *current_band = 0;
                             *current_stream = 0;

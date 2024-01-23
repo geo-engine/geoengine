@@ -123,8 +123,7 @@ impl RasterOperator for Radiance {
                     measurement: "radiance".into(),
                     unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
                 }),
-            )])
-            .unwrap(),
+            )])?,
         };
 
         let initialized_operator = InitializedRadiance {

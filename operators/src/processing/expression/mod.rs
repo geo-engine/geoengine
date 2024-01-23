@@ -107,8 +107,7 @@ impl RasterOperator for Expression {
                     .output_measurement
                     .as_ref()
                     .map_or(Measurement::Unitless, Measurement::clone),
-            )])
-            .unwrap(),
+            )])?,
         };
 
         let initialized_operator = InitializedExpression {
