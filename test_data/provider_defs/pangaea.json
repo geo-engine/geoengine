@@ -1,6 +1,8 @@
 {
   "type": "PangaeaDataProviderDefinition",
   "name": "Pangaea",
+  "priority": -70,
+  "description": "Access to data stored in Pangaea",
   "baseUrl": "https://doi.pangaea.de",
   "cacheTtl": 0
 }

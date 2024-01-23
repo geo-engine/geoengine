@@ -46,6 +46,7 @@ pub struct DatasetLayerListingProviderDefinition {
     pub id: DataProviderId,
     pub name: String,
     pub description: String,
+    pub priority: Option<i16>,
     pub collections: Vec<DatasetLayerListingCollection>,
 }
 
@@ -98,6 +99,10 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for DatasetLayerListingProviderDe
 
     fn id(&self) -> DataProviderId {
         self.id
+    }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
     }
 }
 
@@ -220,6 +225,14 @@ where
                 filters: None,
             },
         }
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        &self.description
     }
 
     async fn load_layer_collection(
@@ -468,6 +481,7 @@ mod tests {
             id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
             name: "User Data Listing".to_string(),
             description: "User specific datasets grouped by tags.".to_string(),
+            priority: None,
             collections: vec![
                 DatasetLayerListingCollection {
                     name: "User Uploads".to_string(),
@@ -585,6 +599,7 @@ mod tests {
             id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
             name: "User Data Listing".to_string(),
             description: "User specific datasets grouped by tags.".to_string(),
+            priority: None,
             collections: vec![
                 DatasetLayerListingCollection {
                     name: "User Uploads".to_string(),

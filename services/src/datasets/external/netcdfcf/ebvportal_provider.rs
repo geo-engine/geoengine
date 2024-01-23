@@ -40,6 +40,8 @@ pub const EBV_PROVIDER_ID: DataProviderId =
 #[serde(rename_all = "camelCase")]
 pub struct EbvPortalDataProviderDefinition {
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub path: PathBuf,
     pub base_url: Url,
     pub overviews: PathBuf,
@@ -50,6 +52,7 @@ pub struct EbvPortalDataProviderDefinition {
 #[derive(Debug)]
 pub struct EbvPortalDataProvider {
     pub name: String,
+    pub description: String,
     pub ebv_api: EbvPortalApi,
     pub netcdf_cf_provider: NetCdfCfDataProvider,
 }
@@ -59,9 +62,11 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefiniti
     async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(EbvPortalDataProvider {
             name: self.name.clone(),
+            description: self.description.clone(),
             ebv_api: EbvPortalApi::new(self.base_url),
             netcdf_cf_provider: NetCdfCfDataProvider {
                 name: self.name,
+                description: self.description,
                 path: self.path,
                 overviews: self.overviews,
                 cache_ttl: self.cache_ttl,
@@ -79,6 +84,10 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefiniti
 
     fn id(&self) -> DataProviderId {
         EBV_PROVIDER_ID
+    }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
     }
 }
 
@@ -548,6 +557,14 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
         }
     }
 
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        &self.description
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
@@ -833,6 +850,8 @@ mod tests {
 
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
+            description: "EbvPortalProviderDefinition".to_string(),
+            priority: None,
             path: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
@@ -971,6 +990,8 @@ mod tests {
 
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
+            description: "EbvPortalProviderDefinition".to_string(),
+            priority: None,
             path: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
@@ -1137,6 +1158,8 @@ mod tests {
 
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
+            description: "EbvPortalProviderDefinition".to_string(),
+            priority: None,
             path: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
@@ -1374,6 +1397,8 @@ mod tests {
 
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
+            description: "EbvPortalProviderDefinition".to_string(),
+            priority: None,
             path: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
@@ -1533,6 +1558,8 @@ mod tests {
 
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
+            description: "EbvPortalProviderDefinition".to_string(),
+            priority: None,
             path: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),

@@ -396,6 +396,8 @@ impl TryFrom<DatabaseConnectionConfigDbType> for DatabaseConnectionConfig {
 #[postgres(name = "GfbioCollectionsDataProviderDefinition")]
 pub struct GfbioCollectionsDataProviderDefinitionDbType {
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub collection_api_url: String,
     pub collection_api_auth_token: String,
     pub abcd_db_config: DatabaseConnectionConfig,
@@ -409,6 +411,8 @@ impl From<&GfbioCollectionsDataProviderDefinition>
     fn from(other: &GfbioCollectionsDataProviderDefinition) -> Self {
         Self {
             name: other.name.clone(),
+            description: other.description.clone(),
+            priority: other.priority,
             collection_api_url: other.collection_api_url.clone().into(),
             collection_api_auth_token: other.collection_api_auth_token.clone(),
             abcd_db_config: other.abcd_db_config.clone(),
@@ -426,6 +430,8 @@ impl TryFrom<GfbioCollectionsDataProviderDefinitionDbType>
     fn try_from(other: GfbioCollectionsDataProviderDefinitionDbType) -> Result<Self, Self::Error> {
         Ok(Self {
             name: other.name,
+            description: other.description,
+            priority: other.priority,
             collection_api_url: other.collection_api_url.as_str().try_into()?,
             collection_api_auth_token: other.collection_api_auth_token,
             abcd_db_config: other.abcd_db_config,
@@ -439,6 +445,8 @@ impl TryFrom<GfbioCollectionsDataProviderDefinitionDbType>
 #[postgres(name = "EbvPortalDataProviderDefinition")]
 pub struct EbvPortalDataProviderDefinitionDbType {
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub path: String,
     pub base_url: String,
     pub overviews: String,
@@ -449,6 +457,8 @@ impl From<&EbvPortalDataProviderDefinition> for EbvPortalDataProviderDefinitionD
     fn from(other: &EbvPortalDataProviderDefinition) -> Self {
         Self {
             name: other.name.clone(),
+            description: other.description.clone(),
+            priority: other.priority,
             path: other.path.to_string_lossy().to_string(),
             base_url: other.base_url.clone().into(),
             overviews: other.overviews.to_string_lossy().to_string(),
@@ -463,6 +473,8 @@ impl TryFrom<EbvPortalDataProviderDefinitionDbType> for EbvPortalDataProviderDef
     fn try_from(other: EbvPortalDataProviderDefinitionDbType) -> Result<Self, Self::Error> {
         Ok(Self {
             name: other.name,
+            description: other.description,
+            priority: other.priority,
             path: other.path.into(),
             base_url: other.base_url.as_str().try_into()?,
             overviews: other.overviews.into(),
@@ -475,6 +487,8 @@ impl TryFrom<EbvPortalDataProviderDefinitionDbType> for EbvPortalDataProviderDef
 #[postgres(name = "NetCdfCfDataProviderDefinition")]
 pub struct NetCdfCfDataProviderDefinitionDbType {
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub path: String,
     pub overviews: String,
     pub cache_ttl: CacheTtlSeconds,
@@ -484,6 +498,8 @@ impl From<&NetCdfCfDataProviderDefinition> for NetCdfCfDataProviderDefinitionDbT
     fn from(other: &NetCdfCfDataProviderDefinition) -> Self {
         Self {
             name: other.name.clone(),
+            description: other.description.clone(),
+            priority: other.priority,
             path: other.path.to_string_lossy().to_string(),
             overviews: other.overviews.to_string_lossy().to_string(),
             cache_ttl: other.cache_ttl,
@@ -497,6 +513,8 @@ impl TryFrom<NetCdfCfDataProviderDefinitionDbType> for NetCdfCfDataProviderDefin
     fn try_from(other: NetCdfCfDataProviderDefinitionDbType) -> Result<Self, Self::Error> {
         Ok(Self {
             name: other.name,
+            description: other.description,
+            priority: other.priority,
             path: other.path.into(),
             overviews: other.overviews.into(),
             cache_ttl: other.cache_ttl,
@@ -508,6 +526,8 @@ impl TryFrom<NetCdfCfDataProviderDefinitionDbType> for NetCdfCfDataProviderDefin
 #[postgres(name = "PangaeaDataProviderDefinition")]
 pub struct PangaeaDataProviderDefinitionDbType {
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub base_url: String,
     pub cache_ttl: CacheTtlSeconds,
 }
@@ -516,6 +536,8 @@ impl From<&PangaeaDataProviderDefinition> for PangaeaDataProviderDefinitionDbTyp
     fn from(other: &PangaeaDataProviderDefinition) -> Self {
         Self {
             name: other.name.clone(),
+            description: other.description.clone(),
+            priority: other.priority,
             base_url: other.base_url.clone().into(),
             cache_ttl: other.cache_ttl,
         }
@@ -528,6 +550,8 @@ impl TryFrom<PangaeaDataProviderDefinitionDbType> for PangaeaDataProviderDefinit
     fn try_from(other: PangaeaDataProviderDefinitionDbType) -> Result<Self, Self::Error> {
         Ok(Self {
             name: other.name,
+            description: other.description,
+            priority: other.priority,
             base_url: other.base_url.as_str().try_into()?,
             cache_ttl: other.cache_ttl,
         })
@@ -568,6 +592,8 @@ impl TryFrom<EdrVectorSpecDbType> for EdrVectorSpec {
 #[postgres(name = "EdrDataProviderDefinition")]
 pub struct EdrDataProviderDefinitionDbType {
     name: String,
+    description: String,
+    priority: Option<i16>,
     id: DataProviderId,
     base_url: String,
     vector_spec: Option<EdrVectorSpec>,
@@ -581,6 +607,8 @@ impl From<&EdrDataProviderDefinition> for EdrDataProviderDefinitionDbType {
     fn from(other: &EdrDataProviderDefinition) -> Self {
         Self {
             name: other.name.clone(),
+            description: other.description.clone(),
+            priority: other.priority,
             id: other.id,
             base_url: other.base_url.clone().into(),
             vector_spec: other.vector_spec.clone(),
@@ -597,6 +625,8 @@ impl TryFrom<EdrDataProviderDefinitionDbType> for EdrDataProviderDefinition {
     fn try_from(other: EdrDataProviderDefinitionDbType) -> Result<Self, Self::Error> {
         Ok(Self {
             name: other.name,
+            description: other.description,
+            priority: other.priority,
             id: other.id,
             base_url: other.base_url.as_str().try_into()?,
             vector_spec: other.vector_spec,

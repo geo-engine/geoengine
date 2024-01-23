@@ -36,6 +36,11 @@ pub trait DataProviderDefinition<D: GeoEngineDb>: Send + Sync + std::fmt::Debug 
 
     /// id of the provider
     fn id(&self) -> DataProviderId;
+
+    /// priority of the provider
+    fn priority(&self) -> i16 {
+        0
+    }
 }
 
 /// A provider of layers that are not hosted by Geo Engine itself but some external party
@@ -289,6 +294,38 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
             }
             TypedDataProviderDefinition::EdrDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::id(def)
+            }
+        }
+    }
+
+    fn priority(&self) -> i16 {
+        match self {
+            TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::priority(def)
+            }
+            TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => {
+                DataProviderDefinition::<D>::priority(def)
+            }
+            TypedDataProviderDefinition::GbifDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::priority(def)
+            }
+            TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::priority(def)
+            }
+            TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::priority(def)
+            }
+            TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::priority(def)
+            }
+            TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::priority(def)
+            }
+            TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::priority(def)
+            }
+            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::priority(def)
             }
         }
     }

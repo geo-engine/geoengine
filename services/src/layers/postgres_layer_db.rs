@@ -559,6 +559,14 @@ where
         }
     }
 
+    fn name(&self) -> &str {
+        "Postgres Layer Database"
+    }
+
+    fn description(&self) -> &str {
+        "A layer database using Postgres"
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn load_layer_collection(
         &self,
@@ -884,11 +892,25 @@ where
                   id, 
                   type_name, 
                   name,
-                  definition
+                  definition,
+                  priority
               )
-              VALUES ($1, $2, $3, $4)",
+              VALUES ($1, $2, $3, $4, $5)",
             )
             .await?;
+
+        // clamp the priority to a reasonable range
+        let prio = DataProviderDefinition::<Self>::priority(&provider);
+        let clamp_prio = prio.clamp(-1000, 1000);
+
+        if prio != clamp_prio {
+            log::warn!(
+                "The priority of the provider {} is out of range! --> clamped {} to {}",
+                DataProviderDefinition::<Self>::name(&provider),
+                prio,
+                clamp_prio
+            );
+        }
 
         let id = DataProviderDefinition::<Self>::id(&provider);
         conn.execute(
@@ -898,6 +920,7 @@ where
                 &DataProviderDefinition::<Self>::type_name(&provider),
                 &DataProviderDefinition::<Self>::name(&provider),
                 &provider,
+                &clamp_prio,
             ],
         )
         .await?;
@@ -917,10 +940,12 @@ where
             SELECT 
                 id, 
                 name,
-                type_name
+                priority
             FROM 
                 layer_providers
-            ORDER BY name ASC
+            WHERE
+                priority > -1000
+            ORDER BY priority DESC, name ASC
             LIMIT $1 
             OFFSET $2;",
             )
@@ -938,7 +963,7 @@ where
             .map(|row| LayerProviderListing {
                 id: row.get(0),
                 name: row.get(1),
-                description: row.get(2),
+                priority: row.get(2),
             })
             .collect())
     }
