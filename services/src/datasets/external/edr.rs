@@ -59,6 +59,8 @@ fn init_is_filetype_raster() -> HashMap<&'static str, bool> {
 #[serde(rename_all = "camelCase")]
 pub struct EdrDataProviderDefinition {
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub id: DataProviderId,
     #[serde(deserialize_with = "deserialize_base_url")]
     pub base_url: Url,
@@ -83,6 +85,8 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for EdrDataProviderDefinition {
     async fn initialize(self: Box<Self>, _db: D) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(EdrDataProvider {
             id: self.id,
+            name: self.name,
+            description: self.description,
             base_url: self.base_url,
             vector_spec: self.vector_spec,
             client: Client::new(),
@@ -103,11 +107,17 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for EdrDataProviderDefinition {
     fn id(&self) -> DataProviderId {
         self.id
     }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
+    }
 }
 
 #[derive(Debug)]
 pub struct EdrDataProvider {
     id: DataProviderId,
+    name: String,
+    description: String,
     base_url: Url,
     vector_spec: Option<EdrVectorSpec>,
     client: Client,
@@ -894,6 +904,14 @@ impl LayerCollectionProvider for EdrDataProvider {
         }
     }
 
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        &self.description
+    }
+
     async fn load_layer_collection(
         &self,
         collection_id: &LayerCollectionId,
@@ -1218,6 +1236,8 @@ mod tests {
     async fn create_provider<D: GeoEngineDb>(server: &Server, db: D) -> Box<dyn DataProvider> {
         Box::new(EdrDataProviderDefinition {
             name: "EDR".to_string(),
+            description: "Environmental Data Retrieval".to_string(),
+            priority: None,
             id: DEMO_PROVIDER_ID,
             base_url: Url::parse(server.url_str("").strip_suffix('/').unwrap()).unwrap(),
             vector_spec: Some(EdrVectorSpec {

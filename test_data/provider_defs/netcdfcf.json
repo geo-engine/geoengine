@@ -1,6 +1,8 @@
 {
   "type": "NetCdfCfDataProviderDefinition",
   "name": "terranova",
+  "description": "terranova",
+  "priority": -1000,
   "path": "test_data/netcdf4d/",
   "overviews": "test_data/netcdf4d/overviews/",
   "cacheTtl": 0

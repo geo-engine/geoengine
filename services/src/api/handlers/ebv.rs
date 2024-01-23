@@ -645,6 +645,8 @@ mod tests {
             .add_layer_provider(
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
+                    description: "test".to_string(),
+                    priority: None,
                     path: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
                     cache_ttl: Default::default(),
@@ -728,6 +730,8 @@ mod tests {
             .add_layer_provider(
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
+                    description: "test".to_string(),
+                    priority: None,
                     path: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
                     cache_ttl: Default::default(),
@@ -778,6 +782,8 @@ mod tests {
             .add_layer_provider(
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
+                    description: "test".to_string(),
+                    priority: None,
                     path: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
                     cache_ttl: Default::default(),

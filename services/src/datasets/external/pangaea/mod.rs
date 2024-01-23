@@ -32,6 +32,8 @@ pub const PANGAEA_PROVIDER_ID: DataProviderId =
 #[serde(rename_all = "camelCase")]
 pub struct PangaeaDataProviderDefinition {
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub base_url: Url,
     pub cache_ttl: CacheTtlSeconds,
 }
@@ -56,10 +58,16 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for PangaeaDataProviderDefinition
     fn id(&self) -> DataProviderId {
         PANGAEA_PROVIDER_ID
     }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
+    }
 }
 
 #[derive(Debug)]
 pub struct PangaeaDataProvider {
+    name: String,
+    description: String,
     client: Client,
     base_url: Url,
     cache_ttl: CacheTtlSeconds,
@@ -68,6 +76,23 @@ pub struct PangaeaDataProvider {
 impl PangaeaDataProvider {
     pub fn new(base_url: Url, cache_ttl: CacheTtlSeconds) -> PangaeaDataProvider {
         PangaeaDataProvider {
+            name: "Pangaea".to_string(),
+            description: "Pangaea".to_string(),
+            client: Client::new(),
+            base_url,
+            cache_ttl,
+        }
+    }
+
+    pub fn new_with_name_and_description(
+        name: String,
+        description: String,
+        base_url: Url,
+        cache_ttl: CacheTtlSeconds,
+    ) -> PangaeaDataProvider {
+        PangaeaDataProvider {
+            name,
+            description,
             client: Client::new(),
             base_url,
             cache_ttl,
@@ -123,6 +148,14 @@ impl LayerCollectionProvider for PangaeaDataProvider {
             listing: false,
             search: SearchCapabilities::none(),
         }
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        &self.description
     }
 
     async fn load_layer_collection(
@@ -272,6 +305,8 @@ mod tests {
     ) -> Result<Box<dyn DataProvider>, Error> {
         Box::new(PangaeaDataProviderDefinition {
             name: "Pangaea".to_string(),
+            description: "Pangaea".to_string(),
+            priority: None,
             base_url: Url::parse(server.url_str("").strip_suffix('/').unwrap()).unwrap(),
             cache_ttl: Default::default(),
         })

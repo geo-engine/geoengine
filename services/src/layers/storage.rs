@@ -94,7 +94,7 @@ pub trait LayerDb: Send + Sync {
 pub struct LayerProviderListing {
     pub id: DataProviderId,
     pub name: String,
-    pub description: String,
+    pub priority: i16,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 // TODO: validate user input

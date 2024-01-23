@@ -940,6 +940,8 @@ mod tests {
 
         let provider = NetCdfCfDataProviderDefinition {
             name: "netcdfcf".to_string(),
+            description: "NetCdfCfProviderDefinition".to_string(),
+            priority: Some(21),
             path: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
             cache_ttl: CacheTtlSeconds::new(0),
@@ -962,7 +964,7 @@ mod tests {
             LayerProviderListing {
                 id: provider_id,
                 name: "netcdfcf".to_owned(),
-                description: "NetCdfCfProviderDefinition".to_owned(),
+                priority: 21,
             }
         );
 
@@ -4537,6 +4539,8 @@ mod tests {
             [ArunaDataProviderDefinition {
                 id: DataProviderId::from_str("86a7f7ce-1bab-4ce9-a32b-172c0f958ee0").unwrap(),
                 name: "NFDI".to_string(),
+                description: "NFDI".to_string(),
+                priority: Some(33),
                 api_url: "http://test".to_string(),
                 project_id: "project".to_string(),
                 api_token: "api_token".to_string(),
@@ -4551,6 +4555,8 @@ mod tests {
             "GbifDataProviderDefinition",
             [GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GFBio".to_string(),
+                priority: None,
                 db_config: DatabaseConnectionConfig {
                     host: "testhost".to_string(),
                     port: 1234,
@@ -4570,6 +4576,8 @@ mod tests {
             "GfbioAbcdDataProviderDefinition",
             [GfbioAbcdDataProviderDefinition {
                 name: "GFbio".to_string(),
+                description: "GFBio".to_string(),
+                priority: None,
                 db_config: DatabaseConnectionConfig {
                     host: "testhost".to_string(),
                     port: 1234,
@@ -4588,6 +4596,8 @@ mod tests {
             "GfbioCollectionsDataProviderDefinition",
             [GfbioCollectionsDataProviderDefinition {
                 name: "GFbio".to_string(),
+                description: "GFBio".to_string(),
+                priority: None,
                 collection_api_url: "http://testhost".try_into().unwrap(),
                 collection_api_auth_token: "token".to_string(),
                 abcd_db_config: DatabaseConnectionConfig {
@@ -4611,6 +4621,8 @@ mod tests {
             "EbvPortalDataProviderDefinition",
             [EbvPortalDataProviderDefinition {
                 name: "ebv".to_string(),
+                description: "EBV".to_string(),
+                priority: None,
                 path: "a_path".into(),
                 base_url: "http://base".try_into().unwrap(),
                 overviews: "another_path".into(),
@@ -4624,6 +4636,8 @@ mod tests {
             "NetCdfCfDataProviderDefinition",
             [NetCdfCfDataProviderDefinition {
                 name: "netcdfcf".to_string(),
+                description: "netcdfcf".to_string(),
+                priority: Some(33),
                 path: "a_path".into(),
                 overviews: "another_path".into(),
                 cache_ttl: CacheTtlSeconds::new(0),
@@ -4636,6 +4650,8 @@ mod tests {
             "PangaeaDataProviderDefinition",
             [PangaeaDataProviderDefinition {
                 name: "pangaea".to_string(),
+                description: "pangaea".to_string(),
+                priority: None,
                 base_url: "http://base".try_into().unwrap(),
                 cache_ttl: CacheTtlSeconds::new(0),
             }],
@@ -4651,6 +4667,8 @@ mod tests {
                         id: DataProviderId::from_str("86a7f7ce-1bab-4ce9-a32b-172c0f958ee0")
                             .unwrap(),
                         name: "NFDI".to_string(),
+                        description: "NFDI".to_string(),
+                        priority: Some(33),
                         api_url: "http://test".to_string(),
                         project_id: "project".to_string(),
                         api_token: "api_token".to_string(),
@@ -4661,6 +4679,8 @@ mod tests {
                 TypedDataProviderDefinition::GbifDataProviderDefinition(
                     GbifDataProviderDefinition {
                         name: "GBIF".to_string(),
+                        description: "GFBio".to_string(),
+                        priority: None,
                         db_config: DatabaseConnectionConfig {
                             host: "testhost".to_string(),
                             port: 1234,
@@ -4676,6 +4696,8 @@ mod tests {
                 TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(
                     GfbioAbcdDataProviderDefinition {
                         name: "GFbio".to_string(),
+                        description: "GFBio".to_string(),
+                        priority: None,
                         db_config: DatabaseConnectionConfig {
                             host: "testhost".to_string(),
                             port: 1234,
@@ -4690,6 +4712,8 @@ mod tests {
                 TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(
                     GfbioCollectionsDataProviderDefinition {
                         name: "GFbio".to_string(),
+                        description: "GFBio".to_string(),
+                        priority: None,
                         collection_api_url: "http://testhost".try_into().unwrap(),
                         collection_api_auth_token: "token".to_string(),
                         abcd_db_config: DatabaseConnectionConfig {
@@ -4707,6 +4731,8 @@ mod tests {
                 TypedDataProviderDefinition::EbvPortalDataProviderDefinition(
                     EbvPortalDataProviderDefinition {
                         name: "ebv".to_string(),
+                        description: "ebv".to_string(),
+                        priority: Some(33),
                         path: "a_path".into(),
                         base_url: "http://base".try_into().unwrap(),
                         overviews: "another_path".into(),
@@ -4716,6 +4742,8 @@ mod tests {
                 TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(
                     NetCdfCfDataProviderDefinition {
                         name: "netcdfcf".to_string(),
+                        description: "netcdfcf".to_string(),
+                        priority: Some(33),
                         path: "a_path".into(),
                         overviews: "another_path".into(),
                         cache_ttl: CacheTtlSeconds::new(0),
@@ -4724,6 +4752,8 @@ mod tests {
                 TypedDataProviderDefinition::PangaeaDataProviderDefinition(
                     PangaeaDataProviderDefinition {
                         name: "pangaea".to_string(),
+                        description: "pangaea".to_string(),
+                        priority: None,
                         base_url: "http://base".try_into().unwrap(),
                         cache_ttl: CacheTtlSeconds::new(0),
                     },
