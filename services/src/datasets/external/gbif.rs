@@ -46,6 +46,8 @@ pub const GBIF_PROVIDER_ID: DataProviderId =
 #[serde(rename_all = "camelCase")]
 pub struct GbifDataProviderDefinition {
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub db_config: DatabaseConnectionConfig,
     #[serde(default)]
     pub cache_ttl: CacheTtlSeconds,
@@ -56,8 +58,14 @@ pub struct GbifDataProviderDefinition {
 impl<D: GeoEngineDb> DataProviderDefinition<D> for GbifDataProviderDefinition {
     async fn initialize(self: Box<Self>, _db: D) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(
-            GbifDataProvider::new(self.db_config, self.cache_ttl, self.autocomplete_timeout)
-                .await?,
+            GbifDataProvider::new(
+                self.name,
+                self.description,
+                self.db_config,
+                self.cache_ttl,
+                self.autocomplete_timeout,
+            )
+            .await?,
         ))
     }
 
@@ -72,10 +80,16 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for GbifDataProviderDefinition {
     fn id(&self) -> DataProviderId {
         GBIF_PROVIDER_ID
     }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
+    }
 }
 
 #[derive(Debug)]
 pub struct GbifDataProvider {
+    name: String,
+    description: String,
     db_config: DatabaseConnectionConfig,
     pool: Pool<PostgresConnectionManager<NoTls>>,
     cache_ttl: CacheTtlSeconds,
@@ -96,6 +110,8 @@ impl GbifDataProvider {
     const LISTABLE_RANKS: [&'static str; 3] = ["family", "genus", "species"];
 
     async fn new(
+        name: String,
+        description: String,
         db_config: DatabaseConnectionConfig,
         cache_ttl: CacheTtlSeconds,
         autocomplete_timeout: i32,
@@ -104,6 +120,8 @@ impl GbifDataProvider {
         let pool = Pool::builder().build(pg_mgr).await?;
 
         Ok(Self {
+            name,
+            description,
             db_config,
             pool,
             cache_ttl,
@@ -583,6 +601,14 @@ impl GbifDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for GbifDataProvider {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        &self.description
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
@@ -1498,6 +1524,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -1580,6 +1608,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -1670,6 +1700,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -1756,6 +1788,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -1824,6 +1858,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -1869,6 +1905,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -1922,6 +1960,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -1974,6 +2014,8 @@ mod tests {
 
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    priority: Some(12),
                     db_config: db_config.clone(),
                     cache_ttl: Default::default(),
                     autocomplete_timeout: 5,
@@ -2197,6 +2239,8 @@ mod tests {
             ) -> Result<(), String> {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    priority: Some(12),
                     db_config,
                     cache_ttl: Default::default(),
                     autocomplete_timeout: 5,
@@ -2569,6 +2613,8 @@ mod tests {
             async fn test(app_ctx: PostgresContext<NoTls>, db_config: DatabaseConnectionConfig) -> Result<(), String> {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    priority: Some(12),
                     db_config,
                     cache_ttl: Default::default(),
                     autocomplete_timeout: 5,
@@ -2618,6 +2664,8 @@ mod tests {
             async fn test(app_ctx: PostgresContext<NoTls>, db_config: DatabaseConnectionConfig) -> Result<(), String> {
                 let provider = Box::new(GbifDataProviderDefinition {
                     name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    priority: Some(12),
                     db_config,
                     cache_ttl: Default::default(),
                     autocomplete_timeout: 5,
@@ -2680,6 +2728,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -2782,6 +2832,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -2838,6 +2890,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -2984,6 +3038,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -3063,6 +3119,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -3213,6 +3271,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -3292,6 +3352,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,
@@ -3438,6 +3500,8 @@ mod tests {
         with_temp_schema(|app_ctx, db_config| async move {
             let provider = Box::new(GbifDataProviderDefinition {
                 name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
                 db_config,
                 cache_ttl: Default::default(),
                 autocomplete_timeout: 5,

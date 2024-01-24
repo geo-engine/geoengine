@@ -54,6 +54,8 @@ pub const GFBIO_COLLECTIONS_PROVIDER_ID: DataProviderId =
 #[serde(rename_all = "camelCase")]
 pub struct GfbioCollectionsDataProviderDefinition {
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub collection_api_url: Url,
     pub collection_api_auth_token: String,
     pub abcd_db_config: DatabaseConnectionConfig,
@@ -67,6 +69,8 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for GfbioCollectionsDataProviderD
     async fn initialize(self: Box<Self>, _db: D) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(
             GfbioCollectionsDataProvider::new(
+                self.name,
+                self.description,
                 self.collection_api_url,
                 self.collection_api_auth_token,
                 self.abcd_db_config,
@@ -88,10 +92,16 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for GfbioCollectionsDataProviderD
     fn id(&self) -> DataProviderId {
         GFBIO_COLLECTIONS_PROVIDER_ID
     }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
+    }
 }
 
 #[derive(Debug)]
 pub struct GfbioCollectionsDataProvider {
+    name: String,
+    description: String,
     collection_api_url: Url,
     collection_api_auth_token: String,
     abcd_db_config: DatabaseConnectionConfig,
@@ -260,6 +270,8 @@ impl fmt::Display for LayerStatus {
 
 impl GfbioCollectionsDataProvider {
     async fn new(
+        name: String,
+        description: String,
         url: Url,
         auth_token: String,
         db_config: DatabaseConnectionConfig,
@@ -270,6 +282,8 @@ impl GfbioCollectionsDataProvider {
         let pool = Pool::builder().build(pg_mgr).await?;
 
         Ok(Self {
+            name,
+            description,
             collection_api_url: url,
             collection_api_auth_token: auth_token,
             abcd_db_config: db_config,
@@ -577,6 +591,14 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
             listing: false,
             search: SearchCapabilities::none(),
         }
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        &self.description
     }
 
     async fn load_layer_collection(
@@ -923,6 +945,8 @@ mod tests {
             );
 
             let provider = GfbioCollectionsDataProvider::new(
+                "GFBio Collections".to_string(),
+                "GFBio Collections".to_string(),
                 Url::parse(&gfbio_collections_server.url("/api/").to_string()).unwrap(),
                 gfbio_collections_server_token.to_string(),
                 DatabaseConnectionConfig {
@@ -1030,6 +1054,8 @@ mod tests {
             let ogr_pg_string = provider_db_config.ogr_pg_config();
 
             let provider = GfbioCollectionsDataProvider::new(
+                "GFBio Collections".to_string(),
+                "GFBio Collections".to_string(),
                 Url::parse("http://foo.bar/api").unwrap(),
                 gfbio_collections_server_token.to_string(),
                 provider_db_config,
@@ -1217,6 +1243,8 @@ mod tests {
             };
 
             let provider = GfbioCollectionsDataProvider::new(
+                "GFBio Collections".to_string(),
+                "GFBio Collections".to_string(),
                 Url::parse("http://foo.bar/api").unwrap(),
                 gfbio_collections_server_token.to_string(),
                 provider_db_config,

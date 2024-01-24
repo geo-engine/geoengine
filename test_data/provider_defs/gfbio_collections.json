@@ -1,6 +1,8 @@
 {
   "type": "GfbioCollectionsDataProviderDefinition",
   "name": "GFBio Collections",
+  "description": "Access to GFBio collections",
+  "priority": -50,
   "collectionApiUrl": "https://collections.gfbio.dev/api/",
   "collectionApiAuthToken": "Token 6bc06a951394f222eeb576c6f86a4ad73ab805f6",
   "abcdDbConfig": {
