@@ -42,7 +42,11 @@ pub async fn can_run_pro_examples<F, Fut>(
                             parameters: &operation.parameters,
                             body: example,
                             with_auth,
-                            session_id: app_ctx.create_anonymous_session().await.unwrap().id,
+                            session_id: app_ctx
+                                .create_anonymous_session()
+                                .await
+                                .expect("creating an anonymous session should always work")
+                                .id,
                             ctx: app_ctx.clone(),
                             send_test_request: &send_test_request,
                         }
@@ -68,7 +72,7 @@ pub async fn can_run_pro_examples<F, Fut>(
                                             session_id: app_ctx
                                                 .create_anonymous_session()
                                                 .await
-                                                .unwrap()
+                                                .expect("creating an anonymous session should always work")
                                                 .id,
                                             ctx: app_ctx.clone(),
                                             send_test_request: &send_test_request,

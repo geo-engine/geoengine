@@ -428,10 +428,10 @@ impl EdrCollectionMetaData {
             }
         })?;
 
-        Ok(TimeInterval::new_unchecked(
-            TimeInstance::from_str(&temporal_extent.interval[0][0]).unwrap(),
-            TimeInstance::from_str(&temporal_extent.interval[0][1]).unwrap(),
-        ))
+        time_interval_from_strings(
+            &temporal_extent.interval[0][0],
+            &temporal_extent.interval[0][1],
+        )
     }
 
     fn get_bounding_box(&self) -> Result<BoundingBox2D, geoengine_operators::error::Error> {
@@ -1117,7 +1117,15 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
         if let Some(temporal_extent) = collection.extent.temporal.clone() {
             let mut temporal_values_iter = temporal_extent.values.iter();
-            let mut previous_start = temporal_values_iter.next().unwrap();
+            let mut previous_start = temporal_values_iter
+                .next()
+                // TODO: check if this could be unwrapped safely
+                .ok_or(
+                    geoengine_operators::error::Error::InvalidNumberOfTimeSteps {
+                        expected: 1,
+                        found: 0,
+                    },
+                )?;
             let dataset = gdal_open_dataset(
                 collection
                     .get_raster_download_url(
@@ -1135,10 +1143,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                     self,
                     &parameter,
                     &height,
-                    TimeInterval::new_unchecked(
-                        TimeInstance::from_str(previous_start).unwrap(),
-                        TimeInstance::from_str(current_time).unwrap(),
-                    ),
+                    time_interval_from_strings(previous_start, current_time)?,
                     previous_start,
                     &dataset,
                 )?);
@@ -1148,10 +1153,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 self,
                 &parameter,
                 &height,
-                TimeInterval::new_unchecked(
-                    TimeInstance::from_str(previous_start).unwrap(),
-                    TimeInstance::from_str(&temporal_extent.interval[0][1]).unwrap(),
-                ),
+                time_interval_from_strings(previous_start, &temporal_extent.interval[0][1])?,
                 previous_start,
                 &dataset,
             )?);
@@ -1183,6 +1185,17 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             params,
         }))
     }
+}
+
+// TODO: proper error handling
+#[allow(clippy::unnecessary_wraps)]
+fn time_interval_from_strings(
+    start: &str,
+    end: &str,
+) -> Result<TimeInterval, geoengine_operators::error::Error> {
+    let start = TimeInstance::from_str(start).unwrap_or(TimeInstance::MIN);
+    let end = TimeInstance::from_str(end).unwrap_or(TimeInstance::MAX);
+    Ok(TimeInterval::new_unchecked(start, end))
 }
 
 #[derive(Debug, Snafu)]

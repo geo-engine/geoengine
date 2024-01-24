@@ -3,7 +3,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::ItemFn;
 
-pub fn test(attr: TokenStream, item: TokenStream) -> Result<TokenStream, syn::Error> {
+pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::Error> {
     let input: ItemFn = syn::parse2(item.clone())?;
 
     let mut config_args = parse_config_args(attr)?;
@@ -174,7 +174,7 @@ mod tests {
             }
         };
 
-        let actual = test(attributes, input).unwrap();
+        let actual = test(attributes, &input).unwrap();
 
         assert_eq!(expected.to_string(), actual.to_string());
     }
@@ -222,7 +222,7 @@ mod tests {
             }
         };
 
-        let actual = test(attributes, input).unwrap();
+        let actual = test(attributes, &input).unwrap();
 
         assert_eq!(expected.to_string(), actual.to_string());
     }

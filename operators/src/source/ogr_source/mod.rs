@@ -763,7 +763,7 @@ where
                 OgrDatasetIterator::new(&dataset_information, &query_rectangle, attribute_filters)?;
 
             let (data_types, feature_collection_builder) =
-                Self::initialize_types_and_builder(&dataset_information);
+                Self::initialize_types_and_builder(&dataset_information)?;
 
             let dataset_information = Arc::new(dataset_information);
             let time_extractor = Self::initialize_time_extractors(dataset_information.time.clone());
@@ -989,47 +989,37 @@ where
 
     fn initialize_types_and_builder(
         dataset_information: &OgrSourceDataset,
-    ) -> (
+    ) -> Result<(
         HashMap<String, FeatureDataType>,
         FeatureCollectionBuilder<G>,
-    ) {
+    )> {
         let mut data_types = HashMap::new();
         let mut feature_collection_builder = FeatureCollection::<G>::builder();
         // TODO: what to do if there is nothing specified?
         if let Some(ref column_spec) = dataset_information.columns {
-            // TODO: error handling instead of unwrap
             for attribute in &column_spec.int {
                 data_types.insert(attribute.clone(), FeatureDataType::Int);
-                feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Int)
-                    .unwrap();
+                feature_collection_builder.add_column(attribute.clone(), FeatureDataType::Int)?;
             }
             for attribute in &column_spec.float {
                 data_types.insert(attribute.clone(), FeatureDataType::Float);
-                feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Float)
-                    .unwrap();
+                feature_collection_builder.add_column(attribute.clone(), FeatureDataType::Float)?;
             }
             for attribute in &column_spec.text {
                 data_types.insert(attribute.clone(), FeatureDataType::Text);
-                feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Text)
-                    .unwrap();
+                feature_collection_builder.add_column(attribute.clone(), FeatureDataType::Text)?;
             }
             for attribute in &column_spec.bool {
                 data_types.insert(attribute.clone(), FeatureDataType::Bool);
-                feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Bool)
-                    .unwrap();
+                feature_collection_builder.add_column(attribute.clone(), FeatureDataType::Bool)?;
             }
             for attribute in &column_spec.datetime {
                 data_types.insert(attribute.clone(), FeatureDataType::DateTime);
                 feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::DateTime)
-                    .unwrap();
+                    .add_column(attribute.clone(), FeatureDataType::DateTime)?;
             }
         }
-        (data_types, feature_collection_builder)
+        Ok((data_types, feature_collection_builder))
     }
 
     #[allow(clippy::too_many_arguments)]

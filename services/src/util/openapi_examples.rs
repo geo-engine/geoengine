@@ -240,20 +240,15 @@ where
                 }
             }
         }
-        if !cookies.is_empty() {
-            req = req.append_header((
-                header::COOKIE,
-                serde_urlencoded::to_string(cookies)
-                    .unwrap()
-                    .replace('&', "; "),
-            ));
+        if let Ok(cookie_str) = serde_urlencoded::to_string(cookies) {
+            if !cookie_str.is_empty() {
+                req = req.append_header((header::COOKIE, cookie_str.replace('&', "; ")));
+            }
         }
-        if !query_params.is_empty() {
-            uri = format!(
-                "{}?{}",
-                uri,
-                serde_urlencoded::to_string(query_params).unwrap()
-            );
+        if let Ok(query_params_str) = serde_urlencoded::to_string(query_params) {
+            if !query_params_str.is_empty() {
+                uri = format!("{uri}?{query_params_str}");
+            }
         }
         req.uri(uri.as_str())
     }

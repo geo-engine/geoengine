@@ -375,8 +375,7 @@ impl ArunaDataProvider {
                 info.measurement
                     .as_ref()
                     .map_or(Measurement::Unitless, Clone::clone),
-            )])
-            .unwrap(),
+            )])?,
         })
     }
 

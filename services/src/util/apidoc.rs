@@ -112,7 +112,10 @@ impl TransformSchemasWithTag {
 
 impl Modify for TransformSchemasWithTag {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        let old_components = openapi.components.as_ref().unwrap();
+        let Some(old_components) = openapi.components.as_ref() else {
+            debug_assert!(openapi.components.as_ref().is_some());
+            return;
+        };
         let old_schemas = &old_components.schemas;
         let mut new_schemas = old_schemas.clone();
 

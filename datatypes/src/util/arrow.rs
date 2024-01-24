@@ -13,7 +13,10 @@ use arrow::error::ArrowError;
 /// Panics if `array` is not of type `T`
 ///
 pub fn downcast_array<T: Any>(array: &ArrayRef) -> &T {
-    array.as_any().downcast_ref().unwrap() // must obey type
+    array
+        .as_any()
+        .downcast_ref()
+        .expect("the caller has to be sure that it obeys the type")
 }
 
 /// Helper function to downcast an arrow array
@@ -24,7 +27,10 @@ pub fn downcast_array<T: Any>(array: &ArrayRef) -> &T {
 /// Panics if `array` is not of type `T`
 ///
 pub fn downcast_dyn_array<T: Any>(array: &dyn Array) -> &T {
-    array.as_any().downcast_ref().unwrap() // must obey type
+    array
+        .as_any()
+        .downcast_ref()
+        .expect("the caller has to be sure that it obeys the type")
 }
 
 /// Helper function to downcast a mutable arrow array from a builder
@@ -34,7 +40,10 @@ pub fn downcast_dyn_array<T: Any>(array: &dyn Array) -> &T {
 /// Panics if `array` is not of type `T`
 ///
 pub fn downcast_mut_array<T: Any>(array: &mut dyn ArrayBuilder) -> &mut T {
-    array.as_any_mut().downcast_mut().unwrap() // must obey type
+    array
+        .as_any_mut()
+        .downcast_mut()
+        .expect("the caller has to be sure that it obeys the type")
 }
 
 /// Helper function to downcast an arrow array builder to a concrete type
@@ -44,7 +53,10 @@ pub fn downcast_mut_array<T: Any>(array: &mut dyn ArrayBuilder) -> &mut T {
 /// Panics if `array` is not of type `T`
 ///
 pub fn downcast_dyn_array_builder<T: Any>(array: &dyn ArrayBuilder) -> &T {
-    array.as_any().downcast_ref().unwrap() // must obey type
+    array
+        .as_any()
+        .downcast_ref()
+        .expect("the caller has to be sure that it obeys the type")
 }
 
 /// Helper function to calculate the padded byte size of a buffer

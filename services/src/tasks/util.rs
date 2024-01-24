@@ -16,12 +16,15 @@ pub mod test {
         geoengine_operators::util::retry::retry(10, 100, 2., None, move || {
             let task_manager = task_manager.clone();
             async move {
-                let status = task_manager.get_task_status(task_id).await.unwrap();
+                let status = task_manager
+                    .get_task_status(task_id)
+                    .await
+                    .expect("it should only be used in tests");
                 status.is_finished().then_some(()).ok_or(())
             }
         })
         .await
-        .unwrap();
+        .expect("it should only be used in tests");
     }
 }
 

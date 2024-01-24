@@ -72,9 +72,9 @@ pub fn save_test_bytes(bytes: &[u8], filename: &str) {
     use std::io::Write;
 
     std::fs::File::create(filename)
-        .unwrap()
+        .expect("it should be possible to create this file for testing")
         .write_all(bytes)
-        .unwrap();
+        .expect("it should be possible to write this file for testing");
 }
 
 #[cfg(test)]

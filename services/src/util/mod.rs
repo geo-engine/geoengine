@@ -14,6 +14,8 @@ pub mod operators;
 pub mod parsing;
 pub mod postgres;
 pub mod server;
+// TODO: this should actually be only used in tests
+#[allow(clippy::unwrap_used)]
 pub mod tests;
 
 /// Serde deserializer <https://docs.rs/serde_qs/0.6.0/serde_qs/index.html#flatten-workaround>
