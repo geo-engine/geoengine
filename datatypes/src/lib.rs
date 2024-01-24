@@ -57,9 +57,9 @@ macro_rules! test_data {
     ($name:expr) => {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .canonicalize() // get a full path
-            .unwrap()
+            .expect("should be available during testing")
             .parent()
-            .unwrap()
+            .expect("should be available during testing")
             .join("test_data/")
             .join($name)
             .as_path()
