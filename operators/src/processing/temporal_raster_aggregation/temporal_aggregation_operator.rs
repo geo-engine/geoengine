@@ -8,7 +8,7 @@ use super::aggregators::{
 use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
-use crate::adapters::{SimpleRasterStackerAdapter, SimpleRasterStackerSource};
+use crate::adapters::stack_individual_aligned_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
     RasterOperator, SingleRasterSource, WorkflowOperatorPath,
@@ -257,14 +257,18 @@ where
     #[allow(clippy::too_many_lines)]
     fn create_subquery_adapter_stream_for_single_band<'a>(
         &'a self,
-        query_rect_to_answer: RasterQueryRectangle,
-        band_idx: u32,
+        query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> futures::stream::BoxStream<'a, Result<RasterTile2D<P>>> {
-        let mut query = query_rect_to_answer;
-        query.attributes = band_idx.into();
+    ) -> Result<futures::stream::BoxStream<'a, Result<RasterTile2D<P>>>> {
+        ensure!(
+            query.attributes.count() == 1,
+            error::InvalidBandCount {
+                expected: 1u32,
+                found: query.attributes.count()
+            }
+        );
 
-        match self.aggregation_type {
+        Ok(match self.aggregation_type {
             Aggregation::Min {
                 ignore_no_data: true,
             } => self
@@ -402,7 +406,7 @@ where
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Sum"),
-        }
+        })
     }
 }
 
@@ -427,31 +431,10 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
-        if query.attributes.count() == 1 {
-            // special case of single band query requires no tile stacking
-            return Ok(self.create_subquery_adapter_stream_for_single_band(
-                query.clone(),
-                query.attributes.as_slice()[0],
-                ctx,
-            ));
-        }
-
-        // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
-        let band_streams = query
-            .attributes
-            .as_slice()
-            .iter()
-            .map(|band| SimpleRasterStackerSource {
-                stream: self.create_subquery_adapter_stream_for_single_band(
-                    query.clone(),
-                    *band,
-                    ctx,
-                ),
-                num_bands: 1,
-            })
-            .collect::<Vec<_>>();
-
-        Ok(Box::pin(SimpleRasterStackerAdapter::new(band_streams)?))
+        stack_individual_aligned_raster_bands(&query, ctx, |query, ctx| async {
+            self.create_subquery_adapter_stream_for_single_band(query, ctx)
+        })
+        .await
     }
 
     fn result_descriptor(&self) -> &Self::ResultDescription {

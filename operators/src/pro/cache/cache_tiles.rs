@@ -208,6 +208,7 @@ where
     fn intersects_query(&self, query: &Self::Query) -> bool {
         self.spatial_partition().intersects(&query.spatial_bounds)
             && self.time.intersects(&query.time_interval)
+            && query.attributes.as_slice().contains(&self.band)
     }
 }
 

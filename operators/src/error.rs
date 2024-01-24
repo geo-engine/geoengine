@@ -436,14 +436,25 @@ pub enum Error {
 
     AtLeastOneStreamRequired,
 
-    #[snafu(display("Operator {operator:?} does not support sources with multiple bands."))]
+    #[snafu(display("Operator {operator:?} does not support sources with multiple bands yet."))]
     OperatorDoesNotSupportMultiBandsSourcesYet {
+        operator: &'static str,
+    },
+
+    #[snafu(display("Operator {operator:?} does not support sources with multiple bands."))]
+    OperatorDoesNotSupportMultiBandsSources {
         operator: &'static str,
     },
 
     #[snafu(display("Operation {operation:?} does not support queries with multiple bands."))]
     OperationDoesNotSupportMultiBandQueriesYet {
         operation: &'static str,
+    },
+
+    #[snafu(display("Invalid band count. Expected {}, found {}", expected, found))]
+    InvalidBandCount {
+        expected: u32,
+        found: u32,
     },
 
     RasterInputsMustHaveSameSpatialReferenceAndDatatype {

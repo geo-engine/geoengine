@@ -34,7 +34,6 @@ use geoengine_datatypes::{
     util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -385,14 +384,6 @@ impl RasterOperator for Reprojection {
 
         let initialized_source = raster_source.initialize_sources(path, context).await?;
 
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            initialized_source.raster.result_descriptor().bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: Reprojection::TYPE_NAME
-            }
-        );
-
         let initialized_operator = InitializedRasterReprojection::try_new_with_input(
             name,
             self.params,
@@ -551,7 +542,12 @@ where
 
 impl<Q, P> RasterReprojectionProcessor<Q, P>
 where
-    Q: RasterQueryProcessor<RasterType = P>,
+    Q: QueryProcessor<
+        Output = RasterTile2D<P>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
+    >,
     P: Pixel,
 {
     pub fn new(
