@@ -99,10 +99,10 @@ pub fn default_colorizer_gradient<T: Pixel>() -> Result<Colorizer> {
         vec![
             (AsPrimitive::<f64>::as_(T::min_value()), RgbaColor::black())
                 .try_into()
-                .unwrap(),
+                .expect("a `Pixel` type's min value should not be NaN"),
             (AsPrimitive::<f64>::as_(T::max_value()), RgbaColor::white())
                 .try_into()
-                .unwrap(),
+                .expect("a `Pixel` type's max value should not be NaN"),
         ],
         RgbaColor::transparent(),
         RgbaColor::white(),

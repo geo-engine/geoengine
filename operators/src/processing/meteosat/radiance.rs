@@ -19,7 +19,6 @@ use geoengine_datatypes::raster::{
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 
 // Output type is always f32
 type PixelOut = f32;
@@ -71,44 +70,38 @@ impl RasterOperator for Radiance {
 
         let in_desc = input.result_descriptor();
 
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            in_desc.bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: Radiance::TYPE_NAME
+        for band in in_desc.bands.iter() {
+            match &band.measurement {
+                Measurement::Continuous(ContinuousMeasurement {
+                    measurement: m,
+                    unit: _,
+                }) if m != "raw" => {
+                    return Err(Error::InvalidMeasurement {
+                        expected: "raw".into(),
+                        found: m.clone(),
+                    })
+                }
+                Measurement::Classification(ClassificationMeasurement {
+                    measurement: m,
+                    classes: _,
+                }) => {
+                    return Err(Error::InvalidMeasurement {
+                        expected: "raw".into(),
+                        found: m.clone(),
+                    })
+                }
+                Measurement::Unitless => {
+                    return Err(Error::InvalidMeasurement {
+                        expected: "raw".into(),
+                        found: "unitless".into(),
+                    })
+                }
+                // OK Case
+                Measurement::Continuous(ContinuousMeasurement {
+                    measurement: _,
+                    unit: _,
+                }) => {}
             }
-        );
-
-        match &in_desc.bands[0].measurement {
-            Measurement::Continuous(ContinuousMeasurement {
-                measurement: m,
-                unit: _,
-            }) if m != "raw" => {
-                return Err(Error::InvalidMeasurement {
-                    expected: "raw".into(),
-                    found: m.clone(),
-                })
-            }
-            Measurement::Classification(ClassificationMeasurement {
-                measurement: m,
-                classes: _,
-            }) => {
-                return Err(Error::InvalidMeasurement {
-                    expected: "raw".into(),
-                    found: m.clone(),
-                })
-            }
-            Measurement::Unitless => {
-                return Err(Error::InvalidMeasurement {
-                    expected: "raw".into(),
-                    found: "unitless".into(),
-                })
-            }
-            // OK Case
-            Measurement::Continuous(ContinuousMeasurement {
-                measurement: _,
-                unit: _,
-            }) => {}
         }
 
         let out_desc = RasterResultDescriptor {
@@ -117,14 +110,19 @@ impl RasterOperator for Radiance {
             time: in_desc.time,
             bbox: in_desc.bbox,
             resolution: in_desc.resolution,
-            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                in_desc.bands[0].name.clone(),
-                Measurement::Continuous(ContinuousMeasurement {
-                    measurement: "radiance".into(),
-                    unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
-                }),
-            )])
-            .unwrap(),
+            bands: RasterBandDescriptors::new(
+                in_desc
+                    .bands
+                    .iter()
+                    .map(|b| RasterBandDescriptor {
+                        name: b.name.clone(),
+                        measurement: Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "radiance".into(),
+                            unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
+                        }),
+                    })
+                    .collect::<Vec<_>>(),
+            )?,
         };
 
         let initialized_operator = InitializedRadiance {

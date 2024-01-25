@@ -27,7 +27,12 @@ pub struct CustomRootSpanBuilder;
 
 impl RootSpanBuilder for CustomRootSpanBuilder {
     fn on_request_start(request: &ServiceRequest) -> Span {
-        let request_id = request.extensions().get::<RequestId>().copied().unwrap();
+        // TODO: rethink this error handling
+        let request_id = request
+            .extensions()
+            .get::<RequestId>()
+            .copied()
+            .expect("it should not run without the `RequestId` extension");
 
         let span = tracing::info_span!("Request", request_id = %request_id);
 

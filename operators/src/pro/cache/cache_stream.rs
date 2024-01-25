@@ -9,7 +9,6 @@ use std::{pin::Pin, sync::Arc};
 type DecompressorFutureType<X> = tokio::task::JoinHandle<std::result::Result<X, CacheError>>;
 
 /// Our own cache element stream that "owns" the data (more precisely a reference to the data)
-
 #[pin_project(project = CacheStreamProjection)]
 pub struct CacheStream<I, O, Q> {
     inner: CacheStreamInner<I, Q>,
@@ -128,6 +127,8 @@ where
             let res = futures::ready!(pin_state.poll(cx));
             state.set(None);
             let element = Self::check_decompress_future_res(res);
+            // Note: this is where we would have to filter feature collections by query attributes
+            //       raster tiles on the other hand are already filtered entirely using `intersects_query`
             return std::task::Poll::Ready(Some(element));
         }
 

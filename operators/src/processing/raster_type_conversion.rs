@@ -5,7 +5,6 @@ use geoengine_datatypes::{
     raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
 };
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
@@ -17,7 +16,7 @@ use crate::util::Result;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterTypeConversionParams {
-    output_data_type: RasterDataType,
+    pub output_data_type: RasterDataType,
 }
 
 /// This operator converts the type of raster data into another type. This may cause precision loss as e.g. `3.1_f32` converted to `u8` will result in `3_u8`.
@@ -46,14 +45,6 @@ impl RasterOperator for RasterTypeConversion {
 
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
         let in_desc = initialized_sources.raster.result_descriptor();
-
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            in_desc.bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: RasterTypeConversion::TYPE_NAME
-            }
-        );
 
         let out_data_type = self.params.output_data_type;
 

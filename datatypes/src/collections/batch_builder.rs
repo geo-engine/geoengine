@@ -401,7 +401,10 @@ impl RawFeatureCollectionBuilder {
         let mut arrays: Vec<ArrayRef> = Vec::with_capacity(self.types.len() + 2);
 
         for (column_name, array) in self.column_arrays.drain() {
-            let column_type = self.types.get(&column_name).unwrap(); // column must exist
+            let column_type = self
+                .types
+                .get(&column_name)
+                .expect("column should exist because `types` and `column_arrays` are kept in sync");
             columns.push(Field::new(
                 &column_name,
                 column_type.arrow_data_type(),

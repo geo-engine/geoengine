@@ -176,6 +176,8 @@ mod tests {
                 [SentinelS2L2ACogsProviderDefinition {
                     name: "foo".to_owned(),
                     id: DataProviderId::new(),
+                    description: "A provider".to_owned(),
+                    priority: Some(1),
                     api_url: "http://api.url".to_owned(),
                     bands: vec![StacBand {
                         name: "band".to_owned(),
@@ -206,6 +208,8 @@ mod tests {
                     TypedProDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(
                         SentinelS2L2ACogsProviderDefinition {
                             name: "foo".to_owned(),
+                            description: "A provider".to_owned(),
+                            priority: Some(3),
                             id: DataProviderId::new(),
                             api_url: "http://api.url".to_owned(),
                             bands: vec![StacBand {

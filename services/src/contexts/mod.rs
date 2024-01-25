@@ -35,8 +35,9 @@ pub use migrations::{
     migrate_database, migration_0000_initial::Migration0000Initial,
     migration_0001_raster_stacks::Migration0001RasterStacks,
     migration_0002_dataset_listing_provider::Migration0002DatasetListingProvider,
-    migration_0003_gbif_config::Migration0003GbifConfig, DatabaseVersion, Migration,
-    MigrationResult,
+    migration_0003_gbif_config::Migration0003GbifConfig,
+    migration_0004_dataset_listing_provider_prio::Migration0004DatasetListingProviderPrio,
+    DatabaseVersion, Migration, MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};

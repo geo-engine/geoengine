@@ -576,7 +576,11 @@ fn create_subdataset_tiff(
         )))
         .boxed_context(error::CannotOpenNetCdfSubdataset)?;
 
-        temp_ds.spatial_ref().unwrap().authority().ok()
+        temp_ds
+            .spatial_ref()
+            .context(error::MissingCrs)?
+            .authority()
+            .ok()
     };
 
     for raster_creation_option in raster_creation_options {

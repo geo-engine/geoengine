@@ -612,7 +612,6 @@ where
     Ok((output, cache_hint))
 }
 
-#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
 fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
     let collection = MultiPointCollection::from_data(
         MultiPoint::many(vec![
@@ -621,8 +620,7 @@ fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
             (2.0, 3.1),
             (3.0, 3.1),
             (4.0, 4.1),
-        ])
-        .unwrap(),
+        ])?,
         vec![geoengine_datatypes::primitives::TimeInterval::new_unchecked(0, 1); 5],
         [(
             "foo".to_string(),
@@ -632,8 +630,7 @@ fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
         .cloned()
         .collect(),
         CacheHint::default(),
-    )
-    .unwrap();
+    )?;
 
     Ok(HttpResponse::Ok()
         .content_type(mime::APPLICATION_JSON)

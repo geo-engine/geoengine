@@ -13,7 +13,9 @@ pub use raster_subquery::{
     SubQueryTileAggregator, TileReprojectionSubQuery,
 };
 pub use raster_time::{QueryWrapper, Queryable, RasterArrayTimeAdapter, RasterTimeAdapter};
-pub use simple_raster_stacker::{SimpleRasterStackerAdapter, SimpleRasterStackerSource};
+pub use simple_raster_stacker::{
+    stack_individual_aligned_raster_bands, SimpleRasterStackerAdapter, SimpleRasterStackerSource,
+};
 pub use sparse_tiles_fill_adapter::{
     FillerTileCacheExpirationStrategy, SparseTilesFillAdapter, SparseTilesFillAdapterError,
 };

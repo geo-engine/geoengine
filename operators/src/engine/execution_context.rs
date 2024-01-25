@@ -177,6 +177,13 @@ impl MockExecutionContext {
         self.named_data.insert(named_data, data);
     }
 
+    pub fn delete_meta_data(&mut self, named_data: &NamedData) {
+        let data = self.named_data.remove(named_data);
+        if let Some(data) = data {
+            self.meta_data.remove(&data);
+        }
+    }
+
     pub fn mock_query_context(&self, chunk_byte_size: ChunkByteSize) -> MockQueryContext {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         MockQueryContext {

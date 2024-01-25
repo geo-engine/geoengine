@@ -23,7 +23,7 @@
               "mapNoData": false
             },
             "sources": {
-              "a": {
+              "raster": {
                 "type": "GdalSource",
                 "params": {
                   "data": "ndvi"

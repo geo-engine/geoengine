@@ -69,6 +69,8 @@ const URL_REPLACEMENT: &str = "%URL%";
 pub struct ArunaDataProviderDefinition {
     pub id: DataProviderId,
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub api_url: String,
     pub project_id: String,
     pub api_token: String,
@@ -93,6 +95,10 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for ArunaDataProviderDefinition {
 
     fn id(&self) -> DataProviderId {
         self.id
+    }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
     }
 }
 
@@ -143,6 +149,7 @@ struct ArunaDatasetIds {
 #[derive(Debug)]
 pub struct ArunaDataProvider {
     name: String,
+    description: String,
     id: DataProviderId,
     project_id: String,
     collection_stub: CollectionServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
@@ -184,6 +191,7 @@ impl ArunaDataProvider {
 
         Ok(ArunaDataProvider {
             name: def.name,
+            description: def.description,
             id: def.id,
             project_id: def.project_id,
             collection_stub,
@@ -367,8 +375,7 @@ impl ArunaDataProvider {
                 info.measurement
                     .as_ref()
                     .map_or(Measurement::Unitless, Clone::clone),
-            )])
-            .unwrap(),
+            )])?,
         })
     }
 
@@ -667,6 +674,14 @@ impl LayerCollectionProvider for ArunaDataProvider {
             listing: true,
             search: SearchCapabilities::none(),
         }
+    }
+
+    fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    fn description(&self) -> &str {
+        self.description.as_ref()
     }
 
     async fn load_layer_collection(
@@ -1055,6 +1070,8 @@ mod tests {
             api_url: url,
             project_id: PROJECT_ID.to_string(),
             name: "NFDI".to_string(),
+            description: "Access to NFDI data stored in Aruna".to_string(),
+            priority: Some(123),
             filter_label: FILTER_LABEL.to_string(),
             cache_ttl: Default::default(),
         };

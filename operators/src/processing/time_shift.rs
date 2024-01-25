@@ -22,7 +22,7 @@ use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, Snafu};
+use snafu::Snafu;
 
 /// Project the query rectangle to a new time interval.
 pub type TimeShift = Operator<TimeShiftParams, SingleRasterOrVectorSource>;
@@ -266,14 +266,6 @@ impl RasterOperator for TimeShift {
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
-                // TODO: implement multi-band functionality and remove this check
-                ensure!(
-                    result_descriptor.bands.len() == 1,
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: TimeShift::TYPE_NAME
-                    }
-                );
-
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
                     source,
@@ -294,14 +286,6 @@ impl RasterOperator for TimeShift {
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
-                // TODO: implement multi-band functionality and remove this check
-                ensure!(
-                    result_descriptor.bands.len() == 1,
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: TimeShift::TYPE_NAME
-                    }
-                );
-
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
                     source,
@@ -316,14 +300,6 @@ impl RasterOperator for TimeShift {
                 let shift = AbsoluteShift { time_interval };
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
-
-                // TODO: implement multi-band functionality and remove this check
-                ensure!(
-                    result_descriptor.bands.len() == 1,
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: TimeShift::TYPE_NAME
-                    }
-                );
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
@@ -531,9 +507,12 @@ mod tests {
     use super::*;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterBandDescriptors},
+        engine::{
+            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            SingleRasterSource,
+        },
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
-        processing::{Expression, ExpressionParams, ExpressionSources},
+        processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
         util::{gdal::add_ndvi_dataset, input::RasterOrVectorOperator},
     };
@@ -1208,7 +1187,15 @@ mod tests {
                 output_measurement: None,
                 map_no_data: false,
             },
-            sources: ExpressionSources::new_a_b(ndvi_source, shifted_ndvi_source),
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![ndvi_source, shifted_ndvi_source],
+                    },
+                }
+                .boxed(),
+            },
         }
         .boxed();
 

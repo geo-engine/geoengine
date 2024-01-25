@@ -1753,7 +1753,8 @@ impl From<geoengine_datatypes::primitives::MultiPoint> for MultiPoint {
 
 impl From<MultiPoint> for geoengine_datatypes::primitives::MultiPoint {
     fn from(value: MultiPoint) -> Self {
-        Self::new(value.coordinates.into_iter().map(Into::into).collect()).unwrap()
+        Self::new(value.coordinates.into_iter().map(Into::into).collect())
+            .expect("it should always be able to convert it")
     }
 }
 
@@ -1783,7 +1784,7 @@ impl From<MultiLineString> for geoengine_datatypes::primitives::MultiLineString 
                 .map(|x| x.into_iter().map(Into::into).collect())
                 .collect(),
         )
-        .unwrap()
+        .expect("it should always be able to convert it")
     }
 }
 
@@ -1821,7 +1822,7 @@ impl From<MultiPolygon> for geoengine_datatypes::primitives::MultiPolygon {
                 })
                 .collect(),
         )
-        .unwrap()
+        .expect("it should always be able to convert it")
     }
 }
 

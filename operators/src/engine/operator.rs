@@ -185,8 +185,9 @@ impl CanonicOperatorName {
     /// # Panics
     ///
     /// if the value cannot be serialized as json
+    ///
     pub fn new_unchecked<T: Serialize>(value: &T) -> Self {
-        CanonicOperatorName(serde_json::to_vec(&value).unwrap())
+        CanonicOperatorName(serde_json::to_vec(&value).expect("it should be checked by the caller"))
     }
 }
 

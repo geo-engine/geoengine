@@ -8,8 +8,11 @@ use geoengine_datatypes::{
     util::test::TestDefault,
 };
 use geoengine_operators::{
-    engine::{MockExecutionContext, MockQueryContext, RasterOperator, WorkflowOperatorPath},
-    processing::{Expression, ExpressionParams, ExpressionSources},
+    engine::{
+        MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterOperator,
+        SingleRasterSource, WorkflowOperatorPath,
+    },
+    processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
     source::{GdalSource, GdalSourceParameters},
     util::{gdal::add_ndvi_dataset, number_statistics::NumberStatistics, Result},
 };
@@ -32,7 +35,15 @@ fn expression_on_sources(
             output_measurement: Some(Measurement::Unitless),
             map_no_data: false,
         },
-        sources: ExpressionSources::new_a_b(a, b),
+        sources: SingleRasterSource {
+            raster: RasterStacker {
+                params: RasterStackerParams {},
+                sources: MultipleRasterSources {
+                    rasters: vec![a, b],
+                },
+            }
+            .boxed(),
+        },
     }
     .boxed()
 }

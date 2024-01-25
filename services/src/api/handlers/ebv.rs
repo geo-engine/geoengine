@@ -58,7 +58,10 @@ struct SecurityAddon;
 
 impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        let components = openapi.components.as_mut().unwrap();
+        let Some(components) = openapi.components.as_mut() else {
+            debug_assert!(openapi.components.as_mut().is_some());
+            return;
+        };
         components.add_security_scheme(
             "admin_token",
             SecurityScheme::Http(
@@ -642,6 +645,8 @@ mod tests {
             .add_layer_provider(
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
+                    description: "test".to_string(),
+                    priority: None,
                     path: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
                     cache_ttl: Default::default(),
@@ -725,6 +730,8 @@ mod tests {
             .add_layer_provider(
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
+                    description: "test".to_string(),
+                    priority: None,
                     path: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
                     cache_ttl: Default::default(),
@@ -775,6 +782,8 @@ mod tests {
             .add_layer_provider(
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
+                    description: "test".to_string(),
+                    priority: None,
                     path: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
                     cache_ttl: Default::default(),

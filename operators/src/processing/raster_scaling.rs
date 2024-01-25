@@ -1,8 +1,7 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    OperatorName, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -20,7 +19,6 @@ use num::FromPrimitive;
 use num_traits::AsPrimitive;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -99,14 +97,6 @@ impl RasterOperator for RasterScaling {
         let input = self.sources.initialize_sources(path, context).await?;
         let in_desc = input.raster.result_descriptor();
 
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            in_desc.bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: RasterScaling::TYPE_NAME
-            }
-        );
-
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: in_desc.data_type,
@@ -114,12 +104,20 @@ impl RasterOperator for RasterScaling {
             bbox: in_desc.bbox,
             time: in_desc.time,
             resolution: in_desc.resolution,
-            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                in_desc.bands[0].name.clone(),
-                self.params
-                    .output_measurement
-                    .unwrap_or_else(|| in_desc.bands[0].measurement.clone()),
-            )])?,
+            bands: in_desc
+                .bands
+                .iter()
+                .map(|b| {
+                    RasterBandDescriptor::new(
+                        b.name.clone(),
+                        self.params
+                            .output_measurement
+                            .clone()
+                            .unwrap_or_else(|| b.measurement.clone()),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .try_into()?,
         };
 
         let initialized_operator = InitializedRasterScalingOperator {
@@ -286,7 +284,7 @@ mod tests {
     };
 
     use crate::{
-        engine::{ChunkByteSize, MockExecutionContext},
+        engine::{ChunkByteSize, MockExecutionContext, RasterBandDescriptors},
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 

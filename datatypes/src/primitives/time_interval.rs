@@ -130,8 +130,12 @@ impl TimeInterval {
         A::Error: Debug,
         B::Error: Debug,
     {
-        let start = start.try_into().unwrap();
-        let end = end.try_into().unwrap();
+        let start = start
+            .try_into()
+            .expect("start's validity should be checked by the caller");
+        let end = end
+            .try_into()
+            .expect("end's validity should be checked by the caller");
         debug_assert!(start <= end);
         Self { start, end }
     }
