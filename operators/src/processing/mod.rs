@@ -24,8 +24,8 @@ pub use circle_merging_quadtree::{
     InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
 };
 pub use expression::{
-    Expression, ExpressionError, ExpressionParams, ExpressionParser, ExpressionSources,
-    LinkedExpression, Parameter as ExpressionParameter,
+    Expression, ExpressionError, ExpressionParams, ExpressionParser, LinkedExpression,
+    Parameter as ExpressionParameter,
 };
 pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
 pub use line_simplification::{

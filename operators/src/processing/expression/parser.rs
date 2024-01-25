@@ -69,6 +69,7 @@ impl ExpressionParser {
         for parameter in parameters {
             match parameter {
                 Parameter::Number(name) => numeric_parameters.insert(name.clone()),
+                Parameter::Geometry(name) => numeric_parameters.insert(name.clone()), // TODO: handle properly
             };
         }
 

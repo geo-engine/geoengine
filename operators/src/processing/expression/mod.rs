@@ -1,6 +1,6 @@
 use self::{
-    codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser,
-    query_processor::ExpressionInput,
+    codegen::ExpressionAst,
+    query_processor::{ExpressionInput, ExpressionQueryProcessor},
 };
 use crate::{
     engine::{
@@ -10,7 +10,6 @@ use crate::{
         WorkflowOperatorPath,
     },
     error::InvalidNumberOfExpressionInputBands,
-    processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::Result,
 };
 use async_trait::async_trait;

@@ -64,6 +64,7 @@ impl ToTokens for ExpressionAst {
             .parameters
             .iter()
             .map(|p| match p {
+                Parameter::Geometry(param) => quote! { #param: Option<#dtype> }, // TODO: change
                 Parameter::Number(param) => quote! { #param: Option<#dtype> },
             })
             .collect();
