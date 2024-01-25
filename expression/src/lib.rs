@@ -28,9 +28,13 @@
     clippy::unwrap_used
 )]
 
+mod codegen;
 mod compiled;
-mod deps;
+mod dependencies;
 pub mod error;
+mod functions;
+mod parser;
+mod util;
 
 pub use compiled::LinkedExpression;
-pub use deps::ExpressionDependencies;
+pub use dependencies::ExpressionDependencies;

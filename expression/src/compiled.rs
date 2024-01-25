@@ -1,8 +1,9 @@
 use crate::{
-    error::{ExpressionError, Result},
+    error::{self, ExpressionError, Result},
     ExpressionDependencies,
 };
 use libloading::{library_filename, Library, Symbol};
+use snafu::ResultExt;
 use std::{
     fs::File,
     io::Write,
@@ -25,30 +26,24 @@ impl LinkedExpression {
         code: &str,
         dependencies: &ExpressionDependencies,
     ) -> Result<Self> {
-        let library_folder = tempfile::tempdir().map_err(|error| {
-            ExpressionError::CannotGenerateSourceCodeDirectory {
-                error: error.to_string(),
-            }
-        })?;
+        let library_folder =
+            tempfile::tempdir().context(error::CannotGenerateSourceCodeDirectory)?;
 
-        // TODO: use `rustfmt` / `formatted_code` in debug mode
-        let input_filename =
-            create_source_code_file(library_folder.path(), code).map_err(|error| {
-                ExpressionError::CannotGenerateSourceCodeFile {
-                    error: error.to_string(),
-                }
-            })?;
+        let input_filename = create_source_code_file(library_folder.path(), code)
+            .context(error::CannotGenerateSourceCodeFile)?;
+
+        // format with `rustfmt` in debug mode
+        if std::cfg!(debug_assertions) {
+            let _ = Command::new("rustfmt")
+                .arg(&input_filename)
+                .status()
+                .context(error::CannotFormatSourceCodeFile)?;
+        }
 
         let library_filename = compile_file(library_folder.path(), &input_filename, dependencies)
-            .map_err(|error| ExpressionError::CompileError {
-            error: error.to_string(),
-        })?;
+            .context(error::Compiler)?;
 
-        let library = unsafe { Library::new(library_filename) }.map_err(|error| {
-            ExpressionError::CompileError {
-                error: error.to_string(),
-            }
-        })?;
+        let library = unsafe { Library::new(library_filename) }.context(error::LinkExpression)?;
 
         Ok(Self {
             library_folder: ManuallyDrop::new(library_folder),

@@ -23,20 +23,39 @@ pub enum ExpressionError {
         source: Whatever,
     },
 
+    #[snafu(display("Cannot store source code in temporary file"))]
     CannotGenerateSourceCodeFile {
-        error: String,
+        source: std::io::Error,
     },
 
+    #[snafu(display("Cannot format source code"))]
+    CannotFormatSourceCodeFile {
+        source: std::io::Error,
+    },
+
+    #[snafu(display("Cannot store source code in temporary directory"))]
     CannotGenerateSourceCodeDirectory {
-        error: String,
+        source: std::io::Error,
     },
-    CompileError {
-        error: String,
+
+    #[snafu(display("Cannot compile expression"))]
+    Compiler {
+        source: std::io::Error,
     },
+
+    #[snafu(display("Cannot load expression for execution"))]
+    LinkExpression {
+        source: libloading::Error,
+    },
+
     Linker {
         error: String,
     },
+
     LinkedFunctionNotFound {
         error: String,
     },
+
+    #[snafu(display("The expression must have a name"))]
+    EmptyExpressionName,
 }
