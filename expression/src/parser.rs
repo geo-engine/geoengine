@@ -466,16 +466,25 @@ mod tests {
     use quote::{quote, ToTokens};
 
     fn parse(name: &str, parameters: &[&str], input: &str) -> String {
-        try_parse(name, parameters, input).unwrap()
-    }
-
-    fn try_parse(name: &str, parameters: &[&str], input: &str) -> Result<String> {
         let parameters: Vec<Parameter> = parameters
             .iter()
             .map(|&p| Parameter::Number(Identifier::from(p)))
             .collect();
 
-        let parser = ExpressionParser::new(&parameters, DataType::Number)?;
+        try_parse(name, &parameters, DataType::Number, input).unwrap()
+    }
+
+    fn parse2(name: &str, parameters: &[Parameter], out_type: DataType, input: &str) -> String {
+        try_parse(name, parameters, out_type, input).unwrap()
+    }
+
+    fn try_parse(
+        name: &str,
+        parameters: &[Parameter],
+        out_type: DataType,
+        input: &str,
+    ) -> Result<String> {
+        let parser = ExpressionParser::new(parameters, out_type)?;
         let ast = parser.parse(name, input)?;
 
         Ok(ast.into_token_stream().to_string())
@@ -862,7 +871,10 @@ mod tests {
             .to_string()
         );
 
-        // TODO: call with wrong signature
+        assert!(
+            try_parse("will_not_compile", &[], DataType::Number, "max(1, 2, 3)").is_err(),
+            "function called with wrong signature"
+        );
     }
 
     #[test]
@@ -910,8 +922,6 @@ mod tests {
             }
             .to_string()
         );
-
-        // TODO: non-numeric comparison
     }
 
     #[test]
@@ -1013,8 +1023,6 @@ mod tests {
             }
             .to_string()
         );
-
-        // TODO: branches of different data types
     }
 
     #[test]
@@ -1046,7 +1054,8 @@ mod tests {
         assert!(
             try_parse(
                 "expression",
-                &["A"],
+                &[Parameter::Number("A".into())],
+                DataType::Number,
                 "let b = A;
                 let b = C;
                 let c = 2;
@@ -1059,7 +1068,8 @@ mod tests {
         assert!(
             try_parse(
                 "expression",
-                &["A"],
+                &[Parameter::Number("A".into())],
+                DataType::Number,
                 "let A = 2;
                 a",
             )
@@ -1068,5 +1078,90 @@ mod tests {
         );
     }
 
-    // TODO: geo tests
+    #[test]
+    fn it_fails_when_using_wrong_datatypes() {
+        assert!(
+            try_parse(
+                "expression",
+                &[
+                    Parameter::Number("A".into()),
+                    Parameter::MultiPoint("B".into())
+                ],
+                DataType::Number,
+                "if true { A } else { B }",
+            )
+            .is_err(),
+            "cannot use branches of different data types"
+        );
+
+        assert!(
+            try_parse(
+                "expression",
+                &[
+                    Parameter::Number("A".into()),
+                    Parameter::MultiPoint("B".into())
+                ],
+                DataType::Number,
+                "if B IS NODATA { A } else { A }",
+            )
+            .is_err(),
+            "cannot use non-numeric comparison"
+        );
+
+        assert!(
+            try_parse(
+                "expression",
+                &[Parameter::MultiPoint("A".into())],
+                DataType::Number,
+                "A + 1",
+            )
+            .is_err(),
+            "cannot use non-numeric operators"
+        );
+
+        assert!(
+            try_parse(
+                "expression",
+                &[Parameter::MultiPoint("A".into())],
+                DataType::Number,
+                "sqrt(A)",
+            )
+            .is_err(),
+            "cannot call numeric fn with geom"
+        );
+
+        assert!(
+            try_parse("expression", &[], DataType::MultiPoint, "1",).is_err(),
+            "cannot call with wrong output"
+        );
+    }
+
+    #[test]
+    fn it_works_with_geoms() {
+        assert_eq_pretty!(
+            parse2(
+                "make_centroid",
+                &[Parameter::MultiPolygon("geom".into())],
+                DataType::MultiPoint,
+                "centroid(geom)",
+            ),
+            quote! {
+                #[inline]
+                fn import_centroid__q(
+                    geom: Option<geo::geometry::MultiPolygon<geo::Polygon<f64>>>
+                ) -> Option<geo::geometry::MultiPoint<geo::Point<f64>>> {
+                    use geo::Centroid;
+                    geom.centroid().map(Into::into)
+                }
+
+                #[no_mangle]
+                pub extern "Rust" fn make_centroid(
+                    geom: Option<geo::geometry::MultiPolygon<geo::Polygon<f64>>>
+                ) -> Option<geo::geometry::MultiPoint<geo::Point<f64>>> {
+                    import_centroid__q(geom)
+                }
+            }
+            .to_string()
+        );
+    }
 }
