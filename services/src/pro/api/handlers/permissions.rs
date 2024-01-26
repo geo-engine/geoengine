@@ -82,7 +82,7 @@ pub struct PermissionListOptions {
     get,
     path = "/permissions/resources/{resource_type}/{resource_id}",
     responses(
-        (status = 200, description = "OK"),        
+        (status = 200, description = "List of permission", body = Vec<PermissionListing>),        
     ),
     params(
         ("resource_type" = String, description = "Resource Type"),
