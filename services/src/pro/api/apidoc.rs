@@ -1,4 +1,4 @@
-use super::handlers::permissions::{PermissionRequest, Resource};
+use super::handlers::permissions::{PermissionListOptions, PermissionRequest, Resource};
 use super::handlers::users::AddRole;
 use super::model::MlModelId;
 use crate::api::handlers;
@@ -52,7 +52,9 @@ use crate::layers::listing::{
 };
 use crate::pro;
 use crate::pro::api::handlers::users::{Quota, UpdateQuota};
-use crate::pro::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
+use crate::pro::permissions::{
+    Permission, PermissionListing, ResourceId, Role, RoleDescription, RoleId,
+};
 use crate::pro::users::{
     AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
     UserSession,
@@ -147,7 +149,8 @@ use utoipa::{Modify, OpenApi};
         handlers::upload::list_upload_file_layers_handler,
         handlers::upload::upload_handler,
         pro::api::handlers::permissions::add_permission_handler,
-        pro::api::handlers::permissions::remove_permission_handler
+        pro::api::handlers::permissions::remove_permission_handler,
+        pro::api::handlers::permissions::get_resource_permissions_handler
     ),
     components(
         responses(
@@ -378,6 +381,8 @@ use utoipa::{Modify, OpenApi};
             Resource,
             ResourceId,
             Permission,
+            PermissionListing,
+            PermissionListOptions,
             AddRole,
             RoleDescription,
             Role,
