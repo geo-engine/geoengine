@@ -1,10 +1,6 @@
-use std::fmt::Display;
-
-use snafu::{Snafu, Whatever};
-
 use crate::codegen::DataType;
-
-// pub type Result<T, E = ExpressionExecutionError> = std::result::Result<T, E>;
+use snafu::{Snafu, Whatever};
+use std::fmt::Display;
 
 /// An expression error type that concern the compilation, linkage and execution of an expression
 #[derive(Debug, Snafu)]
@@ -171,6 +167,7 @@ pub enum ExpressionParserError {
     },
 }
 
+/// User-facing display of a list of strings
 fn display_strings<S: Display>(strings: &[S]) -> String {
     let mut output = String::new();
     output.push('[');
