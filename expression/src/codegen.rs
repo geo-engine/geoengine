@@ -1,15 +1,11 @@
-use std::{collections::BTreeSet, fmt::Debug};
-
-use proc_macro2::{Ident, TokenStream};
+use super::error::{self, ExpressionParserError};
+use crate::functions::Function;
+use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
 use snafu::ensure;
+use std::{collections::BTreeSet, fmt::Debug, hash::Hash};
 
-use super::{
-    error::{self, ExpressionError},
-    functions::{init_functions, FUNCTIONS},
-};
-
-type Result<T, E = ExpressionError> = std::result::Result<T, E>;
+type Result<T, E = ExpressionParserError> = std::result::Result<T, E>;
 
 // TODO: prefix for variables and functions
 
@@ -21,14 +17,15 @@ pub struct ExpressionAst {
     name: Identifier,
     root: AstNode,
     parameters: Vec<Parameter>,
+    out_type: DataType,
     functions: BTreeSet<AstFunction>,
-    // TODO: dtype Float or Int
 }
 
 impl ExpressionAst {
     pub fn new(
         name: Identifier,
         parameters: Vec<Parameter>,
+        out_type: DataType,
         functions: BTreeSet<AstFunction>,
         root: AstNode,
     ) -> Result<ExpressionAst> {
@@ -38,6 +35,7 @@ impl ExpressionAst {
             name,
             root,
             parameters,
+            out_type,
             functions,
         })
     }
@@ -62,29 +60,16 @@ impl ToTokens for ExpressionAst {
             .parameters
             .iter()
             .map(|p| {
-                let dtype = p.parameter_type().ident();
-                match p {
-                    Parameter::Number(param) => quote! { #param: Option<#dtype> },
-                    Parameter::MultiPoint(param)
-                    | Parameter::MultiLineString(param)
-                    | Parameter::MultiPolygon(param) => quote! { #param: #dtype },
-                }
+                let param = p.identifier();
+                let dtype = p.data_type();
+                quote! { #param: Option<#dtype> }
             })
             .collect();
         let content = &self.root;
 
-        // TODO: adapt to more options
-        let dtype = format_ident!("{}", "f64");
+        let dtype = self.out_type;
 
         tokens.extend(quote! {
-            #[inline]
-            fn apply(a: Option<#dtype>, b: Option<#dtype>, f: fn(#dtype, #dtype) -> #dtype) -> Option<#dtype> {
-                match (a, b) {
-                    (Some(a), Some(b)) => Some(f(a, b)),
-                    _ => None,
-                }
-            }
-
             #[no_mangle]
             pub extern "Rust" fn #fn_name (#(#params),*) -> Option<#dtype> {
                 #content
@@ -101,13 +86,13 @@ pub enum AstNode {
         name: Identifier,
         data_type: DataType,
     },
-    Operation {
-        left: Box<AstNode>,
-        op: AstOperator,
-        right: Box<AstNode>,
-    },
+    // Operation {
+    //     left: Box<AstNode>,
+    //     op: AstOperator,
+    //     right: Box<AstNode>,
+    // },
     Function {
-        name: Identifier,
+        function: Function,
         args: Vec<AstNode>,
     },
     Branch {
@@ -121,22 +106,67 @@ pub enum AstNode {
 }
 
 impl AstNode {
-    fn data_type(&self) -> DataType {
+    pub fn data_type(&self) -> DataType {
         match self {
-            // only support number constants
-            Self::Constant(_) => DataType::Number,
-            Self::NoData => DataType::Number,
+            // - only support number constants
+            // - no data is a number for now
+            Self::Constant(_) | Self::NoData => DataType::Number,
+
             Self::Variable { data_type, .. } => *data_type,
-            // operations cannot be anything else than numbers for now
-            Self::Operation { .. } => DataType::Number,
-            // TODO: also allow geometries
-            Self::Function { .. } => DataType::Number,
-            // TODO: also allow geometries
-            Self::Branch { .. } => DataType::Number,
-            // TODO: also allow geometries
-            Self::AssignmentsAndExpression { .. } => DataType::Number,
+
+            Self::Function { function, .. } => function.output_type(),
+
+            // we have to check beforehand that all branches have the same type
+            Self::Branch { else_branch, .. } => else_branch.data_type(),
+
+            Self::AssignmentsAndExpression { expression, .. } => expression.data_type(),
         }
     }
+
+    ///// Outputs the required variables for this node.
+    // TODO: reverse to input available variables?
+    // TODO: speed-up by caching intermediate results?
+    // fn required_vars<'s>(&'s self, vars: &mut HashSet<&'s Identifier>) {
+    //     match self {
+    //         AstNode::Constant(_) | AstNode::NoData => {}
+    //         AstNode::Variable { name, .. } => {
+    //             vars.insert(name);
+    //         }
+    //         // AstNode::Operation { left, op: _, right } => {
+    //         //     left.required_vars(vars);
+    //         //     right.required_vars(vars);
+    //         // }
+    //         AstNode::Function { args, .. } => {
+    //             for arg in args {
+    //                 arg.required_vars(vars);
+    //             }
+    //         }
+    //         AstNode::Branch {
+    //             condition_branches,
+    //             else_branch,
+    //         } => {
+    //             for branch in condition_branches {
+    //                 branch.body.required_vars(vars);
+    //             }
+    //             else_branch.required_vars(vars);
+    //         }
+    //         AstNode::AssignmentsAndExpression {
+    //             assignments,
+    //             expression,
+    //         } => {
+    //             let mut candidate_vars = HashSet::new();
+    //             expression.required_vars(&mut candidate_vars);
+
+    //             let exclusion_vars: HashSet<&Identifier> = assignments
+    //                 .iter()
+    //                 .map(|assignment| &assignment.identifier)
+    //                 .collect();
+
+    //             // only output variables that were not covered by the assignments
+    //             vars.extend(candidate_vars.difference(&exclusion_vars));
+    //         }
+    //     }
+    // }
 }
 
 impl ToTokens for AstNode {
@@ -145,11 +175,11 @@ impl ToTokens for AstNode {
             Self::Constant(n) => quote! { Some(#n) },
             Self::NoData => quote! { None },
             Self::Variable { name, .. } => quote! { #name },
-            Self::Operation { left, op, right } => {
-                quote! { apply(#left, #right, #op) }
-            }
-            Self::Function { name, args } => {
-                let fn_name = format_ident!("import_{}__{}", name.as_ref(), args.len());
+            // Self::Operation { left, op, right } => {
+            //     quote! { apply(#left, #right, #op) }
+            // }
+            Self::Function { function, args } => {
+                let fn_name = function.name();
                 quote! { #fn_name(#(#args),*) }
             }
             AstNode::Branch {
@@ -242,26 +272,26 @@ impl std::fmt::Display for Identifier {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum AstOperator {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-}
+// #[derive(Debug, Clone)]
+// pub enum AstOperator {
+//     Add,
+//     Subtract,
+//     Multiply,
+//     Divide,
+// }
 
-impl ToTokens for AstOperator {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        let new_tokens = match self {
-            AstOperator::Add => quote! { std::ops::Add::add },
-            AstOperator::Subtract => quote! { std::ops::Sub::sub },
-            AstOperator::Multiply => quote! { std::ops::Mul::mul },
-            AstOperator::Divide => quote! { std::ops::Div::div },
-        };
+// impl ToTokens for AstOperator {
+//     fn to_tokens(&self, tokens: &mut TokenStream) {
+//         let new_tokens = match self {
+//             AstOperator::Add => quote! { std::ops::Add::add },
+//             AstOperator::Subtract => quote! { std::ops::Sub::sub },
+//             AstOperator::Multiply => quote! { std::ops::Mul::mul },
+//             AstOperator::Divide => quote! { std::ops::Div::div },
+//         };
 
-        tokens.extend(new_tokens);
-    }
-}
+//         tokens.extend(new_tokens);
+//     }
+// }
 
 #[derive(Debug, Clone)]
 pub struct Branch {
@@ -358,6 +388,7 @@ impl ToTokens for Assignment {
     }
 }
 
+// TODO: make parameters case insensitive
 #[derive(Debug, Clone)]
 pub enum Parameter {
     Number(Identifier),
@@ -378,7 +409,16 @@ impl AsRef<str> for Parameter {
 }
 
 impl Parameter {
-    pub fn parameter_type(&self) -> DataType {
+    pub fn identifier(&self) -> &Identifier {
+        match self {
+            Self::Number(identifier)
+            | Self::MultiPoint(identifier)
+            | Self::MultiLineString(identifier)
+            | Self::MultiPolygon(identifier) => identifier,
+        }
+    }
+
+    pub fn data_type(&self) -> DataType {
         match self {
             Self::Number(_) => DataType::Number,
             Self::MultiPoint(_) => DataType::MultiPoint,
@@ -388,7 +428,7 @@ impl Parameter {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DataType {
     Number,
     MultiPoint,
@@ -396,41 +436,66 @@ pub enum DataType {
     MultiPolygon,
 }
 
-impl DataType {
-    fn ident(self) -> Ident {
-        match self {
-            Self::Number => format_ident!("f64"),
-            Self::MultiPoint => format_ident!("geo::geometry::MultiPoint"),
-            Self::MultiLineString => {
-                format_ident!("geo::geometry::MultiLineString")
+impl std::fmt::Display for DataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        let s = match self {
+            Self::Number => "number",
+            Self::MultiPoint => "geometry (multipoint)",
+            Self::MultiLineString => "geometry (multilinestring)",
+            Self::MultiPolygon => "geometry (multipolygon)",
+        };
+
+        write!(f, "{s}")
+    }
+}
+
+impl ToTokens for DataType {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.extend(match self {
+            Self::Number => quote! { f64 },
+            Self::MultiPoint => {
+                quote! { geo::geometry::MultiPoint<geo::Point<f64>> }
             }
-            Self::MultiPolygon => format_ident!("geo::geometry::MultiPolygon"),
+            Self::MultiLineString => {
+                quote! { geo::geometry::MultiLineString<geo::LineString<f64>> }
+            }
+            Self::MultiPolygon => {
+                quote! { geo::geometry::MultiPolygon<geo::Polygon<f64>> }
+            }
+        });
+    }
+}
+
+impl DataType {
+    pub fn group_name(&self) -> &str {
+        match self {
+            Self::Number => "number",
+            Self::MultiPoint | Self::MultiLineString | Self::MultiPolygon => "geometry",
+        }
+    }
+
+    /// A unique short name without spaces, etc.
+    pub fn call_name_suffix(self) -> char {
+        match self {
+            Self::Number => 'n',
+            Self::MultiPoint => 'p',
+            Self::MultiLineString => 'l',
+            Self::MultiPolygon => 'q',
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AstFunction {
-    pub name: Identifier,
-    pub num_parameters: usize,
+    pub function: Function,
 }
 
 impl ToTokens for AstFunction {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let Some(function) = FUNCTIONS
-            .get_or_init(init_functions)
-            .get(self.name.as_ref())
-        else {
-            return; // do nothing if, for some reason, the function doesn't exist
-        };
-
-        let prefixed_fn_name =
-            format_ident!("import_{}__{}", self.name.as_ref(), self.num_parameters);
-
+        let function = &self.function;
         tokens.extend(quote! {
             #[inline]
+            #function
         });
-
-        tokens.extend((function.token_fn)(self.num_parameters, prefixed_fn_name));
     }
 }

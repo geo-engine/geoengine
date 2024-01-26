@@ -36,5 +36,7 @@ mod functions;
 mod parser;
 mod util;
 
+pub use codegen::{DataType, Parameter};
 pub use compiled::LinkedExpression;
 pub use dependencies::ExpressionDependencies;
+pub use parser::ExpressionParser;

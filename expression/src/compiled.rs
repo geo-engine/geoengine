@@ -1,10 +1,11 @@
 use crate::{
-    error::{self, ExpressionError, Result},
+    error::{self, ExpressionExecutionError},
     ExpressionDependencies,
 };
 use libloading::{library_filename, Library, Symbol};
 use snafu::ResultExt;
 use std::{
+    borrow::Cow,
     fs::File,
     io::Write,
     mem::ManuallyDrop,
@@ -12,6 +13,8 @@ use std::{
     process::Command,
 };
 use tempfile::TempDir;
+
+pub type Result<T, E = ExpressionExecutionError> = std::result::Result<T, E>;
 
 /// Compiles and links an expression as a program and offers means to call it
 pub struct LinkedExpression {
@@ -29,16 +32,23 @@ impl LinkedExpression {
         let library_folder =
             tempfile::tempdir().context(error::CannotGenerateSourceCodeDirectory)?;
 
-        let input_filename = create_source_code_file(library_folder.path(), code)
-            .context(error::CannotGenerateSourceCodeFile)?;
-
-        // format with `rustfmt` in debug mode
+        // format code in debug mode
+        let mut code = Cow::from(code);
         if std::cfg!(debug_assertions) {
-            let _ = Command::new("rustfmt")
-                .arg(&input_filename)
-                .status()
-                .context(error::CannotFormatSourceCodeFile)?;
+            code = syn::parse_file(&code)
+                .map_or_else(
+                    |e| {
+                        // fallback to unformatted code
+                        log::error!("Cannot parse expression: {e}");
+                        code.to_string()
+                    },
+                    |file| prettyplease::unparse(&file),
+                )
+                .into();
         }
+
+        let input_filename = create_source_code_file(library_folder.path(), &code)
+            .context(error::CannotGenerateSourceCodeFile)?;
 
         let library_filename = compile_file(library_folder.path(), &input_filename, dependencies)
             .context(error::Compiler)?;
@@ -62,8 +72,8 @@ impl LinkedExpression {
     pub unsafe fn function_1<A>(&self) -> Result<Symbol<fn(A) -> Option<f64>>> {
         self.library
             .get(self.function_name.as_bytes())
-            .map_err(|error| ExpressionError::LinkedFunctionNotFound {
-                error: error.to_string(),
+            .context(error::LinkedFunctionNotFound {
+                name: self.function_name.clone(),
             })
     }
     /// Returns a function with 3 input parameters
@@ -76,8 +86,8 @@ impl LinkedExpression {
     pub unsafe fn function_2<A, B>(&self) -> Result<Symbol<fn(A, B) -> Option<f64>>> {
         self.library
             .get(self.function_name.as_bytes())
-            .map_err(|error| ExpressionError::LinkedFunctionNotFound {
-                error: error.to_string(),
+            .context(error::LinkedFunctionNotFound {
+                name: self.function_name.clone(),
             })
     }
 
@@ -91,8 +101,8 @@ impl LinkedExpression {
     pub unsafe fn function_nary<F>(&self) -> Result<Symbol<F>> {
         self.library
             .get(self.function_name.as_bytes())
-            .map_err(|error| ExpressionError::LinkedFunctionNotFound {
-                error: error.to_string(),
+            .context(error::LinkedFunctionNotFound {
+                name: self.function_name.clone(),
             })
     }
 }

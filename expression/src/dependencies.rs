@@ -1,4 +1,4 @@
-use crate::error::{self, Result};
+use crate::error::{self, ExpressionExecutionError};
 use cargo::{
     core::{
         compiler::{BuildConfig, MessageFormat},
@@ -9,6 +9,8 @@ use cargo::{
 };
 use snafu::{OptionExt, ResultExt, Whatever};
 use std::path::{Path, PathBuf};
+
+pub type Result<T, E = ExpressionExecutionError> = std::result::Result<T, E>;
 
 const DEPS_CARGO_TOML: &[u8] = std::include_bytes!("../deps-workspace/Cargo.toml");
 const DEPS_CARGO_LOCK: &[u8] = std::include_bytes!("../deps-workspace/Cargo.lock");
