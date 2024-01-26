@@ -51,15 +51,30 @@ pub enum ExpressionExecutionError {
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum ExpressionParserError {
+    // TODO: use pest's error format for every parsing error?
+    // We would get lines and columns with this.
+    #[snafu(display("The expression is erroneous: {source}"))]
+    Parser {
+        source: crate::parser::PestError,
+    },
+
     #[snafu(display("The expression function must have a name"))]
     EmptyExpressionName,
 
-    #[snafu(display("The variable {variable} was not defined"))]
+    #[snafu(display("A parameter name must not be empty"))]
+    EmptyParameterName,
+
+    #[snafu(display("The parameter `{parameter}` was defined multiple times"))]
+    DuplicateParameterName {
+        parameter: String,
+    },
+
+    #[snafu(display("The variable `{variable}` was not defined"))]
     UnknownVariable {
         variable: String,
     },
 
-    #[snafu(display("The variable {variable} was already defined"))]
+    #[snafu(display("The variable `{variable}` was already defined"))]
     VariableShadowing {
         variable: String,
     },
@@ -68,13 +83,13 @@ pub enum ExpressionParserError {
         variable: String,
     },
 
-    #[snafu(display("Unknown function: {function}"))]
+    #[snafu(display("Unknown function `{function}`"))]
     UnknownFunction {
         function: String,
     },
 
     #[snafu(display(
-        "Invalid function arguments for function {name}: expected {expected}, got {actual}",
+        "Invalid function arguments for function `{name}`: expected {expected}, got {actual}",
         expected = display_strings(expected),
         actual = display_strings(actual)
     ))]
@@ -84,9 +99,15 @@ pub enum ExpressionParserError {
         actual: Vec<DataType>,
     },
 
-    UnexpectedBranchStructure,
+    #[snafu(display("The if-then-else expression is missing a branch"))]
+    MissingBranch,
+
+    #[snafu(display("The if-then-else expression must have an else part"))]
     BranchStructureMalformed,
 
+    #[snafu(display(
+        "To output a value, the last statement must be an expression and not an assignment"
+    ))]
     DoesNotEndWithExpression,
 
     #[snafu(display("Unexpected rule: {rule}"))]
@@ -94,37 +115,60 @@ pub enum ExpressionParserError {
         rule: String,
     },
 
-    #[snafu(display("Unexpected operator: expected {expected}, found {found}"))]
+    #[snafu(display("Unexpected operator: expected (+, -, *, /, **), found {found}"))]
     UnexpectedOperator {
-        expected: &'static str,
         found: String,
     },
 
+    #[snafu(display("Unexpected operator: expected (<, <=, ==, !=, >=, >), found {comparator}"))]
     UnexpectedComparator {
         comparator: String,
     },
+
+    #[snafu(display("Unexpected boolean rule: {rule}"))]
     UnexpectedBooleanRule {
         rule: String,
     },
+
+    #[snafu(display("Unexpected boolean operator: {operator}"))]
     UnexpectedBooleanOperator {
         operator: String,
     },
+
+    #[snafu(display("A comparison needs a left part, a comparator and a right part"))]
     ComparisonNeedsThreeParts,
+
+    #[snafu(display("An assignment needs a variable name and an expression"))]
     AssignmentNeedsTwoParts,
-    Parser {
-        source: crate::parser::PestError,
-    },
-    EmptyParameterName,
-    DuplicateParameterName {
-        parameter: String,
-    },
-    InvalidNumber {
+
+    #[snafu(display("The constant `{constant}` is not a number"))]
+    ConstantIsNotAdNumber {
         source: std::num::ParseFloatError,
+        constant: String,
     },
-    MissingFunctionName,
-    MissingIdentifier,
-    MissingOutputNoDataValue,
-    SourcesMustBeConsecutive,
+
+    #[snafu(display("The function call is missing a function name"))]
+    MalformedFunctionCall,
+
+    #[snafu(display("The expression of form `A IS NODATA` is missing the left part"))]
+    MalformedIdentifierIsNodata,
+
+    #[snafu(display("All branches of an if-then-else expression must output the same type"))]
+    AllBranchesMustOutputSameType,
+
+    #[snafu(display("Comparisons can only be used with numbers"))]
+    ComparisonsMustBeUsedWithNumbers,
+
+    #[snafu(display("Operators can only be used with numbers"))]
+    OperatorsMustBeUsedWithNumbers,
+
+    #[snafu(display(
+        "The expression was expected to output `{expected}`, but it outputs `{actual}`"
+    ))]
+    WrongOutputType {
+        expected: DataType,
+        actual: DataType,
+    },
 }
 
 fn display_strings<S: Display>(strings: &[S]) -> String {

@@ -97,6 +97,13 @@ impl ExpressionParser {
 
         let root = self.build_ast(pairs, &variables)?;
 
+        if root.data_type() != self.out_type {
+            return Err(ExpressionParserError::WrongOutputType {
+                expected: self.out_type,
+                actual: root.data_type(),
+            });
+        }
+
         ExpressionAst::new(
             name.to_string().into(),
             self.parameters,
@@ -126,9 +133,11 @@ impl ExpressionParser {
     ) -> Result<AstNode> {
         match pair.as_rule() {
             Rule::expression => self.build_ast(pair.into_inner(), variables),
-            Rule::number => Ok(AstNode::Constant(
-                pair.as_str().parse().context(error::InvalidNumber)?,
-            )),
+            Rule::number => Ok(AstNode::Constant(pair.as_str().parse().context(
+                error::ConstantIsNotAdNumber {
+                    constant: pair.as_str(),
+                },
+            )?)),
             Rule::identifier => {
                 let identifier = pair.as_str().into();
                 let data_type = *variables.get(&identifier).context(error::UnknownVariable {
@@ -148,22 +157,35 @@ impl ExpressionParser {
 
                 let mut condition_branches: Vec<Branch> = vec![];
 
+                let mut data_type = None;
+
                 while let Some(pair) = pairs.next() {
                     if matches!(pair.as_rule(), Rule::boolean_expression) {
-                        let boolean =
+                        let condition =
                             self.build_boolean_expression(pair.into_inner(), variables)?;
 
-                        let next_pair = pairs
-                            .next()
-                            .ok_or(ExpressionParserError::BranchStructureMalformed)?;
-                        let expression = self.build_ast(next_pair.into_inner(), variables)?;
+                        let next_pair = pairs.next().ok_or(ExpressionParserError::MissingBranch)?;
+                        let body = self.build_ast(next_pair.into_inner(), variables)?;
 
-                        condition_branches.push(Branch {
-                            condition: boolean,
-                            body: expression,
-                        });
+                        if let Some(data_type) = data_type {
+                            ensure!(
+                                data_type == body.data_type(),
+                                error::AllBranchesMustOutputSameType
+                            );
+                        } else {
+                            data_type = Some(body.data_type());
+                        }
+
+                        condition_branches.push(Branch { condition, body });
                     } else {
                         let expression = self.build_ast(pair.into_inner(), variables)?;
+
+                        if let Some(data_type) = data_type {
+                            ensure!(
+                                data_type == expression.data_type(),
+                                error::AllBranchesMustOutputSameType
+                            );
+                        }
 
                         return Ok(AstNode::Branch {
                             condition_branches,
@@ -172,7 +194,7 @@ impl ExpressionParser {
                     }
                 }
 
-                Err(ExpressionParserError::UnexpectedBranchStructure)
+                Err(ExpressionParserError::BranchStructureMalformed)
             }
             Rule::assignments_and_expression => {
                 let mut assignments: Vec<Assignment> = vec![];
@@ -241,7 +263,7 @@ impl ExpressionParser {
         // first one is name
         let name: Identifier = pairs
             .next()
-            .ok_or(ExpressionParserError::MissingFunctionName)?
+            .ok_or(ExpressionParserError::MalformedFunctionCall)?
             .as_str()
             .into();
 
@@ -277,6 +299,10 @@ impl ExpressionParser {
     ) -> Result<AstNode> {
         let (left, right) = (left?, right?);
 
+        if left.data_type() != DataType::Number || right.data_type() != DataType::Number {
+            return Err(ExpressionParserError::OperatorsMustBeUsedWithNumbers);
+        }
+
         let fn_name = match op.as_rule() {
             Rule::add => "add",
             Rule::subtract => "sub",
@@ -285,7 +311,6 @@ impl ExpressionParser {
             Rule::power => "pow",
             _ => {
                 return Err(ExpressionParserError::UnexpectedOperator {
-                    expected: "(+, -, *, *, **)",
                     found: op.as_str().to_string(),
                 })
             }
@@ -335,13 +360,17 @@ impl ExpressionParser {
 
                 let identifier = pairs
                     .next()
-                    .ok_or(ExpressionParserError::MissingIdentifier)?
+                    .ok_or(ExpressionParserError::MalformedIdentifierIsNodata)?
                     .as_str()
                     .into();
 
                 let data_type = *variables.get(&identifier).context(error::UnknownVariable {
                     variable: identifier.to_string(),
                 })?;
+
+                if data_type != DataType::Number {
+                    return Err(ExpressionParserError::ComparisonsMustBeUsedWithNumbers);
+                }
 
                 let left = AstNode::Variable {
                     name: identifier,
@@ -384,6 +413,12 @@ impl ExpressionParser {
                     }
                 };
                 let right_expression = self.build_ast(third_pair.into_inner(), variables)?;
+
+                if left_expression.data_type() != DataType::Number
+                    || right_expression.data_type() != DataType::Number
+                {
+                    return Err(ExpressionParserError::ComparisonsMustBeUsedWithNumbers);
+                }
 
                 Ok(BooleanExpression::Comparison {
                     left: Box::new(left_expression),
@@ -826,6 +861,8 @@ mod tests {
             }
             .to_string()
         );
+
+        // TODO: call with wrong signature
     }
 
     #[test]
@@ -873,6 +910,8 @@ mod tests {
             }
             .to_string()
         );
+
+        // TODO: non-numeric comparison
     }
 
     #[test]
@@ -974,6 +1013,8 @@ mod tests {
             }
             .to_string()
         );
+
+        // TODO: branches of different data types
     }
 
     #[test]
@@ -1026,4 +1067,6 @@ mod tests {
             "cannot shadow variable"
         );
     }
+
+    // TODO: geo tests
 }
