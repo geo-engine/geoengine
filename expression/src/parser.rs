@@ -1,11 +1,11 @@
-use crate::codegen::DataType;
+use crate::{codegen::DataType, error::ExpressionParserError};
 
 use super::{
     codegen::{
         Assignment, AstFunction, AstNode, BooleanComparator, BooleanExpression, BooleanOperator,
         Branch, ExpressionAst, Identifier, Parameter,
     },
-    error::{self, ExpressionParserError},
+    error::{self, ExpressionSemanticError},
     functions::{init_functions, FUNCTIONS},
     util::duplicate_or_empty_str_slice,
 };
@@ -15,7 +15,7 @@ use pest::{
     Parser,
 };
 use pest_derive::Parser;
-use snafu::{ensure, OptionExt, ResultExt};
+use snafu::{OptionExt, ResultExt};
 use std::{
     cell::RefCell,
     collections::{hash_map, BTreeSet, HashMap, HashSet},
@@ -61,10 +61,15 @@ impl ExpressionParser {
         match duplicate_or_empty_str_slice(parameters) {
             crate::util::DuplicateOrEmpty::Ok => (), // fine
             crate::util::DuplicateOrEmpty::Duplicate(parameter) => {
-                return Err(ExpressionParserError::DuplicateParameterName { parameter });
+                return Err(
+                    ExpressionSemanticError::DuplicateParameterName { parameter }
+                        .into_definition_parser_error(),
+                );
             }
             crate::util::DuplicateOrEmpty::Empty => {
-                return Err(ExpressionParserError::EmptyParameterName);
+                return Err(
+                    ExpressionSemanticError::EmptyParameterName.into_definition_parser_error()
+                );
             }
         };
 
@@ -84,9 +89,12 @@ impl ExpressionParser {
     }
 
     pub fn parse(self, name: &str, input: &str) -> Result<ExpressionAst> {
-        ensure!(!name.is_empty(), error::EmptyExpressionName);
+        if name.is_empty() {
+            return Err(ExpressionSemanticError::EmptyExpressionName.into_definition_parser_error());
+        }
 
-        let pairs = _ExpressionParser::parse(Rule::main, input).context(error::Parser)?;
+        let pairs = _ExpressionParser::parse(Rule::main, input)
+            .map_err(ExpressionParserError::from_syntactic_error)?;
 
         // TODO: make variable case insensitive
         let variables = self
@@ -98,10 +106,11 @@ impl ExpressionParser {
         let root = self.build_ast(pairs, &variables)?;
 
         if root.data_type() != self.out_type {
-            return Err(ExpressionParserError::WrongOutputType {
+            return Err(ExpressionSemanticError::WrongOutputType {
                 expected: self.out_type,
                 actual: root.data_type(),
-            });
+            }
+            .into_definition_parser_error());
         }
 
         ExpressionAst::new(
@@ -131,71 +140,33 @@ impl ExpressionParser {
         pair: Pair<Rule>,
         variables: &HashMap<Identifier, DataType>,
     ) -> Result<AstNode> {
+        let span = pair.as_span();
         match pair.as_rule() {
             Rule::expression => self.build_ast(pair.into_inner(), variables),
-            Rule::number => Ok(AstNode::Constant(pair.as_str().parse().context(
-                error::ConstantIsNotAdNumber {
-                    constant: pair.as_str(),
-                },
-            )?)),
+            Rule::number => Ok(AstNode::Constant(
+                pair.as_str()
+                    .parse()
+                    .context(error::ConstantIsNotAdNumber {
+                        constant: pair.as_str(),
+                    })
+                    .map_err(|e| e.into_parser_error(span))?,
+            )),
             Rule::identifier => {
                 let identifier = pair.as_str().into();
-                let data_type = *variables.get(&identifier).context(error::UnknownVariable {
-                    variable: identifier.to_string(),
-                })?;
+                let data_type = *variables
+                    .get(&identifier)
+                    .context(error::UnknownVariable {
+                        variable: identifier.to_string(),
+                    })
+                    .map_err(|e| e.into_parser_error(span))?;
                 Ok(AstNode::Variable {
                     name: identifier,
                     data_type,
                 })
             }
             Rule::nodata => Ok(AstNode::NoData),
-            Rule::function => self.resolve_function(pair.into_inner(), variables),
-            Rule::branch => {
-                // pairs are boolean -> expression
-                // and last one is just an expression
-                let mut pairs = pair.into_inner();
-
-                let mut condition_branches: Vec<Branch> = vec![];
-
-                let mut data_type = None;
-
-                while let Some(pair) = pairs.next() {
-                    if matches!(pair.as_rule(), Rule::boolean_expression) {
-                        let condition =
-                            self.build_boolean_expression(pair.into_inner(), variables)?;
-
-                        let next_pair = pairs.next().ok_or(ExpressionParserError::MissingBranch)?;
-                        let body = self.build_ast(next_pair.into_inner(), variables)?;
-
-                        if let Some(data_type) = data_type {
-                            ensure!(
-                                data_type == body.data_type(),
-                                error::AllBranchesMustOutputSameType
-                            );
-                        } else {
-                            data_type = Some(body.data_type());
-                        }
-
-                        condition_branches.push(Branch { condition, body });
-                    } else {
-                        let expression = self.build_ast(pair.into_inner(), variables)?;
-
-                        if let Some(data_type) = data_type {
-                            ensure!(
-                                data_type == expression.data_type(),
-                                error::AllBranchesMustOutputSameType
-                            );
-                        }
-
-                        return Ok(AstNode::Branch {
-                            condition_branches,
-                            else_branch: Box::new(expression),
-                        });
-                    }
-                }
-
-                Err(ExpressionParserError::BranchStructureMalformed)
-            }
+            Rule::function => self.resolve_function(pair.into_inner(), span, variables),
+            Rule::branch => self.resolve_branch(pair, span, variables),
             Rule::assignments_and_expression => {
                 let mut assignments: Vec<Assignment> = vec![];
 
@@ -205,12 +176,14 @@ impl ExpressionParser {
                     if matches!(pair.as_rule(), Rule::assignment) {
                         let mut pairs = pair.into_inner();
 
-                        let first_pair = pairs
-                            .next()
-                            .ok_or(ExpressionParserError::AssignmentNeedsTwoParts)?;
-                        let second_pair = pairs
-                            .next()
-                            .ok_or(ExpressionParserError::AssignmentNeedsTwoParts)?;
+                        let first_pair = pairs.next().ok_or(
+                            ExpressionSemanticError::AssignmentNeedsTwoParts
+                                .into_parser_error(span),
+                        )?;
+                        let second_pair = pairs.next().ok_or(
+                            ExpressionSemanticError::AssignmentNeedsTwoParts
+                                .into_parser_error(span),
+                        )?;
 
                         let identifier: Identifier = first_pair.as_str().into();
 
@@ -232,9 +205,10 @@ impl ExpressionParser {
                                 // we do not allow shadowing for now
 
                                 let identifier: &Identifier = entry.key();
-                                return Err(ExpressionParserError::VariableShadowing {
+                                return Err(ExpressionSemanticError::VariableShadowing {
                                     variable: identifier.to_string(),
-                                });
+                                }
+                                .into_parser_error(span));
                             }
                         };
                     } else {
@@ -247,23 +221,78 @@ impl ExpressionParser {
                     }
                 }
 
-                Err(ExpressionParserError::DoesNotEndWithExpression)
+                Err(ExpressionSemanticError::DoesNotEndWithExpression.into_parser_error(span))
             }
-            _ => Err(ExpressionParserError::UnexpectedRule {
+            _ => Err(ExpressionSemanticError::UnexpectedRule {
                 rule: pair.as_str().to_string(),
-            }),
+            }
+            .into_parser_error(span)),
         }
+    }
+
+    fn resolve_branch(
+        &self,
+        pair: Pair<Rule>,
+        span: pest::Span<'_>,
+        variables: &HashMap<Identifier, DataType>,
+    ) -> Result<AstNode> {
+        // pairs are boolean -> expression
+        // and last one is just an expression
+        let mut pairs = pair.into_inner();
+
+        let mut condition_branches: Vec<Branch> = vec![];
+
+        let mut data_type = None;
+
+        while let Some(pair) = pairs.next() {
+            if matches!(pair.as_rule(), Rule::boolean_expression) {
+                let condition = self.build_boolean_expression(pair.into_inner(), variables)?;
+
+                let next_pair = pairs
+                    .next()
+                    .ok_or(ExpressionSemanticError::MissingBranch.into_parser_error(span))?;
+                let body = self.build_ast(next_pair.into_inner(), variables)?;
+
+                if let Some(data_type) = data_type {
+                    if data_type != body.data_type() {
+                        return Err(ExpressionSemanticError::AllBranchesMustOutputSameType
+                            .into_parser_error(span));
+                    }
+                } else {
+                    data_type = Some(body.data_type());
+                }
+
+                condition_branches.push(Branch { condition, body });
+            } else {
+                let expression = self.build_ast(pair.into_inner(), variables)?;
+
+                if let Some(data_type) = data_type {
+                    if data_type != expression.data_type() {
+                        return Err(ExpressionSemanticError::AllBranchesMustOutputSameType
+                            .into_parser_error(span));
+                    }
+                }
+
+                return Ok(AstNode::Branch {
+                    condition_branches,
+                    else_branch: Box::new(expression),
+                });
+            }
+        }
+
+        Err(ExpressionSemanticError::BranchStructureMalformed.into_parser_error(span))
     }
 
     fn resolve_function(
         &self,
         mut pairs: Pairs<Rule>,
+        span: pest::Span<'_>,
         variables: &HashMap<Identifier, DataType>,
     ) -> Result<AstNode> {
         // first one is name
         let name: Identifier = pairs
             .next()
-            .ok_or(ExpressionParserError::MalformedFunctionCall)?
+            .ok_or(ExpressionSemanticError::MalformedFunctionCall.into_parser_error(span))?
             .as_str()
             .into();
 
@@ -276,13 +305,15 @@ impl ExpressionParser {
             .get(name.as_ref())
             .context(error::UnknownFunction {
                 function: name.to_string(),
-            })?
+            })
+            .map_err(|e| e.into_parser_error(span))?
             .generate(
                 args.iter()
                     .map(AstNode::data_type)
                     .collect::<Vec<_>>()
                     .as_slice(),
-            )?;
+            )
+            .map_err(|e| e.into_parser_error(span))?;
 
         self.functions.borrow_mut().insert(AstFunction {
             function: function.clone(),
@@ -300,7 +331,8 @@ impl ExpressionParser {
         let (left, right) = (left?, right?);
 
         if left.data_type() != DataType::Number || right.data_type() != DataType::Number {
-            return Err(ExpressionParserError::OperatorsMustBeUsedWithNumbers);
+            return Err(ExpressionSemanticError::OperatorsMustBeUsedWithNumbers
+                .into_parser_error(op.as_span()));
         }
 
         let fn_name = match op.as_rule() {
@@ -310,9 +342,10 @@ impl ExpressionParser {
             Rule::divide => "div",
             Rule::power => "pow",
             _ => {
-                return Err(ExpressionParserError::UnexpectedOperator {
+                return Err(ExpressionSemanticError::UnexpectedOperator {
                     found: op.as_str().to_string(),
-                })
+                }
+                .into_parser_error(op.as_span()))
             }
         };
 
@@ -320,10 +353,14 @@ impl ExpressionParser {
         let function = FUNCTIONS
             .get_or_init(init_functions)
             .get(fn_name)
-            .context(error::UnknownFunction {
-                function: fn_name.to_string(),
+            .ok_or_else(|| {
+                ExpressionSemanticError::UnknownFunction {
+                    function: fn_name.to_string(),
+                }
+                .into_parser_error(op.as_span())
             })?
-            .generate(&[DataType::Number, DataType::Number])?;
+            .generate(&[DataType::Number, DataType::Number])
+            .map_err(|e| e.into_parser_error(op.as_span()))?;
 
         self.functions.borrow_mut().insert(AstFunction {
             function: function.clone(),
@@ -352,6 +389,7 @@ impl ExpressionParser {
         pair: Pair<Rule>,
         variables: &HashMap<Identifier, DataType>,
     ) -> Result<BooleanExpression> {
+        let span = pair.as_span();
         match pair.as_rule() {
             Rule::identifier_is_nodata => {
                 // convert `A IS NODATA` to the check for `A.is_none()`
@@ -360,16 +398,23 @@ impl ExpressionParser {
 
                 let identifier = pairs
                     .next()
-                    .ok_or(ExpressionParserError::MalformedIdentifierIsNodata)?
+                    .ok_or(
+                        ExpressionSemanticError::MalformedIdentifierIsNodata
+                            .into_parser_error(span),
+                    )?
                     .as_str()
                     .into();
 
-                let data_type = *variables.get(&identifier).context(error::UnknownVariable {
-                    variable: identifier.to_string(),
-                })?;
+                let data_type = *variables
+                    .get(&identifier)
+                    .context(error::UnknownVariable {
+                        variable: identifier.to_string(),
+                    })
+                    .map_err(|e| e.into_parser_error(span))?;
 
                 if data_type != DataType::Number {
-                    return Err(ExpressionParserError::ComparisonsMustBeUsedWithNumbers);
+                    return Err(ExpressionSemanticError::ComparisonsMustBeUsedWithNumbers
+                        .into_parser_error(span));
                 }
 
                 let left = AstNode::Variable {
@@ -388,15 +433,15 @@ impl ExpressionParser {
             Rule::boolean_comparison => {
                 let mut pairs = pair.into_inner();
 
-                let first_pair = pairs
-                    .next()
-                    .ok_or(ExpressionParserError::ComparisonNeedsThreeParts)?;
-                let second_pair = pairs
-                    .next()
-                    .ok_or(ExpressionParserError::ComparisonNeedsThreeParts)?;
-                let third_pair = pairs
-                    .next()
-                    .ok_or(ExpressionParserError::ComparisonNeedsThreeParts)?;
+                let first_pair = pairs.next().ok_or(
+                    ExpressionSemanticError::ComparisonNeedsThreeParts.into_parser_error(span),
+                )?;
+                let second_pair = pairs.next().ok_or(
+                    ExpressionSemanticError::ComparisonNeedsThreeParts.into_parser_error(span),
+                )?;
+                let third_pair = pairs.next().ok_or(
+                    ExpressionSemanticError::ComparisonNeedsThreeParts.into_parser_error(span),
+                )?;
 
                 let left_expression = self.build_ast(first_pair.into_inner(), variables)?;
                 let comparison = match second_pair.as_rule() {
@@ -407,9 +452,10 @@ impl ExpressionParser {
                     Rule::larger => BooleanComparator::GreaterThan,
                     Rule::larger_equals => BooleanComparator::GreaterThanOrEqual,
                     _ => {
-                        return Err(ExpressionParserError::UnexpectedComparator {
+                        return Err(ExpressionSemanticError::UnexpectedComparator {
                             comparator: format!("{:?}", second_pair.as_rule()),
-                        })
+                        }
+                        .into_parser_error(span))
                     }
                 };
                 let right_expression = self.build_ast(third_pair.into_inner(), variables)?;
@@ -417,7 +463,8 @@ impl ExpressionParser {
                 if left_expression.data_type() != DataType::Number
                     || right_expression.data_type() != DataType::Number
                 {
-                    return Err(ExpressionParserError::ComparisonsMustBeUsedWithNumbers);
+                    return Err(ExpressionSemanticError::ComparisonsMustBeUsedWithNumbers
+                        .into_parser_error(span));
                 }
 
                 Ok(BooleanExpression::Comparison {
@@ -427,9 +474,10 @@ impl ExpressionParser {
                 })
             }
             Rule::boolean_expression => self.build_boolean_expression(pair.into_inner(), variables),
-            _ => Err(ExpressionParserError::UnexpectedBooleanRule {
+            _ => Err(ExpressionSemanticError::UnexpectedBooleanRule {
                 rule: format!("{:?}", pair.as_rule()),
-            }),
+            }
+            .into_parser_error(span)),
         }
     }
 
@@ -444,9 +492,10 @@ impl ExpressionParser {
             Rule::and => BooleanOperator::And,
             Rule::or => BooleanOperator::Or,
             _ => {
-                return Err(ExpressionParserError::UnexpectedBooleanOperator {
+                return Err(ExpressionSemanticError::UnexpectedBooleanOperator {
                     operator: format!("{:?}", op.as_rule()),
-                });
+                }
+                .into_parser_error(op.as_span()));
             }
         };
 
@@ -871,12 +920,11 @@ mod tests {
             .to_string()
         );
 
-        assert!(
-            matches!(
-                try_parse("will_not_compile", &[], DataType::Number, "max(1, 2, 3)").unwrap_err(),
-                ExpressionParserError::InvalidFunctionArguments { .. }
-            ),
-            "function called with wrong signature"
+        assert_eq!(
+            try_parse("will_not_compile", &[], DataType::Number, "max(1, 2, 3)")
+                .unwrap_err()
+                .to_string(),
+                " --> 1:1\n  |\n1 | max(1, 2, 3)\n  | ^----------^\n  |\n  = Invalid function arguments for function `max`: expected [number, number], got [number, number, number]"
         );
     }
 
@@ -1054,108 +1102,102 @@ mod tests {
             .to_string()
         );
 
-        assert!(
-            matches!(
-                try_parse(
-                    "expression",
-                    &[Parameter::Number("A".into())],
-                    DataType::Number,
-                    "let b = A;
-                    let b = C;
-                    let c = 2;
-                    a + b",
-                )
-                .unwrap_err(),
-                ExpressionParserError::UnknownVariable { .. }
-            ),
-            "cannot use variable before declaration"
+        assert_eq!(
+            try_parse(
+                "expression",
+                &[Parameter::Number("A".into())],
+                DataType::Number,
+                "let b = A;
+                let b = C;
+                let c = 2;
+                a + b",
+            )
+                .unwrap_err()
+                .to_string(),
+                " --> 2:25\n  |\n2 |                 let b = C;\n  |                         ^\n  |\n  = The variable `C` was not defined",
+                "no access before declaration"
         );
 
-        assert!(
-            matches!(
-                try_parse(
-                    "expression",
-                    &[Parameter::Number("A".into())],
-                    DataType::Number,
-                    "let A = 2;
-                    a",
-                )
-                .unwrap_err(),
-                ExpressionParserError::VariableShadowing { .. }
-            ),
-            "cannot shadow variable"
+        assert_eq!(
+            try_parse(
+                "expression",
+                &[Parameter::Number("A".into())],
+                DataType::Number,
+                "let A = 2;
+                a",
+            )
+                .unwrap_err()
+                .to_string(),
+                " --> 1:1\n  |\n1 | let A = 2;\n2 |                 a\n  | ^---------------^\n  |\n  = The variable `A` was already defined",
+                "no shadowing"
         );
     }
 
     #[test]
     fn it_fails_when_using_wrong_datatypes() {
-        assert!(
-            matches!(
-                try_parse(
-                    "expression",
-                    &[
-                        Parameter::Number("A".into()),
-                        Parameter::MultiPoint("B".into())
-                    ],
-                    DataType::Number,
-                    "if true { A } else { B }",
-                )
-                .unwrap_err(),
-                ExpressionParserError::AllBranchesMustOutputSameType
-            ),
+        assert_eq!(
+            try_parse(
+                "expression",
+                &[
+                    Parameter::Number("A".into()),
+                    Parameter::MultiPoint("B".into())
+                ],
+                DataType::Number,
+                "if true { A } else { B }",
+            )
+            .unwrap_err()
+            .to_string(),
+            " --> 1:1\n  |\n1 | if true { A } else { B }\n  | ^----------------------^\n  |\n  = All branches of an if-then-else expression must output the same type",
             "cannot use branches of different data types"
         );
 
-        assert!(
-            matches!(
-                try_parse(
-                    "expression",
-                    &[
-                        Parameter::Number("A".into()),
-                        Parameter::MultiPoint("B".into())
-                    ],
-                    DataType::Number,
-                    "if B IS NODATA { A } else { A }",
-                )
-                .unwrap_err(),
-                ExpressionParserError::ComparisonsMustBeUsedWithNumbers
-            ),
+        assert_eq!(
+            try_parse(
+                "expression",
+                &[
+                    Parameter::Number("A".into()),
+                    Parameter::MultiPoint("B".into())
+                ],
+                DataType::Number,
+                "if B IS NODATA { A } else { A }",
+            )
+            .unwrap_err()
+            .to_string(),
+            " --> 1:4\n  |\n1 | if B IS NODATA { A } else { A }\n  |    ^---------^\n  |\n  = Comparisons can only be used with numbers",
             "cannot use non-numeric comparison"
         );
 
-        assert!(
-            matches!(
-                try_parse(
-                    "expression",
-                    &[Parameter::MultiPoint("A".into())],
-                    DataType::Number,
-                    "A + 1",
-                )
-                .unwrap_err(),
-                ExpressionParserError::OperatorsMustBeUsedWithNumbers
-            ),
+        assert_eq!(
+            try_parse(
+                "expression",
+                &[Parameter::MultiPoint("A".into())],
+                DataType::Number,
+                "A + 1",
+            )
+            .unwrap_err()
+            .to_string(),
+            " --> 1:3\n  |\n1 | A + 1\n  |   ^\n  |\n  = Operators can only be used with numbers",
             "cannot use non-numeric operators"
         );
 
-        assert!(
-            matches!(
-                try_parse(
-                    "expression",
-                    &[Parameter::MultiPoint("A".into())],
-                    DataType::Number,
-                    "sqrt(A)",
-                )
-                .unwrap_err(),
-                ExpressionParserError::InvalidFunctionArguments { .. }
-            ),
+        assert_eq!(
+            try_parse(
+                "expression",
+                &[Parameter::MultiPoint("A".into())],
+                DataType::Number,
+                "sqrt(A)",
+            )
+            .unwrap_err()
+            .to_string(),
+            " --> 1:1\n  |\n1 | sqrt(A)\n  | ^-----^\n  |\n  = Invalid function arguments for function `sqrt`: expected [number], got [geometry (multipoint)]",
             "cannot call numeric fn with geom"
         );
 
-        assert!(
-            matches!(
-                try_parse("expression", &[], DataType::MultiPoint, "1",).unwrap_err(),
-                ExpressionParserError::WrongOutputType { .. }
-            ),
+        assert_eq!(
+            try_parse("expression", &[], DataType::MultiPoint, "1",)
+                .unwrap_err()
+                .to_string(),
+                " --> 1:1\n  |\n1 | \n  | ^---\n  |\n  = The expression was expected to output `geometry (multipoint)`, but it outputs `number`",
             "cannot call with wrong output"
         );
     }

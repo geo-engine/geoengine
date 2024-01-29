@@ -1,12 +1,12 @@
 use crate::{
     codegen::{DataType, Identifier},
-    error::ExpressionParserError,
+    error::ExpressionSemanticError,
 };
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use std::{collections::HashMap, hash::Hash, sync::OnceLock};
 
-type Result<T, E = ExpressionParserError> = std::result::Result<T, E>;
+type Result<T, E = ExpressionSemanticError> = std::result::Result<T, E>;
 
 /// A function generator that can be used to generate a function
 /// that can be used in an expression.
@@ -113,7 +113,7 @@ macro_rules! add_const_num {
                             });
                         },
                     }),
-                    _ => Err(ExpressionParserError::InvalidFunctionArguments {
+                    _ => Err(ExpressionSemanticError::InvalidFunctionArguments {
                         name: name.into(),
                         expected: vec![DataType::Number.group_name().to_string()],
                         actual: args.into(),
@@ -147,7 +147,7 @@ macro_rules! add_1_num {
                             });
                         },
                     }),
-                    _ => Err(ExpressionParserError::InvalidFunctionArguments {
+                    _ => Err(ExpressionSemanticError::InvalidFunctionArguments {
                         name: name.into(),
                         expected: vec![DataType::Number.group_name().to_string()],
                         actual: args.into(),
@@ -184,7 +184,7 @@ macro_rules! add_2_num {
                             });
                         },
                     }),
-                    _ => Err(ExpressionParserError::InvalidFunctionArguments {
+                    _ => Err(ExpressionSemanticError::InvalidFunctionArguments {
                         name: name.into(),
                         expected: [DataType::Number, DataType::Number]
                             .iter()
@@ -271,7 +271,7 @@ pub fn init_functions() -> HashMap<&'static str, FunctionGenerator> {
                         });
                     },
                 }),
-                _ => Err(ExpressionParserError::InvalidFunctionArguments {
+                _ => Err(ExpressionSemanticError::InvalidFunctionArguments {
                     name: name.into(),
                     expected: [DataType::MultiPoint]
                         .iter()

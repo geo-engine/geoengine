@@ -1,6 +1,6 @@
 use crate::codegen::DataType;
 use snafu::{Snafu, Whatever};
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 /// An expression error type that concern the compilation, linkage and execution of an expression
 #[derive(Debug, Snafu)]
@@ -42,18 +42,72 @@ pub enum ExpressionExecutionError {
     },
 }
 
+pub struct ExpressionParserError {
+    source: crate::parser::PestError,
+}
+
+impl Display for ExpressionParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.source, f)
+    }
+}
+
+impl Debug for ExpressionParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.source, f)
+    }
+}
+
+impl std::error::Error for ExpressionParserError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source.source()
+    }
+}
+
+impl ExpressionParserError {
+    pub fn from_syntactic_error(source: crate::parser::PestError) -> Self {
+        Self { source }
+    }
+
+    pub fn from_semantic_error(source: &ExpressionSemanticError, span: pest::Span) -> Self {
+        Self {
+            source: crate::parser::PestError::new_from_span(
+                pest::error::ErrorVariant::CustomError {
+                    message: source.to_string(),
+                },
+                span,
+            ),
+        }
+    }
+
+    pub fn from_definition_error(source: &ExpressionSemanticError) -> Self {
+        Self {
+            source: crate::parser::PestError::new_from_pos(
+                pest::error::ErrorVariant::CustomError {
+                    message: source.to_string(),
+                },
+                // we cannot point to anything other than the start of the file
+                pest::Position::from_start(""),
+            ),
+        }
+    }
+}
+
+impl ExpressionSemanticError {
+    pub fn into_parser_error(self, span: pest::Span) -> ExpressionParserError {
+        ExpressionParserError::from_semantic_error(&self, span)
+    }
+
+    pub fn into_definition_parser_error(self) -> ExpressionParserError {
+        ExpressionParserError::from_definition_error(&self)
+    }
+}
+
 /// An expression error type that concern the parsing of user code
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
-pub enum ExpressionParserError {
-    // TODO: use pest's error format for every parsing error?
-    // We would get lines and columns with this.
-    #[snafu(display("The expression is erroneous: {source}"))]
-    Parser {
-        source: crate::parser::PestError,
-    },
-
+pub enum ExpressionSemanticError {
     #[snafu(display("The expression function must have a name"))]
     EmptyExpressionName,
 

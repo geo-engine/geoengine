@@ -1,8 +1,7 @@
-use super::error::{self, ExpressionParserError};
+use super::error::{ExpressionParserError, ExpressionSemanticError};
 use crate::functions::Function;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
-use snafu::ensure;
 use std::{collections::BTreeSet, fmt::Debug, hash::Hash};
 
 type Result<T, E = ExpressionParserError> = std::result::Result<T, E>;
@@ -29,7 +28,9 @@ impl ExpressionAst {
         functions: BTreeSet<AstFunction>,
         root: AstNode,
     ) -> Result<ExpressionAst> {
-        ensure!(!name.as_ref().is_empty(), error::EmptyExpressionName);
+        if name.as_ref().is_empty() {
+            return Err(ExpressionSemanticError::EmptyExpressionName.into_definition_parser_error());
+        }
 
         Ok(Self {
             name,
@@ -122,51 +123,6 @@ impl AstNode {
             Self::AssignmentsAndExpression { expression, .. } => expression.data_type(),
         }
     }
-
-    ///// Outputs the required variables for this node.
-    // TODO: reverse to input available variables?
-    // TODO: speed-up by caching intermediate results?
-    // fn required_vars<'s>(&'s self, vars: &mut HashSet<&'s Identifier>) {
-    //     match self {
-    //         AstNode::Constant(_) | AstNode::NoData => {}
-    //         AstNode::Variable { name, .. } => {
-    //             vars.insert(name);
-    //         }
-    //         // AstNode::Operation { left, op: _, right } => {
-    //         //     left.required_vars(vars);
-    //         //     right.required_vars(vars);
-    //         // }
-    //         AstNode::Function { args, .. } => {
-    //             for arg in args {
-    //                 arg.required_vars(vars);
-    //             }
-    //         }
-    //         AstNode::Branch {
-    //             condition_branches,
-    //             else_branch,
-    //         } => {
-    //             for branch in condition_branches {
-    //                 branch.body.required_vars(vars);
-    //             }
-    //             else_branch.required_vars(vars);
-    //         }
-    //         AstNode::AssignmentsAndExpression {
-    //             assignments,
-    //             expression,
-    //         } => {
-    //             let mut candidate_vars = HashSet::new();
-    //             expression.required_vars(&mut candidate_vars);
-
-    //             let exclusion_vars: HashSet<&Identifier> = assignments
-    //                 .iter()
-    //                 .map(|assignment| &assignment.identifier)
-    //                 .collect();
-
-    //             // only output variables that were not covered by the assignments
-    //             vars.extend(candidate_vars.difference(&exclusion_vars));
-    //         }
-    //     }
-    // }
 }
 
 impl ToTokens for AstNode {
