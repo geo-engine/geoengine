@@ -7,6 +7,8 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 use url::Url;
 
+use crate::api::model::datatypes::BandSelection;
+
 /// Parse the `SpatialResolution` of a request by parsing `x,y`, e.g. `0.1,0.1`.
 pub fn parse_spatial_resolution<'de, D>(deserializer: D) -> Result<SpatialResolution, D::Error>
 where
@@ -41,7 +43,29 @@ where
     }
 }
 
-/// Parse a field as a string or array of strings. Always returns a `Vec<String>`.
+/// Parse a list of elements that implement `FromStr` that is separated by commas.
+pub fn parse_list_from_str<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: FromStr,
+    <T as std::str::FromStr>::Err: std::fmt::Display,
+{
+    let s = String::deserialize(deserializer)?;
+
+    let split: Result<Vec<T>, <T as FromStr>::Err> = s.split(',').map(T::from_str).collect();
+
+    split.map_err(D::Error::custom)
+}
+
+pub fn parse_band_selection<'de, D>(deserializer: D) -> Result<BandSelection, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let bands: Vec<usize> = parse_list_from_str(deserializer)?;
+
+    Ok(BandSelection(bands))
+}
+
 pub fn string_or_string_array<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where
     D: serde::Deserializer<'de>,

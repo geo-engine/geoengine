@@ -1,5 +1,5 @@
 use crate::api::handlers::tasks::TaskResponse;
-use crate::api::model::datatypes::{DataId, TimeInterval};
+use crate::api::model::datatypes::{BandSelection, DataId, TimeInterval};
 use crate::api::model::responses::IdResponse;
 use crate::api::ogc::util::{parse_bbox, parse_time};
 use crate::contexts::{ApplicationContext, SessionContext};
@@ -8,7 +8,9 @@ use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetF
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::util::config::get_config_element;
-use crate::util::parsing::{parse_spatial_partition, parse_spatial_resolution};
+use crate::util::parsing::{
+    parse_band_selection, parse_spatial_partition, parse_spatial_resolution,
+};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::workflows::{RasterWebsocketStreamHandler, VectorWebsocketStreamHandler};
@@ -16,8 +18,8 @@ use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    BandSelection, BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
-    SpatialResolution, VectorQueryRectangle,
+    BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+    VectorQueryRectangle,
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
@@ -473,7 +475,7 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
 }
 
 /// The query parameters for `raster_stream_websocket`.
-#[derive(Copy, Clone, Debug, PartialEq, Deserialize, IntoParams)]
+#[derive(Clone, Debug, PartialEq, Deserialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_spatial_partition")]
@@ -483,6 +485,8 @@ pub struct RasterStreamWebsocketQuery {
     pub time_interval: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
     pub spatial_resolution: SpatialResolution,
+    #[serde(deserialize_with = "parse_band_selection")]
+    pub attributes: BandSelection, // TODO: has wrong type in openapi doc..
     pub result_type: RasterStreamWebsocketResultType,
 }
 
@@ -539,7 +543,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         spatial_bounds: query.spatial_bounds,
         time_interval: query.time_interval.into(),
         spatial_resolution: query.spatial_resolution,
-        attributes: BandSelection::first(),
+        attributes: query.attributes.clone().try_into()?,
     };
 
     // this is the only result type for now
@@ -1454,7 +1458,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
             spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: BandSelection::first(),
+            attributes: geoengine_datatypes::primitives::BandSelection::first(),
         };
 
         let processor = o.query_processor().unwrap().get_u8().unwrap();

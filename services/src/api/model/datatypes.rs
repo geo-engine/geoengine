@@ -1,8 +1,7 @@
-use crate::error::{self, Result};
+use crate::error::{self, Error, Result};
 use crate::identifier;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BandSelection, MultiLineStringAccess, MultiPointAccess,
-    MultiPolygonAccess,
+    AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
 use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
@@ -992,8 +991,29 @@ impl From<QueryRectangle<SpatialPartition2D>>
             spatial_bounds: value.spatial_bounds.into(),
             time_interval: value.time_interval.into(),
             spatial_resolution: value.spatial_resolution.into(),
-            attributes: BandSelection::first(), // TODO: adjust once API supports attribute selection
+            attributes: geoengine_datatypes::primitives::BandSelection::first(), // TODO: adjust once API supports attribute selection
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema)]
+
+pub struct BandSelection(pub Vec<usize>);
+
+impl From<geoengine_datatypes::primitives::BandSelection> for BandSelection {
+    fn from(value: geoengine_datatypes::primitives::BandSelection) -> Self {
+        Self(value.as_vec().into_iter().map(|b| b as usize).collect())
+    }
+}
+
+impl TryFrom<BandSelection> for geoengine_datatypes::primitives::BandSelection {
+    type Error = Error;
+
+    fn try_from(value: BandSelection) -> Result<Self> {
+        geoengine_datatypes::primitives::BandSelection::new(
+            value.0.into_iter().map(|b| b as u32).collect(),
+        )
+        .context(error::DataType)
     }
 }
 
@@ -1567,7 +1587,7 @@ pub enum RasterColorizer {
 impl RasterColorizer {
     pub fn band_selection(&self) -> BandSelection {
         match self {
-            RasterColorizer::SingleBand { band, .. } => BandSelection::new_single(*band),
+            RasterColorizer::SingleBand { band, .. } => BandSelection(vec![*band as usize]),
         }
     }
 }
