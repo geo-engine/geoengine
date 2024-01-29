@@ -88,7 +88,7 @@ pub struct PermissionListOptions {
         ("resource_type" = String, description = "Resource Type"),
         ("resource_id" = String, description = "Resource Id"),
         PermissionListOptions,
-    ),    
+    ),
     security(
         ("session_token" = [])
     )
@@ -106,12 +106,9 @@ where
     let options = options.into_inner();
 
     let db = app_ctx.session_context(session).db();
-    let permissions = db.list_permissions(
-        resource_id,
-        options.offset,
-        options.limit,
-    )
-    .await?;
+    let permissions = db
+        .list_permissions(resource_id, options.offset, options.limit)
+        .await?;
 
     Ok(web::Json(permissions))
 }
