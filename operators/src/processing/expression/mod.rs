@@ -1,7 +1,4 @@
-use self::{
-    codegen::ExpressionAst,
-    query_processor::{ExpressionInput, ExpressionQueryProcessor},
-};
+use self::query_processor::{ExpressionInput, ExpressionQueryProcessor};
 use crate::{
     engine::{
         CanonicOperatorName, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
@@ -14,19 +11,15 @@ use crate::{
 };
 use async_trait::async_trait;
 use geoengine_datatypes::{primitives::Measurement, raster::RasterDataType};
+use geoengine_expression::{
+    DataType, ExpressionAst, ExpressionDependencies, ExpressionParser, LinkedExpression, Parameter,
+};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-pub use self::codegen::Parameter;
-pub use self::compiled::LinkedExpression;
 pub use self::error::ExpressionError;
-pub use self::parser::ExpressionParser;
 
-mod codegen;
-mod compiled;
 mod error;
-mod functions;
-mod parser;
 mod query_processor;
 
 /// Parameters for the `Expression` operator.
@@ -92,10 +85,13 @@ impl RasterOperator for Expression {
             })
             .collect::<Vec<_>>();
 
-        let expression = ExpressionParser::new(&parameters)?.parse(
-            "expression", // TODO: generate and store a unique name
-            &self.params.expression,
-        )?;
+        let expression = ExpressionParser::new(&parameters, DataType::Number)
+            .map_err(ExpressionError::from)?
+            .parse(
+                "expression", // TODO: generate and store a unique name
+                &self.params.expression,
+            )
+            .map_err(ExpressionError::from)?;
 
         let result_descriptor = RasterResultDescriptor {
             data_type: self.params.output_type,
@@ -165,7 +161,16 @@ impl InitializedRasterOperator for InitializedExpression {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let output_type = self.result_descriptor().data_type;
 
-        let expression = LinkedExpression::new(&self.expression)?;
+        // TODO: (a) use a cache for the expression dependencies
+        // TODO: (b) spawn a blocking task for the compilation process
+        let expression_dependencies =
+            ExpressionDependencies::new().map_err(ExpressionError::from)?;
+        let expression = LinkedExpression::new(
+            self.expression.name(),
+            &self.expression.code(),
+            &expression_dependencies,
+        )
+        .map_err(ExpressionError::from)?;
 
         let source_processor = self.source.query_processor()?.into_f64();
 

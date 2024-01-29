@@ -18,7 +18,7 @@ use pest_derive::Parser;
 use snafu::{OptionExt, ResultExt};
 use std::{
     cell::RefCell,
-    collections::{hash_map, BTreeSet, HashMap, HashSet},
+    collections::{hash_map, BTreeSet, HashMap},
     rc::Rc,
     sync::OnceLock,
 };
@@ -72,14 +72,6 @@ impl ExpressionParser {
                 );
             }
         };
-
-        let mut numeric_parameters = HashSet::with_capacity(parameters.len());
-        for parameter in parameters {
-            match parameter {
-                Parameter::Number(name) => numeric_parameters.insert(name.clone()),
-                _ => false, // TODO: handle properly
-            };
-        }
 
         Ok(Self {
             parameters: parameters.to_vec(),
@@ -622,6 +614,7 @@ mod tests {
             parse("expression", &[], "1"),
             quote! {
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     Some(1f64)
                 }
@@ -635,6 +628,7 @@ mod tests {
                 #ADD_FN
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn foo() -> Option<f64> {
                     import_add__n_n(Some(1f64), Some(2f64))
                 }
@@ -648,6 +642,7 @@ mod tests {
                 #ADD_FN
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn bar() -> Option<f64> {
                     import_add__n_n(Some(-1f64), Some(2f64))
                 }
@@ -661,6 +656,7 @@ mod tests {
                 #SUB_FN
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn baz() -> Option<f64> {
                     import_sub__n_n(Some(1f64), Some(-2f64))
                 }
@@ -682,6 +678,7 @@ mod tests {
                 }
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     import_add__n_n(
                         Some(1f64),
@@ -698,6 +695,7 @@ mod tests {
                 #POW_FN
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     import_pow__n_n(Some(2f64) , Some(4f64))
                 }
@@ -714,6 +712,7 @@ mod tests {
                 #ADD_FN
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     import_add__n_n(a, Some(1f64))
                 }
@@ -729,6 +728,7 @@ mod tests {
                 #SUB_FN
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn ndvi(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                     import_div__n_n(
                         import_sub__n_n(a, b),
@@ -755,6 +755,7 @@ mod tests {
                 }
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     import_max__n_n(a, Some(0f64))
                 }
@@ -778,6 +779,7 @@ mod tests {
                 }
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     import_pow__n_n(import_sqrt__n(a), Some(2f64))
                 }
@@ -814,6 +816,7 @@ mod tests {
                 }
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn waves() -> Option<f64> {
                     import_cos__n(import_sin__n(import_tan__n(import_acos__n(import_asin__n(import_atan__n(Some(1f64)))))))
                 }
@@ -838,6 +841,7 @@ mod tests {
                 }
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn non_linear() -> Option<f64> {
                     import_ln__n(import_log10__n(import_pi_()))
                 }
@@ -863,6 +867,7 @@ mod tests {
                 }
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn rounding() -> Option<f64> {
                     import_add__n_n(
                         import_add__n_n(
@@ -890,6 +895,7 @@ mod tests {
                 }
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn radians() -> Option<f64> {
                     import_add__n_n(import_to_radians__n(Some(1.3f64)), import_to_degrees__n(Some(1.3f64)))
                 }
@@ -913,6 +919,7 @@ mod tests {
                 }
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn mod_e() -> Option<f64> {
                     import_mod__n_n(Some(5f64), import_e_())
                 }
@@ -934,6 +941,7 @@ mod tests {
             parse("expression", &["a"], "if a is nodata { 0 } else { a }"),
             quote! {
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     if ((a) == (None)) {
                         Some(0f64)
@@ -961,6 +969,7 @@ mod tests {
                 #MUL_FN
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression(A: Option<f64>, B: Option<f64>) -> Option<f64> {
                     if ((A) == (None)) {
                         import_mul__n_n(B, Some(2f64))
@@ -982,6 +991,7 @@ mod tests {
             parse("expression", &[], "if true { 1 } else { 2 }"),
             quote! {
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if true {
                         Some(1f64)
@@ -1003,6 +1013,7 @@ mod tests {
                 #ADD_FN
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if true {
                         Some(1f64)
@@ -1027,6 +1038,7 @@ mod tests {
                 #SUB_FN
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if ((Some(1f64)) < (Some(2f64))) {
                         Some(1f64)
@@ -1062,6 +1074,7 @@ mod tests {
                 }
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if ((true) && (false)) {
                         Some(1f64)
@@ -1090,6 +1103,7 @@ mod tests {
                 #ADD_FN
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     let a = Some(1.2f64);
                     let b = Some(2f64);
@@ -1221,6 +1235,7 @@ mod tests {
                 }
 
                 #[no_mangle]
+                #[allow(unused_variables)]
                 pub extern "Rust" fn make_centroid(
                     geom: Option<geo::geometry::MultiPolygon<geo::Polygon<f64>>>
                 ) -> Option<geo::geometry::MultiPoint<geo::Point<f64>>> {

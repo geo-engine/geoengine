@@ -26,6 +26,7 @@ gdal = "0.16"
 gdal-sys = "0.9"
 geo = "0.27"
 geoengine-datatypes = { path = "../datatypes" }
+geoengine-expression = { path = "../expression" }
 itertools = "0.12"
 libloading = "0.8"
 log = "0.4"
@@ -36,8 +37,6 @@ num = "0.4"
 ouroboros = "0.18"
 ordered-float = { version = "4.1", features = ["serde"] }
 paste = "1.0"
-pest = "2.1"
-pest_derive = "2.1"
 pin-project = "1.0"
 postgres-protocol = "0.6.3"
 postgres-types = { version = "0.2", features = [
@@ -45,8 +44,6 @@ postgres-types = { version = "0.2", features = [
   "with-chrono-0_4",
   "with-uuid-1",
 ] }
-proc-macro2 = "1.0"
-quote = "1.0"
 rayon = "1.5"
 rustc-hash = { version = "1.0", default-features = false }
 serde = { version = "1.0", features = ["derive"] }

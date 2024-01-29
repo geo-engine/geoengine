@@ -1,5 +1,8 @@
-use std::{marker::PhantomData, sync::Arc};
-
+use super::error::ExpressionError;
+use crate::{
+    engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterResultDescriptor},
+    util::Result,
+};
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
@@ -12,15 +15,10 @@ use geoengine_datatypes::{
         RasterTile2D,
     },
 };
+use geoengine_expression::LinkedExpression;
 use libloading::Symbol;
 use num_traits::AsPrimitive;
-
-use crate::{
-    engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterResultDescriptor},
-    util::Result,
-};
-
-use super::compiled::LinkedExpression;
+use std::{marker::PhantomData, sync::Arc};
 
 pub struct ExpressionInput<const N: usize> {
     pub raster: BoxRasterQueryProcessor<f64>,
@@ -214,7 +212,9 @@ where
     ) -> Result<GridOrEmpty2D<TO>> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
-            program.function_1::<Option<f64>>()?
+            program
+                .function_1::<Option<f64>>()
+                .map_err(ExpressionError::from)?
         };
 
         let map_fn = |in_value: Option<f64>| {
@@ -315,7 +315,9 @@ where
     ) -> Result<GridOrEmpty2D<TO>> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
-            program.function_2::<Option<f64>, Option<f64>>()?
+            program
+                .function_2::<Option<f64>, Option<f64>>()
+                .map_err(ExpressionError::from)?
         };
 
         let map_fn = |lin_idx: usize| {
@@ -461,7 +463,7 @@ macro_rules! impl_expression_tuple_processor {
             ) -> Result<GridOrEmpty2D<TO>> {
                 let expression: Symbol<$FN_T> = unsafe {
                     // we have to "trust" that the function has the signature we expect
-                    program.function_nary()?
+                    program.function_nary().map_err(ExpressionError::from)?
                 };
 
                 let map_fn = |lin_idx: usize| {

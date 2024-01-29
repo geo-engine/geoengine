@@ -32,7 +32,11 @@ impl ExpressionDependencies {
 
         Self::copy_deps_workspace(cargo_workspace.path()).context(error::DepsWorkspace)?;
 
-        let dependencies = Self::cargo_build(cargo_workspace.path()).context(error::DepsBuild)?;
+        let dependencies = Self::cargo_build(cargo_workspace.path()).map_err(|e| {
+            ExpressionExecutionError::DepsBuild {
+                debug: format!("{e:?}"),
+            }
+        })?;
 
         Ok(Self {
             _cargo_workspace: cargo_workspace,
@@ -59,8 +63,11 @@ impl ExpressionDependencies {
     fn cargo_build(cargo_workspace: &Path) -> Result<PathBuf, Whatever> {
         let homedir = cargo::util::homedir(cargo_workspace)
             .whatever_context("Could not find home directory, e.g. $HOME")?;
+
+        // TODO: make shell output configurable?
+        let dev_null_shell = Shell::from_write(Box::new(std::io::empty()));
         let cargo_config =
-            cargo::util::config::Config::new(Shell::new(), cargo_workspace.into(), homedir);
+            cargo::util::config::Config::new(dev_null_shell, cargo_workspace.into(), homedir);
 
         let workspace = Workspace::new(&cargo_workspace.join("Cargo.toml"), &cargo_config)
             .whatever_context("Invalid workspace")?;

@@ -70,8 +70,13 @@ impl ToTokens for ExpressionAst {
 
         let dtype = self.out_type;
 
+        // TODO: allow non-snake case names…
+        // - for variables, e.g. expression(A, B)
+        // - for functions, e.g., import__foo_n
+
         tokens.extend(quote! {
             #[no_mangle]
+            #[allow(unused_variables)]
             pub extern "Rust" fn #fn_name (#(#params),*) -> Option<#dtype> {
                 #content
             }
@@ -87,11 +92,6 @@ pub enum AstNode {
         name: Identifier,
         data_type: DataType,
     },
-    // Operation {
-    //     left: Box<AstNode>,
-    //     op: AstOperator,
-    //     right: Box<AstNode>,
-    // },
     Function {
         function: Function,
         args: Vec<AstNode>,
@@ -131,9 +131,6 @@ impl ToTokens for AstNode {
             Self::Constant(n) => quote! { Some(#n) },
             Self::NoData => quote! { None },
             Self::Variable { name, .. } => quote! { #name },
-            // Self::Operation { left, op, right } => {
-            //     quote! { apply(#left, #right, #op) }
-            // }
             Self::Function { function, args } => {
                 let fn_name = function.name();
                 quote! { #fn_name(#(#args),*) }
@@ -227,27 +224,6 @@ impl std::fmt::Display for Identifier {
         std::fmt::Display::fmt(&self.0, f)
     }
 }
-
-// #[derive(Debug, Clone)]
-// pub enum AstOperator {
-//     Add,
-//     Subtract,
-//     Multiply,
-//     Divide,
-// }
-
-// impl ToTokens for AstOperator {
-//     fn to_tokens(&self, tokens: &mut TokenStream) {
-//         let new_tokens = match self {
-//             AstOperator::Add => quote! { std::ops::Add::add },
-//             AstOperator::Subtract => quote! { std::ops::Sub::sub },
-//             AstOperator::Multiply => quote! { std::ops::Mul::mul },
-//             AstOperator::Divide => quote! { std::ops::Div::div },
-//         };
-
-//         tokens.extend(new_tokens);
-//     }
-// }
 
 #[derive(Debug, Clone)]
 pub struct Branch {

@@ -62,7 +62,7 @@ pub trait GeoFeatureCollectionModifications<G: Geometry> {
     type Output;
 
     /// Replaces the current geometries and returns an updated collection.
-    fn replace_geometries(&self, time_intervals: Vec<G>) -> Result<Self::Output>;
+    fn replace_geometries(&self, geometries: Vec<G>) -> Result<Self::Output>;
 }
 
 impl<G> GeoFeatureCollectionModifications<G> for FeatureCollection<G>

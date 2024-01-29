@@ -1,5 +1,5 @@
 use crate::codegen::DataType;
-use snafu::{Snafu, Whatever};
+use snafu::Snafu;
 use std::fmt::{Debug, Display};
 
 /// An expression error type that concern the compilation, linkage and execution of an expression
@@ -17,7 +17,7 @@ pub enum ExpressionExecutionError {
     DepsBuild {
         /// [`cargo::util::errors::CargoResult`] has a lifetime that refers to a [`cargo::util::config::Config`].
         /// This is a debug print.
-        source: Whatever,
+        debug: String,
     },
 
     #[snafu(display("Cannot store source code in temporary file"))]
@@ -42,6 +42,7 @@ pub enum ExpressionExecutionError {
     },
 }
 
+#[derive(Clone, PartialEq, Eq)]
 pub struct ExpressionParserError {
     source: crate::parser::PestError,
 }
@@ -104,7 +105,7 @@ impl ExpressionSemanticError {
 }
 
 /// An expression error type that concern the parsing of user code
-#[derive(Debug, Snafu)]
+#[derive(Debug, Snafu, Clone, PartialEq, Eq)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum ExpressionSemanticError {
@@ -233,4 +234,17 @@ fn display_strings<S: Display>(strings: &[S]) -> String {
     }
     output.push(']');
     output
+}
+
+/// This module only ensures that the error types are `Send` and `Sync`.
+mod send_sync_ensurance {
+    use super::*;
+
+    trait SendSyncEnsurance: Send + Sync {}
+
+    impl SendSyncEnsurance for ExpressionExecutionError {}
+
+    impl SendSyncEnsurance for ExpressionSemanticError {}
+
+    impl SendSyncEnsurance for ExpressionParserError {}
 }
