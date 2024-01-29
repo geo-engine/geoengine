@@ -872,7 +872,10 @@ mod tests {
         );
 
         assert!(
-            try_parse("will_not_compile", &[], DataType::Number, "max(1, 2, 3)").is_err(),
+            matches!(
+                try_parse("will_not_compile", &[], DataType::Number, "max(1, 2, 3)").unwrap_err(),
+                ExpressionParserError::InvalidFunctionArguments { .. }
+            ),
             "function called with wrong signature"
         );
     }
@@ -1052,28 +1055,34 @@ mod tests {
         );
 
         assert!(
-            try_parse(
-                "expression",
-                &[Parameter::Number("A".into())],
-                DataType::Number,
-                "let b = A;
-                let b = C;
-                let c = 2;
-                a + b",
-            )
-            .is_err(),
+            matches!(
+                try_parse(
+                    "expression",
+                    &[Parameter::Number("A".into())],
+                    DataType::Number,
+                    "let b = A;
+                    let b = C;
+                    let c = 2;
+                    a + b",
+                )
+                .unwrap_err(),
+                ExpressionParserError::UnknownVariable { .. }
+            ),
             "cannot use variable before declaration"
         );
 
         assert!(
-            try_parse(
-                "expression",
-                &[Parameter::Number("A".into())],
-                DataType::Number,
-                "let A = 2;
-                a",
-            )
-            .is_err(),
+            matches!(
+                try_parse(
+                    "expression",
+                    &[Parameter::Number("A".into())],
+                    DataType::Number,
+                    "let A = 2;
+                    a",
+                )
+                .unwrap_err(),
+                ExpressionParserError::VariableShadowing { .. }
+            ),
             "cannot shadow variable"
         );
     }
@@ -1081,57 +1090,72 @@ mod tests {
     #[test]
     fn it_fails_when_using_wrong_datatypes() {
         assert!(
-            try_parse(
-                "expression",
-                &[
-                    Parameter::Number("A".into()),
-                    Parameter::MultiPoint("B".into())
-                ],
-                DataType::Number,
-                "if true { A } else { B }",
-            )
-            .is_err(),
+            matches!(
+                try_parse(
+                    "expression",
+                    &[
+                        Parameter::Number("A".into()),
+                        Parameter::MultiPoint("B".into())
+                    ],
+                    DataType::Number,
+                    "if true { A } else { B }",
+                )
+                .unwrap_err(),
+                ExpressionParserError::AllBranchesMustOutputSameType
+            ),
             "cannot use branches of different data types"
         );
 
         assert!(
-            try_parse(
-                "expression",
-                &[
-                    Parameter::Number("A".into()),
-                    Parameter::MultiPoint("B".into())
-                ],
-                DataType::Number,
-                "if B IS NODATA { A } else { A }",
-            )
-            .is_err(),
+            matches!(
+                try_parse(
+                    "expression",
+                    &[
+                        Parameter::Number("A".into()),
+                        Parameter::MultiPoint("B".into())
+                    ],
+                    DataType::Number,
+                    "if B IS NODATA { A } else { A }",
+                )
+                .unwrap_err(),
+                ExpressionParserError::ComparisonsMustBeUsedWithNumbers
+            ),
             "cannot use non-numeric comparison"
         );
 
         assert!(
-            try_parse(
-                "expression",
-                &[Parameter::MultiPoint("A".into())],
-                DataType::Number,
-                "A + 1",
-            )
-            .is_err(),
+            matches!(
+                try_parse(
+                    "expression",
+                    &[Parameter::MultiPoint("A".into())],
+                    DataType::Number,
+                    "A + 1",
+                )
+                .unwrap_err(),
+                ExpressionParserError::OperatorsMustBeUsedWithNumbers
+            ),
             "cannot use non-numeric operators"
         );
 
         assert!(
-            try_parse(
-                "expression",
-                &[Parameter::MultiPoint("A".into())],
-                DataType::Number,
-                "sqrt(A)",
-            )
-            .is_err(),
+            matches!(
+                try_parse(
+                    "expression",
+                    &[Parameter::MultiPoint("A".into())],
+                    DataType::Number,
+                    "sqrt(A)",
+                )
+                .unwrap_err(),
+                ExpressionParserError::InvalidFunctionArguments { .. }
+            ),
             "cannot call numeric fn with geom"
         );
 
         assert!(
-            try_parse("expression", &[], DataType::MultiPoint, "1",).is_err(),
+            matches!(
+                try_parse("expression", &[], DataType::MultiPoint, "1",).unwrap_err(),
+                ExpressionParserError::WrongOutputType { .. }
+            ),
             "cannot call with wrong output"
         );
     }
