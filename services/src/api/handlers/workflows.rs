@@ -486,7 +486,8 @@ pub struct RasterStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_spatial_resolution")]
     pub spatial_resolution: SpatialResolution,
     #[serde(deserialize_with = "parse_band_selection")]
-    pub attributes: BandSelection, // TODO: has wrong type in openapi doc..
+    #[param(value_type = String)]
+    pub attributes: BandSelection,
     pub result_type: RasterStreamWebsocketResultType,
 }
 

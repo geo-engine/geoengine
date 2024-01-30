@@ -1,3 +1,4 @@
+use crate::api::model::datatypes::BandSelection;
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution};
 use serde::de;
 use serde::de::Error;
@@ -6,8 +7,6 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::str::FromStr;
 use url::Url;
-
-use crate::api::model::datatypes::BandSelection;
 
 /// Parse the `SpatialResolution` of a request by parsing `x,y`, e.g. `0.1,0.1`.
 pub fn parse_spatial_resolution<'de, D>(deserializer: D) -> Result<SpatialResolution, D::Error>

@@ -24,8 +24,7 @@ pub struct QueryRectangle<
 
 pub trait QueryAttributeSelection: Clone + Send + Sync {}
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct BandSelection(Vec<u32>);
 
 impl BandSelection {

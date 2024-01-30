@@ -997,7 +997,6 @@ impl From<QueryRectangle<SpatialPartition2D>>
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema)]
-
 pub struct BandSelection(pub Vec<usize>);
 
 impl From<geoengine_datatypes::primitives::BandSelection> for BandSelection {
