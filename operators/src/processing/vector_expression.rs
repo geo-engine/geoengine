@@ -9,22 +9,22 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
-    GeoFeatureCollectionModifications, VectorDataType,
+    IntoGeometryOptionsIterator, VectorDataType,
 };
 use geoengine_datatypes::primitives::{
-    FeatureData, FeatureDataRef, FeatureDataType, FloatOptionsParIter, Geometry, Measurement,
-    MultiLineString, MultiPoint, MultiPolygon, NoGeometry, VectorQueryRectangle,
+    AsGeoOption, FeatureData, FeatureDataRef, FeatureDataType, FloatOptionsParIter, Geometry,
+    Measurement, MultiLineStringRef, MultiPointRef, MultiPolygonRef, NoGeometry,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use geoengine_expression::{
     DataType, ExpressionDependencies, ExpressionParser, LinkedExpression,
     Parameter as ExpressionParameter,
 };
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 /// A vector expression creates or replaces a column in a `FeatureCollection` by evaluating an expression.
@@ -36,6 +36,7 @@ impl OperatorName for VectorExpression {
 }
 
 const MAX_INPUT_COLUMNS: usize = 2;
+const PARALLEL_MIN_BATCH_SIZE: usize = 32; // TODO: find good default
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,14 +48,26 @@ pub struct VectorExpressionParams {
     /// The expression to evaluate.
     pub expression: String,
 
-    /// The name of the new column.
+    /// The type and name of the new column.
     pub output_column: OutputColumn,
 
+    /// The expression will always include the geometry column.
+    /// Thus, it is necessary to specify the variable name of the geometry column.
+    /// The default is `geom`.
+    #[serde(default = "geometry_default_column_name")]
+    pub geometry_column_name: String,
+
     /// The measurement of the new column.
+    /// The default is [`Measurement::Unitless`].
     #[serde(default)]
     pub output_measurement: Measurement,
 }
 
+fn geometry_default_column_name() -> String {
+    "geom".into()
+}
+
+/// Specify the output of the expression.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "type", content = "value", rename_all = "camelCase")]
 pub enum OutputColumn {
@@ -71,6 +84,7 @@ struct InitializedVectorExpression {
     features: Box<dyn InitializedVectorOperator>,
     expression: Arc<LinkedExpression>,
     input_columns: Vec<String>,
+    geometry_column_name: String,
     output_column: OutputColumn,
 }
 
@@ -122,6 +136,8 @@ impl VectorOperator for VectorExpression {
 
         let expression = Arc::new(compile_expression(
             &self.params.expression,
+            self.params.geometry_column_name.clone(),
+            result_descriptor.data_type,
             &self.params.input_columns,
             expression_output_type,
         )?);
@@ -132,6 +148,7 @@ impl VectorOperator for VectorExpression {
             features: initialized_source.vector,
             expression,
             input_columns: self.params.input_columns,
+            geometry_column_name: self.params.geometry_column_name,
             output_column: self.params.output_column,
         };
 
@@ -206,14 +223,26 @@ fn insert_new_column(
 
 fn compile_expression(
     expression_code: &str,
+    geom_name: String,
+    geom_type: VectorDataType,
     parameters: &[String],
     output_type: DataType,
 ) -> Result<LinkedExpression, VectorExpressionError> {
-    let parameters = parameters
-        .iter()
-        .map(|p| ExpressionParameter::Number(p.into()))
-        .collect::<Vec<_>>();
-    let expression = ExpressionParser::new(&parameters, output_type)?.parse(
+    let geom_parameter = match geom_type {
+        VectorDataType::Data | VectorDataType::MultiPoint => {
+            ExpressionParameter::MultiPoint(geom_name.into())
+        }
+        VectorDataType::MultiLineString => ExpressionParameter::MultiLineString(geom_name.into()),
+        VectorDataType::MultiPolygon => ExpressionParameter::MultiPolygon(geom_name.into()),
+    };
+    let mut expression_parameters = Vec::with_capacity(parameters.len() + 1);
+    expression_parameters.push(geom_parameter);
+    expression_parameters.extend(
+        parameters
+            .iter()
+            .map(|p| ExpressionParameter::Number(p.into())),
+    );
+    let expression = ExpressionParser::new(&expression_parameters, output_type)?.parse(
         "expression", // TODO: generate and store a unique name
         expression_code,
     )?;
@@ -222,9 +251,10 @@ fn compile_expression(
     // TODO: (b) spawn a blocking task for the compilation process
     let expression_dependencies = ExpressionDependencies::new()?;
 
-    Ok(LinkedExpression::new(
-        expression.name(),
-        &expression.code(),
+    eprintln!("{}", expression.pretty_code()); // TODO: remove
+
+    Ok(LinkedExpression::from_ast(
+        &expression,
         &expression_dependencies,
     )?)
 }
@@ -244,6 +274,7 @@ impl InitializedVectorOperator for InitializedVectorExpression {
                     result_descriptor: self.result_descriptor.clone(),
                     expression: self.expression.clone(),
                     input_columns: self.input_columns.clone(),
+                    // geometry_column_name: self.geometry_column_name.clone(),
                     output_column,
                 }
                 .boxed()
@@ -257,6 +288,7 @@ impl InitializedVectorOperator for InitializedVectorExpression {
                 result_descriptor: self.result_descriptor.clone(),
                 expression: self.expression.clone(),
                 input_columns: self.input_columns.clone(),
+                // geometry_column_name: self.geometry_column_name.clone(),
                 output_column,
             }
             .boxed()
@@ -269,6 +301,7 @@ impl InitializedVectorOperator for InitializedVectorExpression {
                 result_descriptor: self.result_descriptor.clone(),
                 expression: self.expression.clone(),
                 input_columns: self.input_columns.clone(),
+                // geometry_column_name: self.geometry_column_name.clone(),
                 output_column,
             }
             .boxed()
@@ -281,6 +314,7 @@ impl InitializedVectorOperator for InitializedVectorExpression {
                 result_descriptor: self.result_descriptor.clone(),
                 expression: self.expression.clone(),
                 input_columns: self.input_columns.clone(),
+                // geometry_column_name: self.geometry_column_name.clone(),
                 output_column,
             }
             .boxed()
@@ -303,36 +337,46 @@ where
     result_descriptor: VectorResultDescriptor,
     expression: Arc<LinkedExpression>,
     input_columns: Vec<String>,
+    // geometry_column_name: String,
     output_column: String,
 }
 
-pub struct VectorExpressionGeometryProcessor<Q, GIn, GOut>
-where
-    GIn: Geometry + 'static + Sized,
-    GOut: Geometry + 'static + Sized,
-    Q: VectorQueryProcessor<VectorType = FeatureCollection<GIn>> + 'static + Sized,
-    // TODO: FeatureCollection<G>: GeoFeatureCollectionModifications<G>,
-{
-    source: Q,
-    result_descriptor: VectorResultDescriptor,
-    expression: Arc<LinkedExpression>,
-    input_columns: Vec<String>,
-    _out: PhantomData<GOut>,
-}
+// pub struct VectorExpressionGeometryProcessor<Q, GIn, GOut>
+// where
+//     GIn: Geometry + 'static + Sized,
+//     GOut: Geometry + 'static + Sized,
+//     Q: VectorQueryProcessor<VectorType = FeatureCollection<GIn>> + 'static + Sized,
+//     // TODO: FeatureCollection<G>: GeoFeatureCollectionModifications<G>,
+// {
+//     source: Q,
+//     result_descriptor: VectorResultDescriptor,
+//     expression: Arc<LinkedExpression>,
+//     input_columns: Vec<String>,
+//     _out: PhantomData<GOut>,
+// }
+
+type ExpressionGeometryType<'g, G> = <<FeatureCollection<G> as IntoGeometryOptionsIterator<'g>>::GeometryType as AsExpressionGeo>::ExpressionGeometryType;
 
 #[async_trait]
 impl<Q, G> VectorQueryProcessor for VectorExpressionColumnProcessor<Q, G>
 where
     Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
     G: Geometry + ArrowTyped + 'static,
+    FeatureCollection<G>: for<'g> IntoGeometryOptionsIterator<'g> + 'static,
+    for<'g> <FeatureCollection<G> as IntoGeometryOptionsIterator<'g>>::GeometryType:
+        AsExpressionGeo + Send,
+    for<'g> <<FeatureCollection<G> as IntoGeometryOptionsIterator<'g>>::GeometryOptionIterator as IntoParallelIterator>::Iter:
+        IndexedParallelIterator + Send,
 {
     type VectorType = FeatureCollection<G>;
+
 
     async fn vector_query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
+
         let stream = self.source.vector_query(query, ctx).await?;
 
         let stream = stream.then(move |collection| async move {
@@ -351,46 +395,75 @@ where
                     })
                     .collect();
 
-                // TODO: add batch size to parallel iteration
+                let float_inputs: Vec<FloatOptionsParIter> = inputs
+                    .iter()
+                    .map(FeatureDataRef::float_options_par_iter)
+                    .collect::<Vec<_>>();
 
-                let result: Vec<Option<f64>> = {
-                    let float_inputs: Vec<FloatOptionsParIter> = inputs
-                        .iter()
-                        .map(FeatureDataRef::float_options_par_iter)
-                        .collect::<Vec<_>>();
+                // TODO: custom type for geometry input
+                let geom_input = collection.geometry_options().into_par_iter().map(|geometry_option| {
+                    if let Some(geometry) = geometry_option.as_ref() {
+                        geometry.as_expression_geo()
+                    } else {
+                        None
+                    }
+                });
 
-                    match float_inputs.len() {
-                        1 => {
-                            let [a] = <[_; 1]>::try_from(float_inputs)
-                                .expect("it matches the match condition");
-                            let f = unsafe {
-                                expression.function_nary::<fn(Option<f64>) -> Option<f64>>()
-                            }
-                            .map_err(VectorExpressionError::from)?;
-
-                            Ok(a.map(*f).collect::<Vec<_>>())
+                let result: Vec<Option<f64>> = match float_inputs.len() {
+                    0 => {
+                        let f = unsafe {
+                            expression.function_nary::<fn(
+                                Option<ExpressionGeometryType<'_, G>>,
+                            ) -> Option<f64>>()
                         }
-                        2 => {
-                            let [a, b] = <[_; 2]>::try_from(float_inputs)
-                                .expect("it matches the match condition");
-                            let f = unsafe {
-                                expression
-                                    .function_nary::<fn(Option<f64>, Option<f64>) -> Option<f64>>()
-                            }
-                            .map_err(VectorExpressionError::from)?;
+                        .map_err(VectorExpressionError::from)?;
 
-                            Ok((a, b)
+                        Ok(geom_input
+                            .with_min_len(PARALLEL_MIN_BATCH_SIZE)
+                            .map(*f)
+                            .collect::<Vec<_>>())
+                    }
+                    1 => {
+                        let [a] = <[_; 1]>::try_from(float_inputs)
+                            .expect("it matches the match condition");
+                        let f =
+                            unsafe { expression.function_nary::<fn(
+                                Option<ExpressionGeometryType<'_, G>>,
+                                Option<f64>,
+                            ) -> Option<f64>>() }
+                                .map_err(VectorExpressionError::from)?;
+
+                            Ok((geom_input, a)
                                 .into_par_iter()
-                                .map(|(a, b)| f(a, b))
+                                .with_min_len(PARALLEL_MIN_BATCH_SIZE)
+                                .map(|(geom, a)| f(geom, a))
                                 .collect::<Vec<_>>())
+                    }
+                    2 => {
+                        let [a, b] = <[_; 2]>::try_from(float_inputs)
+                            .expect("it matches the match condition");
+                        let f = unsafe {
+                            expression
+                                .function_nary::<fn(
+                                    Option<ExpressionGeometryType<'_, G>>,
+                                    Option<f64>,
+                                    Option<f64>,
+                                ) -> Option<f64>>()
                         }
-                        // TODO: implement more cases
-                        other => Err(VectorExpressionError::TooManyInputColumns {
-                            max: MAX_INPUT_COLUMNS,
-                            found: other,
-                        }),
-                    }?
-                };
+                        .map_err(VectorExpressionError::from)?;
+
+                        Ok((geom_input, a, b)
+                                .into_par_iter()
+                                .with_min_len(PARALLEL_MIN_BATCH_SIZE)
+                                .map(|(geom, a, b)| f(geom, a, b))
+                                .collect::<Vec<_>>())
+                    }
+                    // TODO: implement more cases
+                    other => Err(VectorExpressionError::TooManyInputColumns {
+                        max: MAX_INPUT_COLUMNS,
+                        found: other,
+                    }),
+                }?;
 
                 Ok(collection
                     .add_column(&output_column, FeatureData::NullableFloat(result))
@@ -406,6 +479,58 @@ where
 
     fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
         &self.result_descriptor
+    }
+}
+
+// fn call_expression_function<GIn, GOut>(
+//     expression: &Arc<LinkedExpression>,
+//     collection: &FeatureCollection<G>,
+//     input_columns: &[String],
+//     output_column: &str,
+// ) -> Result<FeatureCollection<G>, VectorExpressionError>
+// where
+//     G: Geometry + ArrowTyped + 'static,
+//     for<'i> FeatureCollection<G>: IntoGeometryOptionsIterator<'i>,
+// {
+//     todo!()
+// }
+
+/// Convenience trait for converting [`geoengine_datatypes`] types to [`geoengine_expression`] types.
+trait AsExpressionGeo: AsGeoOption {
+    type ExpressionGeometryType: Send;
+
+    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType>;
+}
+
+impl<'c> AsExpressionGeo for MultiPointRef<'c> {
+    type ExpressionGeometryType = geoengine_expression::MultiPoint;
+
+    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
+        self.as_geo_option().map(Into::into)
+    }
+}
+
+impl<'c> AsExpressionGeo for MultiLineStringRef<'c> {
+    type ExpressionGeometryType = geoengine_expression::MultiLineString;
+
+    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
+        self.as_geo_option().map(Into::into)
+    }
+}
+
+impl<'c> AsExpressionGeo for MultiPolygonRef<'c> {
+    type ExpressionGeometryType = geoengine_expression::MultiPolygon;
+
+    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
+        self.as_geo_option().map(Into::into)
+    }
+}
+
+impl AsExpressionGeo for NoGeometry {
+    type ExpressionGeometryType = geoengine_expression::MultiPoint;
+
+    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
+        self.as_geo_option().map(Into::into)
     }
 }
 
@@ -461,18 +586,22 @@ mod tests {
     };
     use geoengine_datatypes::{
         collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection, MultiPolygonCollection},
-        primitives::{BoundingBox2D, ColumnSelection, SpatialResolution, TimeInterval},
+        primitives::{
+            BoundingBox2D, ColumnSelection, MultiPoint, MultiPolygon, SpatialResolution,
+            TimeInterval,
+        },
         util::test::TestDefault,
     };
 
     #[test]
-    fn test_json() {
+    fn it_deserializes_the_operator() {
         let def: Operator<VectorExpressionParams, SingleVectorSource> = VectorExpression {
             params: VectorExpressionParams {
                 input_columns: vec!["foo".into(), "bar".into()],
                 expression: "foo + bar".into(),
                 output_column: OutputColumn::Column("baz".into()),
                 output_measurement: Measurement::Unitless,
+                geometry_column_name: "geom".to_string(),
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
                 .boxed()
@@ -490,6 +619,7 @@ mod tests {
                 "outputMeasurement": {
                     "type": "unitless",
                 },
+                "geometryColumnName": "geom",
             },
             "sources": {
                 "vector": {
@@ -508,7 +638,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_unary_float() {
+    async fn it_computes_unary_float_expressions() {
         let points = MultiPointCollection::from_slices(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)])
                 .unwrap()
@@ -529,6 +659,7 @@ mod tests {
                 expression: "2 * foo".into(),
                 output_column: OutputColumn::Column("bar".into()),
                 output_measurement: Measurement::Unitless,
+                geometry_column_name: "geom".to_string(),
             },
             sources: point_source.into(),
         }
@@ -586,7 +717,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_binary_float() {
+    async fn it_computes_binary_float_expressions() {
         let points = MultiPointCollection::from_slices(
             MultiPoint::many(vec![
                 (0.0, 0.1),
@@ -619,6 +750,7 @@ mod tests {
                 expression: "foo + bar".into(),
                 output_column: OutputColumn::Column("baz".into()),
                 output_measurement: Measurement::Unitless,
+                geometry_column_name: "geom".to_string(),
             },
             sources: point_source.into(),
         }
@@ -686,8 +818,53 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_unary_geom() {
-        let polygons = MultiPolygonCollection::from_slices(
+    async fn it_computes_the_area_from_a_geom() {
+        let polygons = MockFeatureCollectionSource::single(
+            MultiPolygonCollection::from_slices(
+                &[
+                    MultiPolygon::new(vec![vec![vec![
+                        (0.5, -0.5).into(),
+                        (4., -1.).into(),
+                        (0.5, -2.5).into(),
+                        (0.5, -0.5).into(),
+                    ]]])
+                    .unwrap(),
+                    MultiPolygon::new(vec![vec![vec![
+                        (0.5, -0.5).into(),
+                        (4., -1.).into(),
+                        (0.5, -2.5).into(),
+                        (0.5, -0.5).into(),
+                    ]]])
+                    .unwrap(),
+                ],
+                &[TimeInterval::new_unchecked(0, 1); 2],
+                &[("foo", FeatureData::NullableFloat(vec![Some(1.0), None]))],
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let result = compute_result::<MultiPolygonCollection>(
+            VectorExpression {
+                params: VectorExpressionParams {
+                    input_columns: vec![],
+                    expression: "2".into(),
+                    output_column: OutputColumn::Column("area".into()),
+                    output_measurement: Measurement::Unitless,
+                    geometry_column_name: "geom".to_string(),
+                },
+                sources: polygons.into(),
+            },
+            VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+                time_interval: TimeInterval::default(),
+                spatial_resolution: SpatialResolution::zero_point_one(),
+                attributes: ColumnSelection::all(),
+            },
+        )
+        .await;
+
+        let expected_result = MultiPolygonCollection::from_slices(
             &[
                 MultiPolygon::new(vec![vec![vec![
                     (0.5, -0.5).into(),
@@ -705,48 +882,69 @@ mod tests {
                 .unwrap(),
             ],
             &[TimeInterval::new_unchecked(0, 1); 2],
-            &[("foo", FeatureData::NullableFloat(vec![Some(1.0), None]))],
+            &[
+                ("foo", FeatureData::NullableFloat(vec![Some(1.0), None])),
+                (
+                    "area",
+                    FeatureData::NullableFloat(vec![Some(2.0), Some(2.0)]),
+                ),
+            ],
         )
         .unwrap();
 
-        let polygon_source = MockFeatureCollectionSource::single(polygons.clone()).boxed();
+        // TODO: maybe it is nicer to have something wrapping the actual data that we care about and just adds some cache info
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(&expected_result),
+            "{result:#?} != {expected_result:#?}",
+        );
+    }
 
-        let operator = VectorExpression {
-            params: VectorExpressionParams {
-                input_columns: vec![],
-                expression: "centroid(geom)".into(),
-                output_column: OutputColumn::Geometry(VectorDataType::MultiPoint),
-                output_measurement: Measurement::Unitless,
+    #[tokio::test]
+    async fn it_computes_the_centroid_of_a_geom() {
+        let polygons = MockFeatureCollectionSource::single(
+            MultiPolygonCollection::from_slices(
+                &[
+                    MultiPolygon::new(vec![vec![vec![
+                        (0.5, -0.5).into(),
+                        (4., -1.).into(),
+                        (0.5, -2.5).into(),
+                        (0.5, -0.5).into(),
+                    ]]])
+                    .unwrap(),
+                    MultiPolygon::new(vec![vec![vec![
+                        (0.5, -0.5).into(),
+                        (4., -1.).into(),
+                        (0.5, -2.5).into(),
+                        (0.5, -0.5).into(),
+                    ]]])
+                    .unwrap(),
+                ],
+                &[TimeInterval::new_unchecked(0, 1); 2],
+                &[("foo", FeatureData::NullableFloat(vec![Some(1.0), None]))],
+            )
+            .unwrap(),
+        )
+        .boxed();
+
+        let result = compute_result::<MultiPointCollection>(
+            VectorExpression {
+                params: VectorExpressionParams {
+                    input_columns: vec![],
+                    expression: "centroid(geom)".into(),
+                    output_column: OutputColumn::Geometry(VectorDataType::MultiPoint),
+                    output_measurement: Measurement::Unitless,
+                    geometry_column_name: "geom".to_string(),
+                },
+                sources: polygons.into(),
             },
-            sources: polygon_source.into(),
-        }
-        .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
+            VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+                time_interval: TimeInterval::default(),
+                spatial_resolution: SpatialResolution::zero_point_one(),
+                attributes: ColumnSelection::all(),
+            },
         )
-        .await
-        .unwrap();
-
-        let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
-
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
-
-        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
-
-        let mut result = query
-            .map(Result::unwrap)
-            .collect::<Vec<MultiPointCollection>>()
-            .await;
-
-        assert_eq!(result.len(), 1);
-        let result = result.remove(0);
+        .await;
 
         let expected_result = MultiPointCollection::from_slices(
             MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)])
@@ -762,5 +960,33 @@ mod tests {
             result.chunks_equal_ignoring_cache_hint(&expected_result),
             "{result:#?} != {expected_result:#?}",
         );
+    }
+
+    async fn compute_result<C>(operator: VectorExpression, query_rectangle: VectorQueryRectangle) -> C
+    where
+        C: 'static,
+        Box<dyn VectorQueryProcessor<VectorType = C>>: TryFrom<TypedVectorQueryProcessor>,
+        <Box<dyn VectorQueryProcessor<VectorType = C>> as TryFrom<TypedVectorQueryProcessor>>::Error: std::fmt::Debug,
+    {
+        let operator = operator
+            .boxed()
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default(),
+            )
+            .await
+            .unwrap();
+
+        let query_processor: Box<dyn VectorQueryProcessor<VectorType = C>> =
+            operator.query_processor().unwrap().try_into().unwrap();
+
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+
+        let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
+
+        let mut result = query.map(Result::unwrap).collect::<Vec<C>>().await;
+
+        assert_eq!(result.len(), 1);
+        result.remove(0)
     }
 }

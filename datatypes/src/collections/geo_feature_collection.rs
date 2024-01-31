@@ -14,8 +14,8 @@ use super::FeatureCollection;
 /// This trait allows iterating over the geometries of a feature collection
 pub trait IntoGeometryIterator<'a> {
     type GeometryIterator: Iterator<Item = Self::GeometryType>
-        + Send
-        + IntoParallelIterator<Item = Self::GeometryType>;
+        + IntoParallelIterator<Item = Self::GeometryType>
+        + Send;
     type GeometryType: GeometryRef + Send;
 
     /// Return an iterator over geometries
@@ -32,7 +32,9 @@ pub trait GeometryRandomAccess<'a> {
 
 /// This trait allows iterating over the geometries of a feature collection if the collection has geometries
 pub trait IntoGeometryOptionsIterator<'i> {
-    type GeometryOptionIterator: Iterator<Item = Option<Self::GeometryType>> + Send;
+    type GeometryOptionIterator: Iterator<Item = Option<Self::GeometryType>>
+        + IntoParallelIterator<Item = Option<Self::GeometryType>>
+        + Send;
     type GeometryType: GeometryRef + Send;
 
     /// Return an iterator over geometries

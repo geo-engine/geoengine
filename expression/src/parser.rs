@@ -502,6 +502,7 @@ impl ExpressionParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::codegen::Prelude;
     use pretty_assertions::assert_str_eq;
     use proc_macro2::TokenStream;
     use quote::{quote, ToTokens};
@@ -542,7 +543,7 @@ mod tests {
         }};
     }
 
-    enum Prelude {
+    enum FunctionDefs {
         Add,
         Sub,
         Mul,
@@ -550,10 +551,10 @@ mod tests {
         Pow,
     }
 
-    impl ToTokens for Prelude {
+    impl ToTokens for FunctionDefs {
         fn to_tokens(&self, tokens: &mut TokenStream) {
             tokens.extend(match self {
-                Prelude::Add => quote! {
+                FunctionDefs::Add => quote! {
                     #[inline]
                     fn import_add__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                         match (a, b) {
@@ -562,7 +563,7 @@ mod tests {
                         }
                     }
                 },
-                Prelude::Sub => quote! {
+                FunctionDefs::Sub => quote! {
                     #[inline]
                     fn import_sub__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                         match (a, b) {
@@ -571,7 +572,7 @@ mod tests {
                         }
                     }
                 },
-                Prelude::Mul => quote! {
+                FunctionDefs::Mul => quote! {
                     #[inline]
                     fn import_mul__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                         match (a, b) {
@@ -580,7 +581,7 @@ mod tests {
                         }
                     }
                 },
-                Prelude::Div => quote! {
+                FunctionDefs::Div => quote! {
                     #[inline]
                     fn import_div__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                         match (a, b) {
@@ -589,7 +590,7 @@ mod tests {
                         }
                     }
                 },
-                Prelude::Pow => quote! {
+                FunctionDefs::Pow => quote! {
                     #[inline]
                     fn import_pow__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                         match (a, b) {
@@ -602,19 +603,20 @@ mod tests {
         }
     }
 
-    const ADD_FN: Prelude = Prelude::Add;
-    const SUB_FN: Prelude = Prelude::Sub;
-    const DIV_FN: Prelude = Prelude::Div;
-    const MUL_FN: Prelude = Prelude::Mul;
-    const POW_FN: Prelude = Prelude::Pow;
+    const ADD_FN: FunctionDefs = FunctionDefs::Add;
+    const SUB_FN: FunctionDefs = FunctionDefs::Sub;
+    const DIV_FN: FunctionDefs = FunctionDefs::Div;
+    const MUL_FN: FunctionDefs = FunctionDefs::Mul;
+    const POW_FN: FunctionDefs = FunctionDefs::Pow;
 
     #[test]
     fn simple() {
         assert_eq_pretty!(
             parse("expression", &[], "1"),
             quote! {
+                #Prelude
+
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     Some(1f64)
                 }
@@ -625,10 +627,11 @@ mod tests {
         assert_eq_pretty!(
             parse("foo", &[], "1 + 2"),
             quote! {
+                #Prelude
+
                 #ADD_FN
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn foo() -> Option<f64> {
                     import_add__n_n(Some(1f64), Some(2f64))
                 }
@@ -639,10 +642,11 @@ mod tests {
         assert_eq_pretty!(
             parse("bar", &[], "-1 + 2"),
             quote! {
+                #Prelude
+
                 #ADD_FN
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn bar() -> Option<f64> {
                     import_add__n_n(Some(-1f64), Some(2f64))
                 }
@@ -653,10 +657,11 @@ mod tests {
         assert_eq_pretty!(
             parse("baz", &[], "1 - -2"),
             quote! {
+                #Prelude
+
                 #SUB_FN
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn baz() -> Option<f64> {
                     import_sub__n_n(Some(1f64), Some(-2f64))
                 }
@@ -667,6 +672,8 @@ mod tests {
         assert_eq_pretty!(
             parse("expression", &[], "1 + 2 / 3"),
             quote! {
+                #Prelude
+
                 #ADD_FN
 
                 #[inline]
@@ -678,7 +685,6 @@ mod tests {
                 }
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     import_add__n_n(
                         Some(1f64),
@@ -692,10 +698,11 @@ mod tests {
         assert_eq_pretty!(
             parse("expression", &[], "2**4"),
             quote! {
+                #Prelude
+
                 #POW_FN
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     import_pow__n_n(Some(2f64) , Some(4f64))
                 }
@@ -709,10 +716,11 @@ mod tests {
         assert_eq_pretty!(
             parse("expression", &["a"], "a + 1"),
             quote! {
+                #Prelude
+
                 #ADD_FN
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     import_add__n_n(a, Some(1f64))
                 }
@@ -723,12 +731,13 @@ mod tests {
         assert_eq_pretty!(
             parse("ndvi", &["a", "b"], "(a-b) / (a+b)"),
             quote! {
+                #Prelude
+
                 #ADD_FN
                 #DIV_FN
                 #SUB_FN
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn ndvi(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                     import_div__n_n(
                         import_sub__n_n(a, b),
@@ -746,6 +755,8 @@ mod tests {
         assert_eq_pretty!(
             parse("expression", &["a"], "max(a, 0)"),
             quote! {
+                #Prelude
+
                 #[inline]
                 fn import_max__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                     match (a, b) {
@@ -755,7 +766,6 @@ mod tests {
                 }
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     import_max__n_n(a, Some(0f64))
                 }
@@ -766,6 +776,8 @@ mod tests {
         assert_eq_pretty!(
             parse("expression", &["a"], "pow(sqrt(a), 2)"),
             quote! {
+                #Prelude
+
                 #[inline]
                 fn import_pow__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                     match (a, b) {
@@ -779,7 +791,6 @@ mod tests {
                 }
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     import_pow__n_n(import_sqrt__n(a), Some(2f64))
                 }
@@ -790,6 +801,8 @@ mod tests {
         assert_eq_pretty!(
             parse("waves", &[],  "cos(sin(tan(acos(asin(atan(1))))))"),
             quote! {
+                #Prelude
+
                 #[inline]
                 fn import_acos__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::acos)
@@ -816,7 +829,6 @@ mod tests {
                 }
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn waves() -> Option<f64> {
                     import_cos__n(import_sin__n(import_tan__n(import_acos__n(import_asin__n(import_atan__n(Some(1f64)))))))
                 }
@@ -827,6 +839,8 @@ mod tests {
         assert_eq_pretty!(
             parse("non_linear", &[], "ln(log10(pi()))"),
             quote! {
+                #Prelude
+
                 #[inline]
                 fn import_ln__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::ln)
@@ -841,7 +855,6 @@ mod tests {
                 }
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn non_linear() -> Option<f64> {
                     import_ln__n(import_log10__n(import_pi_()))
                 }
@@ -852,6 +865,8 @@ mod tests {
         assert_eq_pretty!(
             parse("rounding", &[], "round(1.3) + ceil(1.2) + floor(1.1)"),
             quote! {
+                #Prelude
+
                 #ADD_FN
                 #[inline]
                 fn import_ceil__n(a: Option<f64>) -> Option<f64> {
@@ -867,7 +882,6 @@ mod tests {
                 }
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn rounding() -> Option<f64> {
                     import_add__n_n(
                         import_add__n_n(
@@ -884,6 +898,8 @@ mod tests {
         assert_eq_pretty!(
             parse("radians", &[], "to_radians(1.3) + to_degrees(1.3)"),
             quote! {
+                #Prelude
+
                 #ADD_FN
                 #[inline]
                 fn import_to_degrees__n(a: Option<f64>) -> Option<f64> {
@@ -895,7 +911,6 @@ mod tests {
                 }
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn radians() -> Option<f64> {
                     import_add__n_n(import_to_radians__n(Some(1.3f64)), import_to_degrees__n(Some(1.3f64)))
                 }
@@ -906,6 +921,8 @@ mod tests {
         assert_eq_pretty!(
             parse("mod_e", &[], "mod(5, e())"),
             quote! {
+                #Prelude
+
                 #[inline]
                 fn import_e_() -> Option<f64> {
                     Some(std::f64::consts::E)
@@ -919,7 +936,6 @@ mod tests {
                 }
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn mod_e() -> Option<f64> {
                     import_mod__n_n(Some(5f64), import_e_())
                 }
@@ -940,8 +956,9 @@ mod tests {
         assert_eq_pretty!(
             parse("expression", &["a"], "if a is nodata { 0 } else { a }"),
             quote! {
+                #Prelude
+
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     if ((a) == (None)) {
                         Some(0f64)
@@ -966,10 +983,11 @@ mod tests {
                 }",
             ),
             quote! {
+                #Prelude
+
                 #MUL_FN
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression(A: Option<f64>, B: Option<f64>) -> Option<f64> {
                     if ((A) == (None)) {
                         import_mul__n_n(B, Some(2f64))
@@ -990,8 +1008,9 @@ mod tests {
         assert_eq_pretty!(
             parse("expression", &[], "if true { 1 } else { 2 }"),
             quote! {
+                #Prelude
+
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if true {
                         Some(1f64)
@@ -1010,10 +1029,11 @@ mod tests {
                 "if TRUE { 1 } else if false { 2 } else { 1 + 2 }",
             ),
             quote! {
+                #Prelude
+
                 #ADD_FN
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if true {
                         Some(1f64)
@@ -1034,11 +1054,12 @@ mod tests {
                 "if 1 < 2 { 1 } else if 1 + 5 < 3 - 1 { 2 } else { 1 + 2 }"
             ),
             quote! {
+                #Prelude
+
                 #ADD_FN
                 #SUB_FN
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if ((Some(1f64)) < (Some(2f64))) {
                         Some(1f64)
@@ -1065,6 +1086,8 @@ mod tests {
                 }",
             ),
             quote! {
+                #Prelude
+
                 #[inline]
                 fn import_max__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                     match (a, b) {
@@ -1074,7 +1097,6 @@ mod tests {
                 }
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if ((true) && (false)) {
                         Some(1f64)
@@ -1100,10 +1122,11 @@ mod tests {
                 a + b + 1",
             ),
             quote! {
+                #Prelude
+
                 #ADD_FN
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     let a = Some(1.2f64);
                     let b = Some(2f64);
@@ -1226,19 +1249,19 @@ mod tests {
                 "centroid(geom)",
             ),
             quote! {
+                #Prelude
+
                 #[inline]
                 fn import_centroid__q(
-                    geom: Option<geo::geometry::MultiPolygon<geo::Polygon<f64>>>
-                ) -> Option<geo::geometry::MultiPoint<geo::Point<f64>>> {
-                    use geo::Centroid;
-                    geom.centroid().map(Into::into)
+                    geom: Option<MultiPolygon>
+                ) -> Option<MultiPoint> {
+                    geom.centroid()
                 }
 
                 #[no_mangle]
-                #[allow(unused_variables)]
                 pub extern "Rust" fn make_centroid(
-                    geom: Option<geo::geometry::MultiPolygon<geo::Polygon<f64>>>
-                ) -> Option<geo::geometry::MultiPoint<geo::Point<f64>>> {
+                    geom: Option<MultiPolygon>
+                ) -> Option<MultiPoint> {
                     import_centroid__q(geom)
                 }
             }

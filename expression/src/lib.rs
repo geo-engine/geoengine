@@ -40,3 +40,5 @@ pub use codegen::{DataType, ExpressionAst, Parameter};
 pub use compiled::LinkedExpression;
 pub use dependencies::ExpressionDependencies;
 pub use parser::ExpressionParser;
+
+pub use geoengine_expression_deps::*;

@@ -41,8 +41,21 @@ impl ExpressionAst {
         })
     }
 
+    /// Outputs the generated code (file) as a string.
     pub fn code(&self) -> String {
         self.to_token_stream().to_string()
+    }
+
+    /// Outputs the generated code (file) as a formatted string.
+    pub fn pretty_code(&self) -> String {
+        match syn::parse2(self.to_token_stream()) {
+            Ok(code) => prettyplease::unparse(&code),
+            Err(e) => {
+                // fallback to unformatted code
+                log::error!("Cannot parse expression: {e}");
+                self.code()
+            }
+        }
     }
 
     pub fn name(&self) -> &str {
@@ -52,6 +65,8 @@ impl ExpressionAst {
 
 impl ToTokens for ExpressionAst {
     fn to_tokens(&self, tokens: &mut TokenStream) {
+        Prelude.to_tokens(tokens);
+
         for function in &self.functions {
             function.to_tokens(tokens);
         }
@@ -76,10 +91,26 @@ impl ToTokens for ExpressionAst {
 
         tokens.extend(quote! {
             #[no_mangle]
-            #[allow(unused_variables)]
             pub extern "Rust" fn #fn_name (#(#params),*) -> Option<#dtype> {
                 #content
             }
+        });
+    }
+}
+
+/// Generic imports and settings before the actual expression function.
+pub struct Prelude;
+
+impl ToTokens for Prelude {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.extend(quote! {
+            #![allow(unused_variables)] // expression inputs that are not used
+            #![allow(unused_parens)] // safety-first parentheses in generated code
+            #![allow(non_snake_case)] // we use double underscores for generated function names
+
+            extern crate geoengine_expression_deps;
+
+            use geoengine_expression_deps::*;
         });
     }
 }
@@ -386,13 +417,13 @@ impl ToTokens for DataType {
         tokens.extend(match self {
             Self::Number => quote! { f64 },
             Self::MultiPoint => {
-                quote! { geo::geometry::MultiPoint<geo::Point<f64>> }
+                quote! { MultiPoint }
             }
             Self::MultiLineString => {
-                quote! { geo::geometry::MultiLineString<geo::LineString<f64>> }
+                quote! { MultiLineString }
             }
             Self::MultiPolygon => {
-                quote! { geo::geometry::MultiPolygon<geo::Polygon<f64>> }
+                quote! { MultiPolygon }
             }
         });
     }

@@ -251,11 +251,10 @@ pub fn init_functions() -> HashMap<&'static str, FunctionGenerator> {
                         let dtype = fn_.signature[0];
 
                         let inner_operation = match dtype {
-                            DataType::MultiPoint => quote! {
-                                Some(geom.centroid().into())
-                            },
-                            DataType::MultiLineString | DataType::MultiPolygon => quote! {
-                                geom.centroid().map(Into::into)
+                            DataType::MultiPoint
+                            | DataType::MultiLineString
+                            | DataType::MultiPolygon => quote! {
+                                geom.centroid()
                             },
                             // should never happen
                             DataType::Number => quote! {},
@@ -265,7 +264,6 @@ pub fn init_functions() -> HashMap<&'static str, FunctionGenerator> {
 
                         tokens.extend(quote! {
                             fn #name(geom: Option<#dtype>) -> Option<#output_type> {
-                                use geo::Centroid;
                                 #inner_operation
                             }
                         });

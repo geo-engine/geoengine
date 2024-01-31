@@ -31,7 +31,7 @@ pub use feature_data::{
     FeatureDataType, FeatureDataValue, FloatDataRef, FloatOptionsIter, FloatOptionsParIter,
     IntDataRef, TextDataRef,
 };
-pub use geometry::{Geometry, GeometryRef, TypedGeometry};
+pub use geometry::{AsGeo, AsGeoOption, Geometry, GeometryRef, TypedGeometry};
 pub use line::Line;
 pub use measurement::{ClassificationMeasurement, ContinuousMeasurement, Measurement};
 pub use multi_line_string::{MultiLineString, MultiLineStringAccess, MultiLineStringRef};

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 cargo = "0.76"
+geoengine-expression-deps = { path = "deps-workspace" }
 libloading = "0.8"
 log = "0.4"
 pest = "2.1"
@@ -17,4 +18,5 @@ syn = "2.0"
 tempfile = "3.2"
 
 [dev-dependencies]
+geo = "0.27.0"
 pretty_assertions = "1.4"

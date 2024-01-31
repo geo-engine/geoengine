@@ -1,5 +1,5 @@
 [package]
-name = "expression-deps"
+name = "geoengine-expression-deps"
 version = "0.0.0"
 edition = "2021"
 

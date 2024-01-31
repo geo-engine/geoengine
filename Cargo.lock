@@ -2737,6 +2737,8 @@ name = "geoengine-expression"
 version = "0.1.0"
 dependencies = [
  "cargo",
+ "geo 0.27.0",
+ "geoengine-expression-deps",
  "libloading 0.8.1",
  "log",
  "pest",
@@ -2748,6 +2750,13 @@ dependencies = [
  "snafu",
  "syn 2.0.48",
  "tempfile",
+]
+
+[[package]]
+name = "geoengine-expression-deps"
+version = "0.0.0"
+dependencies = [
+ "geo 0.27.0",
 ]
 
 [[package]]

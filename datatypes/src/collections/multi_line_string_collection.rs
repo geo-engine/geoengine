@@ -225,6 +225,35 @@ impl<'l> ParallelIterator for MultiLineStringParIterator<'l> {
     }
 }
 
+impl<'l> Producer for MultiLineStringIterator<'l> {
+    type Item = MultiLineStringRef<'l>;
+
+    type IntoIter = MultiLineStringIterator<'l>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self
+    }
+
+    fn split_at(self, index: usize) -> (Self, Self) {
+        let (left_index, left_length_right_index, right_length) =
+            indices_for_split_at(self.index, self.length, index);
+
+        let left = Self::IntoIter {
+            geometry_column: self.geometry_column,
+            index: left_index,
+            length: left_length_right_index,
+        };
+
+        let right = Self::IntoIter {
+            geometry_column: self.geometry_column,
+            index: left_length_right_index,
+            length: right_length,
+        };
+
+        (left, right)
+    }
+}
+
 impl<'l> Producer for MultiLineStringParIterator<'l> {
     type Item = MultiLineStringRef<'l>;
 
@@ -235,22 +264,8 @@ impl<'l> Producer for MultiLineStringParIterator<'l> {
     }
 
     fn split_at(self, index: usize) -> (Self, Self) {
-        let (left_index, left_length_right_index, right_length) =
-            indices_for_split_at(self.0.index, self.0.length, index);
-
-        let left = Self(Self::IntoIter {
-            geometry_column: self.0.geometry_column,
-            index: left_index,
-            length: left_length_right_index,
-        });
-
-        let right = Self(Self::IntoIter {
-            geometry_column: self.0.geometry_column,
-            index: left_length_right_index,
-            length: right_length,
-        });
-
-        (left, right)
+        let (left, right) = self.0.split_at(index);
+        (Self(left), Self(right))
     }
 }
 

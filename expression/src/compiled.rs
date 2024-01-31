@@ -1,6 +1,6 @@
 use crate::{
     error::{self, ExpressionExecutionError},
-    ExpressionDependencies,
+    ExpressionAst, ExpressionDependencies,
 };
 use libloading::{library_filename, Library, Symbol};
 use snafu::ResultExt;
@@ -60,6 +60,15 @@ impl LinkedExpression {
             library: ManuallyDrop::new(library),
             function_name: function_name.to_string(),
         })
+    }
+
+    pub fn from_ast(ast: &ExpressionAst, dependencies: &ExpressionDependencies) -> Result<Self> {
+        let code = if std::cfg!(debug_assertions) {
+            ast.pretty_code()
+        } else {
+            ast.code()
+        };
+        Self::new(ast.name(), &code, dependencies)
     }
 
     /// Returns a function with 1 input parameters
@@ -159,7 +168,10 @@ fn compile_file(
 
 #[cfg(test)]
 mod tests {
+    use crate::{DataType, ExpressionParser, Parameter};
+
     use super::*;
+    use geoengine_expression_deps::{MultiPoint, MultiPolygon};
     use quote::quote;
 
     #[test]
@@ -169,20 +181,22 @@ mod tests {
 
         let source_code = quote! {
             extern crate geo;
+            extern crate geoengine_expression_deps;
 
-            use geo::{Area, polygon};
+            use geo::{polygon};
+            use geoengine_expression_deps::*;
 
             #[no_mangle]
-            pub extern "Rust" fn area_of_polygon() -> f64 {
-                let polygon = polygon![
+            pub extern "Rust" fn area_of_polygon() -> Option<f64> {
+                let polygon = MultiPolygon::from(polygon![
                     (x: 0., y: 0.),
                     (x: 5., y: 0.),
                     (x: 5., y: 6.),
                     (x: 0., y: 6.),
                     (x: 0., y: 0.),
-                ];
+                ]);
 
-                polygon.signed_area()
+                polygon.area()
             }
         }
         .to_string();
@@ -191,10 +205,58 @@ mod tests {
             LinkedExpression::new("area_of_polygon", &source_code, &dependencies).unwrap();
 
         assert_eq!(
-            unsafe { linked_expression.function_nary::<fn() -> f64>().unwrap() }(),
-            30.0
+            unsafe {
+                linked_expression
+                    .function_nary::<fn() -> Option<f64>>()
+                    .unwrap()
+            }(),
+            Some(30.0)
         );
     }
 
-    // TODO: try out generated expression
+    #[test]
+    fn it_compiles_an_expression() {
+        use geo::{point, polygon};
+
+        let dependencies = ExpressionDependencies::new().unwrap();
+
+        let ast = ExpressionParser::new(
+            &[
+                Parameter::MultiPolygon("geom".into()),
+                Parameter::Number("zero".into()),
+            ],
+            DataType::MultiPoint,
+        )
+        .unwrap()
+        .parse(
+            "expression",
+            "
+                if zero > 0 {
+                    centroid(geom)
+                } else {
+                    centroid(geom)
+                }",
+        )
+        .unwrap();
+
+        let linked_expression = LinkedExpression::from_ast(&ast, &dependencies).unwrap();
+
+        assert_eq!(
+            unsafe {
+                linked_expression
+                    .function_nary::<fn(MultiPolygon, f64) -> Option<MultiPoint>>()
+                    .unwrap()
+            }(
+                MultiPolygon::from(polygon![
+                    (x: 0., y: 0.),
+                    (x: 5., y: 0.),
+                    (x: 5., y: 6.),
+                    (x: 0., y: 6.),
+                    (x: 0., y: 0.),
+                ]),
+                0.
+            ),
+            Some(MultiPoint::from(point!(x: 2.5, y: 3.0)))
+        );
+    }
 }
