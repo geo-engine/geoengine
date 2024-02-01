@@ -123,6 +123,19 @@ impl<'g> From<&MultiPointRef<'g>> for geo::MultiPoint<f64> {
     }
 }
 
+impl TryFrom<geo::MultiPoint<f64>> for MultiPoint {
+    type Error = crate::error::Error;
+
+    fn try_from(geometry: geo::MultiPoint<f64>) -> Result<Self> {
+        let points = geometry.0;
+        let coordinates = points
+            .into_iter()
+            .map(|point| Coordinate2D::new(point.x(), point.y()))
+            .collect();
+        MultiPoint::new(coordinates)
+    }
+}
+
 impl ToSql for MultiPoint {
     fn to_sql(
         &self,

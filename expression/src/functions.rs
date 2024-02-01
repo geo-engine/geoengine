@@ -282,6 +282,54 @@ pub fn init_functions() -> HashMap<&'static str, FunctionGenerator> {
         },
     );
 
+    let name = "area";
+    functions.insert(
+        name,
+        FunctionGenerator {
+            name,
+            generate_fn: |name, args| match args {
+                [dtype @ (DataType::MultiPoint
+                | DataType::MultiLineString
+                | DataType::MultiPolygon)] => Ok(Function {
+                    name: unique_name(name, args),
+                    signature: vec![*dtype],
+                    output_type: DataType::Number,
+                    token_fn: move |fn_, tokens| {
+                        let name = &fn_.name;
+                        let dtype = fn_.signature[0];
+
+                        let inner_operation = match dtype {
+                            DataType::MultiPoint
+                            | DataType::MultiLineString
+                            | DataType::MultiPolygon => quote! {
+                                geom.area()
+                            },
+                            // should never happen
+                            DataType::Number => quote! {},
+                        };
+
+                        let output_type = &fn_.output_type;
+
+                        tokens.extend(quote! {
+                            fn #name(geom: Option<#dtype>) -> Option<#output_type> {
+                                #inner_operation
+                            }
+                        });
+                    },
+                }),
+                _ => Err(ExpressionSemanticError::InvalidFunctionArguments {
+                    name: name.into(),
+                    expected: [DataType::MultiPoint]
+                        .iter()
+                        .map(DataType::group_name)
+                        .map(ToString::to_string)
+                        .collect(),
+                    actual: args.into(),
+                }),
+            },
+        },
+    );
+
     functions
 }
 

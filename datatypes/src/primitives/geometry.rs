@@ -54,6 +54,14 @@ impl<'g> AsGeo for MultiPointRef<'g> {
     }
 }
 
+impl AsGeo for MultiPoint {
+    type GeoGeometryType = geo::MultiPoint<f64>;
+
+    fn as_geo(&self) -> Self::GeoGeometryType {
+        MultiPointRef::from(self).as_geo()
+    }
+}
+
 impl<'g> AsGeo for MultiLineStringRef<'g> {
     type GeoGeometryType = geo::MultiLineString<f64>;
 
@@ -62,11 +70,27 @@ impl<'g> AsGeo for MultiLineStringRef<'g> {
     }
 }
 
+impl AsGeo for MultiLineString {
+    type GeoGeometryType = geo::MultiLineString<f64>;
+
+    fn as_geo(&self) -> Self::GeoGeometryType {
+        MultiLineStringRef::from(self).as_geo()
+    }
+}
+
 impl<'g> AsGeo for MultiPolygonRef<'g> {
     type GeoGeometryType = geo::MultiPolygon<f64>;
 
     fn as_geo(&self) -> Self::GeoGeometryType {
         self.into()
+    }
+}
+
+impl AsGeo for MultiPolygon {
+    type GeoGeometryType = geo::MultiPolygon<f64>;
+
+    fn as_geo(&self) -> Self::GeoGeometryType {
+        MultiPolygonRef::from(self).as_geo()
     }
 }
 
