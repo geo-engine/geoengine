@@ -67,7 +67,6 @@ pub trait GeoFeatureCollectionModifications<G: Geometry> {
 
 impl<GIn, GOut> GeoFeatureCollectionModifications<GOut> for FeatureCollection<GIn>
 where
-    FeatureCollection<GIn>: GeometryCollection,
     GIn: Geometry + ArrowTyped,
     GOut: Geometry + ArrowTyped,
 {

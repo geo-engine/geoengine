@@ -1,21 +1,24 @@
-use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
-    OperatorName, QueryContext, SingleVectorSource, TypedVectorQueryProcessor, VectorColumnInfo,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+use super::{AsExpressionGeo, FromExpressionGeo};
+use crate::{
+    engine::{
+        CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
+        Operator, OperatorName, QueryContext, SingleVectorSource, TypedVectorQueryProcessor,
+        VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        WorkflowOperatorPath,
+    },
+    util::Result,
 };
-use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
-    GeoFeatureCollectionModifications, GeometryCollection, IntoGeometryOptionsIterator,
+    GeoFeatureCollectionModifications, GeoVectorDataType, IntoGeometryOptionsIterator,
     VectorDataType,
 };
 use geoengine_datatypes::primitives::{
-    AsGeoOption, FeatureData, FeatureDataRef, FeatureDataType, FloatOptionsParIter, Geometry,
-    Measurement, MultiLineString, MultiLineStringRef, MultiPoint, MultiPointRef, MultiPolygon,
-    MultiPolygonRef, NoGeometry, VectorQueryRectangle,
+    FeatureData, FeatureDataRef, FeatureDataType, FloatOptionsParIter, Geometry, Measurement,
+    MultiLineString, MultiPoint, MultiPolygon, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use geoengine_expression::{
@@ -74,7 +77,7 @@ fn geometry_default_column_name() -> String {
 #[serde(tag = "type", content = "value", rename_all = "camelCase")]
 pub enum OutputColumn {
     /// The expression will override the current geometry
-    Geometry(VectorDataType),
+    Geometry(GeoVectorDataType),
     /// The expression will append a new `Float` column
     // TODO: allow more types than `Float`s
     Column(String),
@@ -118,12 +121,11 @@ impl VectorOperator for VectorExpression {
         let expression_geom_input_type = result_descriptor.data_type;
         let expression_output_type = match &self.params.output_column {
             OutputColumn::Geometry(vector_data_type) => {
-                result_descriptor.data_type = *vector_data_type;
+                result_descriptor.data_type = (*vector_data_type).into();
                 match vector_data_type {
-                    VectorDataType::MultiPoint => DataType::MultiPoint,
-                    VectorDataType::MultiLineString => DataType::MultiLineString,
-                    VectorDataType::MultiPolygon => DataType::MultiPolygon,
-                    VectorDataType::Data => Err(VectorExpressionError::CannotGenerateDataOutput)?,
+                    GeoVectorDataType::MultiPoint => DataType::MultiPoint,
+                    GeoVectorDataType::MultiLineString => DataType::MultiLineString,
+                    GeoVectorDataType::MultiPolygon => DataType::MultiPolygon,
                 }
             }
             OutputColumn::Column(output_column_name) => {
@@ -263,6 +265,7 @@ impl InitializedVectorOperator for InitializedVectorExpression {
         &self.result_descriptor
     }
 
+    #[allow(clippy::too_many_lines)] // TODO: use a macro to implement the variants
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         let source_processor = self.features.query_processor()?;
 
@@ -315,8 +318,8 @@ impl InitializedVectorOperator for InitializedVectorExpression {
             .boxed()
             .into(),
             (
-                TypedVectorQueryProcessor::MultiPolygon(source),
-                OutputColumn::Geometry(VectorDataType::MultiPoint),
+                TypedVectorQueryProcessor::MultiPoint(source),
+                OutputColumn::Geometry(GeoVectorDataType::MultiPoint),
             ) => VectorExpressionGeometryProcessor {
                 source,
                 result_descriptor: self.result_descriptor.clone(),
@@ -326,7 +329,138 @@ impl InitializedVectorOperator for InitializedVectorExpression {
             }
             .boxed()
             .into(),
-            _ => todo!(),
+            (
+                TypedVectorQueryProcessor::MultiPoint(source),
+                OutputColumn::Geometry(GeoVectorDataType::MultiLineString),
+            ) => VectorExpressionGeometryProcessor {
+                source,
+                result_descriptor: self.result_descriptor.clone(),
+                expression: self.expression.clone(),
+                input_columns: self.input_columns.clone(),
+                _out: PhantomData::<MultiLineString>,
+            }
+            .boxed()
+            .into(),
+            (
+                TypedVectorQueryProcessor::MultiPoint(source),
+                OutputColumn::Geometry(GeoVectorDataType::MultiPolygon),
+            ) => VectorExpressionGeometryProcessor {
+                source,
+                result_descriptor: self.result_descriptor.clone(),
+                expression: self.expression.clone(),
+                input_columns: self.input_columns.clone(),
+                _out: PhantomData::<MultiPolygon>,
+            }
+            .boxed()
+            .into(),
+            (
+                TypedVectorQueryProcessor::MultiLineString(source),
+                OutputColumn::Geometry(GeoVectorDataType::MultiPoint),
+            ) => VectorExpressionGeometryProcessor {
+                source,
+                result_descriptor: self.result_descriptor.clone(),
+                expression: self.expression.clone(),
+                input_columns: self.input_columns.clone(),
+                _out: PhantomData::<MultiPoint>,
+            }
+            .boxed()
+            .into(),
+            (
+                TypedVectorQueryProcessor::MultiLineString(source),
+                OutputColumn::Geometry(GeoVectorDataType::MultiLineString),
+            ) => VectorExpressionGeometryProcessor {
+                source,
+                result_descriptor: self.result_descriptor.clone(),
+                expression: self.expression.clone(),
+                input_columns: self.input_columns.clone(),
+                _out: PhantomData::<MultiLineString>,
+            }
+            .boxed()
+            .into(),
+            (
+                TypedVectorQueryProcessor::MultiLineString(source),
+                OutputColumn::Geometry(GeoVectorDataType::MultiPolygon),
+            ) => VectorExpressionGeometryProcessor {
+                source,
+                result_descriptor: self.result_descriptor.clone(),
+                expression: self.expression.clone(),
+                input_columns: self.input_columns.clone(),
+                _out: PhantomData::<MultiPolygon>,
+            }
+            .boxed()
+            .into(),
+            (
+                TypedVectorQueryProcessor::MultiPolygon(source),
+                OutputColumn::Geometry(GeoVectorDataType::MultiPoint),
+            ) => VectorExpressionGeometryProcessor {
+                source,
+                result_descriptor: self.result_descriptor.clone(),
+                expression: self.expression.clone(),
+                input_columns: self.input_columns.clone(),
+                _out: PhantomData::<MultiPoint>,
+            }
+            .boxed()
+            .into(),
+            (
+                TypedVectorQueryProcessor::MultiPolygon(source),
+                OutputColumn::Geometry(GeoVectorDataType::MultiLineString),
+            ) => VectorExpressionGeometryProcessor {
+                source,
+                result_descriptor: self.result_descriptor.clone(),
+                expression: self.expression.clone(),
+                input_columns: self.input_columns.clone(),
+                _out: PhantomData::<MultiLineString>,
+            }
+            .boxed()
+            .into(),
+            (
+                TypedVectorQueryProcessor::MultiPolygon(source),
+                OutputColumn::Geometry(GeoVectorDataType::MultiPolygon),
+            ) => VectorExpressionGeometryProcessor {
+                source,
+                result_descriptor: self.result_descriptor.clone(),
+                expression: self.expression.clone(),
+                input_columns: self.input_columns.clone(),
+                _out: PhantomData::<MultiPolygon>,
+            }
+            .boxed()
+            .into(),
+            (
+                TypedVectorQueryProcessor::Data(source),
+                OutputColumn::Geometry(GeoVectorDataType::MultiPoint),
+            ) => VectorExpressionGeometryProcessor {
+                source,
+                result_descriptor: self.result_descriptor.clone(),
+                expression: self.expression.clone(),
+                input_columns: self.input_columns.clone(),
+                _out: PhantomData::<MultiPoint>,
+            }
+            .boxed()
+            .into(),
+            (
+                TypedVectorQueryProcessor::Data(source),
+                OutputColumn::Geometry(GeoVectorDataType::MultiLineString),
+            ) => VectorExpressionGeometryProcessor {
+                source,
+                result_descriptor: self.result_descriptor.clone(),
+                expression: self.expression.clone(),
+                input_columns: self.input_columns.clone(),
+                _out: PhantomData::<MultiLineString>,
+            }
+            .boxed()
+            .into(),
+            (
+                TypedVectorQueryProcessor::Data(source),
+                OutputColumn::Geometry(GeoVectorDataType::MultiPolygon),
+            ) => VectorExpressionGeometryProcessor {
+                source,
+                result_descriptor: self.result_descriptor.clone(),
+                expression: self.expression.clone(),
+                input_columns: self.input_columns.clone(),
+                _out: PhantomData::<MultiPolygon>,
+            }
+            .boxed()
+            .into(),
         })
     }
 
@@ -499,7 +633,7 @@ where
         + Sync
         + 'static
         + Sized,
-    FeatureCollection<GIn>: GeometryCollection + GeoFeatureCollectionModifications<GOut> + for<'g> IntoGeometryOptionsIterator<'g>,
+    FeatureCollection<GIn>: GeoFeatureCollectionModifications<GOut> + for<'g> IntoGeometryOptionsIterator<'g>,
     for<'g> <<FeatureCollection<GIn> as IntoGeometryOptionsIterator<'g>>::GeometryOptionIterator as IntoParallelIterator>::Iter:
         IndexedParallelIterator + Send,
     for<'g> <FeatureCollection<GIn> as IntoGeometryOptionsIterator<'g>>::GeometryType: AsExpressionGeo,
@@ -652,79 +786,6 @@ where
 // {
 //     todo!()
 // }
-
-/// Convenience trait for converting [`geoengine_datatypes`] types to [`geoengine_expression`] types.
-trait AsExpressionGeo: AsGeoOption {
-    type ExpressionGeometryType: Send;
-
-    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType>;
-}
-
-/// Convenience trait for converting [`geoengine_expression`] types to [`geoengine_datatypes`] types.
-trait FromExpressionGeo: Sized {
-    type ExpressionGeometryType: Send;
-
-    fn from_expression_geo(geom: Self::ExpressionGeometryType) -> Option<Self>;
-}
-
-impl<'c> AsExpressionGeo for MultiPointRef<'c> {
-    type ExpressionGeometryType = geoengine_expression::MultiPoint;
-
-    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
-        self.as_geo_option().map(Into::into)
-    }
-}
-
-impl<'c> AsExpressionGeo for MultiLineStringRef<'c> {
-    type ExpressionGeometryType = geoengine_expression::MultiLineString;
-
-    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
-        self.as_geo_option().map(Into::into)
-    }
-}
-
-impl<'c> AsExpressionGeo for MultiPolygonRef<'c> {
-    type ExpressionGeometryType = geoengine_expression::MultiPolygon;
-
-    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
-        self.as_geo_option().map(Into::into)
-    }
-}
-
-impl AsExpressionGeo for NoGeometry {
-    type ExpressionGeometryType = geoengine_expression::MultiPoint;
-
-    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
-        self.as_geo_option().map(Into::into)
-    }
-}
-
-impl FromExpressionGeo for MultiPoint {
-    type ExpressionGeometryType = geoengine_expression::MultiPoint;
-
-    fn from_expression_geo(geom: Self::ExpressionGeometryType) -> Option<Self> {
-        let geo_geom: geo::MultiPoint = geom.into();
-        geo_geom.try_into().ok()
-    }
-}
-
-impl FromExpressionGeo for MultiLineString {
-    type ExpressionGeometryType = geoengine_expression::MultiLineString;
-
-    fn from_expression_geo(geom: Self::ExpressionGeometryType) -> Option<Self> {
-        let geo_geom: geo::MultiLineString = geom.into();
-        Some(geo_geom.into())
-    }
-}
-
-impl FromExpressionGeo for MultiPolygon {
-    type ExpressionGeometryType = geoengine_expression::MultiPolygon;
-
-    fn from_expression_geo(geom: Self::ExpressionGeometryType) -> Option<Self> {
-        let geo_geom: geo::MultiPolygon = geom.into();
-        Some(geo_geom.into())
-    }
-}
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
@@ -1132,7 +1193,7 @@ mod tests {
                 params: VectorExpressionParams {
                     input_columns: vec![],
                     expression: "centroid(geom)".into(),
-                    output_column: OutputColumn::Geometry(VectorDataType::MultiPoint),
+                    output_column: OutputColumn::Geometry(GeoVectorDataType::MultiPoint),
                     output_measurement: Measurement::Unitless,
                     geometry_column_name: "geom".to_string(),
                 },
