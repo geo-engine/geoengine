@@ -234,6 +234,29 @@ where
         })
     }
 
+    async fn load_loading_info(&self, dataset: &DatasetId) -> Result<MetaDataDefinition> {
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+            SELECT 
+                meta_data 
+            FROM 
+                user_permitted_datasets p JOIN datasets d
+                    ON(p.dataset_id = d.id)
+            WHERE 
+                p.user_id = $1 AND d.id = $2",
+            )
+            .await?;
+
+        let row = conn
+            .query_one(&stmt, &[&self.session.user.id, dataset])
+            .await?;
+
+        Ok(row.get(0))
+    }
+
     async fn resolve_dataset_name_to_id(
         &self,
         dataset_name: &DatasetName,

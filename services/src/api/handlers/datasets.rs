@@ -54,6 +54,10 @@ where
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
+                web::resource("/{dataset}/loadingInfo")
+                    .route(web::get().to(get_loading_info_handler::<C>)),
+            )
+            .service(
                 web::resource("/{dataset}")
                     .route(web::get().to(get_dataset_handler::<C>))
                     .route(web::delete().to(delete_dataset_handler::<C>)),
@@ -205,6 +209,44 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
         .load_dataset(&dataset_id)
         .await
         .context(CannotLoadDataset)?;
+
+    Ok(web::Json(dataset))
+}
+
+/// Retrieves the loading information of a dataset
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/dataset/{dataset}/loadingInfo",
+    responses(
+        (status = 200, description = "OK", body = MetaDataDefinition)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn get_loading_info_handler<C: ApplicationContext>(
+    dataset: web::Path<DatasetName>,
+    session: C::Session,
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let real_dataset = dataset.into_inner();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id.ok_or(error::Error::UnknownDatasetName {
+        dataset_name: real_dataset.to_string(),
+    })?;
+
+    let dataset = session_ctx.load_loading_info(&dataset_id).await?;
 
     Ok(web::Json(dataset))
 }

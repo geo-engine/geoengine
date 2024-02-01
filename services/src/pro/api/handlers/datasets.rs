@@ -4,9 +4,12 @@ use crate::{
         delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
         suggest_meta_data_handler,
     },
-    api::model::{
-        responses::datasets::{errors::*, DatasetNameResponse},
-        services::{CreateDataset, DataPath, DatasetDefinition},
+    api::{
+        handlers::datasets::get_loading_info_handler,
+        model::{
+            responses::datasets::{errors::*, DatasetNameResponse},
+            services::{CreateDataset, DataPath, DatasetDefinition},
+        },
     },
     contexts::{ApplicationContext, SessionContext},
     datasets::{
@@ -34,6 +37,10 @@ where
             .service(web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)))
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
+            .service(
+                web::resource("/{dataset}/loadingInfo")
+                    .route(web::get().to(get_loading_info_handler::<C>)),
+            )
             .service(
                 web::resource("/{dataset}")
                     .route(web::get().to(get_dataset_handler::<C>))
