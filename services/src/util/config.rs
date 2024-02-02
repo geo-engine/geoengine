@@ -2,7 +2,7 @@ use crate::contexts::SessionId;
 use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
-use config::{Config, Environment, File};
+use config::{Config, Environment, File, FileFormat};
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
@@ -15,26 +15,44 @@ use url::Url;
 
 static SETTINGS: OnceLock<RwLock<Config>> = OnceLock::new();
 
+const SETTINGS_FILE_PATH_OVERRIDE_ENV_VAR: &str = "GEOENGINE_SETTINGS_FILE_PATH";
+
 // TODO: change to `LazyLock' once stable
+#[allow(clippy::dbg_macro)]
 fn init_settings() -> RwLock<Config> {
     let mut settings = Config::builder();
 
     let dir: PathBuf = retrieve_settings_dir().expect("settings directory should exist");
 
-    #[cfg(test)]
-    let files = ["Settings-default.toml", "Settings-test.toml"];
+    // include the default settings in the binary
+    let default_settings = include_str!("../../../Settings-default.toml");
 
-    #[cfg(not(test))]
-    let files = ["Settings-default.toml", "Settings.toml"];
+    settings = settings.add_source(File::from_str(default_settings, FileFormat::Toml));
 
-    let files: Vec<File<_, _>> = files
-        .iter()
-        .map(|f| dir.join(f))
-        .filter(|p| p.exists())
-        .map(File::from)
-        .collect();
+    std::env::vars().for_each(|(key, value)| {
+        dbg!((&key, &value));
+    });
 
-    settings = settings.add_source(files);
+    if let Ok(settings_file_path) = std::env::var(SETTINGS_FILE_PATH_OVERRIDE_ENV_VAR) {
+        dbg!(
+            "Settings file path: {} (set by environment variable)",
+            &settings_file_path
+        );
+        // override the settings file path
+        settings = settings.add_source(File::with_name(&settings_file_path));
+    } else {
+        // use the default settings file path
+        #[cfg(test)]
+        {
+            dbg!("Settings file path: Settings-test.toml");
+            settings = settings.add_source(File::from(dir.join("Settings-test.toml")));
+        }
+        #[cfg(not(test))]
+        {
+            dbg!("Settings file path: Settings.toml");
+            settings = settings.add_source(File::from(dir.join("Settings.toml")));
+        }
+    }
 
     // Override config with environment variables that start with `GEOENGINE_`,
     // e.g. `GEOENGINE_WEB__EXTERNAL_ADDRESS=https://path.to.geoengine.io`
@@ -50,8 +68,7 @@ fn init_settings() -> RwLock<Config> {
 }
 
 /// test may run in subdirectory
-#[cfg(test)]
-fn retrieve_settings_dir() -> Result<PathBuf> {
+pub fn retrieve_settings_dir() -> Result<PathBuf> {
     use crate::error::Error;
 
     const MAX_PARENT_DIRS: usize = 1;
@@ -70,11 +87,6 @@ fn retrieve_settings_dir() -> Result<PathBuf> {
     }
 
     Err(Error::MissingSettingsDirectory)
-}
-
-#[cfg(not(test))]
-fn retrieve_settings_dir() -> Result<PathBuf> {
-    std::env::current_dir().context(error::MissingWorkingDirectory)
 }
 
 #[cfg(test)]

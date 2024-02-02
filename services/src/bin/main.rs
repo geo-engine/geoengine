@@ -14,7 +14,11 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
 #[tokio::main]
+#[allow(clippy::dbg_macro)]
+#[allow(unused_must_use)]
+
 async fn main() {
+    dbg!(std::env::var("GEOENGINE_SETTINGS_FILE_PATH"));
     start_server().await.unwrap();
 }
 

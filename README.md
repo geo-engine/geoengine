@@ -122,6 +122,7 @@ The PostgreSQL storage backend can optionally be enabled using `--features postg
 ### Configuration
 
 Copy `Settings-default.toml` to `Settings.toml` and edit per your requirements.
+You can override the location of the settings file by using the `GEOENGINE_SETTINGS_FILE_PATH` environment variable.
 
 ## Troubleshooting
 
