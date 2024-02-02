@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in tests
+
 use assert_cmd::prelude::*;
 use geoengine_services::test_data;
 use serial_test::serial;
@@ -117,7 +119,7 @@ async fn it_starts_without_warnings_and_accepts_connections() {
 
                 // run server 2nd time on initialized schmea
                 run_server_and_check_warnings().await;
-            })
+            });
         });
     });
 

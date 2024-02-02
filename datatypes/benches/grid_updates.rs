@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)] // okay in benchmarks
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use geoengine_datatypes::raster::{
     Grid, GridIdx, GridIdx1D, GridIdx2D, GridShape, UpdateIndexedElements,
@@ -20,16 +22,16 @@ fn update_indexed_elements_1d_simple(c: &mut Criterion) {
         b.iter(|| {
             let mut grid = grid.clone();
 
-            black_box(grid.update_indexed_elements(lin_idx_map_fn))
-        })
+            black_box(grid.update_indexed_elements(lin_idx_map_fn));
+        });
     });
 
     group.bench_function("update_indexed_elements GridIdx1D", |b| {
         b.iter(|| {
             let mut grid = grid.clone();
 
-            black_box(grid.update_indexed_elements(grid_idx_map_fn))
-        })
+            black_box(grid.update_indexed_elements(grid_idx_map_fn));
+        });
     });
 
     group.finish();
@@ -54,6 +56,7 @@ fn update_indexed_elements_1d(c: &mut Criterion) {
         let pool_builder = rayon::ThreadPoolBuilder::new();
         let pool = pool_builder.num_threads(thread_num).build().unwrap();
 
+        #[allow(clippy::no_effect_underscore_binding)] // need to compute it for benchmarking
         rayon::spawn_fifo(|| {
             let _best_number = 40 + 2;
         });
@@ -64,8 +67,8 @@ fn update_indexed_elements_1d(c: &mut Criterion) {
                     let mut grid = grid.clone();
 
                     black_box(grid.update_indexed_elements_parallel(lin_idx_map_fn));
-                })
-            })
+                });
+            });
         });
 
         group.bench_function("update_indexed_elements_parallel GridIdx1D", |b| {
@@ -74,8 +77,8 @@ fn update_indexed_elements_1d(c: &mut Criterion) {
                     let mut grid = grid.clone();
 
                     black_box(grid.update_indexed_elements_parallel(grid_idx_map_fn));
-                })
-            })
+                });
+            });
         });
     }
 }
@@ -98,7 +101,7 @@ fn update_indexed_elements_2d_simple(c: &mut Criterion) {
             let mut grid = grid.clone();
 
             black_box(grid.update_indexed_elements(lin_idx_map_fn));
-        })
+        });
     });
 
     group.bench_function("update_indexed_elements GridIdx2D", |b| {
@@ -106,7 +109,7 @@ fn update_indexed_elements_2d_simple(c: &mut Criterion) {
             let mut grid = grid.clone();
 
             black_box(grid.update_indexed_elements(grid_idx_map_fn));
-        })
+        });
     });
 
     group.finish();
@@ -132,6 +135,7 @@ fn update_indexed_elements_2d(c: &mut Criterion) {
         let pool_builder = rayon::ThreadPoolBuilder::new();
         let pool = pool_builder.num_threads(thread_num).build().unwrap();
 
+        #[allow(clippy::no_effect_underscore_binding)] // need to compute it for benchmarking
         rayon::spawn_fifo(|| {
             let _best_number = 40 + 2;
         });
@@ -142,8 +146,8 @@ fn update_indexed_elements_2d(c: &mut Criterion) {
                     let mut grid = grid.clone();
 
                     black_box(grid.update_indexed_elements_parallel(lin_idx_map_fn));
-                })
-            })
+                });
+            });
         });
 
         group.bench_function("update_indexed_elements_parallel GridIdx2D", |b| {
@@ -151,9 +155,9 @@ fn update_indexed_elements_2d(c: &mut Criterion) {
                 b.iter(|| {
                     let mut grid = grid.clone();
 
-                    black_box(grid.update_indexed_elements_parallel(grid_idx_map_fn))
-                })
-            })
+                    black_box(grid.update_indexed_elements_parallel(grid_idx_map_fn));
+                });
+            });
         });
 
         group.finish();
