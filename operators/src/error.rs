@@ -319,7 +319,7 @@ pub enum Error {
     },
     #[snafu(context(false))]
     ExpressionOperator {
-        source: crate::processing::ExpressionError,
+        source: crate::processing::RasterExpressionError,
     },
 
     #[snafu(context(false), display("VectorExpression: {}", source))]

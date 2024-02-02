@@ -1,4 +1,4 @@
-use super::error::ExpressionError;
+use super::RasterExpressionError;
 use crate::{
     engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterResultDescriptor},
     util::Result,
@@ -214,7 +214,7 @@ where
             // we have to "trust" that the function has the signature we expect
             program
                 .function_1::<Option<f64>>()
-                .map_err(ExpressionError::from)?
+                .map_err(RasterExpressionError::from)?
         };
 
         let map_fn = |in_value: Option<f64>| {
@@ -317,7 +317,7 @@ where
             // we have to "trust" that the function has the signature we expect
             program
                 .function_2::<Option<f64>, Option<f64>>()
-                .map_err(ExpressionError::from)?
+                .map_err(RasterExpressionError::from)?
         };
 
         let map_fn = |lin_idx: usize| {
@@ -463,7 +463,7 @@ macro_rules! impl_expression_tuple_processor {
             ) -> Result<GridOrEmpty2D<TO>> {
                 let expression: Symbol<$FN_T> = unsafe {
                     // we have to "trust" that the function has the signature we expect
-                    program.function_nary().map_err(ExpressionError::from)?
+                    program.function_nary().map_err(RasterExpressionError::from)?
                 };
 
                 let map_fn = |lin_idx: usize| {

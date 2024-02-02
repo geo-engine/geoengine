@@ -3,14 +3,53 @@ mod raster_operator;
 mod raster_query_processor;
 mod vector_operator;
 
+pub use error::{RasterExpressionError, VectorExpressionError};
+pub use raster_operator::{Expression, ExpressionParams}; // TODO: rename to `RasterExpression`
+pub use vector_operator::{VectorExpression, VectorExpressionParams};
+
+use self::error::ExpressionDependenciesInitializationError;
+use crate::util::Result;
 use geoengine_datatypes::primitives::{
     AsGeoOption, MultiLineString, MultiLineStringRef, MultiPoint, MultiPointRef, MultiPolygon,
     MultiPolygonRef, NoGeometry,
 };
+use geoengine_expression::{error::ExpressionExecutionError, ExpressionDependencies};
+use std::sync::{Arc, OnceLock};
 
-pub use error::ExpressionError;
-pub use raster_operator::{Expression, ExpressionParams};
-pub use vector_operator::{VectorExpression, VectorExpressionError, VectorExpressionParams};
+/// The expression dependencies are initialized once and then reused for all expression evaluations.
+static EXPRESSION_DEPENDENCIES: OnceLock<
+    Result<ExpressionDependencies, Arc<ExpressionExecutionError>>,
+> = OnceLock::new();
+
+/// Initializes the expression dependencies once so that they can be reused for all expression evaluations.
+/// Compiling the dependencies takes a while, so this can drastically improve performance on the first expression call.
+///
+/// If it fails, you can retry or terminate the program.
+///
+pub async fn initialize_expression_dependencies(
+) -> Result<(), ExpressionDependenciesInitializationError> {
+    crate::util::spawn_blocking(|| {
+        let dependencies = ExpressionDependencies::new()?;
+
+        // if set returns an error, it was initialized before so it is ok for this functions purpose
+        let _ = EXPRESSION_DEPENDENCIES.set(Ok(dependencies));
+        Ok(())
+    })
+    .await?
+}
+
+fn generate_expression_dependencies(
+) -> Result<ExpressionDependencies, Arc<ExpressionExecutionError>> {
+    ExpressionDependencies::new().map_err(Arc::new)
+}
+
+fn get_expression_dependencies(
+) -> Result<&'static ExpressionDependencies, Arc<ExpressionExecutionError>> {
+    EXPRESSION_DEPENDENCIES
+        .get_or_init(generate_expression_dependencies)
+        .as_ref()
+        .map_err(Clone::clone)
+}
 
 /// Convenience trait for converting [`geoengine_datatypes`] types to [`geoengine_expression`] types.
 trait AsExpressionGeo: AsGeoOption {

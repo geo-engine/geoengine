@@ -1,4 +1,7 @@
-use super::{AsExpressionGeo, FromExpressionGeo};
+use super::{
+    error::vector as error, get_expression_dependencies, AsExpressionGeo, FromExpressionGeo,
+    VectorExpressionError,
+};
 use crate::{
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
@@ -11,23 +14,25 @@ use crate::{
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::collections::{
-    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
-    GeoFeatureCollectionModifications, GeoVectorDataType, IntoGeometryOptionsIterator,
-    VectorDataType,
-};
 use geoengine_datatypes::primitives::{
     FeatureData, FeatureDataRef, FeatureDataType, FloatOptionsParIter, Geometry, Measurement,
     MultiLineString, MultiPoint, MultiPolygon, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
+use geoengine_datatypes::{
+    collections::{
+        FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+        GeoFeatureCollectionModifications, GeoVectorDataType, IntoGeometryOptionsIterator,
+        VectorDataType,
+    },
+    primitives::NoGeometry,
+};
 use geoengine_expression::{
-    DataType, ExpressionDependencies, ExpressionParser, LinkedExpression,
-    Parameter as ExpressionParameter,
+    DataType, ExpressionParser, LinkedExpression, Parameter as ExpressionParameter,
 };
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, Snafu};
+use snafu::ResultExt;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -42,6 +47,7 @@ impl OperatorName for VectorExpression {
 
 const MAX_INPUT_COLUMNS: usize = 2;
 const PARALLEL_MIN_BATCH_SIZE: usize = 32; // TODO: find good default
+const EXPRESSION_MAIN_NAME: &str = "expression";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -138,20 +144,31 @@ impl VectorOperator for VectorExpression {
             }
         };
 
-        let expression = Arc::new(compile_expression(
-            &self.params.expression,
-            self.params.geometry_column_name.clone(),
-            expression_geom_input_type,
-            &self.params.input_columns,
-            expression_output_type,
-        )?);
+        let (expression, input_columns) = {
+            let expression_code = self.params.expression.clone();
+            let geometry_column_name = self.params.geometry_column_name.clone();
+            let input_columns = self.params.input_columns;
+
+            crate::util::spawn_blocking(move || {
+                compile_expression(
+                    &expression_code,
+                    geometry_column_name,
+                    expression_geom_input_type,
+                    &input_columns,
+                    expression_output_type,
+                )
+                .map(|expression| (Arc::new(expression), input_columns))
+            })
+            .await
+            .map_err(|source| VectorExpressionError::CompilationTask { source })??
+        };
 
         let initialized_operator = InitializedVectorExpression {
             name,
             result_descriptor,
             features: initialized_source.vector,
             expression,
-            input_columns: self.params.input_columns,
+            input_columns,
             output_column: self.params.output_column,
         };
 
@@ -245,19 +262,139 @@ fn compile_expression(
             .iter()
             .map(|p| ExpressionParameter::Number(p.into())),
     );
-    let expression = ExpressionParser::new(&expression_parameters, output_type)?.parse(
-        "expression", // TODO: generate and store a unique name
-        expression_code,
-    )?;
+    let expression = ExpressionParser::new(&expression_parameters, output_type)?
+        .parse(EXPRESSION_MAIN_NAME, expression_code)?;
 
-    // TODO: (a) use a cache for the expression dependencies
-    // TODO: (b) spawn a blocking task for the compilation process
-    let expression_dependencies = ExpressionDependencies::new()?;
+    let expression_dependencies = get_expression_dependencies().context(error::Dependencies)?;
 
     Ok(LinkedExpression::from_ast(
         &expression,
-        &expression_dependencies,
+        expression_dependencies,
     )?)
+}
+
+impl InitializedVectorExpression {
+    #[inline]
+    fn column_processor<G>(
+        &self,
+        source: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+        output_column: String,
+    ) -> TypedVectorQueryProcessor
+    where
+        G: Geometry + ArrowTyped + 'static,
+        FeatureCollection<G>: for<'g> IntoGeometryOptionsIterator<'g> + 'static,
+        for<'g> <FeatureCollection<G> as IntoGeometryOptionsIterator<'g>>::GeometryType:
+            AsExpressionGeo + Send,
+        for<'g> <<FeatureCollection<G> as IntoGeometryOptionsIterator<'g>>::GeometryOptionIterator as IntoParallelIterator>::Iter:
+        IndexedParallelIterator + Send,
+        TypedVectorQueryProcessor: From<Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>>,
+    {
+        VectorExpressionColumnProcessor {
+            source,
+            result_descriptor: self.result_descriptor.clone(),
+            expression: self.expression.clone(),
+            input_columns: self.input_columns.clone(),
+            output_column,
+        }
+        .boxed()
+        .into()
+    }
+
+    #[inline]
+    fn geometry_processor<GIn, GOut>(
+        &self,
+        source: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<GIn>>>,
+    ) -> TypedVectorQueryProcessor
+    where
+        GIn: Geometry + ArrowTyped + Send + Sync + 'static + Sized,
+        GOut: Geometry
+            + ArrowTyped
+            + FromExpressionGeo
+            + Send
+            + Sync
+            + 'static
+            + Sized,
+        FeatureCollection<GIn>: GeoFeatureCollectionModifications<GOut> + for<'g> IntoGeometryOptionsIterator<'g>,
+        for<'g> <<FeatureCollection<GIn> as IntoGeometryOptionsIterator<'g>>::GeometryOptionIterator as IntoParallelIterator>::Iter:
+            IndexedParallelIterator + Send,
+        for<'g> <FeatureCollection<GIn> as IntoGeometryOptionsIterator<'g>>::GeometryType: AsExpressionGeo,
+        TypedVectorQueryProcessor: From<Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<GIn>>>>,
+    {
+        VectorExpressionGeometryProcessor {
+            source,
+            result_descriptor: self.result_descriptor.clone(),
+            expression: self.expression.clone(),
+            input_columns: self.input_columns.clone(),
+            _out: PhantomData::<MultiPolygon>,
+        }
+        .boxed()
+        .into()
+    }
+
+    #[inline]
+    fn dispatch_float_column_output(
+        &self,
+        source_processor: TypedVectorQueryProcessor,
+        output_column: String,
+    ) -> TypedVectorQueryProcessor {
+        match source_processor {
+            TypedVectorQueryProcessor::Data(source) => {
+                self.column_processor::<NoGeometry>(source, output_column)
+            }
+            TypedVectorQueryProcessor::MultiPoint(source) => {
+                self.column_processor::<MultiPoint>(source, output_column)
+            }
+            TypedVectorQueryProcessor::MultiLineString(source) => {
+                self.column_processor::<MultiLineString>(source, output_column)
+            }
+            TypedVectorQueryProcessor::MultiPolygon(source) => {
+                self.column_processor::<MultiPolygon>(source, output_column)
+            }
+        }
+    }
+
+    #[inline]
+    fn dispatch_geometry_output_for_type<GOut>(
+        &self,
+        source_processor: TypedVectorQueryProcessor,
+    ) -> TypedVectorQueryProcessor
+    where
+        GOut: Geometry + ArrowTyped + FromExpressionGeo + Send + Sync + 'static + Sized,
+    {
+        match source_processor {
+            TypedVectorQueryProcessor::Data(source) => {
+                self.geometry_processor::<NoGeometry, GOut>(source)
+            }
+            TypedVectorQueryProcessor::MultiPoint(source) => {
+                self.geometry_processor::<MultiPoint, GOut>(source)
+            }
+            TypedVectorQueryProcessor::MultiLineString(source) => {
+                self.geometry_processor::<MultiLineString, GOut>(source)
+            }
+            TypedVectorQueryProcessor::MultiPolygon(source) => {
+                self.geometry_processor::<MultiPolygon, GOut>(source)
+            }
+        }
+    }
+
+    #[inline]
+    fn dispatch_geometry_output(
+        &self,
+        source_processor: TypedVectorQueryProcessor,
+        vector_data_type: GeoVectorDataType,
+    ) -> TypedVectorQueryProcessor {
+        match vector_data_type {
+            GeoVectorDataType::MultiPoint => {
+                self.dispatch_geometry_output_for_type::<MultiPoint>(source_processor)
+            }
+            GeoVectorDataType::MultiLineString => {
+                self.dispatch_geometry_output_for_type::<MultiLineString>(source_processor)
+            }
+            GeoVectorDataType::MultiPolygon => {
+                self.dispatch_geometry_output_for_type::<MultiPolygon>(source_processor)
+            }
+        }
+    }
 }
 
 impl InitializedVectorOperator for InitializedVectorExpression {
@@ -265,202 +402,16 @@ impl InitializedVectorOperator for InitializedVectorExpression {
         &self.result_descriptor
     }
 
-    #[allow(clippy::too_many_lines)] // TODO: use a macro to implement the variants
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         let source_processor = self.features.query_processor()?;
 
-        Ok(match (source_processor, self.output_column.clone()) {
-            (TypedVectorQueryProcessor::Data(source), OutputColumn::Column(output_column)) => {
-                VectorExpressionColumnProcessor {
-                    source,
-                    result_descriptor: self.result_descriptor.clone(),
-                    expression: self.expression.clone(),
-                    input_columns: self.input_columns.clone(),
-                    output_column,
-                }
-                .boxed()
-                .into()
+        Ok(match self.output_column.clone() {
+            OutputColumn::Geometry(vector_data_type) => {
+                self.dispatch_geometry_output(source_processor, vector_data_type)
             }
-            (
-                TypedVectorQueryProcessor::MultiPoint(source),
-                OutputColumn::Column(output_column),
-            ) => VectorExpressionColumnProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                output_column,
+            OutputColumn::Column(output_column) => {
+                self.dispatch_float_column_output(source_processor, output_column)
             }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::MultiLineString(source),
-                OutputColumn::Column(output_column),
-            ) => VectorExpressionColumnProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                output_column,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::MultiPolygon(source),
-                OutputColumn::Column(output_column),
-            ) => VectorExpressionColumnProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                output_column,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::MultiPoint(source),
-                OutputColumn::Geometry(GeoVectorDataType::MultiPoint),
-            ) => VectorExpressionGeometryProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                _out: PhantomData::<MultiPoint>,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::MultiPoint(source),
-                OutputColumn::Geometry(GeoVectorDataType::MultiLineString),
-            ) => VectorExpressionGeometryProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                _out: PhantomData::<MultiLineString>,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::MultiPoint(source),
-                OutputColumn::Geometry(GeoVectorDataType::MultiPolygon),
-            ) => VectorExpressionGeometryProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                _out: PhantomData::<MultiPolygon>,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::MultiLineString(source),
-                OutputColumn::Geometry(GeoVectorDataType::MultiPoint),
-            ) => VectorExpressionGeometryProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                _out: PhantomData::<MultiPoint>,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::MultiLineString(source),
-                OutputColumn::Geometry(GeoVectorDataType::MultiLineString),
-            ) => VectorExpressionGeometryProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                _out: PhantomData::<MultiLineString>,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::MultiLineString(source),
-                OutputColumn::Geometry(GeoVectorDataType::MultiPolygon),
-            ) => VectorExpressionGeometryProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                _out: PhantomData::<MultiPolygon>,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::MultiPolygon(source),
-                OutputColumn::Geometry(GeoVectorDataType::MultiPoint),
-            ) => VectorExpressionGeometryProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                _out: PhantomData::<MultiPoint>,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::MultiPolygon(source),
-                OutputColumn::Geometry(GeoVectorDataType::MultiLineString),
-            ) => VectorExpressionGeometryProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                _out: PhantomData::<MultiLineString>,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::MultiPolygon(source),
-                OutputColumn::Geometry(GeoVectorDataType::MultiPolygon),
-            ) => VectorExpressionGeometryProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                _out: PhantomData::<MultiPolygon>,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::Data(source),
-                OutputColumn::Geometry(GeoVectorDataType::MultiPoint),
-            ) => VectorExpressionGeometryProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                _out: PhantomData::<MultiPoint>,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::Data(source),
-                OutputColumn::Geometry(GeoVectorDataType::MultiLineString),
-            ) => VectorExpressionGeometryProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                _out: PhantomData::<MultiLineString>,
-            }
-            .boxed()
-            .into(),
-            (
-                TypedVectorQueryProcessor::Data(source),
-                OutputColumn::Geometry(GeoVectorDataType::MultiPolygon),
-            ) => VectorExpressionGeometryProcessor {
-                source,
-                result_descriptor: self.result_descriptor.clone(),
-                expression: self.expression.clone(),
-                input_columns: self.input_columns.clone(),
-                _out: PhantomData::<MultiPolygon>,
-            }
-            .boxed()
-            .into(),
         })
     }
 
@@ -469,6 +420,8 @@ impl InitializedVectorOperator for InitializedVectorExpression {
     }
 }
 
+/// A processor that evaluates an expression on the columns of a `FeatureCollection`.
+/// The result is a new `FeatureCollection` with the evaluated column added.
 pub struct VectorExpressionColumnProcessor<Q, G>
 where
     G: Geometry,
@@ -481,6 +434,8 @@ where
     output_column: String,
 }
 
+/// A processor that evaluates an expression on the columns of a `FeatureCollection`.
+/// The result is a new `FeatureCollection` with a replaced geometry column.
 pub struct VectorExpressionGeometryProcessor<Q, GIn, GOut>
 where
     GIn: Geometry,
@@ -538,7 +493,6 @@ where
                     .map(FeatureDataRef::float_options_par_iter)
                     .collect::<Vec<_>>();
 
-                // TODO: custom type for geometry input
                 let geom_input = collection.geometry_options().into_par_iter().map(|geometry_option| {
                     if let Some(geometry) = geometry_option.as_ref() {
                         geometry.as_expression_geo()
@@ -786,54 +740,6 @@ where
 // {
 //     todo!()
 // }
-
-#[derive(Debug, Snafu)]
-#[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
-pub enum VectorExpressionError {
-    #[snafu(display("Input column `{name}` does not exist."))]
-    InputColumnNotExisting { name: String },
-
-    #[snafu(display("Input column `{name}` is not numeric."))]
-    InputColumnNotNumeric { name: String },
-
-    #[snafu(display("Found {found} columns, but only up to {max} are allowed."))]
-    TooManyInputColumns { max: usize, found: usize },
-
-    #[snafu(display("The column `{name}` contains special characters."))]
-    ColumnNameContainsSpecialCharacters { name: String },
-
-    #[snafu(display("Output column `{name}` already exists."))]
-    OutputColumnCollision { name: String },
-
-    #[snafu(display("Cannot create `DataCollection`."))]
-    CannotGenerateDataOutput,
-
-    #[snafu(display("Cannot parse expression: {source}"), context(false))]
-    Parsing {
-        source: geoengine_expression::error::ExpressionParserError,
-    },
-
-    #[snafu(display("Cannot call expression function: {source}."), context(false))]
-    Executing {
-        source: geoengine_expression::error::ExpressionExecutionError,
-    },
-
-    #[snafu(display("Cannot add column {name}."))]
-    AddColumn {
-        name: String,
-        source: geoengine_datatypes::error::Error,
-    },
-
-    #[snafu(display("Could not replace geometries."))]
-    ReplaceGeometries {
-        source: geoengine_datatypes::error::Error,
-    },
-
-    #[snafu(display("Cannot filter collection for empty output geometries."))]
-    FilterEmptyGeometries {
-        source: geoengine_datatypes::error::Error,
-    },
-}
 
 #[cfg(test)]
 mod tests {

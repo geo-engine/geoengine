@@ -1,6 +1,7 @@
 use super::{
-    error::ExpressionError,
+    get_expression_dependencies,
     raster_query_processor::{ExpressionInput, ExpressionQueryProcessor},
+    RasterExpressionError,
 };
 use crate::{
     engine::{
@@ -15,7 +16,7 @@ use crate::{
 use async_trait::async_trait;
 use geoengine_datatypes::{primitives::Measurement, raster::RasterDataType};
 use geoengine_expression::{
-    DataType, ExpressionAst, ExpressionDependencies, ExpressionParser, LinkedExpression, Parameter,
+    DataType, ExpressionAst, ExpressionParser, LinkedExpression, Parameter,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -84,12 +85,12 @@ impl RasterOperator for Expression {
             .collect::<Vec<_>>();
 
         let expression = ExpressionParser::new(&parameters, DataType::Number)
-            .map_err(ExpressionError::from)?
+            .map_err(RasterExpressionError::from)?
             .parse(
                 "expression", // TODO: generate and store a unique name
                 &self.params.expression,
             )
-            .map_err(ExpressionError::from)?;
+            .map_err(RasterExpressionError::from)?;
 
         let result_descriptor = RasterResultDescriptor {
             data_type: self.params.output_type,
@@ -159,16 +160,15 @@ impl InitializedRasterOperator for InitializedExpression {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let output_type = self.result_descriptor().data_type;
 
-        // TODO: (a) use a cache for the expression dependencies
-        // TODO: (b) spawn a blocking task for the compilation process
-        let expression_dependencies =
-            ExpressionDependencies::new().map_err(ExpressionError::from)?;
+        // TODO: spawn a blocking task for the compilation process
+        let expression_dependencies = get_expression_dependencies()
+            .map_err(|source| RasterExpressionError::Dependencies { source })?;
         let expression = LinkedExpression::new(
             self.expression.name(),
             &self.expression.code(),
-            &expression_dependencies,
+            expression_dependencies,
         )
-        .map_err(ExpressionError::from)?;
+        .map_err(RasterExpressionError::from)?;
 
         let source_processor = self.source.query_processor()?.into_f64();
 

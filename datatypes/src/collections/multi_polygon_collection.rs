@@ -1,3 +1,4 @@
+use super::geo_feature_collection::ReplaceRawArrayCoords;
 use crate::collections::{
     BuilderProvider, FeatureCollection, FeatureCollectionInfos, FeatureCollectionIterator,
     FeatureCollectionRow, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
@@ -19,8 +20,6 @@ use arrow::{
 use rayon::iter::plumbing::Producer;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use std::{slice, sync::Arc};
-
-use super::geo_feature_collection::ReplaceRawArrayCoords;
 
 /// This collection contains temporal multi polygons and miscellaneous data.
 pub type MultiPolygonCollection = FeatureCollection<MultiPolygon>;
