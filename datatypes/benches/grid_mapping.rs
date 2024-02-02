@@ -19,7 +19,7 @@ fn map_indexed_elements_1d_simple(c: &mut Criterion) {
             let grid = grid.clone();
 
             black_box(grid.map_indexed_elements(lin_idx_map_fn))
-        })
+        });
     });
 
     group.bench_function("map_indexed_elements GridIdx1D", |b| {
@@ -27,10 +27,10 @@ fn map_indexed_elements_1d_simple(c: &mut Criterion) {
             let grid = grid.clone();
 
             black_box(grid.map_indexed_elements(grid_idx_map_fn))
-        })
+        });
     });
 
-    group.finish()
+    group.finish();
 }
 
 fn map_indexed_elements_1d(c: &mut Criterion) {
@@ -70,10 +70,10 @@ fn map_indexed_elements_1d(c: &mut Criterion) {
                     let grid = grid.clone();
 
                     black_box(grid.map_indexed_elements_parallel(grid_idx_map_fn))
-                })
+                });
             })
         });
-        group.finish()
+        group.finish();
     }
 }
 

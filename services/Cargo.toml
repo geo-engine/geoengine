@@ -1,12 +1,12 @@
 [package]
 name = "geoengine-services"
-version = "0.7.0"
-authors = [
-  "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
-  "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
-  "Michael Mattig <mattig@mathematik.uni-marburg.de>",
-]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+publish.workspace = true
+license-file.workspace = true
+documentation.workspace = true
+repository.workspace = true
 build = "build.rs"
 
 [features]
@@ -143,3 +143,6 @@ vergen = { version = "8", features = ["build", "cargo", "git", "gitcl"] }
 name = "quota_check"
 harness = false
 required-features = ["pro"]
+
+[lints]
+workspace = true
