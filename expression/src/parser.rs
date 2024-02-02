@@ -88,7 +88,6 @@ impl ExpressionParser {
         let pairs = _ExpressionParser::parse(Rule::main, input)
             .map_err(ExpressionParserError::from_syntactic_error)?;
 
-        // TODO: make variable case insensitive
         let variables = self
             .parameters
             .iter()
@@ -556,7 +555,7 @@ mod tests {
             tokens.extend(match self {
                 FunctionDefs::Add => quote! {
                     #[inline]
-                    fn import_add__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    fn expression_fn_add__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                         match (a, b) {
                             (Some(a), Some(b)) => Some(std::ops::Add::add(a, b)),
                             _ => None,
@@ -565,7 +564,7 @@ mod tests {
                 },
                 FunctionDefs::Sub => quote! {
                     #[inline]
-                    fn import_sub__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    fn expression_fn_sub__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                         match (a, b) {
                             (Some(a), Some(b)) => Some(std::ops::Sub::sub(a, b)),
                             _ => None,
@@ -574,7 +573,7 @@ mod tests {
                 },
                 FunctionDefs::Mul => quote! {
                     #[inline]
-                    fn import_mul__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    fn expression_fn_mul__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                         match (a, b) {
                             (Some(a), Some(b)) => Some(std::ops::Mul::mul(a, b)),
                             _ => None,
@@ -583,7 +582,7 @@ mod tests {
                 },
                 FunctionDefs::Div => quote! {
                     #[inline]
-                    fn import_div__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    fn expression_fn_div__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                         match (a, b) {
                             (Some(a), Some(b)) => Some(std::ops::Div::div(a, b)),
                             _ => None,
@@ -592,7 +591,7 @@ mod tests {
                 },
                 FunctionDefs::Pow => quote! {
                     #[inline]
-                    fn import_pow__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                    fn expression_fn_pow__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                         match (a, b) {
                             (Some(a), Some(b)) => Some(f64::powf(a, b)),
                             _ => None,
@@ -633,7 +632,7 @@ mod tests {
 
                 #[no_mangle]
                 pub extern "Rust" fn foo() -> Option<f64> {
-                    import_add__n_n(Some(1f64), Some(2f64))
+                    expression_fn_add__n_n(Some(1f64), Some(2f64))
                 }
             }
             .to_string()
@@ -648,7 +647,7 @@ mod tests {
 
                 #[no_mangle]
                 pub extern "Rust" fn bar() -> Option<f64> {
-                    import_add__n_n(Some(-1f64), Some(2f64))
+                    expression_fn_add__n_n(Some(-1f64), Some(2f64))
                 }
             }
             .to_string()
@@ -663,7 +662,7 @@ mod tests {
 
                 #[no_mangle]
                 pub extern "Rust" fn baz() -> Option<f64> {
-                    import_sub__n_n(Some(1f64), Some(-2f64))
+                    expression_fn_sub__n_n(Some(1f64), Some(-2f64))
                 }
             }
             .to_string()
@@ -677,7 +676,7 @@ mod tests {
                 #ADD_FN
 
                 #[inline]
-                fn import_div__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                fn expression_fn_div__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                     match (a, b) {
                         (Some(a), Some(b)) => Some(std::ops::Div::div(a, b)),
                         _ => None,
@@ -686,9 +685,9 @@ mod tests {
 
                 #[no_mangle]
                 pub extern "Rust" fn expression() -> Option<f64> {
-                    import_add__n_n(
+                    expression_fn_add__n_n(
                         Some(1f64),
-                        import_div__n_n(Some(2f64), Some(3f64)),
+                        expression_fn_div__n_n(Some(2f64), Some(3f64)),
                     )
                 }
             }
@@ -704,7 +703,7 @@ mod tests {
 
                 #[no_mangle]
                 pub extern "Rust" fn expression() -> Option<f64> {
-                    import_pow__n_n(Some(2f64) , Some(4f64))
+                    expression_fn_pow__n_n(Some(2f64) , Some(4f64))
                 }
             }
             .to_string()
@@ -722,7 +721,7 @@ mod tests {
 
                 #[no_mangle]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
-                    import_add__n_n(a, Some(1f64))
+                    expression_fn_add__n_n(a, Some(1f64))
                 }
             }
             .to_string()
@@ -739,9 +738,9 @@ mod tests {
 
                 #[no_mangle]
                 pub extern "Rust" fn ndvi(a: Option<f64>, b: Option<f64>) -> Option<f64> {
-                    import_div__n_n(
-                        import_sub__n_n(a, b),
-                        import_add__n_n(a, b),
+                    expression_fn_div__n_n(
+                        expression_fn_sub__n_n(a, b),
+                        expression_fn_add__n_n(a, b),
                     )
                 }
             }
@@ -758,7 +757,7 @@ mod tests {
                 #Prelude
 
                 #[inline]
-                fn import_max__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                fn expression_fn_max__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                     match (a, b) {
                         (Some(a), Some(b)) => Some(f64::max(a, b)),
                         _ => None,
@@ -767,7 +766,7 @@ mod tests {
 
                 #[no_mangle]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
-                    import_max__n_n(a, Some(0f64))
+                    expression_fn_max__n_n(a, Some(0f64))
                 }
             }
             .to_string()
@@ -779,20 +778,20 @@ mod tests {
                 #Prelude
 
                 #[inline]
-                fn import_pow__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                fn expression_fn_pow__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                     match (a, b) {
                         (Some(a), Some(b)) => Some(f64::powf(a, b)),
                         _ => None,
                     }
                 }
                 #[inline]
-                fn import_sqrt__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_sqrt__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::sqrt)
                 }
 
                 #[no_mangle]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
-                    import_pow__n_n(import_sqrt__n(a), Some(2f64))
+                    expression_fn_pow__n_n(expression_fn_sqrt__n(a), Some(2f64))
                 }
             }
             .to_string()
@@ -804,33 +803,33 @@ mod tests {
                 #Prelude
 
                 #[inline]
-                fn import_acos__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_acos__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::acos)
                 }
                 #[inline]
-                fn import_asin__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_asin__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::asin)
                 }
                 #[inline]
-                fn import_atan__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_atan__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::atan)
                 }
                 #[inline]
-                fn import_cos__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_cos__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::cos)
                 }
                 #[inline]
-                fn import_sin__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_sin__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::sin)
                 }
                 #[inline]
-                fn import_tan__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_tan__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::tan)
                 }
 
                 #[no_mangle]
                 pub extern "Rust" fn waves() -> Option<f64> {
-                    import_cos__n(import_sin__n(import_tan__n(import_acos__n(import_asin__n(import_atan__n(Some(1f64)))))))
+                    expression_fn_cos__n(expression_fn_sin__n(expression_fn_tan__n(expression_fn_acos__n(expression_fn_asin__n(expression_fn_atan__n(Some(1f64)))))))
                 }
             }
             .to_string()
@@ -842,21 +841,21 @@ mod tests {
                 #Prelude
 
                 #[inline]
-                fn import_ln__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_ln__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::ln)
                 }
                 #[inline]
-                fn import_log10__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_log10__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::log10)
                 }
                 #[inline]
-                fn import_pi_() -> Option<f64> {
+                fn expression_fn_pi_() -> Option<f64> {
                     Some(std::f64::consts::PI)
                 }
 
                 #[no_mangle]
                 pub extern "Rust" fn non_linear() -> Option<f64> {
-                    import_ln__n(import_log10__n(import_pi_()))
+                    expression_fn_ln__n(expression_fn_log10__n(expression_fn_pi_()))
                 }
             }
             .to_string()
@@ -869,26 +868,26 @@ mod tests {
 
                 #ADD_FN
                 #[inline]
-                fn import_ceil__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_ceil__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::ceil)
                 }
                 #[inline]
-                fn import_floor__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_floor__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::floor)
                 }
                 #[inline]
-                fn import_round__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_round__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::round)
                 }
 
                 #[no_mangle]
                 pub extern "Rust" fn rounding() -> Option<f64> {
-                    import_add__n_n(
-                        import_add__n_n(
-                            import_round__n(Some(1.3f64)),
-                            import_ceil__n(Some(1.2f64)),
+                    expression_fn_add__n_n(
+                        expression_fn_add__n_n(
+                            expression_fn_round__n(Some(1.3f64)),
+                            expression_fn_ceil__n(Some(1.2f64)),
                         ),
-                        import_floor__n(Some(1.1f64)),
+                        expression_fn_floor__n(Some(1.1f64)),
                     )
                 }
             }
@@ -902,17 +901,17 @@ mod tests {
 
                 #ADD_FN
                 #[inline]
-                fn import_to_degrees__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_to_degrees__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::to_degrees)
                 }
                 #[inline]
-                fn import_to_radians__n(a: Option<f64>) -> Option<f64> {
+                fn expression_fn_to_radians__n(a: Option<f64>) -> Option<f64> {
                     a.map(f64::to_radians)
                 }
 
                 #[no_mangle]
                 pub extern "Rust" fn radians() -> Option<f64> {
-                    import_add__n_n(import_to_radians__n(Some(1.3f64)), import_to_degrees__n(Some(1.3f64)))
+                    expression_fn_add__n_n(expression_fn_to_radians__n(Some(1.3f64)), expression_fn_to_degrees__n(Some(1.3f64)))
                 }
             }
             .to_string()
@@ -924,11 +923,11 @@ mod tests {
                 #Prelude
 
                 #[inline]
-                fn import_e_() -> Option<f64> {
+                fn expression_fn_e_() -> Option<f64> {
                     Some(std::f64::consts::E)
                 }
                 #[inline]
-                fn import_mod__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                fn expression_fn_mod__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                     match (a, b) {
                         (Some(a), Some(b)) => Some(std::ops::Rem::rem(a, b)),
                         _ => None,
@@ -937,7 +936,7 @@ mod tests {
 
                 #[no_mangle]
                 pub extern "Rust" fn mod_e() -> Option<f64> {
-                    import_mod__n_n(Some(5f64), import_e_())
+                    expression_fn_mod__n_n(Some(5f64), expression_fn_e_())
                 }
             }
             .to_string()
@@ -990,7 +989,7 @@ mod tests {
                 #[no_mangle]
                 pub extern "Rust" fn expression(A: Option<f64>, B: Option<f64>) -> Option<f64> {
                     if ((A) == (None)) {
-                        import_mul__n_n(B, Some(2f64))
+                        expression_fn_mul__n_n(B, Some(2f64))
                     } else if ((A) == (Some(6f64))) {
                         None
                     } else {
@@ -1040,7 +1039,7 @@ mod tests {
                     } else if false {
                         Some(2f64)
                     } else {
-                        import_add__n_n(Some(1f64), Some(2f64))
+                        expression_fn_add__n_n(Some(1f64), Some(2f64))
                     }
                 }
             }
@@ -1063,10 +1062,10 @@ mod tests {
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if ((Some(1f64)) < (Some(2f64))) {
                         Some(1f64)
-                    } else if ((import_add__n_n(Some(1f64), Some(5f64))) < (import_sub__n_n(Some(3f64), Some(1f64)))) {
+                    } else if ((expression_fn_add__n_n(Some(1f64), Some(5f64))) < (expression_fn_sub__n_n(Some(3f64), Some(1f64)))) {
                         Some(2f64)
                     } else {
-                        import_add__n_n(Some(1f64), Some(2f64))
+                        expression_fn_add__n_n(Some(1f64), Some(2f64))
                     }
                 }
             }
@@ -1089,7 +1088,7 @@ mod tests {
                 #Prelude
 
                 #[inline]
-                fn import_max__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
+                fn expression_fn_max__n_n(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                     match (a, b) {
                         (Some(a), Some(b)) => Some(f64::max(a, b)),
                         _ => None,
@@ -1103,7 +1102,7 @@ mod tests {
                     } else if ( (( (Some(1f64)) < (Some(2f64)) )) && (true) ) {
                         Some(2f64)
                     } else {
-                        import_max__n_n(Some(1f64), Some(2f64))
+                        expression_fn_max__n_n(Some(1f64), Some(2f64))
                     }
                 }
             }
@@ -1130,8 +1129,8 @@ mod tests {
                 pub extern "Rust" fn expression() -> Option<f64> {
                     let a = Some(1.2f64);
                     let b = Some(2f64);
-                    import_add__n_n(
-                        import_add__n_n(a, b),
+                    expression_fn_add__n_n(
+                        expression_fn_add__n_n(a, b),
                         Some(1f64),
                     )
                 }
@@ -1252,7 +1251,7 @@ mod tests {
                 #Prelude
 
                 #[inline]
-                fn import_centroid__q(
+                fn expression_fn_centroid__q(
                     geom: Option<MultiPolygon>
                 ) -> Option<MultiPoint> {
                     geom.centroid()
@@ -1262,7 +1261,7 @@ mod tests {
                 pub extern "Rust" fn make_centroid(
                     geom: Option<MultiPolygon>
                 ) -> Option<MultiPoint> {
-                    import_centroid__q(geom)
+                    expression_fn_centroid__q(geom)
                 }
             }
             .to_string()

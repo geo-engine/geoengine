@@ -333,13 +333,15 @@ pub fn init_functions() -> HashMap<&'static str, FunctionGenerator> {
     functions
 }
 
+pub const FUNCTION_PREFIX: &str = "expression_fn_";
+
 /// Creates a unique name for a function to be used in the source code.
 ///
-/// Format: `import_<name>__<dtype1>_<dtype2>_<dtype3>…`
+/// Format: `expression_fn__<name>__<dtype1>_<dtype2>_<dtype3>…`
 ///
 fn unique_name(name: &str, signature: &[DataType]) -> Identifier {
     let mut fn_name = String::new();
-    fn_name.push_str("import_");
+    fn_name.push_str(FUNCTION_PREFIX);
     fn_name.push_str(name);
     fn_name.push('_');
     for dtype in signature {

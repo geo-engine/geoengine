@@ -6,8 +6,6 @@ use std::{collections::BTreeSet, fmt::Debug, hash::Hash};
 
 type Result<T, E = ExpressionParserError> = std::result::Result<T, E>;
 
-// TODO: prefix for variables and functions
-
 /// An expression as an abstract syntax tree.
 /// Allows genering Rust code.
 #[derive(Debug, Clone)]
@@ -84,10 +82,6 @@ impl ToTokens for ExpressionAst {
         let content = &self.root;
 
         let dtype = self.out_type;
-
-        // TODO: allow non-snake case names…
-        // - for variables, e.g. expression(A, B)
-        // - for functions, e.g., import__foo_n
 
         tokens.extend(quote! {
             #[no_mangle]
@@ -351,7 +345,6 @@ impl ToTokens for Assignment {
     }
 }
 
-// TODO: make parameters case insensitive
 #[derive(Debug, Clone)]
 pub enum Parameter {
     Number(Identifier),

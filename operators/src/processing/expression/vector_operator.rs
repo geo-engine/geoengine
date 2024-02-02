@@ -28,7 +28,8 @@ use geoengine_datatypes::{
     primitives::NoGeometry,
 };
 use geoengine_expression::{
-    DataType, ExpressionParser, LinkedExpression, Parameter as ExpressionParameter,
+    is_allowed_variable_name, DataType, ExpressionParser, LinkedExpression,
+    Parameter as ExpressionParameter,
 };
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
@@ -45,7 +46,7 @@ impl OperatorName for VectorExpression {
     const TYPE_NAME: &'static str = "VectorExpression";
 }
 
-const MAX_INPUT_COLUMNS: usize = 2;
+const MAX_INPUT_COLUMNS: usize = 8;
 const PARALLEL_MIN_BATCH_SIZE: usize = 32; // TODO: find good default
 const EXPRESSION_MAIN_NAME: &str = "expression";
 
@@ -53,7 +54,13 @@ const EXPRESSION_MAIN_NAME: &str = "expression";
 #[serde(rename_all = "camelCase")]
 pub struct VectorExpressionParams {
     /// The columns to use as variables in the expression.
-    // TODO: Columns with special characaters? Use `ticks`?
+    ///
+    /// For usage in the expression, all special characters are replaced by underscores.
+    /// E.g., `precipitation.cm` becomes `precipitation_cm`.
+    ///
+    /// If the column name starts with a number, an underscore is prepended.
+    /// E.g., `1column` becomes `_1column`.
+    ///
     pub input_columns: Vec<String>,
 
     /// The expression to evaluate.
@@ -144,20 +151,32 @@ impl VectorOperator for VectorExpression {
             }
         };
 
-        let (expression, input_columns) = {
+        let mut expression_input_names = Vec::with_capacity(self.params.input_columns.len());
+        for input_column in &self.params.input_columns {
+            let variable_name = canonicalize_column_name(input_column);
+
+            if !is_allowed_variable_name(&variable_name) {
+                return Err(VectorExpressionError::ColumnNameContainsSpecialCharacters {
+                    name: variable_name,
+                })?;
+            }
+
+            expression_input_names.push(variable_name);
+        }
+
+        let expression = {
             let expression_code = self.params.expression.clone();
             let geometry_column_name = self.params.geometry_column_name.clone();
-            let input_columns = self.params.input_columns;
 
             crate::util::spawn_blocking(move || {
                 compile_expression(
                     &expression_code,
                     geometry_column_name,
                     expression_geom_input_type,
-                    &input_columns,
+                    &expression_input_names,
                     expression_output_type,
                 )
-                .map(|expression| (Arc::new(expression), input_columns))
+                .map(Arc::new)
             })
             .await
             .map_err(|source| VectorExpressionError::CompilationTask { source })??
@@ -168,7 +187,7 @@ impl VectorOperator for VectorExpression {
             result_descriptor,
             features: initialized_source.vector,
             expression,
-            input_columns,
+            input_columns: self.params.input_columns,
             output_column: self.params.output_column,
         };
 
@@ -219,6 +238,25 @@ fn check_output_column_validity(output_column: &OutputColumn) -> Result<(), Vect
     };
 
     Ok(())
+}
+
+/// Replaces all non-alphanumeric characters in a string with underscores.
+/// Prepends an underscore if the string is empty or starts with a number.
+fn canonicalize_column_name(name: &str) -> String {
+    let prepend_underscore = name.chars().next().map_or(true, char::is_numeric);
+
+    let mut canonicalized_name =
+        String::with_capacity(name.len() + usize::from(prepend_underscore));
+
+    if prepend_underscore {
+        canonicalized_name.push('_');
+    }
+
+    for c in name.chars() {
+        canonicalized_name.push(if c.is_alphanumeric() { c } else { '_' });
+    }
+
+    canonicalized_name
 }
 
 fn insert_new_column(
@@ -318,14 +356,14 @@ impl InitializedVectorExpression {
         for<'g> <<FeatureCollection<GIn> as IntoGeometryOptionsIterator<'g>>::GeometryOptionIterator as IntoParallelIterator>::Iter:
             IndexedParallelIterator + Send,
         for<'g> <FeatureCollection<GIn> as IntoGeometryOptionsIterator<'g>>::GeometryType: AsExpressionGeo,
-        TypedVectorQueryProcessor: From<Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<GIn>>>>,
+        TypedVectorQueryProcessor: From<Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<GOut>>>>,
     {
         VectorExpressionGeometryProcessor {
             source,
             result_descriptor: self.result_descriptor.clone(),
             expression: self.expression.clone(),
             input_columns: self.input_columns.clone(),
-            _out: PhantomData::<MultiPolygon>,
+            _out: PhantomData::<GOut>,
         }
         .boxed()
         .into()
@@ -360,6 +398,8 @@ impl InitializedVectorExpression {
     ) -> TypedVectorQueryProcessor
     where
         GOut: Geometry + ArrowTyped + FromExpressionGeo + Send + Sync + 'static + Sized,
+        TypedVectorQueryProcessor:
+            From<Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<GOut>>>>,
     {
         match source_processor {
             TypedVectorQueryProcessor::Data(source) => {
@@ -479,83 +519,20 @@ where
             let expression = self.expression.clone();
 
             crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
-                let inputs: Vec<FeatureDataRef> = input_columns
-                    .into_iter()
-                    .map(|input_column| {
-                        collection
-                            .data(&input_column)
-                            .expect("was checked durin initialization")
-                    })
-                    .collect();
-
-                let float_inputs: Vec<FloatOptionsParIter> = inputs
-                    .iter()
-                    .map(FeatureDataRef::float_options_par_iter)
-                    .collect::<Vec<_>>();
-
-                let geom_input = collection.geometry_options().into_par_iter().map(|geometry_option| {
-                    if let Some(geometry) = geometry_option.as_ref() {
-                        geometry.as_expression_geo()
-                    } else {
-                        None
-                    }
-                });
-
-                let result: Vec<Option<f64>> = match float_inputs.len() {
-                    0 => {
-                        let f = unsafe {
-                            expression.function_nary::<fn(
-                                Option<ExpressionGeometryType<'_, G>>,
-                            ) -> Option<f64>>()
-                        }
-                        .map_err(VectorExpressionError::from)?;
-
-                        Ok(geom_input
-                            .with_min_len(PARALLEL_MIN_BATCH_SIZE)
-                            .map(*f)
-                            .collect::<Vec<_>>())
-                    }
-                    1 => {
-                        let [a] = <[_; 1]>::try_from(float_inputs)
-                            .expect("it matches the match condition");
-                        let f =
-                            unsafe { expression.function_nary::<fn(
-                                Option<ExpressionGeometryType<'_, G>>,
-                                Option<f64>,
-                            ) -> Option<f64>>() }
-                                .map_err(VectorExpressionError::from)?;
-
-                            Ok((geom_input, a)
-                                .into_par_iter()
-                                .with_min_len(PARALLEL_MIN_BATCH_SIZE)
-                                .map(|(geom, a)| f(geom, a))
-                                .collect::<Vec<_>>())
-                    }
-                    2 => {
-                        let [a, b] = <[_; 2]>::try_from(float_inputs)
-                            .expect("it matches the match condition");
-                        let f = unsafe {
-                            expression
-                                .function_nary::<fn(
-                                    Option<ExpressionGeometryType<'_, G>>,
-                                    Option<f64>,
-                                    Option<f64>,
-                                ) -> Option<f64>>()
-                        }
-                        .map_err(VectorExpressionError::from)?;
-
-                        Ok((geom_input, a, b)
-                                .into_par_iter()
-                                .with_min_len(PARALLEL_MIN_BATCH_SIZE)
-                                .map(|(geom, a, b)| f(geom, a, b))
-                                .collect::<Vec<_>>())
-                    }
-                    // TODO: implement more cases
-                    other => Err(VectorExpressionError::TooManyInputColumns {
-                        max: MAX_INPUT_COLUMNS,
-                        found: other,
-                    }),
-                }?;
+                let result: Vec<Option<f64>> = call_expression_function::<G, f64, Vec<Option<f64>>>(
+                    &expression,
+                    &collection,
+                    &input_columns,
+                    Vec::new,
+                    |mut floats, float_option| {
+                        floats.push(float_option);
+                        floats
+                    },
+                    |mut floats, mut other_floats| {
+                        floats.append(&mut other_floats);
+                        floats
+                    },
+                )?;
 
                 Ok(collection
                     .add_column(&output_column, FeatureData::NullableFloat(result))
@@ -607,96 +584,25 @@ where
             let expression = self.expression.clone();
 
             crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
-                let inputs: Vec<FeatureDataRef> = input_columns
-                    .into_iter()
-                    .map(|input_column| {
-                        collection
-                            .data(&input_column)
-                            .expect("was checked durin initialization")
-                    })
-                    .collect();
+                let (geometry_options, row_filter): (Vec<Option<GOut>>, Vec<bool>) = call_expression_function::<GIn, <GOut as FromExpressionGeo>::ExpressionGeometryType, (Vec<Option<GOut>>, Vec<bool>)>(
+                    &expression,
+                    &collection,
+                    &input_columns,
+                    || (Vec::new(), Vec::new()),
+                    |(mut geometry_options, mut row_filter), geom_option| {
+                        let geom_option = geom_option.and_then(<GOut as FromExpressionGeo>::from_expression_geo);
 
-                let float_inputs: Vec<FloatOptionsParIter> = inputs
-                    .iter()
-                    .map(FeatureDataRef::float_options_par_iter)
-                    .collect::<Vec<_>>();
+                        row_filter.push(geom_option.is_some());
+                        geometry_options.push(geom_option);
 
-                let geom_input =
-                    collection
-                        .geometry_options()
-                        .into_par_iter()
-                        .map(|geometry_option| {
-                            if let Some(geometry) = geometry_option.as_ref() {
-                                geometry.as_expression_geo()
-                            } else {
-                                None
-                            }
-                        });
-
-                let (geometry_options, row_filter): (Vec<Option<GOut>>, Vec<bool>) = match float_inputs.len() {
-                    0 => {
-                        let f = unsafe {
-                            expression.function_nary::<
-                            fn(
-                                Option<ExpressionGeometryType<'_, GIn>>,
-                            ) -> Option<<GOut as FromExpressionGeo>::ExpressionGeometryType>
-                            >()
-                        }
-                        .map_err(VectorExpressionError::from)?;
-
-                        Ok(geom_input
-                            .with_min_len(PARALLEL_MIN_BATCH_SIZE)
-                            .map(|geom| f(geom))
-                            .map(geometry_option_to_tuple)
-                            .unzip())
-                    }
-                    1 => {
-                        let [a] = <[_; 1]>::try_from(float_inputs)
-                            .expect("it matches the match condition");
-                        let f = unsafe {
-                            expression.function_nary::<
-                            fn(
-                                Option<ExpressionGeometryType<'_, GIn>>,
-                                Option<f64>,
-                            ) -> Option<<GOut as FromExpressionGeo>::ExpressionGeometryType>
-                            >()
-                        }
-                        .map_err(VectorExpressionError::from)?;
-
-                        Ok((geom_input, a)
-                        .into_par_iter()
-                            .with_min_len(PARALLEL_MIN_BATCH_SIZE)
-                            .map(|(geom, a)| f(geom, a))
-                            .map(geometry_option_to_tuple)
-                            .unzip())
-                    }
-                    2 => {
-                        let [a, b] = <[_; 2]>::try_from(float_inputs)
-                            .expect("it matches the match condition");
-                        let f = unsafe {
-                            expression.function_nary::<
-                            fn(
-                                Option<ExpressionGeometryType<'_, GIn>>,
-                                Option<f64>,
-                                Option<f64>,
-                            ) -> Option<<GOut as FromExpressionGeo>::ExpressionGeometryType>
-                            >()
-                        }
-                        .map_err(VectorExpressionError::from)?;
-
-                        Ok((geom_input, a, b)
-                        .into_par_iter()
-                            .with_min_len(PARALLEL_MIN_BATCH_SIZE)
-                            .map(|(geom, a, b)| f(geom, a, b))
-                            .map(geometry_option_to_tuple)
-                            .unzip())
-                    }
-                    // TODO: implement more cases
-                    other => Err(VectorExpressionError::TooManyInputColumns {
-                        max: MAX_INPUT_COLUMNS,
-                        found: other,
-                    }),
-                }?;
+                        (geometry_options, row_filter)
+                    },
+                    |(mut geometry_options, mut row_filter), (mut other_geometry_options, mut other_row_filter)| {
+                        geometry_options.append(&mut other_geometry_options);
+                        row_filter.append(&mut other_row_filter);
+                        (geometry_options, row_filter)
+                    },
+                )?;
 
                 // remove all `None`s and output only the geometries
                 let geometries = geometry_options.into_par_iter().with_min_len(PARALLEL_MIN_BATCH_SIZE).filter_map(std::convert::identity).collect::<Vec<_>>();
@@ -718,28 +624,103 @@ where
     }
 }
 
-fn geometry_option_to_tuple<G>(geom_option: Option<G::ExpressionGeometryType>) -> (Option<G>, bool)
+fn call_expression_function<GIn, ExprOut, Out>(
+    expression: &Arc<LinkedExpression>,
+    collection: &FeatureCollection<GIn>,
+    input_columns: &[String],
+    fold_init: fn() -> Out,
+    fold_fn: fn(Out, Option<ExprOut>) -> Out,
+    reduce_fn: fn(Out, Out) -> Out,
+) -> Result<Out, VectorExpressionError>
 where
-    G: FromExpressionGeo,
+    GIn: Geometry + ArrowTyped + 'static,
+    for<'i> FeatureCollection<GIn>: IntoGeometryOptionsIterator<'i>,
+    for<'g> <<FeatureCollection<GIn> as IntoGeometryOptionsIterator<'g>>::GeometryOptionIterator as IntoParallelIterator>::Iter:
+        IndexedParallelIterator + Send,
+    for<'g> <FeatureCollection<GIn> as IntoGeometryOptionsIterator<'g>>::GeometryType: AsExpressionGeo,
+    ExprOut: Send,
+    Out: Send,
 {
-    let geom_filter = geom_option.is_some();
-    let geom_option: Option<G> =
-        geom_option.and_then(<G as FromExpressionGeo>::from_expression_geo);
-    (geom_option, geom_filter)
-}
+    let data_columns: Vec<FeatureDataRef> = input_columns
+        .iter()
+        .map(|input_column| {
+            collection
+                .data(input_column)
+                .expect("was checked durin initialization")
+        })
+        .collect();
 
-// fn call_expression_function<GIn, GOut>(
-//     expression: &Arc<LinkedExpression>,
-//     collection: &FeatureCollection<G>,
-//     input_columns: &[String],
-//     output_column: &str,
-// ) -> Result<FeatureCollection<G>, VectorExpressionError>
-// where
-//     G: Geometry + ArrowTyped + 'static,
-//     for<'i> FeatureCollection<G>: IntoGeometryOptionsIterator<'i>,
-// {
-//     todo!()
-// }
+    let float_inputs: Vec<FloatOptionsParIter> = data_columns
+        .iter()
+        .map(FeatureDataRef::float_options_par_iter)
+        .collect::<Vec<_>>();
+
+    let geom_input = collection
+        .geometry_options()
+        .into_par_iter()
+        .map(|geometry_option| {
+            if let Some(geometry) = geometry_option.as_ref() {
+                geometry.as_expression_geo()
+            } else {
+                None
+            }
+        });
+
+    macro_rules! impl_expression_subcall {
+        ($n:literal, $($i:ident),*) => {
+            {
+                let [ $($i),* ] = <[_; $n]>::try_from(float_inputs).expect("it matches the match condition");
+                let f = unsafe {
+                    expression.function_nary::<fn(
+                        Option<ExpressionGeometryType<'_, GIn>>,
+                        $( impl_expression_subcall!(@float_option $i), )*
+                    ) -> Option<ExprOut>>()
+                }
+                .map_err(VectorExpressionError::from)?;
+
+                (geom_input, $($i),*)
+                    .into_par_iter()
+                    .with_min_len(PARALLEL_MIN_BATCH_SIZE)
+                    .map(|(geom, $($i),*)| f(geom, $($i),*))
+                    .fold(fold_init, fold_fn)
+                    .reduce(fold_init, reduce_fn)
+            }
+        };
+        // Create one float option for each float input
+        (@float_option $i:ident) => {
+            Option<f64>
+        };
+    }
+
+    Ok(match float_inputs.len() {
+        0 => {
+            let f = unsafe {
+                expression.function_nary::<fn(
+                    Option<ExpressionGeometryType<'_, GIn>>,
+                ) -> Option<ExprOut>>()
+            }
+            .map_err(VectorExpressionError::from)?;
+
+            geom_input
+                .with_min_len(PARALLEL_MIN_BATCH_SIZE)
+                .map(|geom| f(geom))
+                .fold(fold_init, fold_fn)
+                .reduce(fold_init, reduce_fn)
+        }
+        1 => impl_expression_subcall!(1, i1),
+        2 => impl_expression_subcall!(2, i1, i2),
+        3 => impl_expression_subcall!(3, i1, i2, i3),
+        4 => impl_expression_subcall!(4, i1, i2, i3, i4),
+        5 => impl_expression_subcall!(5, i1, i2, i3, i4, i5),
+        6 => impl_expression_subcall!(6, i1, i2, i3, i4, i5, i6),
+        7 => impl_expression_subcall!(7, i1, i2, i3, i4, i5, i6, i7),
+        8 => impl_expression_subcall!(8, i1, i2, i3, i4, i5, i6, i7, i8),
+        other => Err(VectorExpressionError::TooManyInputColumns {
+            max: MAX_INPUT_COLUMNS,
+            found: other,
+        })?,
+    })
+}
 
 #[cfg(test)]
 mod tests {
@@ -1125,6 +1106,102 @@ mod tests {
             &[("foo", FeatureData::NullableFloat(vec![Some(1.0), None]))],
         )
         .unwrap();
+
+        // TODO: maybe it is nicer to have something wrapping the actual data that we care about and just adds some cache info
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(&expected_result),
+            "{result_geometries:#?} != {expected_result_geometries:#?}",
+            result_geometries = result.geometries().collect::<Vec<_>>(),
+            expected_result_geometries = expected_result.geometries().collect::<Vec<_>>(),
+        );
+    }
+
+    #[tokio::test]
+    async fn it_computes_eight_larger_inputs() {
+        const NUMBER_OF_ROWS: usize = 100;
+        let points = MultiPointCollection::from_slices(
+            MultiPoint::many((0..NUMBER_OF_ROWS).map(|i| (i as f64, i as f64)).collect())
+                .unwrap()
+                .as_ref(),
+            &[TimeInterval::new_unchecked(0, 1); NUMBER_OF_ROWS],
+            &[
+                (
+                    "f1",
+                    FeatureData::Float((0..NUMBER_OF_ROWS).map(|i| i as f64).collect()),
+                ),
+                (
+                    "f2",
+                    FeatureData::Float((0..NUMBER_OF_ROWS).map(|i| i as f64).collect()),
+                ),
+                (
+                    "f3",
+                    FeatureData::Float((0..NUMBER_OF_ROWS).map(|i| i as f64).collect()),
+                ),
+                (
+                    "f4",
+                    FeatureData::Float((0..NUMBER_OF_ROWS).map(|i| i as f64).collect()),
+                ),
+                (
+                    "f5",
+                    FeatureData::Float((0..NUMBER_OF_ROWS).map(|i| i as f64).collect()),
+                ),
+                (
+                    "f6",
+                    FeatureData::Float((0..NUMBER_OF_ROWS).map(|i| i as f64).collect()),
+                ),
+                (
+                    "f7",
+                    FeatureData::Float((0..NUMBER_OF_ROWS).map(|i| i as f64).collect()),
+                ),
+                (
+                    "f8",
+                    FeatureData::Float((0..NUMBER_OF_ROWS).map(|i| i as f64).collect()),
+                ),
+            ],
+        )
+        .unwrap();
+
+        let result = compute_result::<MultiPointCollection>(
+            VectorExpression {
+                params: VectorExpressionParams {
+                    input_columns: vec![
+                        "f1".into(),
+                        "f2".into(),
+                        "f3".into(),
+                        "f4".into(),
+                        "f5".into(),
+                        "f6".into(),
+                        "f7".into(),
+                        "f8".into(),
+                    ],
+                    expression: "f1 + f2 + f3 + f4 + f5 + f6 + f7 + f8".into(),
+                    output_column: OutputColumn::Column("new".into()),
+                    output_measurement: Measurement::Unitless,
+                    geometry_column_name: "geom".to_string(),
+                },
+                sources: MockFeatureCollectionSource::single(points.clone())
+                    .boxed()
+                    .into(),
+            },
+            VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new(
+                    (0., 0.).into(),
+                    (NUMBER_OF_ROWS as f64, NUMBER_OF_ROWS as f64).into(),
+                )
+                .unwrap(),
+                time_interval: TimeInterval::default(),
+                spatial_resolution: SpatialResolution::zero_point_one(),
+                attributes: ColumnSelection::all(),
+            },
+        )
+        .await;
+
+        let expected_result = points
+            .add_column(
+                "new",
+                FeatureData::Float((0..NUMBER_OF_ROWS).map(|i| 8.0 * i as f64).collect()),
+            )
+            .unwrap();
 
         // TODO: maybe it is nicer to have something wrapping the actual data that we care about and just adds some cache info
         assert!(
