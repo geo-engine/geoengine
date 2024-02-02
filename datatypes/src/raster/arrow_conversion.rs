@@ -17,6 +17,7 @@ pub const X_SIZE_KEY: &str = "xSize";
 pub const Y_SIZE_KEY: &str = "ySize";
 pub const TIME_KEY: &str = "time";
 pub const SPATIAL_REF_KEY: &str = "spatialReference";
+pub const BAND_KEY: &str = "band";
 
 pub fn raster_tile_2d_to_arrow_ipc_file<P: Pixel>(
     tile: RasterTile2D<P>,
@@ -57,6 +58,7 @@ fn raster_tile_2d_to_arrow_record_batch<P: Pixel>(
             serde_json::to_string(&tile.time).unwrap_or_default(),
         ),
         (SPATIAL_REF_KEY.to_string(), spatial_ref.to_string()),
+        (BAND_KEY.to_string(), tile.band.to_string()),
     ]
     .into();
 
