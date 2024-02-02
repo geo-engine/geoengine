@@ -18,7 +18,6 @@ pub const Y_SIZE_KEY: &str = "ySize";
 pub const TIME_KEY: &str = "time";
 pub const SPATIAL_REF_KEY: &str = "spatialReference";
 pub const BAND_KEY: &str = "band";
-pub const TILE_IDX_KEY: &str = "tileIdx";
 
 pub fn raster_tile_2d_to_arrow_ipc_file<P: Pixel>(
     tile: RasterTile2D<P>,
@@ -60,14 +59,6 @@ fn raster_tile_2d_to_arrow_record_batch<P: Pixel>(
         ),
         (SPATIAL_REF_KEY.to_string(), spatial_ref.to_string()),
         (BAND_KEY.to_string(), tile.band.to_string()),
-        (
-            TILE_IDX_KEY.to_string(),
-            format!(
-                "{},{}",
-                tile.tile_position.inner()[0],
-                tile.tile_position.inner()[1]
-            ),
-        ),
     ]
     .into();
 
