@@ -31,7 +31,9 @@ use geoengine_expression::{
     is_allowed_variable_name, DataType, ExpressionParser, LinkedExpression,
     Parameter as ExpressionParameter,
 };
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::iter::{
+    FromParallelIterator, IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
+};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::collections::HashMap;
@@ -519,19 +521,11 @@ where
             let expression = self.expression.clone();
 
             crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
-                let result: Vec<Option<f64>> = call_expression_function::<G, f64, Vec<Option<f64>>>(
+                let result: Vec<Option<f64>> = call_expression_function(
                     &expression,
                     &collection,
                     &input_columns,
-                    Vec::new,
-                    |mut floats, float_option| {
-                        floats.push(float_option);
-                        floats
-                    },
-                    |mut floats, mut other_floats| {
-                        floats.append(&mut other_floats);
-                        floats
-                    },
+                    std::convert::identity,
                 )?;
 
                 Ok(collection
@@ -568,6 +562,7 @@ where
     for<'g> <<FeatureCollection<GIn> as IntoGeometryOptionsIterator<'g>>::GeometryOptionIterator as IntoParallelIterator>::Iter:
         IndexedParallelIterator + Send,
     for<'g> <FeatureCollection<GIn> as IntoGeometryOptionsIterator<'g>>::GeometryType: AsExpressionGeo,
+    Vec<Option<GOut>>: FromParallelIterator<Option<GOut>>,
 {
     type VectorType = FeatureCollection<GOut>;
 
@@ -584,23 +579,16 @@ where
             let expression = self.expression.clone();
 
             crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
-                let (geometry_options, row_filter): (Vec<Option<GOut>>, Vec<bool>) = call_expression_function::<GIn, <GOut as FromExpressionGeo>::ExpressionGeometryType, (Vec<Option<GOut>>, Vec<bool>)>(
+                let (geometry_options, row_filter): (Vec<Option<GOut>>, Vec<bool>) = call_expression_function(
                     &expression,
                     &collection,
                     &input_columns,
-                    || (Vec::new(), Vec::new()),
-                    |(mut geometry_options, mut row_filter), geom_option| {
+                    |geom_option| {
                         let geom_option = geom_option.and_then(<GOut as FromExpressionGeo>::from_expression_geo);
 
-                        row_filter.push(geom_option.is_some());
-                        geometry_options.push(geom_option);
+                        let row_filter = geom_option.is_some();
 
-                        (geometry_options, row_filter)
-                    },
-                    |(mut geometry_options, mut row_filter), (mut other_geometry_options, mut other_row_filter)| {
-                        geometry_options.append(&mut other_geometry_options);
-                        row_filter.append(&mut other_row_filter);
-                        (geometry_options, row_filter)
+                        (geom_option, row_filter)
                     },
                 )?;
 
@@ -624,13 +612,11 @@ where
     }
 }
 
-fn call_expression_function<GIn, ExprOut, Out>(
+fn call_expression_function<GIn, ExprOut, MapOut, Out>(
     expression: &Arc<LinkedExpression>,
     collection: &FeatureCollection<GIn>,
     input_columns: &[String],
-    fold_init: fn() -> Out,
-    fold_fn: fn(Out, Option<ExprOut>) -> Out,
-    reduce_fn: fn(Out, Out) -> Out,
+    map_fn: fn(Option<ExprOut>) -> MapOut,
 ) -> Result<Out, VectorExpressionError>
 where
     GIn: Geometry + ArrowTyped + 'static,
@@ -639,7 +625,8 @@ where
         IndexedParallelIterator + Send,
     for<'g> <FeatureCollection<GIn> as IntoGeometryOptionsIterator<'g>>::GeometryType: AsExpressionGeo,
     ExprOut: Send,
-    Out: Send,
+    MapOut: Send,
+    Out: FromParallelIterator<MapOut> + Send,
 {
     let data_columns: Vec<FeatureDataRef> = input_columns
         .iter()
@@ -681,9 +668,8 @@ where
                 (geom_input, $($i),*)
                     .into_par_iter()
                     .with_min_len(PARALLEL_MIN_BATCH_SIZE)
-                    .map(|(geom, $($i),*)| f(geom, $($i),*))
-                    .fold(fold_init, fold_fn)
-                    .reduce(fold_init, reduce_fn)
+                    .map(|(geom, $($i),*)| map_fn(f(geom, $($i),*)))
+                    .collect()
             }
         };
         // Create one float option for each float input
@@ -703,9 +689,8 @@ where
 
             geom_input
                 .with_min_len(PARALLEL_MIN_BATCH_SIZE)
-                .map(|geom| f(geom))
-                .fold(fold_init, fold_fn)
-                .reduce(fold_init, reduce_fn)
+                .map(|geom| map_fn(f(geom)))
+                .collect()
         }
         1 => impl_expression_subcall!(1, i1),
         2 => impl_expression_subcall!(2, i1, i2),
