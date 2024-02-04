@@ -20,6 +20,7 @@ const DEPS_LIB_RS: &[u8] = std::include_bytes!("../deps-workspace/lib.rs");
 ///
 /// If this is dropped, the workspace will be deleted.
 ///
+#[derive(Debug)]
 pub struct ExpressionDependencies {
     // we need to hold this to keep the tempdir alive
     _cargo_workspace: tempfile::TempDir,

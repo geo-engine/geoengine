@@ -82,8 +82,8 @@ impl TimeInstance {
         self == Self::MAX
     }
 
-    pub const MIN: Self = TimeInstance::from_millis_unchecked(-8_334_632_851_200_001 + 1);
-    pub const MAX: Self = TimeInstance::from_millis_unchecked(8_210_298_412_800_000 - 1);
+    pub const MIN: Self = TimeInstance::from_millis_unchecked(-8_334_601_228_800_000);
+    pub const MAX: Self = TimeInstance::from_millis_unchecked(8_210_266_876_799_999);
 
     pub const EPOCH_START: Self = TimeInstance::from_millis_unchecked(0);
 }

@@ -101,6 +101,7 @@ impl ToTokens for Prelude {
             #![allow(unused_variables)] // expression inputs that are not used
             #![allow(unused_parens)] // safety-first parentheses in generated code
             #![allow(non_snake_case)] // we use double underscores for generated function names
+            #![allow(unused_imports)] // TODO: only import dependencies that are actually used
 
             extern crate geoengine_expression_deps;
 
