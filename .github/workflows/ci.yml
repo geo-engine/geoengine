@@ -32,12 +32,6 @@ jobs:
         build: [""]
 
     steps:
-      - name: Make space by deleting unused software (Workaround cf. https://github.com/actions/runner-images/issues/2840#issuecomment-790492173)
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Checkout code
         uses: actions/checkout@v3
       - name: APT update
@@ -54,6 +48,17 @@ jobs:
           echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
       - name: Install SQLFluff
         run: pip install sqlfluff==2.3.5
+      - name: Make space by deleting unused software (Workaround cf. https://github.com/actions/runner-images/issues/2840#issuecomment-790492173, https://github.com/flashlight/wav2letter/commit/dee0b81895bc9254a463b19ef87d49f14dcb913a)
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo swapoff -a
+          sudo rm -f /swapfile
+          sudo apt clean
+          docker rmi $(docker image ls -aq)
+          df -h
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
