@@ -475,6 +475,8 @@ pub enum Error {
     RasterBandNameMustNotBeEmpty,
     #[snafu(display("Raster band names must not be longer than 256 bytes"))]
     RasterBandNameTooLong,
+
+    ResolutionMissmatch, // FIXME: added this to mark sections where we need to do something about resolutions later
 }
 
 impl actix_web::error::ResponseError for Error {

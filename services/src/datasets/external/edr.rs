@@ -18,7 +18,7 @@ use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
     TimeInterval, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::raster::{BoundedGrid, GeoTransform, GridShape2D, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
@@ -672,6 +672,8 @@ impl EdrCollectionMetaData {
 
     fn get_raster_result_descriptor(
         &self,
+        geo_transform: GeoTransform,
+        grid_shape: GridShape2D,
     ) -> Result<RasterResultDescriptor, geoengine_operators::error::Error> {
         let bbox = self.get_bounding_box()?;
         let bbox = SpatialPartition2D::new_unchecked(bbox.upper_left(), bbox.lower_right());
@@ -680,8 +682,8 @@ impl EdrCollectionMetaData {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: Some(self.get_time_interval()?),
-            bbox: Some(bbox),
-            resolution: None,
+            geo_transform,
+            pixel_bounds: grid_shape.bounding_box(),
             bands: RasterBandDescriptors::new_single_band(),
         })
     }
@@ -1150,8 +1152,21 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             )?);
         }
 
+        // TODO: we need the GeoTransform and GridShape to produce the result descriptor. Since we already have the dataset open, we could also get it from there.
+        let gdal_geotransform = params[0].params.as_mut().unwrap().geo_transform.clone();
+        let geo_transform: GeoTransform = gdal_geotransform.try_into().map_err(|e| {
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(e),
+            }
+        })?;
+        let grid_shape = GridShape2D::new_2d(
+            params[0].params.as_mut().unwrap().height,
+            params[0].params.as_mut().unwrap().width,
+        );
+
         Ok(Box::new(GdalMetaDataList {
-            result_descriptor: collection.get_raster_result_descriptor()?,
+            result_descriptor: collection
+                .get_raster_result_descriptor(geo_transform, grid_shape)?,
             params,
         }))
     }
@@ -1172,7 +1187,10 @@ mod tests {
     use super::*;
     use geoengine_datatypes::{
         dataset::ExternalDataId,
-        primitives::{BandSelection, ColumnSelection, SpatialResolution},
+        primitives::{
+            BandSelection, ColumnSelection, SpatialGridQueryRectangle, SpatialResolution,
+        },
+        raster::GridBoundingBox2D,
         util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
@@ -1530,15 +1548,12 @@ mod tests {
         )
         .await;
         let loading_info = meta
-            .loading_info(VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new_unchecked(
-                    (-180., -90.).into(),
-                    (180., 90.).into(),
-                ),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            })
+            .loading_info(VectorQueryRectangle::with_bounds_and_resolution(
+                BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                TimeInterval::default(),
+                SpatialResolution::zero_point_one(),
+                ColumnSelection::all(),
+            ))
             .await
             .unwrap();
         assert_eq!(
@@ -1633,12 +1648,11 @@ mod tests {
 
         let loading_info_parts = meta
             .loading_info(RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
-                    (0., 90.).into(),
-                    (360., -90.).into(),
-                ),
+                spatial_query: SpatialGridQueryRectangle {
+                    geo_transform: GeoTransform::new((0., -90.).into(), 1., -1.),
+                    grid_bounds: GridBoundingBox2D::new_min_max(0, 0, 180, 180).unwrap(),
+                },
                 time_interval: TimeInterval::new_unchecked(1_692_144_000_000, 1_692_500_400_000),
-                spatial_resolution: SpatialResolution::new_unchecked(1., 1.),
                 attributes: BandSelection::first(),
             })
             .await
@@ -1716,11 +1730,12 @@ mod tests {
                     1_692_144_000_000,
                     1_692_500_400_000
                 )),
-                bbox: Some(SpatialPartition2D::new_unchecked(
-                    (0., 90.).into(),
-                    (359.500_000_000_000_06, -90.).into()
-                )),
-                resolution: None,
+                geo_transform: GeoTransform::new(
+                    (0., -90.).into(),
+                    0.499_305_555_555_555_6,
+                    -0.498_614_958_448_753_5
+                ),
+                pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 720, 361).unwrap(),
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );

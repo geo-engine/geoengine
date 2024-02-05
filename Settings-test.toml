@@ -2,9 +2,9 @@
 host = "localhost"
 port = 5432
 database = "geoengine"
-schema = "pg_temp"           # we need the right to create new schemata for tests
+schema = "pg_temp"     # we need the right to create new schemata for tests
 user = "geoengine"
-password = "geoengine123123"
+password = "geoengine"
 
 [operators.gdal_source]
 raster_data_root_path = "../test_data/raster" # relative to sub crate directory for tests

@@ -2,6 +2,7 @@ use crate::{
     primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialResolution},
     util::test::TestDefault,
 };
+use postgres_types::{FromSql, ToSql};
 use serde::{de, Deserialize, Deserializer, Serialize};
 
 use super::{GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D};
@@ -13,7 +14,7 @@ pub type GdalGeoTransform = [f64; 6];
 /// In Geo Engine x pixel size is always postive and y pixel size is always negative. For raster tiles
 /// the origin is always the upper left corner. In the global grid for the `TilingStrategy` the origin
 /// is always located at (0, 0).
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, ToSql, FromSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GeoTransform {
     pub origin_coordinate: Coordinate2D,

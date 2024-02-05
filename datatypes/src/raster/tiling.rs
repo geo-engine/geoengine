@@ -214,9 +214,8 @@ impl TileInformation {
         }
     }
 
-    
     pub fn with_partition_and_shape(partition: SpatialPartition2D, shape: GridShape2D) -> Self {
-    // FIXME: this method makes no sense, as the tile position is always [0, 0]
+        // FIXME: this method makes no sense, as the tile position is always [0, 0]
 
         let real_geotransform = GeoTransform::new(
             partition.upper_left(),
@@ -224,11 +223,9 @@ impl TileInformation {
             -partition.size_y() / shape.axis_size_y() as f64,
         );
 
-        let tiling_geotransform = real_geotransform.nearest_pixel_to_zero_based();
+        let _tiling_geotransform = real_geotransform.nearest_pixel_to_zero_based();
 
         let _tiling_bounds = real_geotransform.shape_to_nearest_to_zero_based(&shape);
-
-        dbg!(tiling_geotransform);
 
         Self {
             tile_size_in_pixels: shape,
@@ -385,50 +382,50 @@ mod tests {
     #[test]
     fn tiling_tile_tile() {
         let geo_transform = GeoTransform::new(
-            (-1234567890., 1234567890.).into(),
-            0.0000333374,
-            -0.0000333374,
+            (-1_234_567_890., 1_234_567_890.).into(),
+            0.000_033_337_4,
+            -0.000_033_337_4,
         );
         let nearest_to_zero = geo_transform.nearest_pixel_to_zero();
-        println!("nearest_to_zero: {:?}", nearest_to_zero);
+        println!("nearest_to_zero: {nearest_to_zero:?}");
 
         let nearest_to_zero_coord =
             geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(nearest_to_zero);
-        println!("nearest_to_zero_coord: {:?}", nearest_to_zero_coord);
+        println!("nearest_to_zero_coord: {nearest_to_zero_coord:?}");
 
         let tiling_spec = TilingSpecification::new((-1000., 1000.).into(), [512, 512].into());
         let tile_size = tiling_spec.tile_size_in_pixels;
-        println!("tile_size: {:?}", tile_size);
+        println!("tile_size: {tile_size:?}");
 
         let tile_idx = tiling_spec.pixel_idx_to_tile_idx(nearest_to_zero);
-        println!("near zero tile_idx: {:?}", tile_idx);
+        println!("near zero tile_idx: {tile_idx:?}");
 
         let (origin_tile, origin_offset) =
             TilingSpecification::origin_pixel_tile_coord(&geo_transform, &tiling_spec);
 
-        println!("origin_tile: {:?}", origin_tile);
-        println!("origin_offset: {:?}", origin_offset);
+        println!("origin_tile: {origin_tile:?}");
+        println!("origin_offset: {origin_offset:?}");
 
         let GridIdx([y, x]) = origin_tile * tile_size;
-        println!("y: {:?}", y);
-        println!("x: {:?}", x);
+        println!("y: {y:?}");
+        println!("x: {x:?}");
         let coord_x = x as f64 * geo_transform.x_pixel_size();
         let coord_y = y as f64 * geo_transform.y_pixel_size();
-        println!("coord_x: {:?}", coord_x);
-        println!("coord_y: {:?}", coord_y);
+        println!("coord_x: {coord_x:?}");
+        println!("coord_y: {coord_y:?}");
         let coord_x_off = (x - origin_offset.inner()[1]) as f64 * geo_transform.x_pixel_size();
         let coord_y_off = (y - origin_offset.inner()[0]) as f64 * geo_transform.y_pixel_size();
-        println!("coord_x_off: {:?}", coord_x_off);
-        println!("coord_y_off: {:?}", coord_y_off);
+        println!("coord_x_off: {coord_x_off:?}");
+        println!("coord_y_off: {coord_y_off:?}");
         let rgx = coord_x_off + nearest_to_zero_coord.x;
         let rgy = coord_y_off + nearest_to_zero_coord.y;
-        println!("rgx: {:?}", rgx);
-        println!("rgy: {:?}", rgy);
+        println!("rgx: {rgx:?}");
+        println!("rgy: {rgy:?}");
 
         let control_x = geo_transform.x_pixel_size() * x as f64;
         let control_y = geo_transform.y_pixel_size() * y as f64;
 
-        println!("control_x: {:?}", control_x);
-        println!("control_y: {:?}", control_y);
+        println!("control_x: {control_x:?}");
+        println!("control_y: {control_y:?}");
     }
 }

@@ -962,28 +962,22 @@ pub struct QueryRectangle<SpatialBounds> {
     pub spatial_resolution: SpatialResolution,
 }
 
-impl
-    From<
-        geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::SpatialPartition2D,
-            geoengine_datatypes::primitives::BandSelection,
-        >,
-    > for RasterQueryRectangle
-{
-    fn from(
-        value: geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::SpatialPartition2D,
-            geoengine_datatypes::primitives::BandSelection,
-        >,
-    ) -> Self {
+// TODO: figure out if we keep it that way
+impl From<geoengine_datatypes::primitives::RasterQueryRectangle> for RasterQueryRectangle {
+    fn from(value: geoengine_datatypes::primitives::RasterQueryRectangle) -> Self {
         Self {
-            spatial_bounds: value.spatial_bounds.into(),
+            spatial_bounds: value
+                .spatial_query
+                .geo_transform
+                .grid_to_spatial_bounds(&value.spatial_query.grid_bounds)
+                .into(),
             time_interval: value.time_interval.into(),
-            spatial_resolution: value.spatial_resolution.into(),
+            spatial_resolution: value.spatial_query.spatial_resolution().into(),
         }
     }
 }
 
+/*
 impl From<QueryRectangle<SpatialPartition2D>>
     for geoengine_datatypes::primitives::RasterQueryRectangle
 {
@@ -996,6 +990,7 @@ impl From<QueryRectangle<SpatialPartition2D>>
         }
     }
 }
+*/
 
 /// The spatial resolution in SRS units
 #[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema)]

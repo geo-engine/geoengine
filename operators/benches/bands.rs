@@ -72,12 +72,13 @@ async fn one_band_at_a_time(runs: usize, bands: u32, resolution: SpatialResoluti
         .get_u64()
         .unwrap();
 
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: resolution,
-        attributes: BandSelection::first(),
-    };
+    let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+        SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+        resolution,
+        execution_context.tiling_specification.origin_coordinate,
+        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        BandSelection::first(),
+    );
 
     let mut times = NumberStatistics::default();
 
@@ -138,12 +139,13 @@ async fn all_bands_at_once(runs: usize, bands: u32, resolution: SpatialResolutio
         .get_u64()
         .unwrap();
 
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: resolution,
-        attributes: (0..bands).collect::<Vec<_>>().try_into().unwrap(),
-    };
+    let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+        SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+        resolution,
+        execution_context.tiling_specification.origin_coordinate,
+        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        (0..bands).collect::<Vec<_>>().try_into().unwrap(),
+    );
 
     let mut times = NumberStatistics::default();
 

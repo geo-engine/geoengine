@@ -34,7 +34,8 @@ use geoengine_datatypes::operations::image::RasterColorizer;
 use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::Coordinate2D;
-use geoengine_datatypes::primitives::SpatialResolution;
+use geoengine_datatypes::raster::GeoTransform;
+use geoengine_datatypes::raster::GridBoundingBox2D;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -266,11 +267,8 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
                 time: Some(geoengine_datatypes::primitives::TimeInterval::default()),
-                bbox: Some(geoengine_datatypes::primitives::SpatialPartition2D::new((-180., 90.).into(),
-                     (180., -90.).into()).unwrap()),
-                resolution: Some(SpatialResolution {
-                    x: 0.1, y: 0.1,
-                }),
+                geo_transform: GeoTransform::new(Coordinate2D::new(-180.,  90.), 0.1, -0.1),
+                pixel_bounds: GridBoundingBox2D::new_min_max(0,0, 3600, 1800).unwrap(),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
                 [
                     (0_u8, "Water Bodies".to_string()),

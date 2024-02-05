@@ -81,7 +81,9 @@ mod tests {
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::primitives::{SpatialResolution, TimeInterval};
-    use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
+    use geoengine_datatypes::raster::{
+        GeoTransform, GridBoundingBox2D, GridShape, RasterDataType, TilingSpecification,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::ExecutionContext;
@@ -94,7 +96,7 @@ mod tests {
 
     use {
         crate::pro::machine_learning::MachineLearningModelFromWorkflowResult,
-        geoengine_datatypes::primitives::{BoundingBox2D, QueryRectangle, VectorQueryRectangle},
+        geoengine_datatypes::primitives::{BoundingBox2D, VectorQueryRectangle},
         geoengine_operators::engine::WorkflowOperatorPath,
         std::collections::HashMap,
         std::path::PathBuf,
@@ -146,6 +148,24 @@ mod tests {
             ));
         }
 
+        let pixel_bounds = if n_tiles == 1 {
+            GridBoundingBox2D::new_min_max(
+                0,
+                tile_size_in_pixels.y() as isize,
+                0,
+                tile_size_in_pixels.x() as isize,
+            )
+            .unwrap()
+        } else {
+            GridBoundingBox2D::new_min_max(
+                tile_size_in_pixels.y() as isize * -1,
+                0,
+                0,
+                (tile_size_in_pixels.x() * n_tiles) as isize,
+            )
+            .unwrap()
+        };
+
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: tiles,
@@ -153,8 +173,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::test_default(),
+                    pixel_bounds,
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -230,12 +250,12 @@ mod tests {
 
         let spatial_resolution = SpatialResolution::one();
 
-        let qry: QueryRectangle<BoundingBox2D, ColumnSelection> = VectorQueryRectangle {
+        let qry: VectorQueryRectangle = VectorQueryRectangle::with_bounds_and_resolution(
             spatial_bounds,
             time_interval,
             spatial_resolution,
-            attributes: ColumnSelection::all(),
-        };
+            ColumnSelection::all(),
+        );
 
         let xg_train = crate::pro::machine_learning::MLTrainRequest {
             query: qry,
@@ -555,12 +575,12 @@ mod tests {
 
         let spatial_resolution = SpatialResolution::one();
 
-        let qry: QueryRectangle<BoundingBox2D, ColumnSelection> = VectorQueryRectangle {
+        let qry: VectorQueryRectangle = VectorQueryRectangle::with_bounds_and_resolution(
             spatial_bounds,
             time_interval,
             spatial_resolution,
-            attributes: ColumnSelection::all(),
-        };
+            ColumnSelection::all(),
+        );
 
         // generate a hashmap of xgboost parameters with the corresponding setting values
         let training_config_vec = booster_params
@@ -758,12 +778,13 @@ mod tests {
 
         let processor = op.query_processor().unwrap().get_f32().unwrap();
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
+            SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
+            SpatialResolution::one(),
+            exe_ctx.tiling_specification().origin_coordinate,
+            TimeInterval::default(),
+            BandSelection::first(),
+        );
 
         let query_ctx = ctx.query_context().unwrap();
 

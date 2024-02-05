@@ -817,8 +817,8 @@ mod tests {
     use geoengine_datatypes::{
         hashmap,
         operations::image::{Colorizer, RgbaColor},
-        primitives::{DateTime, SpatialResolution, TimeGranularity, TimeStep},
-        raster::RasterDataType,
+        primitives::{DateTime, TimeGranularity, TimeStep},
+        raster::{GeoTransform, GridBoundingBox2D, RasterDataType},
         spatial_reference::SpatialReference,
         test_data,
         util::gdal::hide_gdal_errors,
@@ -875,8 +875,8 @@ mod tests {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    geo_transform: GeoTransform::new((0., 0.).into(), 1., -1.), // Fixme: find correct values
+                    pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 5, 5).unwrap(), // Fixme: find correct values
                     bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: GdalDatasetParameters {
@@ -971,8 +971,8 @@ mod tests {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    geo_transform: GeoTransform::new((0., 0.).into(), 1., -1.), // Fixme: find correct values
+                    pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 5, 5).unwrap(), // Fixme: find correct values
                     bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: GdalDatasetParameters {
@@ -1238,8 +1238,8 @@ mod tests {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    geo_transform: GeoTransform::new((0., 0.).into(), 1., -1.), // Fixme: find correct values
+                    pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 5, 5).unwrap(), // Fixme: find correct values
                     bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: vec![
