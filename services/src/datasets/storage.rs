@@ -1,18 +1,15 @@
-use crate::api::model::datatypes::{DataProviderId, DatasetId, DatasetName};
-use crate::api::model::operators::TypedResultDescriptor;
-use crate::api::model::responses::datasets::DatasetIdAndName;
-use crate::api::model::services::AddDataset;
+use super::listing::Provenance;
+use super::{DatasetIdAndName, DatasetName};
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
 use crate::error;
 use crate::error::Result;
-
 use crate::projects::Symbology;
-
 use async_trait::async_trait;
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
-use geoengine_operators::engine::MetaData;
+use geoengine_operators::engine::{MetaData, TypedResultDescriptor};
 use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf};
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
@@ -23,11 +20,6 @@ use std::fmt::Debug;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
-
-use super::listing::Provenance;
-
-pub const DATASET_DB_LAYER_PROVIDER_ID: DataProviderId =
-    DataProviderId::from_u128(0xac50_ed0d_c9a0_41f8_9ce8_35fc_9e38_299b);
 
 pub const DATASET_DB_ROOT_COLLECTION_ID: Uuid =
     Uuid::from_u128(0x5460_73b6_d535_4205_b601_9967_5c9f_6dd7);
@@ -43,6 +35,7 @@ pub struct Dataset {
     pub source_operator: String,
     pub symbology: Option<Symbology>,
     pub provenance: Option<Vec<Provenance>>,
+    pub tags: Option<Vec<String>>,
 }
 
 impl Dataset {
@@ -52,12 +45,24 @@ impl Dataset {
             name: self.name.clone(),
             display_name: self.display_name.clone(),
             description: self.description.clone(),
-            tags: vec![], // TODO
+            tags: self.tags.clone().unwrap_or_default(), // TODO: figure out if we want to use Option<Vec<String>> everywhere or if Vec<String> is fine
             source_operator: self.source_operator.clone(),
             result_descriptor: self.result_descriptor.clone(),
             symbology: self.symbology.clone(),
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AddDataset {
+    pub name: Option<DatasetName>,
+    pub display_name: String,
+    pub description: String,
+    pub source_operator: String,
+    pub symbology: Option<Symbology>,
+    pub provenance: Option<Vec<Provenance>>,
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
@@ -73,7 +78,8 @@ pub struct DatasetDefinition {
     "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
     "datasetName": "Germany Border (auto)",
     "datasetDescription": "The Outline of Germany (auto detected format)",
-    "mainFile": "germany_polygon.gpkg"
+    "mainFile": "germany_polygon.gpkg",
+    "tags": ["area"]
 }))]
 pub struct AutoCreateDataset {
     pub upload: UploadId,
@@ -83,11 +89,24 @@ pub struct AutoCreateDataset {
     #[validate(custom = "validate_main_file")]
     pub main_file: String,
     pub layer_name: Option<String>,
+    #[validate(custom = "validate_tags")]
+    pub tags: Option<Vec<String>>,
 }
 
 fn validate_main_file(main_file: &String) -> Result<(), ValidationError> {
     if main_file.is_empty() || main_file.contains('/') || main_file.contains("..") {
         return Err(ValidationError::new("Invalid upload file name"));
+    }
+
+    Ok(())
+}
+
+pub fn validate_tags(tags: &Vec<String>) -> Result<(), ValidationError> {
+    for tag in tags {
+        if tag.is_empty() || tag.contains('/') || tag.contains("..") || tag.contains(' ') {
+            // TODO: more validation
+            return Err(ValidationError::new("Invalid tag"));
+        }
     }
 
     Ok(())

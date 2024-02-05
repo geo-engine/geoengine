@@ -19,8 +19,8 @@ use csv::WriterBuilder;
 use futures::StreamExt;
 use geoengine_datatypes::{
     primitives::{
-        BoundingBox2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-        VectorQueryRectangle,
+        BandSelection, BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
+        SpatialResolution, TimeInterval, VectorQueryRectangle,
     },
     raster::Pixel,
     util::{test::TestDefault, Identifier},
@@ -109,6 +109,7 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                 SpatialResolution::zero_point_one(),
                 (0., 0.).into(),
                 TimeInterval::default(),
+                BandSelection::first(),
             ),
         },
         Benchmark::Vector {
@@ -141,6 +142,7 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                 BoundingBox2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
                 TimeInterval::default(),
                 SpatialResolution::zero_point_one(),
+                ColumnSelection::all(),
             ),
         },
     ]

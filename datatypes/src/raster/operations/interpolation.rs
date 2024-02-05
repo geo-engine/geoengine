@@ -5,9 +5,7 @@ use crate::raster::{
     TileInformation,
 };
 use crate::util::Result;
-use async_trait::async_trait;
 
-#[async_trait]
 pub trait InterpolationAlgorithm<P: Pixel>: Send + Sync + Clone + 'static {
     /// interpolate the given input tile into the output tile
     /// the output must be fully contained in the input tile and have an additional row and column in order
@@ -22,7 +20,6 @@ pub trait InterpolationAlgorithm<P: Pixel>: Send + Sync + Clone + 'static {
 #[derive(Clone, Debug)]
 pub struct NearestNeighbor {}
 
-#[async_trait]
 impl<P> InterpolationAlgorithm<P> for NearestNeighbor
 where
     P: Pixel,
@@ -32,6 +29,7 @@ where
             return Ok(RasterTile2D::new_with_tile_info(
                 input.time,
                 *info_out,
+                input.band,
                 EmptyGrid::new(info_out.tile_size_in_pixels).into(),
                 input.cache_hint.clone_with_current_datetime(),
             ));
@@ -60,6 +58,7 @@ where
         let out_tile = RasterTile2D::new(
             input.time,
             info_out.global_tile_position,
+            input.band,
             info_out.global_geo_transform,
             out_data,
             input.cache_hint.clone_with_current_datetime(),
@@ -100,7 +99,6 @@ impl Bilinear {
     }
 }
 
-#[async_trait]
 impl<P> InterpolationAlgorithm<P> for Bilinear
 where
     P: Pixel,
@@ -110,6 +108,7 @@ where
             return Ok(RasterTile2D::new_with_tile_info(
                 input.time,
                 *info_out,
+                input.band,
                 EmptyGrid::new(info_out.tile_size_in_pixels).into(),
                 input.cache_hint.clone_with_current_datetime(),
             ));
@@ -171,6 +170,7 @@ where
         let out_tile = RasterTile2D::new(
             input.time,
             info_out.global_tile_position,
+            input.band,
             info_out.global_geo_transform,
             out_data,
             input.cache_hint.clone_with_current_datetime(),
@@ -199,6 +199,7 @@ mod tests {
                 tile_size_in_pixels: [3, 3].into(),
                 global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
             },
+            0,
             GridOrEmpty::Grid(MaskedGrid::from(
                 Grid2D::new([3, 3].into(), vec![1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap(),
             )),
@@ -272,6 +273,7 @@ mod tests {
                 tile_size_in_pixels: [3, 3].into(),
                 global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
             },
+            0,
             GridOrEmpty::Grid(MaskedGrid::from(
                 Grid2D::new([3, 3].into(), vec![1., 2., 3., 4., 5., 6., 7., 8., 9.]).unwrap(),
             )),

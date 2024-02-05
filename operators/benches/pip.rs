@@ -1,10 +1,10 @@
 use futures::StreamExt;
 use geo_rand::{GeoRand, GeoRandParameters};
 use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPolygonCollection};
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     BoundingBox2D, MultiPoint, SpatialResolution, VectorQueryRectangle,
 };
+use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{collections::MultiPointCollection, primitives::TimeInterval};
 use geoengine_operators::engine::{
@@ -46,6 +46,7 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
         BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
         TimeInterval::default(),
         SpatialResolution::zero_point_one(),
+        ColumnSelection::all(),
     );
     let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, num_threads);
 

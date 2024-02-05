@@ -1,15 +1,13 @@
 mod sentinel_s2_l2a_cogs;
 
-use crate::api::model::datatypes::DataProviderId;
 use crate::error::Result;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-
+use geoengine_datatypes::dataset::DataProviderId;
 pub use sentinel_s2_l2a_cogs::{
-    GdalRetries, SentinelDataset, SentinelS2L2ACogsProviderDefinition,
-    SentinelS2L2aCogsDataProvider, SentinelS2L2aCogsMetaData, StacApiRetries, StacBand, StacZone,
+    GdalRetries, SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacBand, StacZone,
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(PartialEq, Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type")] // TODO: rename_all = "camelCase"

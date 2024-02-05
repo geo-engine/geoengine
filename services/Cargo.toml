@@ -1,15 +1,22 @@
 [package]
 name = "geoengine-services"
 version = "0.7.0"
-authors = ["Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>", "Johannes Drönner <droenner@mathematik.uni-marburg.de>", "Michael Mattig <mattig@mathematik.uni-marburg.de>"]
+authors = [
+  "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
+  "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
+  "Michael Mattig <mattig@mathematik.uni-marburg.de>",
+]
 edition = "2021"
 build = "build.rs"
 
 [features]
 # This compiles Geo Engine Pro
-pro = ["geoengine-operators/pro", "geoengine-datatypes/pro"]
-xgboost = ["pro", "geoengine-operators/xgboost"]
-
+pro = [
+  "geoengine-operators/pro",
+  "geoengine-datatypes/pro",
+  "geoengine-macros/pro",
+  "dep:xgboost-rs",
+]
 
 [dependencies]
 actix = { version = "0.13", default-features = false }
@@ -23,31 +30,41 @@ actix-web-httpauth = "0.8"
 aruna-rust-api = { version = "1.0.0-rc.6" }
 async-trait = "0.1"
 base64 = "0.21"
-bb8-postgres = { version = "0.8", features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1"] }
+bb8-postgres = { version = "0.8", features = [
+  "with-uuid-1",
+  "with-chrono-0_4",
+  "with-serde_json-1",
+] }
 bytes = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.13"
-erased-serde = "0.3"
-fallible-iterator = "0.2"                                                                              # only for postgres-protocol
-flexi_logger = { version = "0.25", features = ["trc"] }
+derive_builder = "0.12"
+erased-serde = "0.4"
+fallible-iterator = "0.2" # only for postgres-protocol
+flexi_logger = { version = "0.27", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
 gdal = "0.16"
 gdal-sys = "0.9"
-geo = "0.26"
+geo = "0.27"
 geoengine-datatypes = { path = "../datatypes" }
+geoengine-macros = { path = "../macros" }
 geoengine-operators = { path = "../operators" }
 geojson = { version = "0.24", features = ["geo-types"] }
 image = "0.24"
+itertools = "0.12"
+lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
 oauth2 = "4.2.3"
 openidconnect = "3.1"
 # `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-jaeger`
-opentelemetry = { version = "0.20", default-features = false, features = ["trace"] }
-opentelemetry-jaeger = "0.19"
-ordered-float = { version = "3.0", features = ["serde"] }
+opentelemetry = { version = "0.21", default-features = false, features = [
+  "trace",
+] }
+opentelemetry-jaeger = "0.20"
+ordered-float = { version = "4.1", features = ["serde"] }
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive", "array-impls"] }
@@ -63,26 +80,50 @@ serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
 serde_with = "3.0"
-snafu = "0.7"
+snafu = "0.8"
 stream-cancel = "0.8"
 strum = { version = "0.25", features = ["derive"] }
 time = "0.3"
-tokio = { version = "1.15", features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
+tokio = { version = "1.15", features = [
+  "macros",
+  "fs",
+  "signal",
+  "sync",
+  "rt-multi-thread",
+] }
 tokio-postgres = { version = "0.7" }
 tokio-util = { version = "0.7", features = ["codec"] }
-tonic = { version = "0.9", features = ["tls", "tls-roots"] }                                   # must be compatible with `aruna-rust-api`
+tonic = { version = "0.9", features = [
+  "tls",
+  "tls-roots",
+] } # must be compatible with `aruna-rust-api`
 tracing = "0.1"
 tracing-actix-web = "0.7"
-tracing-opentelemetry = "0.20"
-tracing-subscriber = { version = "0.3", features = ["local-time", "ansi", "tracing-log"] }
+tracing-opentelemetry = "0.22"
+tracing-subscriber = { version = "0.3", features = [
+  "local-time",
+  "ansi",
+  "tracing-log",
+] }
 typetag = "0.2"
 url = { version = "2.2", features = ["serde"] }
-utoipa = { version = "3.0", features = ["actix_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { version = "3.1", features = ["actix-web"] }
-uuid = { version = "1.1", features = ["serde", "v4", "v5"] }                                   # must be compatible with `bb8-postgres`
+utoipa = { version = "4.0", features = [
+  "actix_extras",
+  "chrono",
+  "url",
+  "uuid",
+] }
+utoipa-swagger-ui = { version = "5.0", features = ["actix-web"] }
+uuid = { version = "1.1", features = [
+  "serde",
+  "v4",
+  "v5",
+] } # must be compatible with `bb8-postgres`
 validator = { version = "0.16", features = ["derive"] }
 walkdir = "2.3"
+xgboost-rs = { version = "0.3", optional = true, features = ["use_serde"] }
 zip = "0.6"
+assert-json-diff = "2.0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nix = { version = "0.27", features = ["socket"] }
@@ -90,8 +131,7 @@ nix = { version = "0.27", features = ["socket"] }
 [dev-dependencies]
 assert_cmd = "2.0"
 httptest = "0.15.2"
-hyper = "0.14"
-prost = "0.11"
+prost = "0.11"      # must be compatbile with aruna-rust-api
 serial_test = "2.0"
 tempfile = "3.1"
 xml-rs = "0.8"

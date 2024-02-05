@@ -13,11 +13,12 @@ use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, VectorQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // TODO: generify this to support all data types
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, FromSql, ToSql)]
 pub struct MockDatasetDataSourceLoadingInfo {
     pub points: Vec<Coordinate2D>,
 }
@@ -72,6 +73,7 @@ impl MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQu
 // }
 
 pub struct MockDatasetDataSourceProcessor {
+    result_descriptor: VectorResultDescriptor,
     loading_info: Box<
         dyn MetaData<
             MockDatasetDataSourceLoadingInfo,
@@ -103,6 +105,10 @@ impl VectorQueryProcessor for MockDatasetDataSourceProcessor {
             )?)
         })
         .boxed())
+    }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -157,6 +163,7 @@ impl InitializedVectorOperator
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockDatasetDataSourceProcessor {
+                result_descriptor: self.result_descriptor.clone(),
                 loading_info: self.loading_info.clone(),
             }
             .boxed(),
@@ -180,7 +187,7 @@ mod tests {
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
-    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection, SpatialResolution};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
 
@@ -217,6 +224,7 @@ mod tests {
             BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             TimeInterval::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
 

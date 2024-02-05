@@ -11,10 +11,12 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::plots::{AreaLineChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    Coordinate2D, Measurement, PlotQueryRectangle, RasterQueryRectangle, TimeInstance, TimeInterval,
+    BandSelection, Coordinate2D, Measurement, PlotQueryRectangle, RasterQueryRectangle,
+    TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use std::collections::BTreeMap;
 
 pub const MEAN_RASTER_PIXEL_VALUES_OVER_TIME_NAME: &str = "Mean Raster Pixel Values over Time";
@@ -67,6 +69,14 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
 
         let in_desc = raster.result_descriptor().clone();
 
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_desc.bands.len() == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: MeanRasterPixelValuesOverTime::TYPE_NAME
+            }
+        );
+
         let initialized_operator = InitializedMeanRasterPixelValuesOverTime {
             name,
             result_descriptor: in_desc.into(),
@@ -92,7 +102,7 @@ impl InitializedPlotOperator for InitializedMeanRasterPixelValuesOverTime {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let input_processor = self.raster.query_processor()?;
         let time_position = self.state.time_position;
-        let measurement = self.raster.result_descriptor().measurement.clone();
+        let measurement = self.raster.result_descriptor().bands[0].measurement.clone(); // TODO: adjust for multibands
         let draw_area = self.state.area;
 
         let processor = call_on_generic_raster_processor!(input_processor, raster => {
@@ -132,9 +142,11 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
         query: PlotQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        let raster_query_rect = RasterQueryRectangle::with_vector_query_and_grid_origin(
-            query,
+        let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_grid_origin(
+            query.spatial_query,
             Coordinate2D::default(), // FIXME: this is the default tiling specification origin. The actual origin is not known here. It should be derived from the input result descriptor!
+            query.time_interval,
+            BandSelection::first(),
         );
 
         let means = Self::calculate_means(
@@ -249,8 +261,8 @@ mod tests {
 
     use crate::{
         engine::{
-            ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-            RasterResultDescriptor,
+            ChunkByteSize, MockExecutionContext, MockQueryContext, RasterBandDescriptors,
+            RasterOperator, RasterResultDescriptor,
         },
         source::GdalSource,
     };
@@ -258,15 +270,15 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
         source::GdalSourceParameters,
     };
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, CacheHint, Measurement, PlotSeriesSelection, SpatialResolution, TimeInterval,
+    };
+    use geoengine_datatypes::raster::GeoTransform;
     use geoengine_datatypes::{
         dataset::NamedData,
         plots::PlotMetaData,
         primitives::DateTime,
         raster::{BoundedGrid, GridShape2D},
-    };
-    use geoengine_datatypes::{
-        primitives::{BoundingBox2D, CacheHint, Measurement, SpatialResolution, TimeInterval},
-        raster::GeoTransform,
     };
     use geoengine_datatypes::{raster::TilingSpecification, spatial_reference::SpatialReference};
     use geoengine_datatypes::{
@@ -362,6 +374,7 @@ mod tests {
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -420,6 +433,7 @@ mod tests {
                     global_tile_position: [0, 0].into(),
                     tile_size_in_pixels: [3, 2].into(),
                 },
+                0,
                 Grid2D::new([3, 2].into(), values).unwrap().into(),
                 CacheHint::default(),
             ));
@@ -431,10 +445,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                     pixel_bounds: GridShape2D::new_2d(3, 2).bounding_box(),
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -502,6 +516,7 @@ mod tests {
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )

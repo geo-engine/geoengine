@@ -25,6 +25,7 @@ pub struct MockFeatureCollectionSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
+    result_descriptor: VectorResultDescriptor,
     collections: Vec<FeatureCollection<G>>,
 }
 
@@ -52,6 +53,10 @@ where
         );
 
         Ok(stream.boxed())
+    }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -212,6 +217,7 @@ macro_rules! impl_mock_feature_collection_source {
             fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
                 Ok(TypedVectorQueryProcessor::$output(
                     MockFeatureCollectionSourceProcessor {
+                        result_descriptor: self.result_descriptor.clone(),
                         collections: self.collections.clone(),
                     }
                     .boxed(),
@@ -239,8 +245,8 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
+    use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
@@ -381,6 +387,7 @@ mod tests {
             BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             TimeInterval::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
 

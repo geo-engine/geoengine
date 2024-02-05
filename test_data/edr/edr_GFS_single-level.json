@@ -1,0 +1,1221 @@
+{
+  "id": "GFS_single-level",
+  "title": "GFS - Single Level",
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          0,
+          -90,
+          359.50000000000006,
+          90
+        ]
+      ],
+      "crs": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]",
+      "_projString": "+proj=longlat +lon_0=180 +R=6371229"
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2023-08-23T06:00:00Z",
+          "2023-08-24T15:00:00Z"
+        ]
+      ],
+      "values": [
+        "2023-08-23T06:00:00Z",
+        "2023-08-23T09:00:00Z",
+        "2023-08-23T12:00:00Z",
+        "2023-08-23T15:00:00Z",
+        "2023-08-23T18:00:00Z",
+        "2023-08-23T21:00:00Z",
+        "2023-08-24T00:00:00Z",
+        "2023-08-24T03:00:00Z",
+        "2023-08-24T06:00:00Z",
+        "2023-08-24T09:00:00Z",
+        "2023-08-24T12:00:00Z",
+        "2023-08-24T15:00:00Z"
+      ],
+      "trs": "TIMECRS[\"DateTime\",TDATUM[\"Gregorian Calendar\"],CS[TemporalDateTime,1],AXIS[\"Time (T)\",future]"
+    }
+  },
+  "crs": [
+    "CRS:84"
+  ],
+  "output_formats": [
+    "CoverageJSON",
+    "CoverageJSON_Grid",
+    "CoverageJSON_MultiPointSeries",
+    "GRIB2",
+    "GeoTIFF",
+    "GeoTIFF_float",
+    "KML",
+    "NetCDF3",
+    "NetCDF3_float",
+    "NetCDF3_grid",
+    "NetCDF3_grid_float",
+    "NetCDF3_point",
+    "NetCDF4",
+    "NetCDF4_float",
+    "NetCDF4_grid",
+    "NetCDF4_grid_float",
+    "NetCDF4_point"
+  ],
+  "data_queries": {
+    "position": {
+      "link": {
+        "href": "https://example.com/edr/collections/GFS_single-level/position",
+        "rel": "data",
+        "title": "Position Query",
+        "templated": false,
+        "variables": {
+          "title": "Position Query",
+          "description": "Data at point location",
+          "query_type": "position",
+          "output_formats": [
+            "CoverageJSON",
+            "KML",
+            "NetCDF4",
+            "NetCDF3"
+          ],
+          "default_output_format": "CoverageJSON",
+          "crs_details": [
+            {
+              "crs": "CRS:84",
+              "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+            }
+          ]
+        }
+      }
+    },
+    "radius": {
+      "link": {
+        "href": "https://example.com/edr/collections/GFS_single-level/radius",
+        "rel": "data",
+        "title": "Radius Query",
+        "templated": false,
+        "variables": {
+          "title": "Radius Query",
+          "description": "Data within circle",
+          "query_type": "radius",
+          "output_formats": [
+            "CoverageJSON",
+            "NetCDF4",
+            "NetCDF3"
+          ],
+          "default_output_format": "CoverageJSON",
+          "within_units": [
+            "m",
+            "km",
+            "ft",
+            "mi",
+            "NM(US)",
+            "NM(UK)"
+          ],
+          "crs_details": [
+            {
+              "crs": "CRS:84",
+              "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+            }
+          ]
+        }
+      }
+    },
+    "area": {
+      "link": {
+        "href": "https://example.com/edr/collections/GFS_single-level/area",
+        "rel": "data",
+        "title": "Area Query",
+        "templated": false,
+        "variables": {
+          "title": "Area Query",
+          "description": "Data within polygonal area",
+          "query_type": "area",
+          "output_formats": [
+            "CoverageJSON_MultiPointSeries",
+            "CoverageJSON_Grid",
+            "GRIB2",
+            "NetCDF4_point",
+            "NetCDF4_grid",
+            "NetCDF4_grid_float",
+            "NetCDF3_point",
+            "NetCDF3_grid",
+            "NetCDF3_grid_float",
+            "GeoTIFF",
+            "GeoTIFF_float",
+            "KML"
+          ],
+          "default_output_format": "CoverageJSON_MultiPointSeries",
+          "crs_details": [
+            {
+              "crs": "CRS:84",
+              "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+            }
+          ]
+        }
+      }
+    },
+    "cube": {
+      "link": {
+        "href": "https://example.com/edr/collections/GFS_single-level/cube",
+        "rel": "data",
+        "title": "Cube Query",
+        "templated": false,
+        "variables": {
+          "title": "Cube Query",
+          "description": "Data within 4D cube",
+          "query_type": "cube",
+          "output_formats": [
+            "GRIB2",
+            "CoverageJSON",
+            "GeoTIFF",
+            "GeoTIFF_float",
+            "KML",
+            "NetCDF4",
+            "NetCDF4_float",
+            "NetCDF3",
+            "NetCDF3_float"
+          ],
+          "default_output_format": "GRIB2",
+          "crs_details": [
+            {
+              "crs": "CRS:84",
+              "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+            }
+          ]
+        }
+      }
+    },
+    "trajectory": {
+      "link": {
+        "href": "https://example.com/edr/collections/GFS_single-level/trajectory",
+        "rel": "data",
+        "title": "Trajectory Query",
+        "templated": false,
+        "variables": {
+          "title": "Trajectory Query",
+          "description": "Data along trajectory",
+          "query_type": "trajectory",
+          "output_formats": [
+            "CoverageJSON",
+            "NetCDF4",
+            "NetCDF3"
+          ],
+          "default_output_format": "CoverageJSON",
+          "crs_details": [
+            {
+              "crs": "CRS:84",
+              "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+            }
+          ]
+        }
+      }
+    },
+    "corridor": {
+      "link": {
+        "href": "https://example.com/edr/collections/GFS_single-level/corridor",
+        "rel": "data",
+        "title": "Corridor Query",
+        "templated": false,
+        "variables": {
+          "title": "Corridor Query",
+          "description": "Data within corridor",
+          "query_type": "corridor",
+          "output_formats": [
+            "NetCDF4",
+            "NetCDF3",
+            "CoverageJSON"
+          ],
+          "default_output_format": "NetCDF4",
+          "width_units": [
+            "m",
+            "km",
+            "ft",
+            "mi",
+            "NM(US)",
+            "NM(UK)"
+          ],
+          "height_units": [
+            "1"
+          ],
+          "crs_details": [
+            {
+              "crs": "CRS:84",
+              "wkt": "GEOGCS[\"Unknown\", DATUM[\"Unknown\", SPHEROID[\"WGS_1984\", 6378137.0, 298.257223563]], PRIMEM[\"Greenwich\",0], UNIT[\"degree\", 0.017453], AXIS[\"Lon\", EAST], AXIS[\"Lat\", NORTH]]"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "parameter_names": {
+    "temperature_gnd-surf": {
+      "type": "Parameter",
+      "id": "temperature_gnd-surf",
+      "label": "Temperature - Ground surface",
+      "unit": {
+        "symbol": "K"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-0-0",
+        "label": "Temperature"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "temperature_max-wind": {
+      "type": "Parameter",
+      "id": "temperature_max-wind",
+      "label": "Temperature - Max. wind",
+      "unit": {
+        "symbol": "K"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-0-0",
+        "label": "Temperature"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_max-wind"
+    },
+    "temperature_tropopause": {
+      "type": "Parameter",
+      "id": "temperature_tropopause",
+      "label": "Temperature - Tropopause",
+      "unit": {
+        "symbol": "K"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-0-0",
+        "label": "Temperature"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_tropopause"
+    },
+    "relative-humidity_0-isoterm": {
+      "type": "Parameter",
+      "id": "relative-humidity_0-isoterm",
+      "label": "Relative humidity - 0C isoterm",
+      "unit": {
+        "symbol": "%"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-1",
+        "label": "Relative humidity"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_0-isoterm"
+    },
+    "relative-humidity_atmosphere": {
+      "type": "Parameter",
+      "id": "relative-humidity_atmosphere",
+      "label": "Relative humidity - Atmosphere",
+      "unit": {
+        "symbol": "%"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-1",
+        "label": "Relative humidity"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_atmosphere"
+    },
+    "relative-humidity_tropo-freeze": {
+      "type": "Parameter",
+      "id": "relative-humidity_tropo-freeze",
+      "label": "Relative humidity - Highest tropospheric freezing level",
+      "unit": {
+        "symbol": "%"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-1",
+        "label": "Relative humidity"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_tropo-freeze"
+    },
+    "precipitable-water_atmosphere": {
+      "type": "Parameter",
+      "id": "precipitable-water_atmosphere",
+      "label": "Precipitable water - Atmosphere",
+      "unit": {
+        "symbol": "kg/m²"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-3",
+        "label": "Precipitable water"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_atmosphere"
+    },
+    "precipitation-rate_gnd-surf": {
+      "type": "Parameter",
+      "id": "precipitation-rate_gnd-surf",
+      "label": "Precipitation rate - Ground surface",
+      "unit": {
+        "symbol": "kg/m²s"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-7",
+        "label": "Precipitation rate"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "snow-depth_gnd-surf": {
+      "type": "Parameter",
+      "id": "snow-depth_gnd-surf",
+      "label": "Snow depth - Ground surface",
+      "unit": {
+        "symbol": "m"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-11",
+        "label": "Snow depth"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "water-equivalent-of-accumulated-snow-depth_gnd-surf": {
+      "type": "Parameter",
+      "id": "water-equivalent-of-accumulated-snow-depth_gnd-surf",
+      "label": "Water equivalent of accumulated snow depth - Ground surface",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-13",
+        "label": "Water equivalent of accumulated snow depth"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "percent-frozen-precipitation_gnd-surf": {
+      "type": "Parameter",
+      "id": "percent-frozen-precipitation_gnd-surf",
+      "label": "Percent frozen precipitation - Ground surface",
+      "unit": {
+        "symbol": "%"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-39",
+        "label": "Percent frozen precipitation"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "categorical-rain-yes-1-no-0_gnd-surf": {
+      "type": "Parameter",
+      "id": "categorical-rain-yes-1-no-0_gnd-surf",
+      "label": "Categorical rain (yes=1; no=0) - Ground surface",
+      "unit": {
+        "symbol": "1"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-192",
+        "label": "Categorical rain (yes=1; no=0)"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "categorical-freezing-rain-yes-1-no-0_gnd-surf": {
+      "type": "Parameter",
+      "id": "categorical-freezing-rain-yes-1-no-0_gnd-surf",
+      "label": "Categorical freezing rain (yes=1; no=0) - Ground surface",
+      "unit": {
+        "symbol": "1"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-193",
+        "label": "Categorical freezing rain (yes=1; no=0)"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "categorical-ice-pellets-yes-1-no-0_gnd-surf": {
+      "type": "Parameter",
+      "id": "categorical-ice-pellets-yes-1-no-0_gnd-surf",
+      "label": "Categorical ice pellets (yes=1; no=0) - Ground surface",
+      "unit": {
+        "symbol": "1"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-194",
+        "label": "Categorical ice pellets (yes=1; no=0)"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "categorical-snow-yes-1-no-0_gnd-surf": {
+      "type": "Parameter",
+      "id": "categorical-snow-yes-1-no-0_gnd-surf",
+      "label": "Categorical snow (yes=1; no=0) - Ground surface",
+      "unit": {
+        "symbol": "1"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-1-195",
+        "label": "Categorical snow (yes=1; no=0)"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "u-component-of-wind_max-wind": {
+      "type": "Parameter",
+      "id": "u-component-of-wind_max-wind",
+      "label": "U component of wind - Max. wind",
+      "unit": {
+        "symbol": "m/s"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-2-2",
+        "label": "U component of wind"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_max-wind"
+    },
+    "u-component-of-wind_tropopause": {
+      "type": "Parameter",
+      "id": "u-component-of-wind_tropopause",
+      "label": "U component of wind - Tropopause",
+      "unit": {
+        "symbol": "m/s"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-2-2",
+        "label": "U component of wind"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_tropopause"
+    },
+    "u-component-of-wind_PBL": {
+      "type": "Parameter",
+      "id": "u-component-of-wind_PBL",
+      "label": "U component of wind - Planetary boundary layer",
+      "unit": {
+        "symbol": "m/s"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-2-2",
+        "label": "U component of wind"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_PBL"
+    },
+    "v-component-of-wind_max-wind": {
+      "type": "Parameter",
+      "id": "v-component-of-wind_max-wind",
+      "label": "V component of wind - Max. wind",
+      "unit": {
+        "symbol": "m/s"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-2-3",
+        "label": "V component of wind"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_max-wind"
+    },
+    "v-component-of-wind_tropopause": {
+      "type": "Parameter",
+      "id": "v-component-of-wind_tropopause",
+      "label": "V component of wind - Tropopause",
+      "unit": {
+        "symbol": "m/s"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-2-3",
+        "label": "V component of wind"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_tropopause"
+    },
+    "v-component-of-wind_PBL": {
+      "type": "Parameter",
+      "id": "v-component-of-wind_PBL",
+      "label": "V component of wind - Planetary boundary layer",
+      "unit": {
+        "symbol": "m/s"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-2-3",
+        "label": "V component of wind"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_PBL"
+    },
+    "wind-speed-gust_gnd-surf": {
+      "type": "Parameter",
+      "id": "wind-speed-gust_gnd-surf",
+      "label": "Wind speed (gust) - Ground surface",
+      "unit": {
+        "symbol": "m/s"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-2-22",
+        "label": "Wind speed (gust)"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "vertical-speed-shear_tropopause": {
+      "type": "Parameter",
+      "id": "vertical-speed-shear_tropopause",
+      "label": "Vertical speed shear - Tropopause",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-2-192",
+        "label": "Vertical speed shear"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_tropopause"
+    },
+    "frictional-velocity_gnd-surf": {
+      "type": "Parameter",
+      "id": "frictional-velocity_gnd-surf",
+      "label": "Frictional velocity - Ground surface",
+      "unit": {
+        "symbol": "m/s"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-2-197",
+        "label": "Frictional velocity"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "ventilation-rate_PBL": {
+      "type": "Parameter",
+      "id": "ventilation-rate_PBL",
+      "label": "Ventilation rate - Planetary boundary layer",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-2-224",
+        "label": "Ventilation rate"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_PBL"
+    },
+    "pressure_gnd-surf": {
+      "type": "Parameter",
+      "id": "pressure_gnd-surf",
+      "label": "Pressure - Ground surface",
+      "unit": {
+        "symbol": "Pa"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-0",
+        "label": "Pressure"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "pressure_max-wind": {
+      "type": "Parameter",
+      "id": "pressure_max-wind",
+      "label": "Pressure - Max. wind",
+      "unit": {
+        "symbol": "Pa"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-0",
+        "label": "Pressure"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_max-wind"
+    },
+    "pressure_tropopause": {
+      "type": "Parameter",
+      "id": "pressure_tropopause",
+      "label": "Pressure - Tropopause",
+      "unit": {
+        "symbol": "Pa"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-0",
+        "label": "Pressure"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_tropopause"
+    },
+    "pressure-reduced-to-msl_mean-sea": {
+      "type": "Parameter",
+      "id": "pressure-reduced-to-msl_mean-sea",
+      "label": "Pressure reduced to MSL - Mean sea",
+      "unit": {
+        "symbol": "Pa"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-1",
+        "label": "Pressure reduced to MSL"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_mean-sea"
+    },
+    "icao-standard-atmosphere-reference-height_max-wind": {
+      "type": "Parameter",
+      "id": "icao-standard-atmosphere-reference-height_max-wind",
+      "label": "ICAO Standard Atmosphere reference height - Max. wind",
+      "unit": {
+        "symbol": "m"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-3",
+        "label": "ICAO Standard Atmosphere reference height"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_max-wind"
+    },
+    "icao-standard-atmosphere-reference-height_tropopause": {
+      "type": "Parameter",
+      "id": "icao-standard-atmosphere-reference-height_tropopause",
+      "label": "ICAO Standard Atmosphere reference height - Tropopause",
+      "unit": {
+        "symbol": "m"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-3",
+        "label": "ICAO Standard Atmosphere reference height"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_tropopause"
+    },
+    "geopotential-height_gnd-surf": {
+      "type": "Parameter",
+      "id": "geopotential-height_gnd-surf",
+      "label": "Geopotential height - Ground surface",
+      "unit": {
+        "symbol": "gpm"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-5",
+        "label": "Geopotential height"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "geopotential-height_0-isoterm": {
+      "type": "Parameter",
+      "id": "geopotential-height_0-isoterm",
+      "label": "Geopotential height - 0C isoterm",
+      "unit": {
+        "symbol": "gpm"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-5",
+        "label": "Geopotential height"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_0-isoterm"
+    },
+    "geopotential-height_max-wind": {
+      "type": "Parameter",
+      "id": "geopotential-height_max-wind",
+      "label": "Geopotential height - Max. wind",
+      "unit": {
+        "symbol": "gpm"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-5",
+        "label": "Geopotential height"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_max-wind"
+    },
+    "geopotential-height_tropopause": {
+      "type": "Parameter",
+      "id": "geopotential-height_tropopause",
+      "label": "Geopotential height - Tropopause",
+      "unit": {
+        "symbol": "gpm"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-5",
+        "label": "Geopotential height"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_tropopause"
+    },
+    "geopotential-height_tropo-freeze": {
+      "type": "Parameter",
+      "id": "geopotential-height_tropo-freeze",
+      "label": "Geopotential height - Highest tropospheric freezing level",
+      "unit": {
+        "symbol": "gpm"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-5",
+        "label": "Geopotential height"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_tropo-freeze"
+    },
+    "geopotential-height_cloud-ceiling": {
+      "type": "Parameter",
+      "id": "geopotential-height_cloud-ceiling",
+      "label": "Geopotential height - Cloud ceiling",
+      "unit": {
+        "symbol": "gpm"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-5",
+        "label": "Geopotential height"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_cloud-ceiling"
+    },
+    "msl-pressure-eta-reduction_mean-sea": {
+      "type": "Parameter",
+      "id": "msl-pressure-eta-reduction_mean-sea",
+      "label": "MSL pressure (Eta reduction) - Mean sea",
+      "unit": {
+        "symbol": "Pa"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-192",
+        "label": "MSL pressure (Eta reduction)"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_mean-sea"
+    },
+    "planetary-boundary-layer-height_gnd-surf": {
+      "type": "Parameter",
+      "id": "planetary-boundary-layer-height_gnd-surf",
+      "label": "Planetary boundary layer height - Ground surface",
+      "unit": {
+        "symbol": "m"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-3-196",
+        "label": "Planetary boundary layer height"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "total-cloud-cover_atmosphere": {
+      "type": "Parameter",
+      "id": "total-cloud-cover_atmosphere",
+      "label": "Total cloud cover - Atmosphere",
+      "unit": {
+        "symbol": "%"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-6-1",
+        "label": "Total cloud cover"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_atmosphere"
+    },
+    "low-cloud-cover_low-cloud": {
+      "type": "Parameter",
+      "id": "low-cloud-cover_low-cloud",
+      "label": "Low cloud cover - Low cloud layer",
+      "unit": {
+        "symbol": "%"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-6-3",
+        "label": "Low cloud cover"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_low-cloud"
+    },
+    "medium-cloud-cover_mid-cloud": {
+      "type": "Parameter",
+      "id": "medium-cloud-cover_mid-cloud",
+      "label": "Medium cloud cover - Middle cloud layer",
+      "unit": {
+        "symbol": "%"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-6-4",
+        "label": "Medium cloud cover"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_mid-cloud"
+    },
+    "high-cloud-cover_high-cld": {
+      "type": "Parameter",
+      "id": "high-cloud-cover_high-cld",
+      "label": "High cloud cover - High cloud layer",
+      "unit": {
+        "symbol": "%"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-6-5",
+        "label": "High cloud cover"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_high-cld"
+    },
+    "cloud-water_atmosphere": {
+      "type": "Parameter",
+      "id": "cloud-water_atmosphere",
+      "label": "Cloud water - Atmosphere",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-6-6",
+        "label": "Cloud water"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_atmosphere"
+    },
+    "sunshine-duration_gnd-surf": {
+      "type": "Parameter",
+      "id": "sunshine-duration_gnd-surf",
+      "label": "Sunshine duration - Ground surface",
+      "unit": {
+        "symbol": "s"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-6-201",
+        "label": "Sunshine duration"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "convective-available-potential-energy_gnd-surf": {
+      "type": "Parameter",
+      "id": "convective-available-potential-energy_gnd-surf",
+      "label": "Convective available potential energy - Ground surface",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-7-6",
+        "label": "Convective available potential energy"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "convective-inhibition_gnd-surf": {
+      "type": "Parameter",
+      "id": "convective-inhibition_gnd-surf",
+      "label": "Convective inhibition - Ground surface",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-7-7",
+        "label": "Convective inhibition"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "surface-lifted-index_gnd-surf": {
+      "type": "Parameter",
+      "id": "surface-lifted-index_gnd-surf",
+      "label": "Surface lifted index - Ground surface",
+      "unit": {
+        "symbol": "K"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-7-192",
+        "label": "Surface lifted index"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "best-4-layer-lifted-index_gnd-surf": {
+      "type": "Parameter",
+      "id": "best-4-layer-lifted-index_gnd-surf",
+      "label": "Best (4 layer) lifted index - Ground surface",
+      "unit": {
+        "symbol": "K"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-7-193",
+        "label": "Best (4 layer) lifted index"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "total-ozone_atmosphere": {
+      "type": "Parameter",
+      "id": "total-ozone_atmosphere",
+      "label": "Total ozone - Atmosphere",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-14-0",
+        "label": "Total ozone"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_atmosphere"
+    },
+    "composite-reflectivity_atmosphere": {
+      "type": "Parameter",
+      "id": "composite-reflectivity_atmosphere",
+      "label": "Composite reflectivity - Atmosphere",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-16-196",
+        "label": "Composite reflectivity"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_atmosphere"
+    },
+    "visibility_gnd-surf": {
+      "type": "Parameter",
+      "id": "visibility_gnd-surf",
+      "label": "Visibility - Ground surface",
+      "unit": {
+        "symbol": "m"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_0-19-0",
+        "label": "Visibility"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "land-cover_gnd-surf": {
+      "type": "Parameter",
+      "id": "land-cover_gnd-surf",
+      "label": "Land cover - Ground surface",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_2-0-0",
+        "label": "Land cover"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "surface-roughness_gnd-surf": {
+      "type": "Parameter",
+      "id": "surface-roughness_gnd-surf",
+      "label": "Surface roughness - Ground surface",
+      "unit": {
+        "symbol": "m"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_2-0-1",
+        "label": "Surface roughness"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "vegetation_gnd-surf": {
+      "type": "Parameter",
+      "id": "vegetation_gnd-surf",
+      "label": "Vegetation - Ground surface",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_2-0-4",
+        "label": "Vegetation"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "plant-canopy-surface-water_gnd-surf": {
+      "type": "Parameter",
+      "id": "plant-canopy-surface-water_gnd-surf",
+      "label": "Plant canopy surface water - Ground surface",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_2-0-196",
+        "label": "Plant canopy surface water"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "wilting-point_gnd-surf": {
+      "type": "Parameter",
+      "id": "wilting-point_gnd-surf",
+      "label": "Wilting point - Ground surface",
+      "unit": {
+        "symbol": "1"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_2-0-201",
+        "label": "Wilting point"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "soil-type_gnd-surf": {
+      "type": "Parameter",
+      "id": "soil-type_gnd-surf",
+      "label": "Soil type - Ground surface",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_2-3-0",
+        "label": "Soil type"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "field-capacity_gnd-surf": {
+      "type": "Parameter",
+      "id": "field-capacity_gnd-surf",
+      "label": "Field capacity - Ground surface",
+      "unit": {
+        "symbol": "1"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_2-3-203",
+        "label": "Field capacity"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "haines-index_gnd-surf": {
+      "type": "Parameter",
+      "id": "haines-index_gnd-surf",
+      "label": "Haines index - Ground surface",
+      "unit": {
+        "symbol": "1"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_2-4-2",
+        "label": "Haines index"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "ice-cover_gnd-surf": {
+      "type": "Parameter",
+      "id": "ice-cover_gnd-surf",
+      "label": "Ice cover - Ground surface",
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_10-2-0",
+        "label": "Ice cover"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "ice-thickness_gnd-surf": {
+      "type": "Parameter",
+      "id": "ice-thickness_gnd-surf",
+      "label": "Ice thickness - Ground surface",
+      "unit": {
+        "symbol": "m"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_10-2-1",
+        "label": "Ice thickness"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    },
+    "ice-temperature_gnd-surf": {
+      "type": "Parameter",
+      "id": "ice-temperature_gnd-surf",
+      "label": "Ice temperature - Ground surface",
+      "unit": {
+        "symbol": "K"
+      },
+      "observedProperty": {
+        "id": "http://codes.wmo.int/grib2/codeflag/4.2/_10-2-8",
+        "label": "Ice temperature"
+      },
+      "measurementType": {
+        "method": "spec:regular"
+      },
+      "_verticalReference": "special_gnd-surf"
+    }
+  }
+}

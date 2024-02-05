@@ -3,7 +3,7 @@ use std::time::Instant;
 use actix_http::header::{self, CONTENT_TYPE};
 use actix_web_httpauth::headers::authorization::Bearer;
 use geoengine_datatypes::{
-    operations::image::{Colorizer, DefaultColors, RgbaColor},
+    operations::image::{Colorizer, RgbaColor},
     primitives::{TimeGranularity, TimeStep},
 };
 use geoengine_operators::{
@@ -47,9 +47,7 @@ async fn bench() {
                     },
                     sources: SingleRasterSource {
                         raster: GdalSource {
-                            params: GdalSourceParameters {
-                                data: dataset.into(),
-                            },
+                            params: GdalSourceParameters { data: dataset },
                         }
                         .boxed(),
                     },
@@ -66,10 +64,8 @@ async fn bench() {
                 (255.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            DefaultColors::OverUnder {
-                over_color: RgbaColor::white(),
-                under_color: RgbaColor::black(),
-            },
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 

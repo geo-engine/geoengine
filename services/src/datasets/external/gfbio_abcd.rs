@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-use std::marker::PhantomData;
-
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Result;
 use crate::error::{self, Error};
@@ -18,6 +14,7 @@ use bb8_postgres::bb8::{Pool, PooledConnection};
 use bb8_postgres::tokio_postgres::NoTls;
 use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
@@ -38,6 +35,8 @@ use geoengine_operators::{
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use std::collections::HashMap;
+use std::marker::PhantomData;
 
 pub const GFBIO_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x907f_9f5b_0304_4a0e_a5ef_28de_62d1_c0f9);
@@ -349,7 +348,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let id: DataId = id.clone().into();
+        let id: DataId = id.clone();
 
         let surrogate_key: i32 = id
             .external()
@@ -466,26 +465,25 @@ impl
 
 #[cfg(test)]
 mod tests {
-    use crate::api::model::datatypes::{ExternalDataId, LayerId};
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
-    use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
     use rand::RngCore;
     use tokio_postgres::Config;
 
+    use super::*;
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
     use crate::util::config;
     use std::{fs::File, io::Read, path::PathBuf};
-
-    use super::*;
 
     /// Create a schema with test tables and return the schema name
     async fn create_test_data(db_config: &config::Postgres) -> String {
@@ -622,13 +620,10 @@ mod tests {
             let meta: Box<
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
             > = provider
-                .meta_data(
-                    &DataId::External(ExternalDataId {
-                        provider_id: GFBIO_PROVIDER_ID,
-                        layer_id: LayerId("1".to_string()),
-                    })
-                    .into(),
-                )
+                .meta_data(&DataId::External(ExternalDataId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    layer_id: LayerId("1".to_string()),
+                }))
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -681,6 +676,7 @@ mod tests {
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     SpatialResolution::zero_point_one(),
+                    ColumnSelection::all(),
                 ))
                 .await
                 .map_err(|e| e.to_string())?;
@@ -780,6 +776,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_loads() {
         async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
             let provider = Box::new(GfbioAbcdDataProviderDefinition {
@@ -801,22 +798,56 @@ mod tests {
             let meta: Box<
                 dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
             > = provider
-                .meta_data(
-                    &DataId::External(ExternalDataId {
-                        provider_id: GFBIO_PROVIDER_ID,
-                        layer_id: LayerId("1".to_string()),
-                    })
-                    .into(),
-                )
+                .meta_data(&DataId::External(ExternalDataId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    layer_id: LayerId("1".to_string()),
+                }))
                 .await
                 .map_err(|e| e.to_string())?;
 
-            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(meta, vec![]);
+            let text_column = VectorColumnInfo {
+                data_type: FeatureDataType::Text,
+                measurement: Measurement::Unitless,
+            };
+
+            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns:  [
+                    ("/DataSets/DataSet/Units/Unit/DateLastEdited".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/Agents/GatheringAgent/AgentText".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/Country/ISO3166Code".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/Country/Name".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/DateTime/ISODateTimeBegin".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/LocalityText".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Gathering/SiteCoordinateSets/SiteCoordinates/CoordinatesLatLong/SpatialDatum".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonName".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/HigherTaxa/HigherTaxon/HigherTaxonRank".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/Identifications/Identification/Result/TaxonIdentified/ScientificName/FullScientificNameString".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Creator".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/FileURI".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/Format".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Details".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/Text".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/MultiMediaObjects/MultiMediaObject/IPR/Licenses/License/URI".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/RecordBasis".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/RecordURI".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/SourceID".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/SourceInstitutionID".to_owned(), text_column.clone()),
+                    ("/DataSets/DataSet/Units/Unit/UnitID".to_owned(), text_column.clone()),
+                    ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    time: None,
+                    bbox: None,
+            },meta, vec![]);
 
             let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
                 BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
                 TimeInterval::default(),
                 SpatialResolution::zero_point_one(),
+                ColumnSelection::all(),
             );
             let ctx = MockQueryContext::test_default();
 

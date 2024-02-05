@@ -1,14 +1,4 @@
-use crate::api::model::datatypes::Coordinate2D;
-use crate::api::model::datatypes::DatasetName;
-use crate::api::model::datatypes::NamedData;
-use crate::api::model::datatypes::RasterDataType;
-use crate::api::model::datatypes::SpatialResolution;
-use crate::api::model::operators::FileNotFoundHandling;
-use crate::api::model::operators::GdalDatasetGeoTransform;
-use crate::api::model::operators::GdalDatasetParameters;
-use crate::api::model::operators::GdalMetaDataStatic;
-use crate::api::model::operators::RasterResultDescriptor;
-use crate::api::model::services::AddDataset;
+use crate::api::model::responses::ErrorResponse;
 use crate::contexts::GeoEngineDb;
 use crate::contexts::PostgresContext;
 use crate::contexts::SimpleApplicationContext;
@@ -16,7 +6,8 @@ use crate::datasets::listing::Provenance;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
 use crate::datasets::upload::UploadRootPath;
-use crate::handlers::ErrorResponse;
+use crate::datasets::AddDataset;
+use crate::datasets::DatasetName;
 use crate::projects::{
     CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
@@ -26,9 +17,9 @@ use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
+    api::handlers,
     contexts::SessionContext,
     datasets::storage::{DatasetDefinition, MetaDataDefinition},
-    handlers,
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{http, http::header, http::Method, middleware, test, web, App};
@@ -37,16 +28,28 @@ use bb8_postgres::PostgresConnectionManager;
 use flexi_logger::Logger;
 use futures_util::Future;
 use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::operations::image::Colorizer;
+use geoengine_datatypes::operations::image::RasterColorizer;
 use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::CacheTtlSeconds;
+use geoengine_datatypes::primitives::Coordinate2D;
+use geoengine_datatypes::primitives::SpatialResolution;
+use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::test_data;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::ChunkByteSize;
+use geoengine_operators::engine::RasterBandDescriptor;
+use geoengine_operators::engine::RasterBandDescriptors;
+use geoengine_operators::engine::RasterResultDescriptor;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
+use geoengine_operators::source::FileNotFoundHandling;
+use geoengine_operators::source::GdalDatasetGeoTransform;
+use geoengine_operators::source::GdalDatasetParameters;
+use geoengine_operators::source::GdalMetaDataStatic;
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 use geoengine_operators::util::gdal::create_ndvi_meta_data_with_cache_ttl;
 use rand::RngCore;
@@ -92,7 +95,10 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
             visibility: Default::default(),
             symbology: Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
-                colorizer: Colorizer::Rgba.into(),
+                raster_colorizer: RasterColorizer::SingleBand {
+                    band: 0,
+                    band_colorizer: Colorizer::Rgba,
+                },
             }),
         })]),
         plots: None,
@@ -118,9 +124,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl<A: SimpleApplicationCo
     let workflow = Workflow {
         operator: TypedOperator::Raster(
             GdalSource {
-                params: GdalSourceParameters {
-                    data: dataset.into(),
-                },
+                params: GdalSourceParameters { data: dataset },
             }
             .boxed(),
         ),
@@ -170,6 +174,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
                 license: "Sample License".to_owned(),
                 uri: "http://example.org/".to_owned(),
             }]),
+            tags: Some(vec!["raster".to_owned(), "test".to_owned()]),
         },
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data_with_cache_ttl(
             cache_ttl,
@@ -189,7 +194,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
         name: dataset_name.name,
     };
 
-    (dataset_id.into(), named_data)
+    (dataset_id, named_data)
 }
 
 #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
@@ -200,9 +205,11 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
             display_name: "Land Cover".to_string(),
             description: "Land Cover derived from MODIS/Terra+Aqua Land Cover".to_string(),
             source_operator: "GdalSource".to_string(),
+            tags: Some(vec!["raster".to_owned(), "test".to_owned()]),
             symbology: Some(Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
-                colorizer: Colorizer::palette(
+                raster_colorizer: RasterColorizer::SingleBand {
+                    band: 0, band_colorizer: Colorizer::palette(
                     [
                         (0.0.try_into().unwrap(), RgbaColor::new(134, 201, 227, 255)),
                         (1.0.try_into().unwrap(), RgbaColor::new(30, 129, 62, 255)),
@@ -227,7 +234,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                     .collect(),
                     RgbaColor::transparent(),
                     RgbaColor::transparent(),
-                ).unwrap().into(),
+                ).unwrap()},
             })),
             provenance: Some(vec![Provenance {
                 citation: "Friedl, M., D. Sulla-Menashe. MCD12C1 MODIS/Terra+Aqua Land Cover Type Yearly L3 Global 0.05Deg CMG V006. 2015, distributed by NASA EOSDIS Land Processes DAAC, https://doi.org/10.5067/MODIS/MCD12C1.006. Accessed 2022-03-16.".to_owned(),
@@ -236,7 +243,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
             }]),
         },
         meta_data: MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
-            time: Some(geoengine_datatypes::primitives::TimeInterval::default().into()),
+            time: Some(geoengine_datatypes::primitives::TimeInterval::default()),
             params: GdalDatasetParameters {
                 file_path: test_data!("raster/landcover/landcover.tif").into(),
                 rasterband_channel: 1,
@@ -253,11 +260,18 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                 gdal_open_options: None,
                 gdal_config_options: None,
                 allow_alphaband_as_mask: false,
+                retry: None,
             },
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
-                spatial_reference: SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()).into(),
-                measurement: geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
+                spatial_reference: SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
+                time: Some(geoengine_datatypes::primitives::TimeInterval::default()),
+                bbox: Some(geoengine_datatypes::primitives::SpatialPartition2D::new((-180., 90.).into(),
+                     (180., -90.).into()).unwrap()),
+                resolution: Some(SpatialResolution {
+                    x: 0.1, y: 0.1,
+                }),
+                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
                 [
                     (0_u8, "Water Bodies".to_string()),
                     (1, "Evergreen Needleleaf Forests".to_string()),
@@ -276,24 +290,16 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                     (14, "Cropland-Natural Vegetation Mosaics".to_string()),
                     (15, "Snow and Ice".to_string()),
                     (16, "Barren or Sparsely Vegetated".to_string()),
-                ].into()).into(),
-                time: Some(geoengine_datatypes::primitives::TimeInterval::default().into()),
-                bbox: Some(geoengine_datatypes::primitives::SpatialPartition2D::new((-180., 90.).into(),
-                     (180., -90.).into()).unwrap()
-                .into()),
-                resolution: Some(SpatialResolution {
-                    x: 0.1, y: 0.1,
-                }),
+                ].into()))]).unwrap(),
             },
             cache_ttl: CacheTtlSeconds::default(),
-        }.into()),
+        }),
     };
 
     db.add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
         .await
         .expect("dataset db access")
         .id
-        .into()
 }
 
 pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(

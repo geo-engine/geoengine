@@ -1,6 +1,6 @@
+use crate::api::handlers::get_token;
 use crate::contexts::{ApplicationContext, MockableSession, Session, SessionId};
 use crate::error;
-use crate::handlers::get_token;
 use crate::pro::contexts::ProPostgresContext;
 use crate::pro::permissions::{Role, RoleId};
 use crate::pro::users::UserId;

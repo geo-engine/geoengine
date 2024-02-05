@@ -1,10 +1,10 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-    PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterOrVectorSource,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    WorkflowOperatorPath,
 };
-use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
@@ -16,8 +16,9 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryFutureExt};
 use geoengine_datatypes::plots::{Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, Coordinate2D, DataRef, FeatureDataRef, FeatureDataType, Geometry,
-    Measurement, PlotQueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
+    AxisAlignedRectangle, BandSelection, ColumnSelection, Coordinate2D, DataRef, FeatureDataRef,
+    FeatureDataType, Geometry, Measurement, PlotQueryRectangle, RasterQueryRectangle,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::{
@@ -25,7 +26,7 @@ use geoengine_datatypes::{
     raster::GridSize,
 };
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, OptionExt};
+use snafu::ensure;
 use std::convert::TryFrom;
 
 pub const HISTOGRAM_OPERATOR_NAME: &str = "Histogram";
@@ -44,8 +45,8 @@ impl OperatorName for Histogram {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistogramParams {
-    /// Name of the (numeric) attribute to compute the histogram on. Ignored for operation on rasters.
-    pub column_name: Option<String>,
+    /// Name of the (numeric) vector attribute or raster band to compute the histogram on.
+    pub attribute_name: String,
     /// The bounds (min/max) of the histogram.
     pub bounds: HistogramBounds,
     /// Specify the number of buckets or how it should be derived.
@@ -95,19 +96,22 @@ impl PlotOperator for Histogram {
 
         Ok(match self.sources.source {
             RasterOrVectorOperator::Raster(raster_source) => {
-                ensure!(
-                    self.params.column_name.is_none(),
-                    error::InvalidOperatorSpec {
-                        reason: "Histogram on raster input must not have `columnName` field set"
-                            .to_string(),
-                    }
-                );
-
                 let raster_source = raster_source
                     .initialize(path.clone_and_append(0), context)
                     .await?;
 
                 let in_desc = raster_source.result_descriptor();
+
+                ensure!(
+                    in_desc
+                        .bands
+                        .iter()
+                        .any(|b| b.name == self.params.attribute_name),
+                    error::InvalidOperatorSpec {
+                        reason: "Band with given `attribute_name` does not exist".to_string(),
+                    }
+                );
+
                 InitializedHistogram::new(
                     name,
                     PlotResultDescriptor {
@@ -122,15 +126,7 @@ impl PlotOperator for Histogram {
                 .boxed()
             }
             RasterOrVectorOperator::Vector(vector_source) => {
-                let column_name =
-                    self.params
-                        .column_name
-                        .as_ref()
-                        .context(error::InvalidOperatorSpec {
-                            reason: "Histogram on vector input is missing `columnName` field"
-                                .to_string(),
-                        })?;
-
+                let column_name = &self.params.attribute_name;
                 let vector_source = vector_source
                     .initialize(path.clone_and_append(0), context)
                     .await?;
@@ -177,7 +173,7 @@ pub struct InitializedHistogram<Op> {
     metadata: HistogramMetadataOptions,
     source: Op,
     interactive: bool,
-    column_name: Option<String>,
+    attribute_name: String,
 }
 
 impl<Op> InitializedHistogram<Op> {
@@ -213,16 +209,24 @@ impl<Op> InitializedHistogram<Op> {
             },
             source,
             interactive: params.interactive,
-            column_name: params.column_name,
+            attribute_name: params.attribute_name,
         }
     }
 }
 
 impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterOperator>> {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
+        let (band_idx, band) = self
+            .source
+            .result_descriptor()
+            .bands
+            .iter().enumerate()
+            .find(|(_, b)| b.name == self.attribute_name).expect("the band with the attribute name should exist in the source because it was checked during initialization of the operator.");
+
         let processor = HistogramRasterQueryProcessor {
             input: self.source.query_processor()?,
-            measurement: self.source.result_descriptor().measurement.clone(),
+            band_idx: band_idx as u32,
+            measurement: band.measurement.clone(),
             metadata: self.metadata,
             interactive: self.interactive,
         };
@@ -243,11 +247,11 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let processor = HistogramVectorQueryProcessor {
             input: self.source.query_processor()?,
-            column_name: self.column_name.clone().unwrap_or_default(),
+            column_name: self.attribute_name.clone(),
             measurement: self
                 .source
                 .result_descriptor()
-                .column_measurement(self.column_name.as_deref().unwrap_or_default())
+                .column_measurement(&self.attribute_name)
                 .cloned()
                 .into(),
             metadata: self.metadata,
@@ -269,6 +273,7 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
 /// A query processor that calculates the Histogram about its raster inputs.
 pub struct HistogramRasterQueryProcessor {
     input: TypedRasterQueryProcessor,
+    band_idx: u32,
     measurement: Measurement,
     metadata: HistogramMetadataOptions,
     interactive: bool,
@@ -296,7 +301,7 @@ impl PlotQueryProcessor for HistogramRasterQueryProcessor {
         query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        self.preprocess(query, ctx)
+        self.preprocess(query.clone(), ctx)
             .and_then(move |mut histogram_metadata| async move {
                 histogram_metadata.sanitize();
                 if histogram_metadata.has_invalid_parameters() {
@@ -323,7 +328,7 @@ impl PlotQueryProcessor for HistogramVectorQueryProcessor {
         query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        self.preprocess(query, ctx)
+        self.preprocess(query.clone(), ctx)
             .and_then(move |mut histogram_metadata| async move {
                 histogram_metadata.sanitize();
                 if histogram_metadata.has_invalid_parameters() {
@@ -366,9 +371,11 @@ impl HistogramRasterQueryProcessor {
         }
 
         // TODO: compute only number of buckets if possible
-        let raster_query_rect = RasterQueryRectangle::with_vector_query_and_grid_origin(
-            query,
+        let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_grid_origin(
+            query.spatial_query,
             Coordinate2D::default(), // FIXME: this is the default tiling specification origin. The actual origin is not known here. It should be derived from the input result descriptor!
+            query.time_interval,
+            BandSelection::new_single(self.band_idx),
         );
 
         call_on_generic_raster_processor!(&self.input, processor => {
@@ -391,9 +398,11 @@ impl HistogramRasterQueryProcessor {
         .build()
         .map_err(Error::from)?;
 
-        let raster_query_rect = RasterQueryRectangle::with_vector_query_and_grid_origin(
-            query,
+        let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_grid_origin(
+            query.spatial_query,
             Coordinate2D::default(), // FIXME: this is the default tiling specification origin. The actual origin is not known here. It should be derived from the input result descriptor!
+            query.time_interval,
+            BandSelection::new_single(self.band_idx),
         );
 
         call_on_generic_raster_processor!(&self.input, processor => {
@@ -431,7 +440,7 @@ impl HistogramRasterQueryProcessor {
 impl HistogramVectorQueryProcessor {
     async fn preprocess<'p>(
         &'p self,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<HistogramMetadata> {
         async fn process_metadata<'m, G>(
@@ -461,6 +470,12 @@ impl HistogramVectorQueryProcessor {
 
         // TODO: compute only number of buckets if possible
 
+        let query = VectorQueryRectangle::new(
+            query.spatial_query,
+            query.time_interval,
+            ColumnSelection::all(),
+        );
+
         call_on_generic_vector_processor!(&self.input, processor => {
             process_metadata(processor.query(query, ctx).await?, &self.column_name, self.metadata).await
         })
@@ -469,7 +484,7 @@ impl HistogramVectorQueryProcessor {
     async fn process<'p>(
         &'p self,
         metadata: HistogramMetadata,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'p dyn QueryContext,
     ) -> Result<<HistogramRasterQueryProcessor as PlotQueryProcessor>::OutputFormat> {
         let mut histogram = geoengine_datatypes::plots::Histogram::builder(
@@ -480,6 +495,12 @@ impl HistogramVectorQueryProcessor {
         )
         .build()
         .map_err(Error::from)?;
+
+        let query = VectorQueryRectangle::new(
+            query.spatial_query,
+            query.time_interval,
+            ColumnSelection::all(),
+        );
 
         call_on_generic_vector_processor!(&self.input, processor => {
             let mut query = processor.query(query, ctx).await?;
@@ -657,8 +678,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-        RasterResultDescriptor, StaticMetaData, VectorColumnInfo, VectorOperator,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterBandDescriptors,
+        RasterOperator, RasterResultDescriptor, StaticMetaData, VectorColumnInfo, VectorOperator,
         VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
@@ -668,7 +689,8 @@ mod tests {
     use crate::test_data;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
+        BoundingBox2D, DateTime, FeatureData, NoGeometry, PlotSeriesSelection, SpatialResolution,
+        TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::raster::{
@@ -688,7 +710,7 @@ mod tests {
     fn serialization() {
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: Some("foobar".to_string()),
+                attribute_name: "foobar".to_string(),
                 bounds: HistogramBounds::Values {
                     min: 5.0,
                     max: 10.0,
@@ -704,7 +726,7 @@ mod tests {
         let serialized = json!({
             "type": "Histogram",
             "params": {
-                "columnName": "foobar",
+                "attributeName": "foobar",
                 "bounds": {
                     "min": 5.0,
                     "max": 10.0,
@@ -737,7 +759,7 @@ mod tests {
     fn serialization_alt() {
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: None,
+                attribute_name: "band".to_string(),
                 bounds: HistogramBounds::Data(Default::default()),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -752,6 +774,7 @@ mod tests {
         let serialized = json!({
             "type": "Histogram",
             "params": {
+                "attributeName": "band",
                 "bounds": "data",
                 "buckets": {
                     "type": "squareRootChoiceRule",
@@ -780,7 +803,7 @@ mod tests {
     async fn column_name_for_raster_source() {
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: Some("foo".to_string()),
+                attribute_name: "foo".to_string(),
                 bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
                 buckets: HistogramBuckets::Number { value: 3 },
                 interactive: false,
@@ -807,6 +830,7 @@ mod tests {
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels: [3, 2].into(),
                     },
+                    0,
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
@@ -815,10 +839,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                     pixel_bounds: GridShape2D::new_2d(3, 2).bounding_box(),
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -836,7 +860,7 @@ mod tests {
 
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: None,
+                attribute_name: "band".to_string(),
                 bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
                 buckets: HistogramBuckets::Number { value: 3 },
                 interactive: false,
@@ -860,6 +884,7 @@ mod tests {
                     BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -888,7 +913,7 @@ mod tests {
 
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: None,
+                attribute_name: "band".to_string(),
                 bounds: HistogramBounds::Data(Default::default()),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -914,6 +939,7 @@ mod tests {
                     BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -951,7 +977,7 @@ mod tests {
 
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: Some("foo".to_string()),
+                attribute_name: "foo".to_string(),
                 bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
                 buckets: HistogramBuckets::Number { value: 3 },
                 interactive: true,
@@ -977,6 +1003,7 @@ mod tests {
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1018,7 +1045,7 @@ mod tests {
 
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: Some("foo".to_string()),
+                attribute_name: "foo".to_string(),
                 bounds: HistogramBounds::Data(Default::default()),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -1046,6 +1073,7 @@ mod tests {
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1072,7 +1100,7 @@ mod tests {
         let workflow = serde_json::json!({
             "type": "Histogram",
             "params": {
-                "columnName": "featurecla",
+                "attributeName": "featurecla",
                 "bounds": "data",
                 "buckets": {
                     "type": "squareRootChoiceRule",
@@ -1191,16 +1219,16 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: None,
             geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
             pixel_bounds: tile_size_in_pixels.bounding_box(),
+            bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: None,
+                attribute_name: "band".to_string(),
                 bounds: HistogramBounds::Data(Data),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -1216,6 +1244,7 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
+                        0,
                         EmptyGrid2D::<u8>::new(tile_size_in_pixels).into(),
                         CacheHint::default(),
                     )],
@@ -1242,6 +1271,7 @@ mod tests {
                     BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1272,7 +1302,7 @@ mod tests {
 
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: Some("foo".to_string()),
+                attribute_name: "foo".to_string(),
                 bounds: HistogramBounds::Data(Default::default()),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -1300,6 +1330,7 @@ mod tests {
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1336,7 +1367,7 @@ mod tests {
 
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: Some("foo".to_string()),
+                attribute_name: "foo".to_string(),
                 bounds: HistogramBounds::Data(Default::default()),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -1360,10 +1391,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                PlotQueryRectangle::with_bounds_and_resolution(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1392,17 +1424,17 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: None,
             geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
             pixel_bounds: tile_size_in_pixels.bounding_box(),
+            bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: None,
+                attribute_name: "band".to_string(),
                 bounds: HistogramBounds::Data(Data),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -1418,6 +1450,7 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
+                        0,
                         Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
                         CacheHint::default(),
                     )],
@@ -1440,10 +1473,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                PlotQueryRectangle::with_bounds_and_resolution(
                     BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     TimeInterval::new_instant(DateTime::new_utc(2013, 12, 1, 12, 0, 0)).unwrap(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )

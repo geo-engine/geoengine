@@ -3,8 +3,10 @@ use crate::primitives::TimeInstance;
 use crate::raster::RasterDataType;
 use crate::util::Result;
 use arrow::buffer::NullBuffer;
+use arrow_array::{BooleanArray, Date64Array, Float64Array, Int64Array, StringArray};
 use gdal::vector::OGRFieldType;
 use num_traits::AsPrimitive;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use snafu::ensure;
@@ -12,7 +14,7 @@ use std::convert::TryFrom;
 use std::str;
 use std::{marker::PhantomData, slice};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureDataType {
     Category,
@@ -1298,6 +1300,78 @@ impl TryFrom<&FeatureDataValue> for TimeInstance {
     fn try_from(value: &FeatureDataValue) -> Result<TimeInstance, Self::Error> {
         Ok(match value {
             FeatureDataValue::DateTime(v) | FeatureDataValue::NullableDateTime(Some(v)) => *v,
+            _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
+        })
+    }
+}
+
+impl TryFrom<&FeatureDataValue> for arrow_array::Scalar<Float64Array> {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(
+        value: &FeatureDataValue,
+    ) -> Result<arrow_array::Scalar<Float64Array>, Self::Error> {
+        Ok(match value {
+            FeatureDataValue::Float(v) | FeatureDataValue::NullableFloat(Some(v)) => {
+                Float64Array::new_scalar(*v)
+            }
+            _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
+        })
+    }
+}
+
+impl TryFrom<&FeatureDataValue> for arrow_array::Scalar<Int64Array> {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(value: &FeatureDataValue) -> Result<arrow_array::Scalar<Int64Array>, Self::Error> {
+        Ok(match value {
+            FeatureDataValue::Int(v) | FeatureDataValue::NullableInt(Some(v)) => {
+                Int64Array::new_scalar(*v)
+            }
+            FeatureDataValue::DateTime(v) | FeatureDataValue::NullableDateTime(Some(v)) => {
+                Int64Array::new_scalar(v.inner())
+            }
+            _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
+        })
+    }
+}
+
+impl TryFrom<&FeatureDataValue> for arrow_array::Scalar<Date64Array> {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(value: &FeatureDataValue) -> Result<arrow_array::Scalar<Date64Array>, Self::Error> {
+        Ok(match value {
+            FeatureDataValue::DateTime(v) | FeatureDataValue::NullableDateTime(Some(v)) => {
+                Date64Array::new_scalar(v.inner())
+            }
+            _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
+        })
+    }
+}
+
+impl TryFrom<&FeatureDataValue> for arrow_array::Scalar<StringArray> {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(value: &FeatureDataValue) -> Result<arrow_array::Scalar<StringArray>, Self::Error> {
+        Ok(match value {
+            FeatureDataValue::Text(v) | FeatureDataValue::NullableText(Some(v)) => {
+                StringArray::new_scalar(v.clone())
+            }
+            _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
+        })
+    }
+}
+
+impl TryFrom<&FeatureDataValue> for arrow_array::Scalar<BooleanArray> {
+    type Error = crate::collections::FeatureCollectionError;
+
+    fn try_from(
+        value: &FeatureDataValue,
+    ) -> Result<arrow_array::Scalar<BooleanArray>, Self::Error> {
+        Ok(match value {
+            FeatureDataValue::Bool(v) | FeatureDataValue::NullableBool(Some(v)) => {
+                BooleanArray::new_scalar(*v)
+            }
             _ => return Err(crate::collections::FeatureCollectionError::WrongDataType),
         })
     }

@@ -20,7 +20,7 @@ Content-Type: application/json
 ###
 
 # @name anonymousSession
-POST http://localhost:3030/anonymous
+POST http://localhost:3030/api/anonymous
 Content-Type: application/json
 
 ###
@@ -148,8 +148,8 @@ Accept: application/json
 
 ###
 
-GET http://localhost:3030/datasets?order=NameDesc&offset=0&limit=2
-Authorization: Bearer a02187ef-0ddc-4d37-90b8-55d1e05ba47b
+GET http://localhost:3030/api/datasets?order=NameDesc&offset=0&limit=2&filter=with
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Accept: application/json
 
 ###

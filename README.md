@@ -1,6 +1,6 @@
 # Geo Engine
 
-[![CI](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml/badge.svg)](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml)
+[![CI](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml/badge.svg?event=merge_group)](https://github.com/geo-engine/geoengine/actions/workflows/ci.yml?query=event%3Amerge_group)
 [![Coverage Status](https://coveralls.io/repos/github/geo-engine/geoengine/badge.svg?branch=main)](https://coveralls.io/github/geo-engine/geoengine?branch=main)
 [![Documentation](https://img.shields.io/badge/documentation-docs.geoengine.io-blue)](https://docs.geoengine.io/)
 
@@ -66,13 +66,16 @@ sudo -u postgres psql << EOF
 \set AUTOCOMMIT on
 CREATE USER geoengine WITH PASSWORD 'geoengine' CREATEDB;
 CREATE DATABASE geoengine OWNER geoengine;
+\c geoengine
+CREATE EXTENSION postgis;
 EOF
 ```
 
-During development, you can use the following command to clean the database and start the server.
+During development, you can use the following setting in your Settings.toml to clean the database on server startup:
 
-```bash
-sudo -u postgres psql -d geoengine -c "drop schema public cascade; create schema public authorization geoengine; create extension postgis;" && cargo run --features pro
+```
+[postgres]
+clear_database_on_start = true
 ```
 
 ##### NFDI / GFBio

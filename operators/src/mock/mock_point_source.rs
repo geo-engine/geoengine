@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub struct MockPointSourceProcessor {
+    result_descriptor: VectorResultDescriptor,
     points: Vec<Coordinate2D>,
 }
 
@@ -49,6 +50,10 @@ impl VectorQueryProcessor for MockPointSourceProcessor {
                 )?)
             })
             .boxed())
+    }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -102,6 +107,7 @@ impl InitializedVectorOperator for InitializedMockPointSource {
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             MockPointSourceProcessor {
+                result_descriptor: self.result_descriptor.clone(),
                 points: self.points.clone(),
             }
             .boxed(),
@@ -124,7 +130,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
-    use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+    use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection, SpatialResolution};
     use geoengine_datatypes::util::test::TestDefault;
 
     #[test]
@@ -165,6 +171,7 @@ mod tests {
             BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             TimeInterval::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
 

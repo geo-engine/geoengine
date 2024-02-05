@@ -2,8 +2,9 @@ use self::{codegen::ExpressionAst, compiled::LinkedExpression, parser::Expressio
 use crate::{
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-        Operator, OperatorData, OperatorName, RasterOperator, RasterQueryProcessor,
-        RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
+        Operator, OperatorData, OperatorName, RasterBandDescriptor, RasterBandDescriptors,
+        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
+        WorkflowOperatorPath,
     },
     processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
     util::Result,
@@ -65,7 +66,7 @@ pub struct ExpressionSources {
 
 impl OperatorData for ExpressionSources {
     fn data_names_collect(&self, data_names: &mut Vec<NamedData>) {
-        for source in self.iter() {
+        for source in self {
             source.data_names_collect(data_names);
         }
     }
@@ -165,19 +166,16 @@ impl ExpressionSources {
     }
 
     /// Returns all non-empty sources
-    #[allow(clippy::borrowed_box)]
-    fn iter(
-        &self,
-    ) -> std::iter::Flatten<std::array::IntoIter<Option<&Box<dyn RasterOperator>>, 8>> {
+    fn iter(&self) -> std::iter::Flatten<std::array::IntoIter<Option<&dyn RasterOperator>, 8>> {
         [
-            Some(&self.a),
-            self.b.as_ref(),
-            self.c.as_ref(),
-            self.d.as_ref(),
-            self.e.as_ref(),
-            self.f.as_ref(),
-            self.g.as_ref(),
-            self.h.as_ref(),
+            Some(self.a.as_ref()),
+            self.b.as_ref().map(AsRef::as_ref),
+            self.c.as_ref().map(AsRef::as_ref),
+            self.d.as_ref().map(AsRef::as_ref),
+            self.e.as_ref().map(AsRef::as_ref),
+            self.f.as_ref().map(AsRef::as_ref),
+            self.g.as_ref().map(AsRef::as_ref),
+            self.h.as_ref().map(AsRef::as_ref),
         ]
         .into_iter()
         .flatten()
@@ -197,6 +195,16 @@ impl ExpressionSources {
         ]
         .into_iter()
         .map_while(std::convert::identity)
+    }
+}
+
+impl<'s> IntoIterator for &'s ExpressionSources {
+    type Item = &'s dyn RasterOperator;
+
+    type IntoIter = std::iter::Flatten<std::array::IntoIter<Option<Self::Item>, 8>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
@@ -267,6 +275,13 @@ impl RasterOperator for Expression {
                 }
             );
         }
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_descriptors.iter().all(|r| r.bands.len() == 1),
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: Expression::TYPE_NAME
+            }
+        );
 
         for other_spatial_reference in in_descriptors.iter().skip(1).map(|rd| rd.spatial_reference)
         {
@@ -325,14 +340,17 @@ impl RasterOperator for Expression {
         let result_descriptor = RasterResultDescriptor {
             data_type: self.params.output_type,
             spatial_reference,
-            measurement: self
-                .params
-                .output_measurement
-                .as_ref()
-                .map_or(Measurement::Unitless, Measurement::clone),
             time,
             geo_transform,
             pixel_bounds: pixel_bounds.expect("there must be at least one input with bounds"), // FIXME: what if all inputs have no bounds? Can happen when all are projected and produce no data
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                "band".into(), // TODO: how to name the band?
+                self.params
+                    .output_measurement
+                    .as_ref()
+                    .map_or(Measurement::Unitless, Measurement::clone),
+            )])
+            .unwrap(),
         };
 
         let initialized_operator = InitializedExpression {
@@ -419,8 +437,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processor = a.into_f64();
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processor, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processor,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
 
                 // TODO: We could save prior conversions by monomophizing the differnt expressions
@@ -444,8 +467,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processors = (a.into_f64(), b.into_f64());
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
 
                 // TODO: We could save prior conversions by monomophizing the differnt expressions
@@ -469,8 +497,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processors = [a.into_f64(), b.into_f64(), c.into_f64()];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
             }
             4 => {
@@ -479,8 +512,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 let query_processors = [a.into_f64(), b.into_f64(), c.into_f64(), d.into_f64()];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
             }
             5 => {
@@ -495,8 +533,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 ];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
             }
             6 => {
@@ -512,8 +555,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 ];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
             }
 
@@ -531,8 +579,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 ];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
             }
             8 => {
@@ -550,8 +603,13 @@ impl InitializedRasterOperator for InitializedExpression {
                 ];
                 call_generic_raster_processor!(
                     output_type,
-                    ExpressionQueryProcessor::new(expression, query_processors, self.map_no_data)
-                        .boxed()
+                    ExpressionQueryProcessor::new(
+                        expression,
+                        query_processors,
+                        self.result_descriptor.clone(),
+                        self.map_no_data
+                    )
+                    .boxed()
                 )
             }
             _ => return Err(crate::error::Error::InvalidNumberOfExpressionInputs),
@@ -574,7 +632,7 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{
-        CacheHint, CacheTtlSeconds, Coordinate2D, Measurement, RasterQueryRectangle,
+        BandSelection, CacheHint, CacheTtlSeconds, Coordinate2D, Measurement, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
@@ -679,6 +737,7 @@ mod tests {
                     SpatialResolution::one(),
                     exe_ctx.tiling_specification.origin_coordinate,
                     Default::default(),
+                    BandSelection::first(),
                 ),
                 &ctx,
             )
@@ -746,6 +805,7 @@ mod tests {
                     SpatialResolution::one(),
                     exe_ctx.tiling_specification.origin_coordinate,
                     Default::default(),
+                    BandSelection::first(),
                 ),
                 &ctx,
             )
@@ -760,7 +820,7 @@ mod tests {
             result[0].as_ref().unwrap().grid_array,
             GridOrEmpty::from(
                 MaskedGrid2D::new(
-                    Grid2D::new([3, 2].into(), vec![2, 4, 0, 8, 10, 12],).unwrap(), // pixels with no data are turned to Default::default wich is 0. And 0 is the out_no_data value.
+                    Grid2D::new([3, 2].into(), vec![2, 4, 0, 8, 10, 12],).unwrap(), // pixels with no data are turned to Default::default() wich is 0. And 0 is the out_no_data value.
                     Grid2D::new([3, 2].into(), vec![true, true, false, true, true, true],).unwrap()
                 )
                 .unwrap()
@@ -814,6 +874,7 @@ mod tests {
                     SpatialResolution::one(),
                     exe_ctx.tiling_specification.origin_coordinate,
                     Default::default(),
+                    BandSelection::first(),
                 ),
                 &ctx,
             )
@@ -885,6 +946,7 @@ mod tests {
                     SpatialResolution::one(),
                     exe_ctx.tiling_specification.origin_coordinate,
                     Default::default(),
+                    BandSelection::first(),
                 ),
                 &ctx,
             )
@@ -957,6 +1019,7 @@ mod tests {
                     SpatialResolution::one(),
                     exe_ctx.tiling_specification.origin_coordinate,
                     Default::default(),
+                    BandSelection::first(),
                 ),
                 &ctx,
             )
@@ -1039,6 +1102,7 @@ mod tests {
                     SpatialResolution::one(),
                     exe_ctx.tiling_specification.origin_coordinate,
                     Default::default(),
+                    BandSelection::first(),
                 ),
                 &ctx,
             )
@@ -1103,6 +1167,7 @@ mod tests {
                     SpatialResolution::one(),
                     exe_ctx.tiling_specification.origin_coordinate,
                     Default::default(),
+                    BandSelection::first(),
                 ),
                 &ctx,
             )
@@ -1146,6 +1211,7 @@ mod tests {
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: TestDefault::test_default(),
             },
+            0,
             real_raster,
             cache_hint,
         );
@@ -1156,10 +1222,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                     pixel_bounds: GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -1213,6 +1279,7 @@ mod tests {
                     SpatialResolution::one(),
                     ectx.tiling_specification.origin_coordinate,
                     Default::default(),
+                    BandSelection::first(),
                 ),
                 &ctx,
             )
@@ -1280,6 +1347,7 @@ mod tests {
                     SpatialResolution::one(),
                     ectx.tiling_specification.origin_coordinate,
                     Default::default(),
+                    BandSelection::first(),
                 ),
                 &ctx,
             )
@@ -1349,6 +1417,7 @@ mod tests {
                     SpatialResolution::one(),
                     ectx.tiling_specification.origin_coordinate,
                     Default::default(),
+                    BandSelection::first(),
                 ),
                 &ctx,
             )

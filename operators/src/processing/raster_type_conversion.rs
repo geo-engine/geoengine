@@ -1,17 +1,17 @@
-use async_trait::async_trait;
-use futures::{stream::BoxStream, StreamExt, TryFutureExt, TryStreamExt};
-use geoengine_datatypes::{
-    primitives::{RasterQueryRectangle, RasterSpatialQueryRectangle},
-    raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
-};
-use serde::{Deserialize, Serialize};
-
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
+use async_trait::async_trait;
+use futures::{stream::BoxStream, StreamExt, TryFutureExt, TryStreamExt};
+use geoengine_datatypes::{
+    primitives::{BandSelection, RasterQueryRectangle, RasterSpatialQueryRectangle},
+    raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
+};
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -46,15 +46,23 @@ impl RasterOperator for RasterTypeConversion {
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
         let in_desc = initialized_sources.raster.result_descriptor();
 
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_desc.bands.len() == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: RasterTypeConversion::TYPE_NAME
+            }
+        );
+
         let out_data_type = self.params.output_data_type;
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: out_data_type,
-            measurement: in_desc.measurement.clone(),
             time: in_desc.time,
             geo_transform: in_desc.geo_transform,
             pixel_bounds: in_desc.pixel_bounds,
+            bands: in_desc.bands.clone(),
         };
 
         let initialized_operator = InitializedRasterTypeConversionOperator {
@@ -128,6 +136,8 @@ where
 {
     type Output = RasterTile2D<POut>;
     type SpatialQuery = RasterSpatialQueryRectangle;
+    type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'b>(
         &'b self,
@@ -140,6 +150,10 @@ where
         });
 
         Ok(converted_stream.boxed())
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        self.query_processor.raster_result_descriptor()
     }
 }
 
@@ -159,7 +173,7 @@ mod tests {
     };
 
     use crate::{
-        engine::{ChunkByteSize, MockExecutionContext},
+        engine::{ChunkByteSize, MockExecutionContext, RasterBandDescriptors},
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -172,10 +186,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: None,
             geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
             pixel_bounds: tile_size_in_pixels.bounding_box(),
+            bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
 
@@ -193,6 +207,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels,
             },
+            0,
             raster.into(),
             CacheHint::default(),
         );
@@ -221,7 +236,10 @@ mod tests {
         let result_descriptor = initialized_op.result_descriptor();
 
         assert_eq!(result_descriptor.data_type, RasterDataType::F32);
-        assert_eq!(result_descriptor.measurement, Measurement::Unitless);
+        assert_eq!(
+            result_descriptor.bands[0].measurement,
+            Measurement::Unitless
+        );
 
         let query_processor = initialized_op.query_processor().unwrap();
 
@@ -230,6 +248,7 @@ mod tests {
             SpatialResolution::one(),
             ctx.tiling_specification().origin_coordinate,
             TimeInterval::default(),
+            BandSelection::first(),
         );
 
         let TypedRasterQueryProcessor::F32(typed_processor) = query_processor else {

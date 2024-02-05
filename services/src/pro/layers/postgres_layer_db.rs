@@ -1,12 +1,14 @@
-use crate::api::model::datatypes::{DataProviderId, LayerId};
-use crate::api::model::HashMapTextTextDbType;
 use crate::error;
 use crate::layers::external::TypedDataProviderDefinition;
 use crate::layers::layer::Property;
+use crate::layers::postgres_layer_db::{
+    delete_layer_collection, delete_layer_collection_from_parent, delete_layer_from_collection,
+    insert_collection_parent, insert_layer, insert_layer_collection_with_id,
+};
 use crate::pro::contexts::ProPostgresDb;
 use crate::pro::datasets::TypedProDataProviderDefinition;
-use crate::pro::permissions::{Permission, PermissionDb, RoleId};
-use crate::workflows::workflow::WorkflowId;
+use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
+use crate::pro::permissions::{Permission, RoleId};
 use crate::{
     error::Result,
     layers::{
@@ -29,58 +31,11 @@ use bb8_postgres::tokio_postgres::{
     tls::{MakeTlsConnect, TlsConnect},
     Socket,
 };
+use geoengine_datatypes::dataset::{DataProviderId, LayerId};
+use geoengine_datatypes::util::HashMapTextTextDbType;
 use snafu::{ensure, ResultExt};
 use std::str::FromStr;
 use uuid::Uuid;
-
-/// delete all collections without parent collection
-async fn _remove_collections_without_parent_collection(
-    transaction: &tokio_postgres::Transaction<'_>,
-) -> Result<()> {
-    // HINT: a recursive delete statement seems reasonable, but hard to implement in postgres
-    //       because you have a graph with potential loops
-
-    let remove_layer_collections_without_parents_stmt = transaction
-        .prepare(
-            "DELETE FROM layer_collections
-                 WHERE  id <> $1 -- do not delete root collection
-                 AND    id NOT IN (
-                    SELECT child FROM collection_children
-                 );",
-        )
-        .await?;
-    while 0 < transaction
-        .execute(
-            &remove_layer_collections_without_parents_stmt,
-            &[&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID],
-        )
-        .await?
-    {
-        // whenever one collection is deleted, we have to check again if there are more
-        // collections without parents
-    }
-
-    Ok(())
-}
-
-/// delete all layers without parent collection
-async fn _remove_layers_without_parent_collection(
-    transaction: &tokio_postgres::Transaction<'_>,
-) -> Result<()> {
-    let remove_layers_without_parents_stmt = transaction
-        .prepare(
-            "DELETE FROM layers
-                 WHERE id NOT IN (
-                    SELECT layer FROM collection_layers
-                 );",
-        )
-        .await?;
-    transaction
-        .execute(&remove_layers_without_parents_stmt, &[])
-        .await?;
-
-    Ok(())
-}
 
 #[async_trait]
 impl<Tls> LayerDb for ProPostgresDb<Tls>
@@ -105,83 +60,20 @@ where
         layer: AddLayer,
         collection: &LayerCollectionId,
     ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let trans = conn.build_transaction().start().await?;
+
         ensure!(
-            self.has_permission(collection.clone(), Permission::Owner)
+            self.has_permission_in_tx(collection.clone(), Permission::Owner, &trans)
                 .await?,
             error::PermissionDenied
         );
 
-        let layer_id =
-            Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: collection.0.clone(),
-            })?;
-
-        let collection_id =
-            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: collection.0.clone(),
-            })?;
-
-        let mut conn = self.conn_pool.get().await?;
-
-        let layer = layer;
-
-        let workflow_id = WorkflowId::from_hash(&layer.workflow);
-
-        let trans = conn.build_transaction().start().await?;
-
-        let stmt = trans
-            .prepare(
-                "INSERT INTO workflows (id, workflow) VALUES ($1, $2) 
-            ON CONFLICT DO NOTHING;",
-            )
-            .await?;
-
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &workflow_id,
-                    &serde_json::to_value(&layer.workflow).context(error::SerdeJson)?,
-                ],
-            )
-            .await?;
-
-        let stmt = trans
-            .prepare(
-                "
-            INSERT INTO layers (id, name, description, workflow_id, symbology, properties, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7);",
-            )
-            .await?;
-
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &layer_id,
-                    &layer.name,
-                    &layer.description,
-                    &workflow_id,
-                    &layer.symbology,
-                    &layer.properties,
-                    &HashMapTextTextDbType::from(&layer.metadata),
-                ],
-            )
-            .await?;
-
-        let stmt = trans
-            .prepare(
-                "
-            INSERT INTO collection_layers (collection, layer)
-            VALUES ($1, $2) ON CONFLICT DO NOTHING;",
-            )
-            .await?;
-
-        trans.execute(&stmt, &[&collection_id, &layer_id]).await?;
+        let layer_id = insert_layer(&trans, id, layer, collection).await?;
 
         // TODO: `ON CONFLICT DO NOTHING` means, we do not get an error if the permission already exists.
         //       Do we want that, or should we report an error and let the caller decide whether to ignore it?
-        //       We should decide that and adjust all places where `ON CONFILCT DO NOTHING` is used.
+        //       We should decide that and adjust all places where `ON CONFLICT DO NOTHING` is used.
         let stmt = trans
             .prepare(
                 "
@@ -211,8 +103,11 @@ where
         layer: &LayerId,
         collection: &LayerCollectionId,
     ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
         ensure!(
-            self.has_permission(collection.clone(), Permission::Owner)
+            self.has_permission_in_tx(collection.clone(), Permission::Owner, &tx)
                 .await?,
             error::PermissionDenied
         );
@@ -227,9 +122,7 @@ where
                 found: collection.0.clone(),
             })?;
 
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
+        let stmt = tx
             .prepare(
                 "
             INSERT INTO collection_layers (collection, layer)
@@ -237,7 +130,9 @@ where
             )
             .await?;
 
-        conn.execute(&stmt, &[&collection_id, &layer_id]).await?;
+        tx.execute(&stmt, &[&collection_id, &layer_id]).await?;
+
+        tx.commit().await?;
 
         Ok(())
     }
@@ -262,55 +157,16 @@ where
         collection: AddLayerCollection,
         parent: &LayerCollectionId,
     ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let trans = conn.build_transaction().start().await?;
+
         ensure!(
-            self.has_permission(parent.clone(), Permission::Owner)
+            self.has_permission_in_tx(parent.clone(), Permission::Owner, &trans)
                 .await?,
             error::PermissionDenied
         );
 
-        let collection_id =
-            Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: id.0.clone(),
-            })?;
-
-        let parent =
-            Uuid::from_str(&parent.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: parent.0.clone(),
-            })?;
-
-        let mut conn = self.conn_pool.get().await?;
-
-        let trans = conn.build_transaction().start().await?;
-
-        let stmt = trans
-            .prepare(
-                "
-            INSERT INTO layer_collections (id, name, description, properties)
-            VALUES ($1, $2, $3, $4);",
-            )
-            .await?;
-
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &collection_id,
-                    &collection.name,
-                    &collection.description,
-                    &collection.properties,
-                ],
-            )
-            .await?;
-
-        let stmt = trans
-            .prepare(
-                "
-            INSERT INTO collection_children (parent, child)
-            VALUES ($1, $2) ON CONFLICT DO NOTHING;",
-            )
-            .await?;
-
-        trans.execute(&stmt, &[&parent, &collection_id]).await?;
+        let collection_id = insert_layer_collection_with_id(&trans, id, collection, parent).await?;
 
         let stmt = trans
             .prepare(
@@ -341,72 +197,21 @@ where
         collection: &LayerCollectionId,
         parent: &LayerCollectionId,
     ) -> Result<()> {
-        ensure!(
-            self.has_permission(collection.clone(), Permission::Owner)
-                .await?,
-            error::PermissionDenied
-        );
-
-        let collection =
-            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: collection.0.clone(),
-            })?;
-
-        let parent =
-            Uuid::from_str(&parent.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: parent.0.clone(),
-            })?;
-
         let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare(
-                "
-            INSERT INTO collection_children (parent, child)
-            VALUES ($1, $2) ON CONFLICT DO NOTHING;",
-            )
-            .await?;
-
-        conn.execute(&stmt, &[&parent, &collection]).await?;
-
-        Ok(())
+        insert_collection_parent(&conn, collection, parent).await
     }
 
     async fn remove_layer_collection(&self, collection: &LayerCollectionId) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let transaction = conn.build_transaction().start().await?;
+
         ensure!(
-            self.has_permission(collection.clone(), Permission::Owner)
+            self.has_permission_in_tx(collection.clone(), Permission::Owner, &transaction)
                 .await?,
             error::PermissionDenied
         );
 
-        let collection =
-            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: collection.0.clone(),
-            })?;
-
-        if collection == INTERNAL_LAYER_DB_ROOT_COLLECTION_ID {
-            return Err(LayerDbError::CannotRemoveRootCollection.into());
-        }
-
-        let mut conn = self.conn_pool.get().await?;
-        let transaction = conn.transaction().await?;
-
-        // delete the collection!
-        // on delete cascade removes all entries from `collection_children` and `collection_layers`
-
-        let remove_layer_collection_stmt = transaction
-            .prepare(
-                "DELETE FROM layer_collections
-                 WHERE id = $1;",
-            )
-            .await?;
-        transaction
-            .execute(&remove_layer_collection_stmt, &[&collection])
-            .await?;
-
-        _remove_collections_without_parent_collection(&transaction).await?;
-
-        _remove_layers_without_parent_collection(&transaction).await?;
+        delete_layer_collection(&transaction, collection).await?;
 
         transaction.commit().await.map_err(Into::into)
     }
@@ -416,48 +221,16 @@ where
         layer: &LayerId,
         collection: &LayerCollectionId,
     ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let transaction = conn.build_transaction().start().await?;
+
         ensure!(
-            self.has_permission(layer.clone(), Permission::Owner)
+            self.has_permission_in_tx(layer.clone(), Permission::Owner, &transaction)
                 .await?,
             error::PermissionDenied
         );
 
-        let collection_uuid =
-            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: collection.0.clone(),
-            })?;
-
-        let layer_uuid =
-            Uuid::from_str(&layer.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: layer.0.clone(),
-            })?;
-
-        let mut conn = self.conn_pool.get().await?;
-        let transaction = conn.transaction().await?;
-
-        let remove_layer_collection_stmt = transaction
-            .prepare(
-                "DELETE FROM collection_layers
-                 WHERE collection = $1
-                 AND layer = $2;",
-            )
-            .await?;
-        let num_results = transaction
-            .execute(
-                &remove_layer_collection_stmt,
-                &[&collection_uuid, &layer_uuid],
-            )
-            .await?;
-
-        if num_results == 0 {
-            return Err(LayerDbError::NoLayerForGivenIdInCollection {
-                layer: layer.clone(),
-                collection: collection.clone(),
-            }
-            .into());
-        }
-
-        _remove_layers_without_parent_collection(&transaction).await?;
+        delete_layer_from_collection(&transaction, layer, collection).await?;
 
         transaction.commit().await.map_err(Into::into)
     }
@@ -467,50 +240,16 @@ where
         collection: &LayerCollectionId,
         parent: &LayerCollectionId,
     ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let transaction = conn.build_transaction().start().await?;
+
         ensure!(
-            self.has_permission(collection.clone(), Permission::Owner)
+            self.has_permission_in_tx(collection.clone(), Permission::Owner, &transaction)
                 .await?,
             error::PermissionDenied
         );
 
-        let collection_uuid =
-            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: collection.0.clone(),
-            })?;
-
-        let parent_collection_uuid =
-            Uuid::from_str(&parent.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
-                found: parent.0.clone(),
-            })?;
-
-        let mut conn = self.conn_pool.get().await?;
-        let transaction = conn.transaction().await?;
-
-        let remove_layer_collection_stmt = transaction
-            .prepare(
-                "DELETE FROM collection_children
-                 WHERE child = $1
-                 AND parent = $2;",
-            )
-            .await?;
-        let num_results = transaction
-            .execute(
-                &remove_layer_collection_stmt,
-                &[&collection_uuid, &parent_collection_uuid],
-            )
-            .await?;
-
-        if num_results == 0 {
-            return Err(LayerDbError::NoCollectionForGivenIdInCollection {
-                collection: collection.clone(),
-                parent: parent.clone(),
-            }
-            .into());
-        }
-
-        _remove_collections_without_parent_collection(&transaction).await?;
-
-        _remove_layers_without_parent_collection(&transaction).await?;
+        delete_layer_collection_from_parent(&transaction, collection, parent).await?;
 
         transaction.commit().await.map_err(Into::into)
     }
@@ -530,8 +269,11 @@ where
         collection_id: &LayerCollectionId,
         options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
         ensure!(
-            self.has_permission(collection_id.clone(), Permission::Read)
+            self.has_permission_in_tx(collection_id.clone(), Permission::Read, &tx)
                 .await?,
             error::PermissionDenied
         );
@@ -541,9 +283,7 @@ where
             }
         })?;
 
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
+        let stmt = tx
             .prepare(
                 "
         SELECT DISTINCT name, description, properties
@@ -553,7 +293,7 @@ where
             )
             .await?;
 
-        let row = conn
+        let row = tx
             .query_one(&stmt, &[&self.session.user.id, &collection])
             .await?;
 
@@ -561,7 +301,7 @@ where
         let description: String = row.get(1);
         let properties: Vec<Property> = row.get(2);
 
-        let stmt = conn
+        let stmt = tx
             .prepare(
                 "
         SELECT DISTINCT id, name, description, properties, is_layer
@@ -595,7 +335,7 @@ where
             )
             .await?;
 
-        let rows = conn
+        let rows = tx
             .query(
                 &stmt,
                 &[
@@ -636,6 +376,8 @@ where
             })
             .collect::<Result<Vec<CollectionItem>>>()?;
 
+        tx.commit().await?;
+
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
                 provider_id: INTERNAL_PROVIDER_ID,
@@ -656,8 +398,12 @@ where
     }
 
     async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
         ensure!(
-            self.has_permission(id.clone(), Permission::Read).await?,
+            self.has_permission_in_tx(id.clone(), Permission::Read, &tx)
+                .await?,
             error::PermissionDenied
         );
 
@@ -666,9 +412,7 @@ where
                 found: id.0.clone(),
             })?;
 
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
+        let stmt = tx
             .prepare(
                 "
             SELECT 
@@ -685,10 +429,12 @@ where
             )
             .await?;
 
-        let row = conn
+        let row = tx
             .query_one(&stmt, &[&layer_id])
             .await
             .map_err(|_error| LayerDbError::NoLayerForGivenId { id: id.clone() })?;
+
+        tx.commit().await?;
 
         Ok(Layer {
             id: ProviderLayerId {

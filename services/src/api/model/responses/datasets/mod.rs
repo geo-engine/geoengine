@@ -1,7 +1,6 @@
+use crate::datasets::DatasetName;
 use serde::{Deserialize, Serialize};
 use utoipa::ToResponse;
-
-use crate::api::model::datatypes::{DatasetId, DatasetName};
 
 pub mod errors;
 
@@ -18,10 +17,4 @@ impl From<DatasetName> for DatasetNameResponse {
     fn from(dataset_name: DatasetName) -> Self {
         Self { dataset_name }
     }
-}
-
-#[derive(Debug)]
-pub struct DatasetIdAndName {
-    pub id: DatasetId,
-    pub name: DatasetName,
 }

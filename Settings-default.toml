@@ -25,7 +25,7 @@ list_limit = 20
 host = "localhost"
 port = 5432
 database = "geoengine"
-schema = "public"
+schema = "geoengine"
 user = "geoengine"
 password = "geoengine"
 # Set to `true` to start with a fresh database each time.
@@ -146,13 +146,13 @@ anonymous_access = true
 
 # Settings for Geo Engine Pro
 [user]
-user_registration = true
+registration = true
 admin_email = "admin@localhost"
 admin_password = "adminadmin"   # Initial password for the user "admin", which is created on startup
 
 [quota]
 mode = "disabled" # "disabled", "track", "check"
-# default_available_quota = 9999
+# initial_credits = 9999
 increment_quota_buffer_size = 100           # number of quota updates to buffer before sending them to the database
 increment_quota_buffer_timeout_seconds = 60 # number of seconds after which the quota updates are sent to the database
 
@@ -183,6 +183,6 @@ volumes = { test_data = "test_data/" }
 [cache]
 enabled = false
 # storage limit for the cache
-cache_size_in_mb = 1_000 # 1 GB
+size_in_mb = 1_000 # 1 GB
 # storage limit for collecting query results before insertion into the cache in 
 landing_zone_ratio = 0.1 # 10% of total cache size

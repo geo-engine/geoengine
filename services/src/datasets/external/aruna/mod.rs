@@ -1,5 +1,4 @@
 pub use self::error::ArunaProviderError;
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
 use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -20,14 +19,17 @@ use aruna_rust_api::api::storage::services::v1::{
     GetObjectGroupObjectsRequest, GetObjectGroupsRequest,
 };
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
-    FeatureDataType, Measurement, RasterQueryRectangle, SpatialResolution, VectorQueryRectangle,
+    FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
+use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterOperator, RasterResultDescriptor, ResultDescriptor,
-    TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
+    RasterResultDescriptor, ResultDescriptor, TypedOperator, VectorColumnInfo, VectorOperator,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -126,10 +128,10 @@ impl Interceptor for APITokenInterceptor {
 ///
 #[derive(Debug, PartialEq)]
 struct ArunaDatasetIds {
-    collection_id: String,
-    _object_group_id: String,
-    meta_object_id: String,
-    data_object_id: String,
+    collection: String,
+    _object_group: String,
+    meta_object: String,
+    data_object: String,
 }
 
 /// The actual provider implementation. It holds `gRPC` stubs to all relevant
@@ -262,10 +264,10 @@ impl ArunaDataProvider {
         }
 
         Ok(ArunaDatasetIds {
-            collection_id,
-            _object_group_id: object_group_id,
-            meta_object_id: meta_object_id.ok_or(ArunaProviderError::MissingMetaObject)?,
-            data_object_id: data_object_id.ok_or(ArunaProviderError::MissingDataObject)?,
+            collection: collection_id,
+            _object_group: object_group_id,
+            meta_object: meta_object_id.ok_or(ArunaProviderError::MissingMetaObject)?,
+            data_object: data_object_id.ok_or(ArunaProviderError::MissingDataObject)?,
         })
     }
 
@@ -277,7 +279,7 @@ impl ArunaDataProvider {
 
         let collection_overview = collection_stub
             .get_collection_by_id(GetCollectionByIdRequest {
-                collection_id: aruna_dataset_ids.collection_id.clone(),
+                collection_id: aruna_dataset_ids.collection.clone(),
             })
             .await?
             .into_inner()
@@ -293,8 +295,8 @@ impl ArunaDataProvider {
 
         let download_url = object_stub
             .get_download_url(GetDownloadUrlRequest {
-                collection_id: aruna_dataset_ids.collection_id.clone(),
-                object_id: aruna_dataset_ids.meta_object_id.clone(),
+                collection_id: aruna_dataset_ids.collection.clone(),
+                object_id: aruna_dataset_ids.meta_object.clone(),
             })
             .await?
             .into_inner()
@@ -348,19 +350,23 @@ impl ArunaDataProvider {
         Ok(RasterResultDescriptor {
             data_type: info.data_type,
             spatial_reference: crs,
-            measurement: info
-                .measurement
-                .as_ref()
-                .map_or(Measurement::Unitless, Clone::clone),
             time: Some(info.time_interval),
-            bbox: Some(
-                info.geo_transform
-                    .spatial_partition(info.width, info.height),
-            ),
-            resolution: Some(SpatialResolution::try_from((
-                info.geo_transform.x_pixel_size,
-                info.geo_transform.y_pixel_size,
-            ))?),
+            geo_transform: GeoTransform::try_from(info.geo_transform)
+                .expect("GeoTransform should be valid"), // TODO: check if that can be false
+            pixel_bounds: GridBoundingBox2D::new_min_max(
+                0,
+                0,
+                info.width as isize,
+                info.height as isize,
+            )
+            .unwrap(),
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                "band".into(),
+                info.measurement
+                    .as_ref()
+                    .map_or(Measurement::Unitless, Clone::clone),
+            )])
+            .unwrap(),
         })
     }
 
@@ -371,8 +377,8 @@ impl ArunaDataProvider {
 
         object_stub
             .get_object_by_id(GetObjectByIdRequest {
-                collection_id: aruna_dataset_ids.collection_id.clone(),
-                object_id: aruna_dataset_ids.data_object_id.clone(),
+                collection_id: aruna_dataset_ids.collection.clone(),
+                object_id: aruna_dataset_ids.data_object.clone(),
                 with_url: false,
             })
             .await?
@@ -538,7 +544,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
     ) -> geoengine_operators::util::Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
     > {
-        let id: DataId = id.clone().into();
+        let id: DataId = id.clone();
 
         let aruna_dataset_ids = self.get_dataset_info(&id).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
@@ -567,7 +573,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                     Self::vector_loading_template(&info, &result_descriptor, self.cache_ttl);
 
                 let res = ArunaMetaData {
-                    collection_id: aruna_dataset_ids.collection_id,
+                    collection_id: aruna_dataset_ids.collection,
                     object_id: aruna_data_object.id,
                     template,
                     result_descriptor,
@@ -594,7 +600,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
     ) -> geoengine_operators::util::Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
     > {
-        let id: DataId = id.clone().into();
+        let id: DataId = id.clone();
 
         let aruna_dataset_ids = self.get_dataset_info(&id).await.map_err(|e| {
             geoengine_operators::error::Error::DatasetMetaData {
@@ -622,7 +628,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 let template = Self::raster_loading_template(info, self.cache_ttl);
 
                 let res = ArunaMetaData {
-                    collection_id: aruna_dataset_ids.collection_id,
+                    collection_id: aruna_dataset_ids.collection,
                     object_id: aruna_data_object.id,
                     template,
                     result_descriptor,
@@ -906,7 +912,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::api::model::datatypes::{DataId, DataProviderId, ExternalDataId, LayerId};
     use crate::datasets::external::aruna::metadata::GEMetadata;
     use crate::datasets::external::aruna::mock_grpc_server::MockGRPCServer;
     use crate::datasets::external::aruna::mock_grpc_server::{
@@ -932,8 +937,10 @@ mod tests {
     };
     use futures::StreamExt;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
+    use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, CacheTtlSeconds, SpatialResolution, TimeInterval, VectorQueryRectangle,
+        BoundingBox2D, CacheTtlSeconds, ColumnSelection, SpatialResolution, TimeInterval,
+        VectorQueryRectangle,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
@@ -1345,10 +1352,10 @@ mod tests {
         let grpc_server_address = format!("http://{}", grpc_server.address());
 
         let dataset_ids = ArunaDatasetIds {
-            collection_id: COLLECTION_ID.to_string(),
-            _object_group_id: OBJECT_GROUP_ID.to_string(),
-            meta_object_id: META_OBJECT_ID.to_string(),
-            data_object_id: DATA_OBJECT_ID.to_string(),
+            collection: COLLECTION_ID.to_string(),
+            _object_group: OBJECT_GROUP_ID.to_string(),
+            meta_object: META_OBJECT_ID.to_string(),
+            data_object: DATA_OBJECT_ID.to_string(),
         };
 
         let provider = new_provider_with_url(grpc_server_address).await;
@@ -1378,10 +1385,10 @@ mod tests {
             .unwrap();
 
         let expected = ArunaDatasetIds {
-            collection_id: COLLECTION_ID.to_string(),
-            _object_group_id: OBJECT_GROUP_ID.to_string(),
-            meta_object_id: META_OBJECT_ID.to_string(),
-            data_object_id: DATA_OBJECT_ID.to_string(),
+            collection: COLLECTION_ID.to_string(),
+            _object_group: OBJECT_GROUP_ID.to_string(),
+            meta_object: META_OBJECT_ID.to_string(),
+            data_object: DATA_OBJECT_ID.to_string(),
         };
 
         assert_eq!(result, expected);
@@ -1753,7 +1760,7 @@ mod tests {
 
         let res: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
-        > = aruna_mock_server.provider.meta_data(&id.into()).await;
+        > = aruna_mock_server.provider.meta_data(&id).await;
 
         assert!(res.is_ok());
     }
@@ -1786,12 +1793,12 @@ mod tests {
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         > = aruna_mock_server
             .provider
-            .meta_data(&id.clone().into())
+            .meta_data(&id.clone())
             .await
             .unwrap();
 
         let mut context = MockExecutionContext::test_default();
-        context.add_meta_data(id.clone().into(), name.clone(), meta);
+        context.add_meta_data(id.clone(), name.clone(), meta);
 
         let src = OgrSource {
             params: OgrSourceParameters {
@@ -1818,6 +1825,7 @@ mod tests {
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
 
         let result: Vec<MultiPointCollection> = proc

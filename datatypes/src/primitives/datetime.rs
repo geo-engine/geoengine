@@ -1,6 +1,7 @@
 use crate::error::ErrorSource;
 use crate::primitives::TimeInstance;
 use chrono::{Datelike, NaiveDate, Timelike};
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::cmp::Ordering;
@@ -36,7 +37,7 @@ impl DateTime {
             .expect("should set valid date")
             .and_hms_opt(hour.into(), minute.into(), second.into())
             .expect("should set valid time");
-        let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
+        let datetime = chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc);
 
         Self { datetime }
     }
@@ -56,7 +57,7 @@ impl DateTime {
     ) -> Option<Self> {
         let date = NaiveDate::from_ymd_opt(year, month.into(), day.into())?;
         let datetime = date.and_hms_opt(hour.into(), minute.into(), second.into())?;
-        let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
+        let datetime = chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc);
 
         Some(Self { datetime })
     }
@@ -80,7 +81,7 @@ impl DateTime {
             .expect("should set valid date")
             .and_hms_milli_opt(hour.into(), minute.into(), second.into(), millis.into())
             .expect("should set valid time");
-        let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
+        let datetime = chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc);
 
         Self { datetime }
     }
@@ -102,7 +103,7 @@ impl DateTime {
         let date = NaiveDate::from_ymd_opt(year, month.into(), day.into())?;
         let datetime =
             date.and_hms_milli_opt(hour.into(), minute.into(), second.into(), millis.into())?;
-        let datetime = chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc);
+        let datetime = chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc);
 
         Some(Self { datetime })
     }
@@ -134,7 +135,7 @@ impl DateTime {
                         })?;
 
                 Ok(Self {
-                    datetime: chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc),
+                    datetime: chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc),
                 })
             }
             (false, true) => Err(DateTimeError::CannotParseOnlyDateWithTimeZone),
@@ -147,7 +148,7 @@ impl DateTime {
                     .expect("`00:00:00` should be a valid time");
 
                 Ok(Self {
-                    datetime: chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc),
+                    datetime: chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc),
                 })
             }
         }
@@ -376,7 +377,7 @@ impl From<&DateTime> for chrono::DateTime<chrono::FixedOffset> {
 /// | %6f       | Similar to %.6f but without the leading dot. 6                         | 026490     |
 /// | %9f       | Similar to %.9f but without the leading dot. 6                         | 026490000  |
 ///
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, FromSql, ToSql)]
 pub struct DateTimeParseFormat {
     fmt: String,
     has_tz: bool,
@@ -524,7 +525,7 @@ impl Serialize for DateTime {
 
 impl PartialOrd for DateTime {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.datetime.partial_cmp(&other.datetime)
+        Some(self.cmp(other))
     }
 }
 
@@ -581,7 +582,7 @@ mod sql {
     impl<'a> FromSql<'a> for DateTime {
         fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
             let naive = chrono::NaiveDateTime::from_sql(ty, raw)?;
-            let datetime = chrono::DateTime::from_utc(naive, chrono::Utc);
+            let datetime = chrono::DateTime::from_naive_utc_and_offset(naive, chrono::Utc);
             Ok(DateTime { datetime })
         }
 

@@ -2,8 +2,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::engine::{
     CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
-    QueryContext, QueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorResultDescriptor,
+    WorkflowOperatorPath,
 };
 use crate::pro::adapters::stream_statistics_adapter::StreamStatisticsAdapter;
 use crate::pro::meta::quota::{QuotaChecker, QuotaTracking};
@@ -11,7 +12,9 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, QueryRectangle, SpatialBounded};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, QueryAttributeSelection, QueryRectangle, SpatialBounded,
+};
 use tracing::{span, Level};
 
 // A wrapper around an initialized operator that adds statistics and quota tracking
@@ -150,18 +153,23 @@ where
 }
 
 #[async_trait]
-impl<Q, T, S> QueryProcessor for QueryProcessorWrapper<Q, T>
+impl<Q, T, S, A, R> QueryProcessor for QueryProcessorWrapper<Q, T>
 where
-    Q: QueryProcessor<Output = T, SpatialQuery = S>,
+    Q: QueryProcessor<Output = T, SpatialQuery = S, Selection = A, ResultDescription = R>,
     S: SpatialBounded + Send + Sync + 'static,
+    A: QueryAttributeSelection + 'static,
+    R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = A>
+        + 'static,
     T: Send,
 {
     type Output = T;
     type SpatialQuery = S;
+    type Selection = A;
+    type ResultDescription = R;
 
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialQuery>,
+        query: QueryRectangle<Self::SpatialQuery, Self::Selection>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let qc = self.next_query_count();
@@ -233,5 +241,9 @@ where
                 Err(err)
             }
         }
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        self.processor.result_descriptor()
     }
 }

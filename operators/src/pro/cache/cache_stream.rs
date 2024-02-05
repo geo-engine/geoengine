@@ -155,6 +155,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashMap, sync::Arc};
+
     use crate::pro::cache::{
         cache_chunks::CompressedFeatureCollection,
         cache_stream::CacheStreamInner,
@@ -163,12 +165,12 @@ mod tests {
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         primitives::{
-            BoundingBox2D, CacheHint, Coordinate2D, FeatureData, MultiPoint, RasterQueryRectangle,
-            SpatialPartition2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
+            BandSelection, BoundingBox2D, CacheHint, ColumnSelection, Coordinate2D, FeatureData,
+            MultiPoint, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+            VectorQueryRectangle,
         },
         raster::{GeoTransform, Grid2D, GridIdx2D, RasterTile2D},
     };
-    use std::{collections::HashMap, sync::Arc};
 
     fn create_test_raster_data() -> Vec<CompressedRasterTile2D<u8>> {
         let mut data = Vec::new();
@@ -176,6 +178,7 @@ mod tests {
             let tile = RasterTile2D::<u8>::new(
                 TimeInterval::new_unchecked(0, 10),
                 GridIdx2D::new([i, i]),
+                0,
                 GeoTransform::new([0., 0.].into(), 0.5, -0.5),
                 geoengine_datatypes::raster::GridOrEmpty::from(
                     Grid2D::new([2, 2].into(), vec![i as u8; 4]).unwrap(),
@@ -226,6 +229,7 @@ mod tests {
             SpatialResolution::zero_point_five(),
             Coordinate2D::new(0., 0.),
             TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
         );
 
         let mut res = Vec::new();
@@ -246,6 +250,7 @@ mod tests {
             BoundingBox2D::new_unchecked((2.1, 2.1).into(), (7.9, 7.9).into()),
             TimeInterval::new_unchecked(0, 10),
             SpatialResolution::zero_point_five(),
+            ColumnSelection::all(),
         );
 
         let mut res = Vec::new();

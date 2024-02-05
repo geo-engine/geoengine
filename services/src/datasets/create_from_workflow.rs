@@ -1,14 +1,16 @@
-use crate::api::model::datatypes::{DatasetName, RasterQueryRectangle};
-use crate::api::model::responses::datasets::DatasetIdAndName;
+use crate::api::model::datatypes::RasterQueryRectangle;
 use crate::api::model::services::AddDataset;
 use crate::contexts::SessionContext;
+use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
 use crate::workflows::workflow::Workflow;
+use float_cmp::approx_eq;
 use geoengine_datatypes::error::ErrorSource;
-use geoengine_datatypes::primitives::{SpatialPartitioned, TimeInterval};
+use geoengine_datatypes::primitives::{BandSelection, TimeInterval};
+use geoengine_datatypes::raster::{GridBoundingBox2D, GridIntersection};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
@@ -29,6 +31,8 @@ use std::sync::Arc;
 use tokio::fs;
 use utoipa::ToSchema;
 
+use super::{DatasetIdAndName, DatasetName};
+
 /// parameter for the dataset from workflow handler (body)
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 #[schema(example = json!({"name": "foo", "displayName": "a new dataset", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}, "spatialResolution": {"x": 0.1, "y": 0.1}}}))]
@@ -41,6 +45,58 @@ pub struct RasterDatasetFromWorkflow {
     #[schema(default = default_as_cog)]
     #[serde(default = "default_as_cog")]
     pub as_cog: bool,
+}
+
+pub struct RasterDatasetFromWorkflowParams {
+    pub name: Option<DatasetName>,
+    pub display_name: String,
+    pub description: Option<String>,
+    pub query: geoengine_datatypes::primitives::RasterQueryRectangle,
+    pub as_cog: bool,
+}
+
+impl RasterDatasetFromWorkflowParams {
+    pub fn from_request_and_result_descriptor(
+        request: RasterDatasetFromWorkflow,
+        result_descriptor: &RasterResultDescriptor,
+    ) -> error::Result<Self> {
+        let query = request.query;
+
+        // FIXME: handle resolutions
+        ensure!(
+            approx_eq!(
+                f64,
+                result_descriptor.geo_transform.x_pixel_size(),
+                query.spatial_resolution.x
+            ) && approx_eq!(
+                f64,
+                result_descriptor.geo_transform.y_pixel_size(),
+                query.spatial_resolution.y
+            ),
+            error::ResolutionMissmatch,
+        );
+
+        let grid_bounds = result_descriptor
+            .geo_transform
+            .spatial_to_grid_bounds(&query.spatial_bounds.into()); // TODO: somehow clean up api and inner structs
+
+        let raster_query = geoengine_datatypes::primitives::RasterQueryRectangle {
+            spatial_query: geoengine_datatypes::primitives::SpatialGridQueryRectangle {
+                grid_bounds,
+                geo_transform: result_descriptor.geo_transform,
+            },
+            time_interval: query.time_interval.into(),
+            attributes: BandSelection::first_n(result_descriptor.bands.len() as u32 + 1), // FIXME: what to do here?
+        };
+
+        Ok(Self {
+            name: request.name,
+            display_name: request.display_name,
+            description: request.description,
+            query: raster_query,
+            as_cog: request.as_cog,
+        })
+    }
 }
 
 /// By default, we set [`RasterDatasetFromWorkflow::as_cog`] to true to produce cloud-optmized `GeoTiff`s.
@@ -62,7 +118,7 @@ pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
     pub source_name: String,
     pub workflow: Workflow,
     pub ctx: Arc<C>,
-    pub info: RasterDatasetFromWorkflow,
+    pub info: RasterDatasetFromWorkflowParams,
     pub upload: UploadId,
     pub file_path: PathBuf,
     pub compression_num_threads: GdalCompressionNumThreads,
@@ -89,13 +145,10 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             .query_processor()
             .context(crate::error::Operator)?;
 
-        let api_query_rect = self.info.query;
-        let query_rect = geoengine_datatypes::primitives::RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            api_query_rect.spatial_bounds.into(),
-            api_query_rect.spatial_resolution.into(),
-            execution_context.tiling_specification().origin_coordinate,
-            api_query_rect.time_interval.into(),
-        );
+        let query_rect: &geoengine_datatypes::primitives::QueryRectangle<
+            geoengine_datatypes::primitives::SpatialGridQueryRectangle,
+            BandSelection,
+        > = &self.info.query;
 
         let query_ctx = self.ctx.query_context()?;
         let request_spatial_ref =
@@ -108,7 +161,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             call_on_generic_raster_processor_gdal_types!(processor, p => raster_stream_to_geotiff(
             &self.file_path,
             p,
-            query_rect,
+            query_rect.clone().into(), // FIXME: unnecessary clone
             query_ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Default::default(), // TODO: decide how to handle the no data here
@@ -127,7 +180,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
 
         // create the dataset
         let dataset = create_dataset(
-            self.info.clone(),
+            &self.info,
             res,
             result_descriptor,
             query_rect,
@@ -189,9 +242,24 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
     source_name: String,
     workflow: Workflow,
     ctx: Arc<C>,
-    info: RasterDatasetFromWorkflow,
+    info: RasterDatasetFromWorkflowParams,
     compression_num_threads: GdalCompressionNumThreads,
 ) -> error::Result<TaskId> {
+    if let Some(dataset_name) = &info.name {
+        let db = ctx.db();
+
+        // try to resolve the dataset name to an id
+        let potential_id_result = db.resolve_dataset_name_to_id(dataset_name).await?;
+
+        // handle the case where the dataset name is already taken
+        if let Some(dataset_id) = potential_id_result {
+            return Err(error::Error::DatasetNameAlreadyExists {
+                dataset_name: dataset_name.to_string(),
+                dataset_id: dataset_id.into(),
+            });
+        }
+    }
+
     let upload = UploadId::new();
     let upload_path = upload.root_path()?;
     fs::create_dir_all(&upload_path)
@@ -216,10 +284,10 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
 }
 
 async fn create_dataset<C: SessionContext>(
-    info: RasterDatasetFromWorkflow,
+    info: &RasterDatasetFromWorkflowParams,
     mut slice_info: Vec<GdalLoadingInfoTemporalSlice>,
     origin_result_descriptor: &RasterResultDescriptor,
-    query_rectangle: geoengine_datatypes::primitives::RasterQueryRectangle,
+    query_rectangle: &geoengine_datatypes::primitives::RasterQueryRectangle,
     ctx: &C,
 ) -> error::Result<DatasetIdAndName> {
     ensure!(!slice_info.is_empty(), error::EmptyDatasetCannotBeImported);
@@ -239,10 +307,15 @@ async fn create_dataset<C: SessionContext>(
     let result_descriptor = RasterResultDescriptor {
         data_type: origin_result_descriptor.data_type,
         spatial_reference: origin_result_descriptor.spatial_reference,
-        measurement: origin_result_descriptor.measurement.clone(),
         time: Some(result_time_interval),
-        bbox: Some(query_rectangle.spatial_query().spatial_partition()),
-        resolution: Some(query_rectangle.spatial_query().spatial_resolution()),
+        geo_transform: origin_result_descriptor.geo_transform,
+        pixel_bounds: origin_result_descriptor
+            .pixel_bounds
+            .intersection(&query_rectangle.spatial_query.grid_bounds)
+            .unwrap_or(
+                GridBoundingBox2D::new_min_max(0, 0, 1, 1).expect("is a valid static value"),
+            ), // FIXME: to something if intersection is empty
+        bands: origin_result_descriptor.bands.clone(),
     };
     //TODO: Recognize MetaDataDefinition::GdalMetaDataRegular
     let meta_data = if slice_info.len() == 1 {
@@ -267,13 +340,15 @@ async fn create_dataset<C: SessionContext>(
 
     let dataset_definition = DatasetDefinition {
         properties: AddDataset {
-            name: info.name,
-            display_name: info.display_name,
-            description: info.description.unwrap_or_default(),
+            name: info.name.clone(),
+            display_name: info.display_name.clone(),
+            description: info.description.clone().unwrap_or_default(),
             source_operator: "GdalSource".to_owned(),
             symbology: None,  // TODO add symbology?
             provenance: None, // TODO add provenance that references the workflow
-        },
+            tags: Some(vec!["workflow".to_owned()]),
+        }
+        .into(),
         meta_data,
     };
 

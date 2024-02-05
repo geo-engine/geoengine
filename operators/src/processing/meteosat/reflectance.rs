@@ -2,21 +2,23 @@ use std::sync::Arc;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use num_traits::AsPrimitive;
 use rayon::ThreadPool;
+use snafu::ensure;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
-    ClassificationMeasurement, ContinuousMeasurement, DateTime, Measurement, RasterQueryRectangle,
-    RasterSpatialQueryRectangle,
+    BandSelection, ClassificationMeasurement, ContinuousMeasurement, DateTime, Measurement,
+    RasterQueryRectangle, RasterSpatialQueryRectangle,
 };
 use geoengine_datatypes::raster::{
     GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey, RasterTile2D,
@@ -74,7 +76,15 @@ impl RasterOperator for Reflectance {
 
         let in_desc = input.result_descriptor();
 
-        match &in_desc.measurement {
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_desc.bands.len() == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: Reflectance::TYPE_NAME
+            }
+        );
+
+        match &in_desc.bands[0].measurement {
             Measurement::Continuous(ContinuousMeasurement {
                 measurement: m,
                 unit: _,
@@ -109,13 +119,17 @@ impl RasterOperator for Reflectance {
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
-            measurement: Measurement::Continuous(ContinuousMeasurement {
-                measurement: "reflectance".into(),
-                unit: Some("fraction".into()),
-            }),
             time: in_desc.time,
             geo_transform: in_desc.geo_transform,
             pixel_bounds: in_desc.pixel_bounds,
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                in_desc.bands[0].name.clone(),
+                Measurement::Continuous(ContinuousMeasurement {
+                    measurement: "reflectance".into(),
+                    unit: Some("fraction".into()),
+                }),
+            )])
+            .unwrap(),
         };
 
         let initialized_operator = InitializedReflectance {
@@ -143,6 +157,7 @@ impl InitializedRasterOperator for InitializedReflectance {
         if let TypedRasterQueryProcessor::F32(p) = q {
             Ok(QueryProcessorOut(Box::new(ReflectanceProcessor::new(
                 p,
+                self.result_descriptor.clone(),
                 self.params,
             ))))
         } else {
@@ -160,6 +175,7 @@ where
     Q: RasterQueryProcessor<RasterType = PixelOut>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     params: ReflectanceParams,
     channel_key: RasterPropertiesKey,
     satellite_key: RasterPropertiesKey,
@@ -169,9 +185,14 @@ impl<Q> ReflectanceProcessor<Q>
 where
     Q: RasterQueryProcessor<RasterType = PixelOut>,
 {
-    pub fn new(source: Q, params: ReflectanceParams) -> Self {
+    pub fn new(
+        source: Q,
+        result_descriptor: RasterResultDescriptor,
+        params: ReflectanceParams,
+    ) -> Self {
         Self {
             source,
+            result_descriptor,
             params,
             channel_key: new_channel_key(),
             satellite_key: new_satellite_key(),
@@ -264,10 +285,17 @@ fn calculate_esd(timestamp: &DateTime) -> f64 {
 #[async_trait]
 impl<Q> QueryProcessor for ReflectanceProcessor<Q>
 where
-    Q: QueryProcessor<Output = RasterTile2D<PixelOut>, SpatialQuery = RasterSpatialQueryRectangle>,
+    Q: QueryProcessor<
+        Output = RasterTile2D<PixelOut>,
+        SpatialQuery = RasterSpatialQueryRectangle,
+        Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
+    >,
 {
     type Output = RasterTile2D<PixelOut>;
     type SpatialQuery = RasterSpatialQueryRectangle;
+    type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -277,6 +305,10 @@ where
         let src = self.source.query(query, ctx).await?;
         let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
     }
 }
 

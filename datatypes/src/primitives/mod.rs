@@ -2,6 +2,7 @@ mod bounding_box;
 mod circle;
 mod coordinate;
 mod datetime;
+mod db_types;
 mod error;
 mod feature_data;
 mod geometry;
@@ -37,7 +38,8 @@ pub use multi_point::{MultiPoint, MultiPointAccess, MultiPointRef};
 pub use multi_polygon::{MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 pub use no_geometry::NoGeometry;
 pub use query_rectangle::{
-    PlotQueryRectangle, PlotSpatialQueryRectangle, QueryRectangle, RasterQueryRectangle,
+    BandSelection, ColumnSelection, PlotQueryRectangle, PlotSeriesSelection,
+    PlotSpatialQueryRectangle, QueryAttributeSelection, QueryRectangle, RasterQueryRectangle,
     RasterSpatialQueryRectangle, SpatialGridQueryRectangle, SpatialQueryRectangle,
     VectorQueryRectangle, VectorSpatialQueryRectangle,
 };

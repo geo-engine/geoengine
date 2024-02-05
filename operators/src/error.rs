@@ -2,7 +2,8 @@ use crate::engine::RasterResultDescriptor;
 use crate::util::statistics::StatisticsError;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
-use geoengine_datatypes::primitives::FeatureDataType;
+use geoengine_datatypes::primitives::{FeatureDataType, TimeInterval};
+use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::ops::Range;
 use std::path::PathBuf;
@@ -103,6 +104,7 @@ pub enum Error {
     InvalidExpression,
 
     InvalidNumberOfExpressionInputs,
+    InvalidNumberOfRasterStackerInputs,
 
     InvalidNoDataValueValueForOutputDataType,
 
@@ -124,6 +126,11 @@ pub enum Error {
         found: String,
     },
 
+    #[snafu(display("NotNan error: {}", source))]
+    InvalidNotNanFloatKey {
+        source: ordered_float::FloatIsNan,
+    },
+
     #[snafu(display("Column types do not match: {:?} - {:?}", left, right))]
     ColumnTypeMismatch {
         left: FeatureDataType,
@@ -142,6 +149,11 @@ pub enum Error {
     CannotResolveDatasetName {
         name: NamedData,
         source: Box<dyn ErrorSource>,
+    },
+
+    #[snafu(display("There is no Model with id {:?} avaiable.", id))]
+    UnknownModelId {
+        id: String,
     },
 
     InvalidDatasetSpec {
@@ -241,6 +253,7 @@ pub enum Error {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    #[snafu(display("CreatingProcessorFailed: {}", source))]
     CreatingProcessorFailed {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
@@ -325,7 +338,7 @@ pub enum Error {
     SpatialReferenceMustNotBeUnreferenced,
 
     #[snafu(context(false))]
-    RasterKernelError {
+    RasterKernel {
         source: crate::processing::NeighborhoodAggregateError,
     },
 
@@ -347,18 +360,28 @@ pub enum Error {
 
     InvalidMachineLearningConfig,
 
+    MachineLearningFeatureDataNotAvailable,
+    MachineLearningFeaturesNotAvailable,
     MachineLearningModelNotFound,
+    MachineLearningMustHaveAtLeastTwoFeatures,
 
-    InvalidMlModelPath,
+    CouldNotCreateMlModelFilePath,
+    CouldNotGetMlLabelKeyName,
     CouldNotGetMlModelDirectory,
+    CouldNotGetMlModelFileName,
+    CouldNotStoreMlModelInDb,
+    InvalidMlModelPath,
 
-    #[cfg(feature = "xgboost")]
+    #[snafu(display("Valid filetypes: 'json'"))]
+    NoValidMlModelFileType,
+
+    #[cfg(feature = "pro")]
     #[snafu(context(false))]
     XGBoost {
-        source: crate::pro::ml::xgboost::XGBoostModuleError,
+        source: crate::pro::xg_error::XGBoostModuleError,
     },
 
-    #[snafu(context(false))]
+    #[snafu(context(false), display("PieChart: {}", source))]
     PieChart {
         source: crate::plot::PieChartError,
     },
@@ -402,6 +425,45 @@ pub enum Error {
     RasterResultsIncompatible {
         a: RasterResultDescriptor,
         b: RasterResultDescriptor,
+    },
+
+    #[snafu(display("Input stream {stream_index} is not temporally aligned. Expected {expected:?}, found {found:?}."))]
+    InputStreamsMustBeTemporallyAligned {
+        stream_index: usize,
+        expected: TimeInterval,
+        found: TimeInterval,
+    },
+
+    AtLeastOneStreamRequired,
+
+    #[snafu(display("Operator {operator:?} does not support sources with multiple bands."))]
+    OperatorDoesNotSupportMultiBandsSourcesYet {
+        operator: &'static str,
+    },
+
+    #[snafu(display("Operation {operation:?} does not support queries with multiple bands."))]
+    OperationDoesNotSupportMultiBandQueriesYet {
+        operation: &'static str,
+    },
+
+    RasterInputsMustHaveSameSpatialReferenceAndDatatype,
+
+    GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet,
+
+    #[snafu(display("Raster band names must be unique. Found {duplicate_key} more than once.",))]
+    RasterBandNamesMustBeUnique {
+        duplicate_key: String,
+    },
+    #[snafu(display("Raster band names must not be empty"))]
+    RasterBandNameMustNotBeEmpty,
+    #[snafu(display("Raster band names must not be longer than 256 bytes"))]
+    RasterBandNameTooLong,
+
+    AtLeastOneRasterBandDescriptorRequired,
+
+    #[snafu(display("Band {band_idx} does not exist."))]
+    BandDoesNotExist {
+        band_idx: u32,
     },
 }
 
@@ -470,5 +532,11 @@ impl From<tokio::task::JoinError> for Error {
 impl From<crate::util::statistics::StatisticsError> for Error {
     fn from(source: StatisticsError) -> Self {
         Error::Statistics { source }
+    }
+}
+
+impl From<ordered_float::FloatIsNan> for Error {
+    fn from(source: FloatIsNan) -> Self {
+        Error::InvalidNotNanFloatKey { source }
     }
 }

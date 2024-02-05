@@ -15,13 +15,14 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    Duration, Geometry, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval,
+    BandSelection, ColumnSelection, Duration, Geometry, RasterQueryRectangle, TimeGranularity,
+    TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+use snafu::{ensure, Snafu};
 
 /// Project the query rectangle to a new time interval.
 pub type TimeShift = Operator<TimeShiftParams, SingleRasterOrVectorSource>;
@@ -265,6 +266,14 @@ impl RasterOperator for TimeShift {
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
+                // TODO: implement multi-band functionality and remove this check
+                ensure!(
+                    result_descriptor.bands.len() == 1,
+                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                        operator: TimeShift::TYPE_NAME
+                    }
+                );
+
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
                     source,
@@ -285,6 +294,14 @@ impl RasterOperator for TimeShift {
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
+                // TODO: implement multi-band functionality and remove this check
+                ensure!(
+                    result_descriptor.bands.len() == 1,
+                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                        operator: TimeShift::TYPE_NAME
+                    }
+                );
+
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
                     source,
@@ -299,6 +316,14 @@ impl RasterOperator for TimeShift {
                 let shift = AbsoluteShift { time_interval };
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
+
+                // TODO: implement multi-band functionality and remove this check
+                ensure!(
+                    result_descriptor.bands.len() == 1,
+                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                        operator: TimeShift::TYPE_NAME
+                    }
+                );
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
@@ -356,6 +381,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedVectorOperator
         Ok(
             call_on_generic_vector_processor!(source_processor, processor => VectorTimeShiftProcessor {
                 processor,
+                result_descriptor: self.result_descriptor.clone(),
                 shift: self.shift,
             }.boxed().into()),
         )
@@ -379,6 +405,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
         Ok(
             call_on_generic_raster_processor!(source_processor, processor => RasterTimeShiftProcessor {
                 processor,
+                result_descriptor: self.result_descriptor.clone(),
                 shift: self.shift,
             }.boxed().into()),
         )
@@ -394,6 +421,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     processor: Q,
+    result_descriptor: RasterResultDescriptor,
     shift: Shift,
 }
 
@@ -403,6 +431,7 @@ where
     Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
     processor: Q,
+    result_descriptor: VectorResultDescriptor,
     shift: Shift,
 }
 
@@ -422,7 +451,8 @@ where
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let (time_interval, state) = self.shift.shift(query.time_interval)?;
 
-        let query = VectorQueryRectangle::new(query.spatial_query, time_interval);
+        let query =
+            VectorQueryRectangle::new(query.spatial_query, time_interval, ColumnSelection::all());
         let stream = self.processor.vector_query(query, ctx).await?;
 
         let stream = stream.then(move |collection| async move {
@@ -446,6 +476,10 @@ where
 
         Ok(stream.boxed())
     }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[async_trait]
@@ -463,7 +497,8 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
         let (time_interval, state) = self.shift.shift(query.time_interval)?;
-        let query = RasterQueryRectangle::new(query.spatial_query, time_interval);
+        let query =
+            RasterQueryRectangle::new(query.spatial_query, time_interval, BandSelection::first());
         let stream = self.processor.raster_query(query, ctx).await?;
 
         let stream = stream.map(move |raster| {
@@ -477,6 +512,10 @@ where
 
         Ok(Box::pin(stream))
     }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[cfg(test)]
@@ -484,7 +523,7 @@ mod tests {
     use super::*;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext},
+        engine::{MockExecutionContext, MockQueryContext, RasterBandDescriptors},
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams, ExpressionSources},
         source::{GdalSource, GdalSourceParameters},
@@ -495,8 +534,8 @@ mod tests {
         collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection},
         dataset::NamedData,
         primitives::{
-            BoundingBox2D, CacheHint, Coordinate2D, DateTime, Measurement, MultiPoint,
-            SpatialPartition2D, SpatialResolution, TimeGranularity,
+            BoundingBox2D, CacheHint, Coordinate2D, DateTime, MultiPoint, SpatialPartition2D,
+            SpatialResolution, TimeGranularity,
         },
         raster::{
             BoundedGrid, EmptyGrid2D, GeoTransform, GridOrEmpty, GridShape2D, RasterDataType,
@@ -663,6 +702,7 @@ mod tests {
                     )
                     .unwrap(),
                     SpatialResolution::one(),
+                    ColumnSelection::all(),
                 ),
                 &query_context,
             )
@@ -751,6 +791,7 @@ mod tests {
                     )
                     .unwrap(),
                     SpatialResolution::one(),
+                    ColumnSelection::all(),
                 ),
                 &query_context,
             )
@@ -793,10 +834,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: None,
             geo_transform: GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
             pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
+            bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
 
@@ -812,6 +853,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 empty_grid.clone(),
                 CacheHint::default(),
             ),
@@ -825,6 +867,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 empty_grid.clone(),
                 CacheHint::default(),
             ),
@@ -838,6 +881,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 empty_grid.clone(),
                 CacheHint::default(),
             ),
@@ -851,6 +895,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 empty_grid.clone(),
                 CacheHint::default(),
             ),
@@ -864,6 +909,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 empty_grid.clone(),
                 CacheHint::default(),
             ),
@@ -877,6 +923,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 empty_grid.clone(),
                 CacheHint::default(),
             ),
@@ -926,6 +973,7 @@ mod tests {
                         DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                     )
                     .unwrap(),
+                    BandSelection::first(),
                 ),
                 &query_context,
             )
@@ -962,10 +1010,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: None,
             geo_transform: GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
             pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
+            bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
 
@@ -981,6 +1029,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 empty_grid.clone(),
                 CacheHint::default(),
             ),
@@ -994,6 +1043,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 empty_grid.clone(),
                 CacheHint::default(),
             ),
@@ -1007,6 +1057,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 empty_grid.clone(),
                 CacheHint::default(),
             ),
@@ -1020,6 +1071,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 empty_grid.clone(),
                 CacheHint::default(),
             ),
@@ -1033,6 +1085,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 empty_grid.clone(),
                 CacheHint::default(),
             ),
@@ -1046,6 +1099,7 @@ mod tests {
                     tile_size_in_pixels: [3, 2].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 empty_grid.clone(),
                 CacheHint::default(),
             ),
@@ -1092,6 +1146,7 @@ mod tests {
                         DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                     )
                     .unwrap(),
+                    BandSelection::first(),
                 ),
                 &query_context,
             )
@@ -1171,6 +1226,7 @@ mod tests {
                     SpatialResolution::one(),
                     execution_context.tiling_specification.origin_coordinate,
                     TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+                    BandSelection::first(),
                 ),
                 &query_context,
             )
@@ -1232,6 +1288,7 @@ mod tests {
                     SpatialResolution::one(),
                     execution_context.tiling_specification.origin_coordinate,
                     TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+                    BandSelection::first(),
                 ),
                 &query_context,
             )

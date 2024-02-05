@@ -1,6 +1,9 @@
 use futures::StreamExt;
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::Coordinate2D;
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use geoengine_datatypes::raster::{
+    BoundedGrid, GridBoundingBox2D, GridShapeAccess, RasterDataType,
+};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
     raster::{
@@ -8,6 +11,7 @@ use geoengine_datatypes::{
     },
     util::test::TestDefault,
 };
+use geoengine_operators::engine::RasterResultDescriptor;
 use geoengine_operators::{
     engine::{ChunkByteSize, MockQueryContext, QueryContext, RasterQueryProcessor},
     mock::MockRasterSourceProcessor,
@@ -22,6 +26,7 @@ fn setup_gdal_source(
     tiling_specification: TilingSpecification,
 ) -> GdalSourceProcessor<u8> {
     GdalSourceProcessor::<u8> {
+        result_descriptor: meta_data.result_descriptor.clone(),
         tiling_specification,
         meta_data: Box::new(meta_data),
         _phantom_data: PhantomData,
@@ -36,14 +41,29 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
     .unwrap()
     .into();
     let geo_transform = GeoTransform::test_default();
+    let grid_bounds = grid.grid_shape().bounding_box();
+    let grid_bounds = GridBoundingBox2D::new_min_max(
+        grid_bounds.x_min() - grid.axis_size_x() as isize,
+        grid_bounds.x_min() + 2 * grid.axis_size_x() as isize,
+        grid_bounds.y_min() - grid.axis_size_y() as isize,
+        grid_bounds.y_min() + 2 * grid.axis_size_y() as isize,
+    )
+    .unwrap();
 
     let time = TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap();
 
     MockRasterSourceProcessor {
+        result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+            RasterDataType::U8,
+            1,
+            grid_bounds,
+            geo_transform,
+        ),
         data: vec![
             RasterTile2D::new(
                 time,
                 [-1, -1].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -51,6 +71,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [-1, 0].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -58,6 +79,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [-1, 1].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -65,6 +87,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [0, -1].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -72,6 +95,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [0, 0].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -79,6 +103,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [0, 1].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -86,6 +111,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [1, -1].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -93,6 +119,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [1, 0].into(),
+                0,
                 geo_transform,
                 grid.clone(),
                 CacheHint::default(),
@@ -100,6 +127,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             RasterTile2D::new(
                 time,
                 [1, 1].into(),
+                0,
                 geo_transform,
                 grid,
                 CacheHint::default(),
@@ -126,11 +154,11 @@ fn bench_raster_processor<
     for tiling_spec in list_of_tiling_specs {
         let operator = (tile_producing_operator_builderr)(*tiling_spec);
 
-        for &(qrect_name, qrect) in list_of_named_querys {
+        for &(qrect_name, ref qrect) in list_of_named_querys {
             run_time.block_on(async {
                 // query the operator
                 let start_query = Instant::now();
-                let query = operator.raster_query(qrect, ctx).await.unwrap();
+                let query = operator.raster_query(qrect.clone(), ctx).await.unwrap();
                 let query_elapsed = start_query.elapsed();
 
                 let start = Instant::now();
@@ -171,6 +199,7 @@ fn bench_no_data_tiles() {
                 spatial_resolution,
                 tiling_origin,
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
         ),
         (
@@ -180,6 +209,7 @@ fn bench_no_data_tiles() {
                 spatial_resolution,
                 tiling_origin,
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
         ),
         (
@@ -189,6 +219,7 @@ fn bench_no_data_tiles() {
                 spatial_resolution,
                 tiling_origin,
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
         ),
         (
@@ -198,6 +229,7 @@ fn bench_no_data_tiles() {
                 spatial_resolution,
                 tiling_origin,
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
         ),
         (
@@ -207,6 +239,7 @@ fn bench_no_data_tiles() {
                 spatial_resolution,
                 tiling_origin,
                 TimeInterval::new(1_000_000_000_000, 1_000_000_000_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
         ),
     ];
@@ -244,6 +277,7 @@ fn bench_tile_size() {
             SpatialResolution::new(0.01, 0.01).unwrap(),
             tiling_origin,
             TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+            BandSelection::first(),
         ),
     )];
 

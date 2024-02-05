@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use geoengine_datatypes::{
-    primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
+    primitives::{
+        BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+    },
     raster::TilesEqualIgnoringCacheHint,
     util::test::TestDefault,
 };
@@ -71,6 +73,7 @@ async fn main() {
                 SpatialResolution::zero_point_one(),
                 exe_ctx.tiling_specification.origin_coordinate,
                 TimeInterval::default(),
+                BandSelection::first(),
             ),
             &query_ctx,
         )
@@ -92,6 +95,7 @@ async fn main() {
                 SpatialResolution::zero_point_one(),
                 exe_ctx.tiling_specification.origin_coordinate,
                 TimeInterval::default(),
+                BandSelection::first(),
             ),
             &query_ctx,
         )

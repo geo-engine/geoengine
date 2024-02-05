@@ -1,6 +1,5 @@
 use super::{error, NetCdfCf4DProviderError, TimeCoverage};
 use crate::{
-    api::model::datatypes::ResamplingMethod,
     datasets::{external::netcdfcf::NetCdfCfDataProvider, storage::MetaDataDefinition},
     tasks::{TaskContext, TaskStatusInfo},
     util::{config::get_config_element, path_with_base_path},
@@ -17,6 +16,7 @@ use gdal_sys::GDALGetRasterStatistics;
 use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{DateTimeParseFormat, TimeInstance, TimeInterval},
+    util::gdal::ResamplingMethod,
 };
 use geoengine_datatypes::{
     primitives::CacheTtlSeconds, spatial_reference::SpatialReference, util::canonicalize_subpath,
@@ -816,15 +816,15 @@ mod tests {
     };
     use geoengine_datatypes::{
         hashmap,
-        operations::image::{Colorizer, DefaultColors, RgbaColor},
-        primitives::{DateTime, Measurement, SpatialResolution, TimeGranularity, TimeStep},
+        operations::image::{Colorizer, RgbaColor},
+        primitives::{DateTime, SpatialResolution, TimeGranularity, TimeStep},
         raster::RasterDataType,
         spatial_reference::SpatialReference,
         test_data,
         util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::{
-        engine::RasterResultDescriptor,
+        engine::{RasterBandDescriptors, RasterResultDescriptor},
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular,
@@ -874,10 +874,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
-                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0))
+                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: GdalDatasetParameters {
                     file_path: Path::new("foo/%_START_TIME_%.tiff").into(),
@@ -970,10 +970,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: GdalDatasetParameters {
                     file_path: tempdir_path.join("1/%_START_TIME_%.tiff"),
@@ -1137,10 +1137,8 @@ mod tests {
                             .into(),
                     ],
                     no_data_color: RgbaColor::new(0, 0, 0, 0),
-                    default_colors: DefaultColors::OverUnder {
-                        over_color: RgbaColor::new(255, 255, 255, 255),
-                        under_color: RgbaColor::new(0, 0, 0, 255)
-                    }
+                    over_color: RgbaColor::new(255, 255, 255, 255),
+                    under_color: RgbaColor::new(0, 0, 0, 255)
                 },
                 creator_name: Some("Luise Quoß".to_string()),
                 creator_email: Some("luise.quoss@idiv.de".to_string()),
@@ -1239,10 +1237,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     bbox: None,
                     resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: vec![
                     GdalLoadingInfoTemporalSlice {

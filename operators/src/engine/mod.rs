@@ -3,7 +3,8 @@ pub use clonable_operator::{
     CloneableRasterOperator, CloneableVectorOperator,
 };
 pub use execution_context::{
-    ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
+    ExecutionContext, ExecutionContextExtensions, MetaData, MetaDataProvider, MockExecutionContext,
+    StaticMetaData,
 };
 pub use operator::{
     CanonicOperatorName, InitializedPlotOperator, InitializedRasterOperator,
@@ -25,8 +26,8 @@ pub use query_processor::{
     TypedVectorQueryProcessor, VectorQueryProcessor,
 };
 pub use result_descriptor::{
-    PlotResultDescriptor, RasterResultDescriptor, ResultDescriptor, TypedResultDescriptor,
-    VectorColumnInfo, VectorResultDescriptor,
+    PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
+    ResultDescriptor, TypedResultDescriptor, VectorColumnInfo, VectorResultDescriptor,
 };
 use tracing::Span;
 

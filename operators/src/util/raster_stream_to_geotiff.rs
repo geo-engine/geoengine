@@ -25,6 +25,7 @@ use geoengine_datatypes::raster::{
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use log::debug;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
@@ -51,7 +52,7 @@ where
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
     let tiles = abortable_query_execution(
-        consume_stream_into_vec(processor, query_rect, query_ctx, tile_limit),
+        consume_stream_into_vec(processor, query_rect.clone(), query_ctx, tile_limit),
         conn_closed,
         query_abort_trigger,
     )
@@ -59,7 +60,7 @@ where
 
     let (initial_tile_time, file_path, dataset, writer) = create_multiband_dataset_and_writer(
         &tiles,
-        query_rect,
+        &query_rect,
         tiling_specification,
         gdal_tiff_options,
         gdal_tiff_metadata,
@@ -108,7 +109,7 @@ where
 
 fn create_multiband_dataset_and_writer<T>(
     tiles: &Vec<RasterTile2D<T>>,
-    query_rect: RasterQueryRectangle,
+    query_rect: &RasterQueryRectangle,
     tiling_specification: TilingSpecification,
     gdal_tiff_options: GdalGeoTiffOptions,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
@@ -332,6 +333,14 @@ pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
 where
     P: Pixel + GdalType,
 {
+    // TODO: support multi band geotiffs
+    ensure!(
+        query_rect.attributes.count() == 1,
+        crate::error::OperationDoesNotSupportMultiBandQueriesYet {
+            operation: "raster_stream_to_geotiff"
+        }
+    );
+
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
     // TODO: create file path if it doesn't exist
@@ -351,13 +360,15 @@ where
     let dataset_holder: Result<GdalDatasetHolder<P>> = Ok(GdalDatasetHolder::new_with_tiling_spec(
         tiling_specification,
         &file_path,
-        query_rect,
+        &query_rect,
         gdal_tiff_metadata,
         gdal_tiff_options,
         gdal_config_options,
     ));
 
-    let tile_stream = processor.raster_query(query_rect, &query_ctx).await?;
+    let tile_stream = processor
+        .raster_query(query_rect.clone(), &query_ctx)
+        .await?;
 
     let mut dataset_holder = tile_stream
         .enumerate()
@@ -481,7 +492,7 @@ struct GdalDatasetHolder<P: Pixel + GdalType> {
 impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
     fn new(
         file_path: &Path,
-        query_rect: RasterQueryRectangle,
+        query_rect: &RasterQueryRectangle,
         gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
         gdal_tiff_options: GdalGeoTiffOptions,
         gdal_config_options: Option<Vec<(String, String)>>,
@@ -647,7 +658,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
     fn new_with_tiling_spec(
         tiling_specification: TilingSpecification,
         file_path: &Path,
-        query_rect: RasterQueryRectangle,
+        query_rect: &RasterQueryRectangle,
         gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
         gdal_tiff_options: GdalGeoTiffOptions,
         gdal_config_options: Option<Vec<(String, String)>>,
@@ -1035,15 +1046,16 @@ mod tests {
     use std::marker::PhantomData;
     use std::ops::Add;
 
-    use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
     use geoengine_datatypes::primitives::{DateTime, Duration};
-    use geoengine_datatypes::raster::Grid;
+    use geoengine_datatypes::raster::{Grid, GridBoundingBox2D, RasterDataType};
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilingSpecification,
         util::test::TestDefault,
     };
 
+    use crate::engine::RasterResultDescriptor;
     use crate::mock::MockRasterSourceProcessor;
     use crate::util::gdal::gdal_open_dataset;
     use crate::{
@@ -1061,6 +1073,7 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1078,6 +1091,7 @@ mod tests {
                 ),
                 Coordinate2D::default(), // this is the default tiling strategy origin
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1117,6 +1131,7 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1134,6 +1149,7 @@ mod tests {
                 ),
                 Coordinate2D::default(), // this is the default tiling strategy origin
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1169,6 +1185,7 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1186,6 +1203,7 @@ mod tests {
                 ),
                 Coordinate2D::default(), // this is the default tiling strategy origin
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1225,6 +1243,7 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1242,6 +1261,7 @@ mod tests {
                 ),
                 Coordinate2D::default(), // this is the default tiling strategy origin
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1284,6 +1304,7 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1301,6 +1322,7 @@ mod tests {
                 ),
                 Coordinate2D::default(), // this is the default tiling strategy origin
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1343,6 +1365,7 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1360,6 +1383,7 @@ mod tests {
                 ),
                 Coordinate2D::default(), // this is the default tiling strategy origin
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 7_776_000_000).unwrap(),
+                BandSelection::first(),
             ),
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1416,6 +1440,7 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1433,6 +1458,7 @@ mod tests {
                 ),
                 Coordinate2D::default(), // this is the default tiling strategy origin
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 7_776_000_000).unwrap(),
+                BandSelection::first(),
             ),
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1462,6 +1488,7 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1479,6 +1506,7 @@ mod tests {
                 ),
                 Coordinate2D::default(), // this is the default tiling strategy origin
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1508,6 +1536,7 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1527,6 +1556,7 @@ mod tests {
                 ),
                 Coordinate2D::default(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
             ctx,
             GdalGeoTiffDatasetMetadata {
@@ -1575,8 +1605,9 @@ mod tests {
             generate_time_intervals(base_start_time, time_step, num_time_steps).unwrap();
         let data = vec![
             RasterTile2D {
-                time: *time_intervals.get(0).unwrap(),
+                time: *time_intervals.first().unwrap(),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
                 properties: Default::default(),
@@ -1585,6 +1616,7 @@ mod tests {
             RasterTile2D {
                 time: *time_intervals.get(1).unwrap(),
                 tile_position: [-1, 0].into(),
+                band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
@@ -1596,6 +1628,12 @@ mod tests {
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
         let processor = MockRasterSourceProcessor {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+                GridBoundingBox2D::new([-4, -4], [4, 4]).unwrap(),
+                GeoTransform::test_default(),
+            ),
             data,
             tiling_specification,
         }
@@ -1605,6 +1643,7 @@ mod tests {
             GeoTransform::test_default().spatial_resolution(),
             GeoTransform::test_default().origin_coordinate(),
             TimeInterval::new_unchecked(1_596_109_801_000, 1_659_181_801_000),
+            BandSelection::first(),
         );
 
         let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
@@ -1712,6 +1751,7 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1727,6 +1767,7 @@ mod tests {
                 SpatialResolution::new_unchecked(0.1, 0.1),
                 tiling_origin_coordinate,
                 TimeInterval::new(1_388_534_400_000, 1_396_306_800_000).unwrap(),
+                BandSelection::first(),
             ),
             ctx,
             GdalGeoTiffDatasetMetadata {

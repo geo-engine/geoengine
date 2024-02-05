@@ -1,13 +1,10 @@
-use std::borrow::Cow;
-use std::{convert::TryInto, fmt::Debug};
-
-use crate::api::model::datatypes::Colorizer;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::identifier;
+use crate::projects::error::ProjectDbError;
 use crate::util::config::ProjectService;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, util::config::get_config_element};
-use geoengine_datatypes::operations::image::RgbaColor;
+use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer, RgbaColor};
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::primitives::TimeInstance;
 use geoengine_datatypes::{
@@ -19,10 +16,11 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use geoengine_operators::string_token;
-
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use std::borrow::Cow;
+use std::{convert::TryInto, fmt::Debug};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
@@ -65,11 +63,12 @@ impl Project {
     /// If the updates layer list is longer than the current list,
     /// it just inserts new layers to the end.
     ///
-    pub fn update_project(&self, update: UpdateProject) -> Result<Project> {
+    pub fn update_project(&self, update: UpdateProject) -> Result<Project, ProjectDbError> {
         fn update_layer_or_plots<Content>(
+            project: ProjectId,
             state: Vec<Content>,
             updates: Vec<VecUpdate<Content>>,
-        ) -> Result<Vec<Content>> {
+        ) -> Result<Vec<Content>, ProjectDbError> {
             let mut result = Vec::new();
 
             let mut updates = updates.into_iter();
@@ -86,7 +85,7 @@ impl Project {
                 if let VecUpdate::UpdateOrInsert(new_content) = update {
                     result.push(new_content);
                 } else {
-                    return Err(Error::ProjectUpdateFailed);
+                    return Err(ProjectDbError::ProjectUpdateFailed { project });
                 }
             }
 
@@ -105,11 +104,11 @@ impl Project {
         }
 
         if let Some(layer_updates) = update.layers {
-            project.layers = update_layer_or_plots(project.layers, layer_updates)?;
+            project.layers = update_layer_or_plots(update.id, project.layers, layer_updates)?;
         }
 
         if let Some(plot_updates) = update.plots {
-            project.plots = update_layer_or_plots(project.plots, plot_updates)?;
+            project.plots = update_layer_or_plots(update.id, project.plots, plot_updates)?;
         }
 
         if let Some(bounds) = update.bounds {
@@ -147,6 +146,7 @@ impl Project {
 //     }
 // }))]
 pub struct STRectangle {
+    #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
     pub bounding_box: BoundingBox2D,
     pub time_interval: TimeInterval,
@@ -257,9 +257,10 @@ pub enum Symbology {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[serde(rename_all = "camelCase")]
 pub struct RasterSymbology {
     pub opacity: f64,
-    pub colorizer: Colorizer,
+    pub raster_colorizer: RasterColorizer,
 }
 
 impl Eq for RasterSymbology {}
@@ -428,18 +429,6 @@ impl From<&Project> for ProjectListing {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema, Default)]
-pub enum ProjectFilter {
-    Name {
-        term: String,
-    },
-    Description {
-        term: String,
-    },
-    #[default]
-    None,
-}
-
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, Validate)]
 #[serde(rename_all = "camelCase")]
 #[schema(example = json!({
@@ -520,23 +509,29 @@ pub type PlotUpdate = VecUpdate<Plot>;
 string_token!(NoUpdate, "none");
 string_token!(Delete, "delete");
 
+// use common schema for `Delete` and `NoUpdate`
+// TODO: maybe revert when https://github.com/OpenAPITools/openapi-generator/issues/14831 is fixed
+impl<'a> ToSchema<'a> for Delete {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        use utoipa::openapi::*;
+        (
+            "ProjectUpdateToken",
+            ObjectBuilder::new()
+                .schema_type(SchemaType::String)
+                .enum_values::<[&str; 2], &str>(Some(["none", "delete"]))
+                .into(),
+        )
+    }
+}
+
 impl<'a> ToSchema<'a> for LayerUpdate {
     fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         use utoipa::openapi::*;
         (
             "LayerUpdate",
             OneOfBuilder::new()
-                .item(
-                    ObjectBuilder::new()
-                        .schema_type(SchemaType::String)
-                        .enum_values::<[&str; 1], &str>(Some(["none"])),
-                )
-                .item(
-                    ObjectBuilder::new()
-                        .schema_type(SchemaType::String)
-                        .enum_values::<[&str; 1], &str>(Some(["delete"])),
-                )
-                .item(Ref::from_schema_name("ShortLayerInfo"))
+                .item(Ref::from_schema_name("ProjectUpdateToken"))
+                .item(Ref::from_schema_name("ProjectLayer"))
                 .into(),
         )
     }
@@ -548,16 +543,7 @@ impl<'a> ToSchema<'a> for PlotUpdate {
         (
             "PlotUpdate",
             OneOfBuilder::new()
-                .item(
-                    ObjectBuilder::new()
-                        .schema_type(SchemaType::String)
-                        .enum_values::<[&str; 1], &str>(Some(["none"])),
-                )
-                .item(
-                    ObjectBuilder::new()
-                        .schema_type(SchemaType::String)
-                        .enum_values::<[&str; 1], &str>(Some(["delete"])),
-                )
+                .item(Ref::from_schema_name("ProjectUpdateToken"))
                 .item(Ref::from_schema_name("Plot"))
                 .into(),
         )
@@ -566,8 +552,6 @@ impl<'a> ToSchema<'a> for PlotUpdate {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, IntoParams, Validate)]
 pub struct ProjectListOptions {
-    #[serde(default)]
-    pub filter: ProjectFilter,
     #[param(example = "NameAsc")]
     pub order: OrderBy,
     #[param(example = 0)]
@@ -692,8 +676,12 @@ mod tests {
                     "symbology": {
                         "type": "raster",
                         "opacity": 1.0,
-                        "colorizer": {
-                            "type": "rgba"
+                        "rasterColorizer": {
+                            "type": "singleBand",
+                            "band": 0,
+                            "bandColorizer": {
+                                "type": "rgba"
+                            }
                         }
                     }
                 })
@@ -709,7 +697,10 @@ mod tests {
                 },
                 symbology: Symbology::Raster(RasterSymbology {
                     opacity: 1.0,
-                    colorizer: Colorizer::Rgba,
+                    raster_colorizer: RasterColorizer::SingleBand {
+                        band: 0,
+                        band_colorizer: Colorizer::Rgba,
+                    },
                 })
             })
         );
@@ -730,7 +721,10 @@ mod tests {
                     visibility: Default::default(),
                     symbology: Symbology::Raster(RasterSymbology {
                         opacity: 1.0,
-                        colorizer: Colorizer::Rgba,
+                        raster_colorizer: RasterColorizer::SingleBand {
+                            band: 0,
+                            band_colorizer: Colorizer::Rgba,
+                        },
                     }),
                 }),
                 LayerUpdate::UpdateOrInsert(ProjectLayer {
@@ -739,7 +733,10 @@ mod tests {
                     visibility: Default::default(),
                     symbology: Symbology::Raster(RasterSymbology {
                         opacity: 1.0,
-                        colorizer: Colorizer::Rgba,
+                        raster_colorizer: RasterColorizer::SingleBand {
+                            band: 0,
+                            band_colorizer: Colorizer::Rgba,
+                        },
                     }),
                 }),
             ]),

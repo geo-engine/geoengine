@@ -1,16 +1,8 @@
-use futures::stream::BoxStream;
-use futures::{StreamExt, TryStreamExt};
-
-use geoengine_datatypes::collections::{
-    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
-};
-use geoengine_datatypes::primitives::CacheHint;
-use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
-use geoengine_datatypes::util::arrow::ArrowTyped;
-
+use super::util::{CoveredPixels, FeatureTimeSpanIter, PixelCoverCreator};
+use super::{create_feature_aggregator, FeatureAggregationMethod};
 use crate::engine::{
     QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
-    VectorQueryProcessor,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::processing::raster_vector_join::aggregator::{
     Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
@@ -19,15 +11,21 @@ use crate::processing::raster_vector_join::aggregator::{
 use crate::processing::raster_vector_join::TemporalAggregationMethod;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{
-    Coordinate2D, Geometry, RasterQueryRectangle, VectorQueryRectangle, VectorSpatialQueryRectangle,
+use futures::stream::BoxStream;
+use futures::{StreamExt, TryStreamExt};
+use geoengine_datatypes::collections::{
+    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-
-use super::util::{CoveredPixels, FeatureTimeSpanIter, PixelCoverCreator};
-use super::{create_feature_aggregator, FeatureAggregationMethod};
+use geoengine_datatypes::primitives::{
+    BandSelection, CacheHint, ColumnSelection, Coordinate2D, Geometry, RasterQueryRectangle,
+    VectorQueryRectangle, VectorSpatialQueryRectangle,
+};
+use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
+use geoengine_datatypes::util::arrow::ArrowTyped;
 
 pub struct RasterVectorAggregateJoinProcessor<G> {
     collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+    result_descriptor: VectorResultDescriptor,
     raster_processors: Vec<TypedRasterQueryProcessor>,
     column_names: Vec<String>,
     feature_aggregation: FeatureAggregationMethod,
@@ -41,8 +39,10 @@ where
     G: Geometry + ArrowTyped,
     FeatureCollection<G>: PixelCoverCreator<G>,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+        result_descriptor: VectorResultDescriptor,
         raster_processors: Vec<TypedRasterQueryProcessor>,
         column_names: Vec<String>,
         feature_aggregation: FeatureAggregationMethod,
@@ -52,6 +52,7 @@ where
     ) -> Self {
         Self {
             collection,
+            result_descriptor,
             raster_processors,
             column_names,
             feature_aggregation,
@@ -88,11 +89,16 @@ where
         let mut cache_hint = CacheHint::max_duration();
 
         for time_span in FeatureTimeSpanIter::new(collection.time_intervals()) {
-            let query = VectorQueryRectangle::new(query.spatial_query(), time_span.time_interval);
+            let query = VectorQueryRectangle::new(
+                query.spatial_query(),
+                time_span.time_interval,
+                ColumnSelection::all(),
+            );
 
             let raster_query = RasterQueryRectangle::with_vector_query_and_grid_origin(
                 query,
                 Coordinate2D::new(0.0, 0.0), // FIXME: this is the default global tiling origin. It should be set from the execution context OR (even better) the raster processor should be able to provide it.
+                BandSelection::first(),      // FIXME: this should prop. use all bands?
             );
 
             let mut rasters = raster_processor.raster_query(raster_query, ctx).await?;
@@ -218,6 +224,8 @@ where
 {
     type Output = FeatureCollection<G>;
     type SpatialQuery = VectorSpatialQueryRectangle;
+    type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -226,32 +234,39 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let stream = self
             .collection
-            .query(query, ctx)
+            .query(query.clone(), ctx)
             .await?
-            .and_then(move |mut collection| async move {
-                for (raster, new_column_name) in
-                    self.raster_processors.iter().zip(&self.column_names)
-                {
-                    collection = call_on_generic_raster_processor!(raster, raster => {
-                        Self::extract_raster_values(
-                            &collection,
-                            raster,
-                            new_column_name,
-                            self.feature_aggregation,
-                            self.feature_aggregation_ignore_no_data,
-                            self.temporal_aggregation,
-                            self.temporal_aggregation_ignore_no_data,
-                            query,
-                            ctx
-                        ).await?
-                    });
-                }
+            .and_then(move |mut collection| {
+                let query = query.clone();
+                async move {
+                    for (raster, new_column_name) in
+                        self.raster_processors.iter().zip(&self.column_names)
+                    {
+                        collection = call_on_generic_raster_processor!(raster, raster => {
+                            Self::extract_raster_values(
+                                &collection,
+                                raster,
+                                new_column_name,
+                                self.feature_aggregation,
+                                self.feature_aggregation_ignore_no_data,
+                                self.temporal_aggregation,
+                                self.temporal_aggregation_ignore_no_data,
+                                query.clone(),
+                                ctx
+                            ).await?
+                        });
+                    }
 
-                Ok(collection)
+                    Ok(collection)
+                }
             })
             .boxed();
 
         Ok(stream)
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
     }
 }
 
@@ -260,7 +275,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, RasterResultDescriptor, WorkflowOperatorPath,
+        ChunkByteSize, MockExecutionContext, RasterBandDescriptors, RasterResultDescriptor,
+        WorkflowOperatorPath,
     };
     use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
@@ -268,7 +284,7 @@ mod tests {
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::MultiPolygon;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureDataRef, Measurement, MultiPoint, SpatialResolution, TimeInterval,
+        BoundingBox2D, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
         GeoTransform, Grid2D, GridBoundingBox2D, RasterTile2D, TileInformation,
@@ -285,6 +301,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
@@ -294,10 +311,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: None,
             geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
             pixel_bounds: GridBoundingBox2D::new_min_max(0, 3, 0, 2).unwrap(),
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         let raster_source = MockRasterSource {
@@ -345,6 +362,7 @@ mod tests {
                 BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
                 Default::default(),
                 SpatialResolution::new(1., 1.).unwrap(),
+                ColumnSelection::all(),
             ),
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
@@ -368,6 +386,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
@@ -380,6 +399,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
@@ -389,10 +409,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: None,
             geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
             pixel_bounds: GridBoundingBox2D::new_min_max(0, 3, 0, 2).unwrap(),
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         let raster_source = MockRasterSource {
@@ -440,6 +460,7 @@ mod tests {
                 BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
                 Default::default(),
                 SpatialResolution::new(1., 1.).unwrap(),
+                ColumnSelection::all(),
             ),
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
@@ -463,6 +484,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
@@ -475,6 +497,7 @@ mod tests {
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
@@ -487,6 +510,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
@@ -499,6 +523,7 @@ mod tests {
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
@@ -508,10 +533,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: None,
             geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
             pixel_bounds: GridBoundingBox2D::new_min_max(0, 3, 0, 4).unwrap(),
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         let raster_source = MockRasterSource {
@@ -560,6 +585,7 @@ mod tests {
                 BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                 Default::default(),
                 SpatialResolution::new(1., 1.).unwrap(),
+                ColumnSelection::all(),
             ),
             &MockQueryContext::new(ChunkByteSize::MIN),
         )
@@ -587,6 +613,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
                 .unwrap()
                 .into(),
@@ -599,6 +626,7 @@ mod tests {
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
                 .unwrap()
                 .into(),
@@ -611,6 +639,7 @@ mod tests {
                 global_tile_position: [0, 2].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![160, 150, 140, 130, 120, 110])
                 .unwrap()
                 .into(),
@@ -623,6 +652,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),
@@ -635,6 +665,7 @@ mod tests {
                 global_tile_position: [0, 1].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
                 .unwrap()
                 .into(),
@@ -647,6 +678,7 @@ mod tests {
                 global_tile_position: [0, 2].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             Grid2D::new([3, 2].into(), vec![110, 120, 130, 140, 150, 160])
                 .unwrap()
                 .into(),
@@ -656,10 +688,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: None,
             geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
             pixel_bounds: GridBoundingBox2D::new_min_max(0, 3, 0, 6).unwrap(),
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         let raster_source = MockRasterSource {
@@ -712,6 +744,7 @@ mod tests {
                 BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                 Default::default(),
                 SpatialResolution::new(1., 1.).unwrap(),
+                ColumnSelection::all(),
             ),
             &MockQueryContext::new(ChunkByteSize::MIN),
         )

@@ -194,26 +194,33 @@ fn send_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::PostgresSessionContext;
-    use crate::util::tests::with_temp_context_from_spec;
+    use crate::contexts::{PostgresContext, PostgresSessionContext};
+    use crate::ge_context;
     use crate::{contexts::SimpleApplicationContext, workflows::workflow::Workflow};
     use actix_http::error::PayloadError;
     use actix_web_actors::ws::WebsocketContext;
     use bytes::{Bytes, BytesMut};
     use futures::channel::mpsc::UnboundedSender;
+    use geoengine_datatypes::primitives::ColumnSelection;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         primitives::{
             BoundingBox2D, CacheHint, DateTime, FeatureData, MultiPoint, SpatialResolution,
             TimeInterval,
         },
-        util::{arrow::arrow_ipc_file_to_record_batches, test::TestDefault},
+        util::arrow::arrow_ipc_file_to_record_batches,
     };
+    use geoengine_operators::engine::ChunkByteSize;
     use geoengine_operators::{engine::TypedOperator, mock::MockFeatureCollectionSource};
     use tokio_postgres::NoTls;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_websocket_stream() {
+    /// ensure that we get one chunk per input
+    fn max_chunk_size() -> ChunkByteSize {
+        usize::MAX.into()
+    }
+
+    #[ge_context::test(query_ctx_chunk_size = "max_chunk_size")]
+    async fn test_websocket_stream(app_ctx: PostgresContext<NoTls>) {
         fn send_next(input_sender: &UnboundedSender<Result<Bytes, PayloadError>>) {
             let mut buf = BytesMut::new();
             actix_http::ws::Parser::write_message(
@@ -227,103 +234,90 @@ mod tests {
             input_sender.unbounded_send(Ok(buf.into())).unwrap();
         }
 
-        with_temp_context_from_spec(
-            TestDefault::test_default(),
-            usize::MAX.into(), // ensure that we get one chunk per input
-            |app_ctx, _| async move {
-                let collection = MultiPointCollection::from_data(
-                    MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
-                    vec![
-                        TimeInterval::new(
-                            DateTime::new_utc(2014, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(2015, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap();
-                        3
-                    ],
-                    [
-                        (
-                            "foobar".to_string(),
-                            FeatureData::NullableInt(vec![Some(0), None, Some(2)]),
-                        ),
-                        (
-                            "strings".to_string(),
-                            FeatureData::Text(vec![
-                                "a".to_string(),
-                                "b".to_string(),
-                                "c".to_string(),
-                            ]),
-                        ),
-                    ]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                    CacheHint::default(),
+        let collection = MultiPointCollection::from_data(
+            MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1), (2.0, 3.1)]).unwrap(),
+            vec![
+                TimeInterval::new(
+                    DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2015, 1, 1, 0, 0, 0)
                 )
                 .unwrap();
-
-                let ctx = app_ctx.default_session_context().await.unwrap();
-
-                let workflow = Workflow {
-                    operator: TypedOperator::Vector(
-                        MockFeatureCollectionSource::multiple(vec![
-                            collection.clone(),
-                            collection.clone(),
-                            collection.clone(),
-                        ])
-                        .boxed(),
-                    ),
-                };
-
-                let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
-                    BoundingBox2D::new_upper_left_lower_right(
-                        (-180., 90.).into(),
-                        (180., -90.).into(),
-                    )
-                    .unwrap(),
-                    TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
-                    SpatialResolution::one(),
-                );
-
-                let handler = VectorWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(
-                    workflow.operator.get_vector().unwrap(),
-                    query_rectangle,
-                    ctx.execution_context().unwrap(),
-                    ctx.query_context().unwrap(),
-                )
-                .await
-                .unwrap();
-
-                let (input_sender, input_receiver) = futures::channel::mpsc::unbounded();
-
-                let mut websocket_context = WebsocketContext::create(handler, input_receiver);
-
-                // 3 batches
-                for _ in 0..3 {
-                    send_next(&input_sender);
-
-                    let bytes = websocket_context.next().await.unwrap().unwrap();
-
-                    let bytes = &bytes[4..]; // the first four bytes are WS op bytes
-
-                    let record_batches = arrow_ipc_file_to_record_batches(bytes).unwrap();
-                    assert_eq!(record_batches.len(), 1);
-                    let record_batch = record_batches.first().unwrap();
-                    let schema = record_batch.schema();
-
-                    assert_eq!(schema.metadata()["spatialReference"], "EPSG:4326");
-
-                    assert_eq!(record_batch.column_by_name("foobar").unwrap().len(), 3);
-                    assert_eq!(record_batch.column_by_name("strings").unwrap().len(), 3);
-                }
-
-                send_next(&input_sender);
-                assert_eq!(websocket_context.next().await.unwrap().unwrap().len(), 4); // close frame
-
-                send_next(&input_sender);
-                assert!(websocket_context.next().await.is_none());
-            },
+                3
+            ],
+            [
+                (
+                    "foobar".to_string(),
+                    FeatureData::NullableInt(vec![Some(0), None, Some(2)]),
+                ),
+                (
+                    "strings".to_string(),
+                    FeatureData::Text(vec!["a".to_string(), "b".to_string(), "c".to_string()]),
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            CacheHint::default(),
         )
-        .await;
+        .unwrap();
+
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockFeatureCollectionSource::multiple(vec![
+                    collection.clone(),
+                    collection.clone(),
+                    collection.clone(),
+                ])
+                .boxed(),
+            ),
+        };
+
+        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+            BoundingBox2D::new_upper_left_lower_right((-180., 90.).into(), (180., -90.).into())
+                .unwrap(),
+            TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+            SpatialResolution::one(),
+            ColumnSelection::all(),
+        );
+
+        let handler = VectorWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(
+            workflow.operator.get_vector().unwrap(),
+            query_rectangle,
+            ctx.execution_context().unwrap(),
+            ctx.query_context().unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let (input_sender, input_receiver) = futures::channel::mpsc::unbounded();
+
+        let mut websocket_context = WebsocketContext::create(handler, input_receiver);
+
+        // 3 batches
+        for _ in 0..3 {
+            send_next(&input_sender);
+
+            let bytes = websocket_context.next().await.unwrap().unwrap();
+
+            let bytes = &bytes[4..]; // the first four bytes are WS op bytes
+
+            let record_batches = arrow_ipc_file_to_record_batches(bytes).unwrap();
+            assert_eq!(record_batches.len(), 1);
+            let record_batch = record_batches.first().unwrap();
+            let schema = record_batch.schema();
+
+            assert_eq!(schema.metadata()["spatialReference"], "EPSG:4326");
+
+            assert_eq!(record_batch.column_by_name("foobar").unwrap().len(), 3);
+            assert_eq!(record_batch.column_by_name("strings").unwrap().len(), 3);
+        }
+
+        send_next(&input_sender);
+        assert_eq!(websocket_context.next().await.unwrap().unwrap().len(), 4); // close frame
+
+        send_next(&input_sender);
+        assert!(websocket_context.next().await.is_none());
     }
 }

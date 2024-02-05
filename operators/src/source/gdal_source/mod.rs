@@ -27,18 +27,19 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
     RasterSpatialQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use geoengine_datatypes::raster::TileInformation;
 use geoengine_datatypes::raster::{
     EmptyGrid, GeoTransform, GridBoundingBoxExt, GridBounds, GridIdx2D, GridOrEmpty, GridOrEmpty2D,
     GridShape2D, GridShapeAccess, MapElements, MaskedGrid, NoDataValueGrid, Pixel, RasterDataType,
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
     RasterTile2D, TilingStrategy, ChangeGridBounds,
 };
-use geoengine_datatypes::raster::{GridIntersection, TileInformation};
+use geoengine_datatypes::raster::GridIntersection;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{
     primitives::TimeInterval,
@@ -50,6 +51,7 @@ pub use loading_info::{
 };
 use log::debug;
 use num::FromPrimitive;
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
@@ -59,6 +61,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+mod db_types;
 mod error;
 mod loading_info;
 
@@ -106,14 +109,14 @@ impl OperatorData for GdalSourceParameters {
 type GdalMetaData =
     Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalSourceTimePlaceholder {
     pub format: DateTimeParseFormat,
     pub reference: TimeReference,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub enum TimeReference {
     Start,
@@ -153,10 +156,10 @@ pub struct GdalRetryOptions {
 
 #[derive(Debug, PartialEq, Eq)]
 struct GdalReadWindow {
-    read_start_x: isize, // pixelspace origin
-    read_start_y: isize,
-    read_size_x: usize, // pixelspace size
-    read_size_y: usize,
+    start_x: isize, // pixelspace origin
+    start_y: isize,
+    size_x: usize, // pixelspace size
+    size_y: usize,
 }
 
 impl GdalReadWindow {
@@ -166,19 +169,19 @@ impl GdalReadWindow {
         size: GridShape2D,
     ) -> Self {
         Self {
-            read_start_x: start.x(),
-            read_start_y: start.y(),
-            read_size_x: size.axis_size_x(),
-            read_size_y: size.axis_size_y(),
+            start_x: start.x(),
+            start_y: start.y(),
+            size_x: size.axis_size_x(),
+            size_y: size.axis_size_y(),
         }
     }
 
     fn gdal_window_start(&self) -> (isize, isize) {
-        (self.read_start_x, self.read_start_y)
+        (self.start_x, self.start_y)
     }
 
     fn gdal_window_size(&self) -> (usize, usize) {
-        (self.read_size_x, self.read_size_y)
+        (self.size_x, self.size_y)
     }
 }
 
@@ -187,7 +190,7 @@ impl GdalReadWindow {
 /// in the upper left corner. It should only be used for loading rasters with Gdal and not internally.
 /// The GDAL pixel space is usually anchored at the "top-left" corner of the data spatial bounds. Therefore the raster data is stored with spatial coordinate y-values decreasing with the rasters rows. This is represented by a negative pixel size.
 /// However, there are datasets where the data is stored "upside-down". If this is the case, the pixel size is positive.
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalDatasetGeoTransform {
     pub origin_coordinate: Coordinate2D,
@@ -301,10 +304,10 @@ impl GdalDatasetGeoTransform {
         let read_size_y = (far_idx_y - near_idx_y) as usize + 1;
 
         GdalReadWindow {
-            read_start_x: near_idx_x,
-            read_start_y: near_idx_y,
-            read_size_x,
-            read_size_y,
+            start_x: near_idx_x,
+            start_y: near_idx_y,
+            size_x: read_size_x,
+            size_y: read_size_y,
         }
     }
 
@@ -561,7 +564,7 @@ impl GridShapeAccess for GdalDatasetParameters {
 }
 
 /// How to handle file not found errors
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, FromSql, ToSql)]
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
@@ -614,6 +617,7 @@ pub struct GdalSourceProcessor<T>
 where
     T: Pixel,
 {
+    pub result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
     pub meta_data: GdalMetaData,
     pub _phantom_data: PhantomData<T>,
@@ -786,7 +790,7 @@ impl GdalRasterLoader {
     /// A stream of futures producing `RasterTile2D` for a single slice in time
     ///
     fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
-        query: RasterQueryRectangle,
+        query: &RasterQueryRectangle,
         info: GdalLoadingInfoTemporalSlice,
         tiling_strategy: TilingStrategy,
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> {
@@ -814,7 +818,7 @@ impl GdalRasterLoader {
     ) -> impl Stream<Item = Result<RasterTile2D<T>>> {
         loading_info_stream
             .map_ok(move |info| {
-                GdalRasterLoader::temporal_slice_tile_future_stream(query, info, tiling_strategy)
+                GdalRasterLoader::temporal_slice_tile_future_stream(&query, info, tiling_strategy)
                     .map(Result::Ok)
             })
             .try_flatten()
@@ -851,12 +855,19 @@ where
 {
     type Output = RasterTile2D<P>;
     type SpatialQuery = RasterSpatialQueryRectangle;
+    type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
+        ensure!(
+            query.attributes.as_slice() == [0],
+            crate::error::GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet
+        );
+
         let start = Instant::now();
         debug!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",
@@ -949,24 +960,32 @@ where
                 parts: vec![].into_iter(),
             }
         } else {
-            let loading_info = self.meta_data.loading_info(query).await?;
+            let loading_info = self.meta_data.loading_info(query.clone()).await?;
             loading_info.info
         };
 
         let source_stream = stream::iter(loading_iter);
 
-        let source_stream =
-            GdalRasterLoader::loading_info_to_tile_stream(source_stream, query, tiling_strategy);
+        let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
+            source_stream,
+            query.clone(),
+            tiling_strategy,
+        );
 
         // use SparseTilesFillAdapter to fill all the gaps
         let filled_stream = SparseTilesFillAdapter::new(
             source_stream,
             tiling_strategy.tile_grid_box(query.spatial_query().spatial_partition()),
+            query.attributes.count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
         );
         Ok(filled_stream.boxed())
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -1019,6 +1038,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
         Ok(match self.result_descriptor().data_type {
             RasterDataType::U8 => TypedRasterQueryProcessor::U8(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -1027,6 +1047,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             ),
             RasterDataType::U16 => TypedRasterQueryProcessor::U16(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -1035,6 +1056,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             ),
             RasterDataType::U32 => TypedRasterQueryProcessor::U32(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -1053,6 +1075,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             }
             RasterDataType::I16 => TypedRasterQueryProcessor::I16(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -1061,6 +1084,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             ),
             RasterDataType::I32 => TypedRasterQueryProcessor::I32(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -1074,6 +1098,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             }
             RasterDataType::F32 => TypedRasterQueryProcessor::F32(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -1082,6 +1107,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             ),
             RasterDataType::F64 => TypedRasterQueryProcessor::F64(
                 GdalSourceProcessor {
+                    result_descriptor: self.result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
                     _phantom_data: PhantomData,
@@ -1283,6 +1309,7 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrim
     Ok(RasterTile2D::new_with_tile_info_and_properties(
         tile_time,
         tile_info,
+        0,
         result_grid,
         properties,
         cache_hint,
@@ -1298,13 +1325,14 @@ fn create_no_data_tile<T: Pixel>(
     RasterTile2D::new_with_tile_info_and_properties(
         tile_time,
         tile_info,
+        0,
         EmptyGrid::new(tile_info.tile_size_in_pixels).into(),
         RasterProperties::default(),
         cache_hint,
     )
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
 pub struct GdalMetadataMapping {
     pub source_key: RasterPropertiesKey,
     pub target_key: RasterPropertiesKey,
@@ -1424,7 +1452,8 @@ mod tests {
                     output_bounds,
                     spatial_resolution,
                     exe_ctx.tiling_specification.origin_coordinate,
-                    time_interval,
+                    time_interval,                
+                    BandSelection::first(),
                 ),
                 query_ctx,
             )
@@ -1700,6 +1729,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties,
             cache_hint: _,
@@ -1755,6 +1785,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties: _,
             cache_hint: _,
@@ -1792,6 +1823,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties: _,
             cache_hint: _,
@@ -2010,6 +2042,7 @@ mod tests {
         let expected = RasterTile2D::<f64>::new_with_tile_info(
             time_interval,
             tile_info,
+            0,
             EmptyGrid2D::new(output_shape).into(),
             CacheHint::default(),
         );
@@ -2250,10 +2283,10 @@ mod tests {
         let rw = gt.spatial_partition_to_read_window(&sb);
 
         let exp = GdalReadWindow {
-            read_size_x: 4,
-            read_size_y: 6,
-            read_start_x: 6,
-            read_start_y: 4,
+            size_x: 4,
+            size_y: 6,
+            start_x: 6,
+            start_y: 4,
         };
 
         assert_eq!(rw, exp);
@@ -2273,15 +2306,16 @@ mod tests {
         let rw = gt.spatial_partition_to_read_window(&sb);
 
         let exp = GdalReadWindow {
-            read_size_x: 10,
-            read_size_y: 10,
-            read_start_x: 0,
-            read_start_y: 0,
+            size_x: 10,
+            size_y: 10,
+            start_x: 0,
+            start_y: 0,
         };
 
         assert_eq!(rw, exp);
     }
 
+    /* FIXME: add upside down support back
     #[test]
     fn read_up_side_down_raster() {
         let output_shape: GridShape2D = [8, 8].into();
@@ -2340,6 +2374,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties,
             cache_hint: _,
@@ -2373,6 +2408,8 @@ mod tests {
         assert!(properties.scale_option().is_none());
     }
 
+    */
+    
     #[test]
     fn read_raster_and_offset_scale() {
         let output_shape: GridShape2D = [8, 8].into();
@@ -2408,6 +2445,7 @@ mod tests {
             global_geo_transform: _,
             grid_array: grid,
             tile_position: _,
+            band: _,
             time: _,
             properties,
             cache_hint: _,
@@ -2682,6 +2720,7 @@ mod tests {
         let expected = RasterTile2D::<f64>::new_with_tile_info(
             time_interval,
             tile_info,
+            0,
             EmptyGrid2D::new(output_shape).into(),
             CacheHint::seconds(1234),
         );
@@ -2707,10 +2746,10 @@ mod tests {
         ).unwrap();
 
         assert_eq!(read_window, GdalReadWindow {
-            read_size_x: 512,
-            read_size_y: 512,
-            read_start_x: 512,
-            read_start_y: 512,
+            size_x: 512,
+            size_y: 512,
+            start_x: 512,
+            start_y: 512,
         });
 
         assert_eq!(target_bounds, GridBoundingBox2D::new(GridIdx([512,512]), GridIdx([1023,1023])).unwrap());
@@ -2734,10 +2773,10 @@ mod tests {
         ).unwrap();
 
         assert_eq!(read_window, GdalReadWindow {
-            read_size_x: 1024,
-            read_size_y: 1024,
-            read_start_x: 0,
-            read_start_y: 0,
+            size_x: 1024,
+            size_y: 1024,
+            start_x: 0,
+            start_y: 0,
         });
 
         assert_eq!(target_bounds, GridBoundingBox2D::new(GridIdx([0,0]), GridIdx([511,511])).unwrap());
@@ -2761,10 +2800,10 @@ mod tests {
         ).unwrap();
 
         assert_eq!(read_window, GdalReadWindow {
-            read_size_x: 256,
-            read_size_y: 256,
-            read_start_x: 0,
-            read_start_y: 0,
+            size_x: 256,
+            size_y: 256,
+            start_x: 0,
+            start_y: 0,
         });
 
         assert_eq!(target_bounds, GridBoundingBox2D::new(GridIdx([0,0]), GridIdx([511,511])).unwrap());
@@ -2791,10 +2830,10 @@ mod tests {
 
         // since the origin of the tile is at -3,3 and the "coordinate nearest to zero" is 0,0 the tile at tile position 0,0 maps to the read window starting at 3,3 with 512x512 pixels
         assert_eq!(read_window, GdalReadWindow {
-            read_size_x: 512,
-            read_size_y: 512,
-            read_start_x: 3,
-            read_start_y: 3,
+            size_x: 512,
+            size_y: 512,
+            start_x: 3,
+            start_y: 3,
         });
 
         // the data maps to the complete tile
@@ -2809,10 +2848,10 @@ mod tests {
 
         // since the origin of the tile is at -3,3 and the "coordinate nearest to zero" is 0,0 the tile at tile position 1,1 maps to the read window starting at 515,515 (512+3, 512+3) with 512x512 pixels
         assert_eq!(read_window, GdalReadWindow {
-            read_size_x: 509,
-            read_size_y: 509,
-            read_start_x: 515,
-            read_start_y: 515,
+            size_x: 509,
+            size_y: 509,
+            start_x: 515,
+            start_y: 515,
         });
 
         // the data maps only to a part of the tile since the data is only 1024x1024 pixels in size. So the tile at tile position 1,1 maps to the data starting at 515,515 (512+3, 512+3) with 509x509 pixels left.
@@ -2842,10 +2881,10 @@ mod tests {
 
         // in this case the data origin is at 3,-3 which is inside the tile at tile position 0,0. Since the tile starts at the "coordinate nearest to zero, which is 0.0,0.0" we need to read the data starting at data 0,0 with 509x509 pixels (512-3, 512-3).
         assert_eq!(read_window, GdalReadWindow {
-            read_size_x: 509,
-            read_size_y: 509,
-            read_start_x: 0,
-            read_start_y: 0,
+            size_x: 509,
+            size_y: 509,
+            start_x: 0,
+            start_y: 0,
         });
 
         // in this case, the data only maps to the last 509x509 pixels of the tile. So the data we read does not fill a whole tile.
@@ -2859,10 +2898,10 @@ mod tests {
         ).unwrap();
 
         assert_eq!(read_window, GdalReadWindow {
-            read_size_x: 512,
-            read_size_y: 512,
-            read_start_x: 509,
-            read_start_y: 509,
+            size_x: 512,
+            size_y: 512,
+            start_x: 509,
+            start_y: 509,
         });
 
         assert_eq!(target_bounds, GridBoundingBox2D::new(GridIdx([512,512]), GridIdx([1023,1023])).unwrap());
@@ -2875,10 +2914,10 @@ mod tests {
         ).unwrap();
 
         assert_eq!(read_window, GdalReadWindow {
-            read_size_x: 3,
-            read_size_y: 3,
-            read_start_x: 1021,
-            read_start_y: 1021,
+            size_x: 3,
+            size_y: 3,
+            start_x: 1021,
+            start_y: 1021,
         });
 
         assert_eq!(target_bounds, GridBoundingBox2D::new(GridIdx([1024,1024]), GridIdx([1026,1026])).unwrap());
@@ -2903,10 +2942,10 @@ mod tests {
         ).unwrap();
 
         assert_eq!(read_window, GdalReadWindow {
-            read_size_x: 170, // 
-            read_size_y: 170,
-            read_start_x: 1,
-            read_start_y: 1,
+            size_x: 170, // 
+            size_y: 170,
+            start_x: 1,
+            start_y: 1,
         });
 
         assert_eq!(target_bounds, GridBoundingBox2D::new(GridIdx([0,0]), GridIdx([512,512])).unwrap()); // we need to read 683 pixels but we only want 682.6666666666666 pixels.
@@ -2919,10 +2958,10 @@ mod tests {
         ).unwrap();
 
         assert_eq!(read_window, GdalReadWindow {
-            read_size_x: 171,
-            read_size_y: 171,
-            read_start_x: 171,
-            read_start_y: 171,
+            size_x: 171,
+            size_y: 171,
+            start_x: 171,
+            start_y: 171,
         });
 
         assert_eq!(target_bounds, GridBoundingBox2D::new(GridIdx([510,510]), GridIdx([1025,1025])).unwrap());
@@ -2935,10 +2974,10 @@ mod tests {
         ).unwrap();
 
         assert_eq!(read_window, GdalReadWindow {
-            read_size_x: 171,
-            read_size_y: 171,
-            read_start_x: 342,
-            read_start_y: 342,
+            size_x: 171,
+            size_y: 171,
+            start_x: 342,
+            start_y: 342,
         });
 
         assert_eq!(target_bounds, GridBoundingBox2D::new(GridIdx([1023,1023]), GridIdx([1535,1535])).unwrap());

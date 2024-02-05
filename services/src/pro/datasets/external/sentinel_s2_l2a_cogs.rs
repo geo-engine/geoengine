@@ -1,4 +1,3 @@
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId, NamedData};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::{self, Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -12,20 +11,21 @@ use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, S
 use crate::util::operators::source_operator_from_dataset;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-use geoengine_datatypes::operations::image::{DefaultColors, RgbaColor};
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
+use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, DateTime, Duration, Measurement, RasterQueryRectangle,
-    SpatialPartitioned, TimeInstance, TimeInterval, VectorQueryRectangle,
+    AxisAlignedRectangle, DateTime, Duration, RasterQueryRectangle, SpatialPartitioned,
+    TimeInstance, TimeInterval, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, OperatorName, RasterOperator, RasterResultDescriptor,
-    TypedOperator, VectorResultDescriptor,
+    MetaData, MetaDataProvider, OperatorName, RasterBandDescriptors, RasterOperator,
+    RasterResultDescriptor, TypedOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -118,7 +118,7 @@ impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
         self.name.clone()
     }
 
-    fn id(&self) -> DataProviderId {
+    fn id(&self) -> geoengine_datatypes::dataset::DataProviderId {
         self.id
     }
 }
@@ -208,7 +208,8 @@ impl SentinelS2L2aCogsDataProvider {
                         },
                         symbology: Some(Symbology::Raster(RasterSymbology {
                             opacity: 1.0,
-                            colorizer:
+                            raster_colorizer: RasterColorizer::SingleBand {
+                                band: 0, band_colorizer:
                                 geoengine_datatypes::operations::image::Colorizer::linear_gradient(
                                     vec![
                                         (0.0, RgbaColor::white())
@@ -219,14 +220,11 @@ impl SentinelS2L2aCogsDataProvider {
                                             .expect("valid breakpoint"),
                                     ],
                                     RgbaColor::transparent(),
-                                    DefaultColors::OverUnder {
-                                        over_color: RgbaColor::white(),
-                                        under_color: RgbaColor::black(),
-                                    },
+                                    RgbaColor::white(),
+                                    RgbaColor::black(),
                                 )
-                                .expect("valid colorizer")
-                                .into(),
-                        })), // TODO: individual colorizer per band
+                                .expect("valid colorizer"),
+                        }})), // TODO: individual colorizer per band
                         properties: vec![],
                         metadata: HashMap::new(),
                     };
@@ -323,8 +321,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                                 namespace: None,
                                 provider: Some(self.id.to_string()),
                                 name: id.to_string(),
-                            }
-                            .into(),
+                            },
                         },
                     }
                     .boxed(),
@@ -351,7 +348,7 @@ impl SentinelS2L2aCogsMetaData {
     async fn create_loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
         // for reference: https://stacspec.org/STAC-ext-api.html#operation/getSearchSTAC
         debug!("create_loading_info with: {:?}", &query);
-        let request_params = self.request_params(query)?;
+        let request_params = self.request_params(&query)?;
 
         if request_params.is_none() {
             log::debug!("Request params are empty -> returning empty loading info");
@@ -509,7 +506,10 @@ impl SentinelS2L2aCogsMetaData {
         })
     }
 
-    fn request_params(&self, query: RasterQueryRectangle) -> Result<Option<Vec<(String, String)>>> {
+    fn request_params(
+        &self,
+        query: &RasterQueryRectangle,
+    ) -> Result<Option<Vec<(String, String)>>> {
         let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
 
         // request all features in zone in order to be able to determine the temporal validity of individual tile
@@ -657,10 +657,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                 self.zone.epsg,
             )
             .into(),
-            measurement: Measurement::Unitless,
             time: None,
-            bbox: None,
-            resolution: None, // TODO: determine from STAC or data or hardcode it
+            geo_transform: GeoTransform::new((0., 0.).into(), 1., -1.),
+            pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 0, 0).unwrap(), // FIXME: derive from loading info
+            bands: RasterBandDescriptors::new_single_band(),
         })
     }
 
@@ -682,7 +682,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let id: DataId = id.clone().into();
+        let id: DataId = id.clone();
 
         let dataset = self
             .datasets
@@ -747,19 +747,19 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 mod tests {
     use super::*;
     use crate::{
-        api::model::datatypes::ExternalDataId,
         contexts::{ApplicationContext, SessionContext},
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
         pro::{
-            layers::ProLayerProviderDb,
-            util::tests::{admin_login, with_pro_temp_context},
+            contexts::ProPostgresContext, ge_context, layers::ProLayerProviderDb,
+            util::tests::admin_login,
         },
         test_data,
     };
     use futures::StreamExt;
     use geoengine_datatypes::{
         dataset::DatasetId,
-        primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
+        dataset::ExternalDataId,
+        primitives::{BandSelection, Coordinate2D, SpatialPartition2D, SpatialResolution},
         util::{gdal::hide_gdal_errors, test::TestDefault, Identifier},
     };
     use geoengine_operators::{
@@ -776,6 +776,7 @@ mod tests {
         Expectation, Server,
     };
     use std::{fs::File, io::BufReader, str::FromStr};
+    use tokio_postgres::NoTls;
 
     #[tokio::test]
     async fn loading_info() -> Result<()> {
@@ -810,6 +811,7 @@ mod tests {
                 .unwrap(),
                 SpatialResolution::one(),
                 TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
+                BandSelection::first(),
             ))
             .await
             .unwrap();
@@ -892,12 +894,12 @@ mod tests {
                 layer_id: LayerId("UTM32N:B01".to_owned()),
             }
             .into(),
-            name.clone().into(),
+            name.clone(),
             meta,
         );
 
         let op = GdalSource {
-            params: GdalSourceParameters { data: name.into() },
+            params: GdalSourceParameters { data: name },
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe)
@@ -915,6 +917,7 @@ mod tests {
             sr,
             exe.tiling_specification.origin_coordinate,
             TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
+            BandSelection::first(),
         );
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
@@ -1185,6 +1188,7 @@ mod tests {
             SpatialResolution::new_unchecked(10., 10.),
             Coordinate2D::new(0., 0.), // FIXME: this is the default tiling strategy origin
             TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44)).unwrap(),
+            BandSelection::first(),
         );
 
         let loading_info = meta.loading_info(query).await.unwrap();
@@ -1251,16 +1255,16 @@ mod tests {
         };
         execution_context.add_meta_data(
             id.clone(),
-            name.clone().into(),
+            name.clone(),
             Box::new(GdalMetaDataStatic {
                 time: None,
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U16,
                     spatial_reference: SpatialReference::from_str("EPSG:32736").unwrap().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform: GeoTransform::new((0., 0.).into(), 1., -1.), // FIXME: find out correct geo transform
+                    pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 0, 0).unwrap(), // FIXME: find out the correct pixel bounds
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
                 params,
                 cache_ttl: CacheTtlSeconds::default(),
@@ -1268,7 +1272,7 @@ mod tests {
         );
 
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { data: name.into() },
+            params: GdalSourceParameters { data: name },
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1291,6 +1295,7 @@ mod tests {
                     SpatialResolution::new(10., 10.).unwrap(),
                     execution_context.tiling_specification.origin_coordinate,
                     TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+                    BandSelection::first(),
                 ),
                 &query_context,
             )
@@ -1398,46 +1403,43 @@ mod tests {
         assert_eq!(uts, expected_timestamps);
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_adds_the_data_provider_to_the_db() {
-        with_pro_temp_context(|app_ctx, _| async move {
-            let session = admin_login(&app_ctx).await;
-            let ctx = app_ctx.session_context(session.clone());
+    #[ge_context::test]
+    async fn it_adds_the_data_provider_to_the_db(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-            let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
-                File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json")).unwrap(),
+        let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
+            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json")).unwrap(),
+        ))
+        .unwrap();
+
+        ctx.db().add_pro_layer_provider(def.into()).await.unwrap();
+
+        ctx.db()
+            .load_layer_provider(DataProviderId::from_u128(
+                0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5,
             ))
+            .await
             .unwrap();
 
-            ctx.db().add_pro_layer_provider(def.into()).await.unwrap();
+        let providers = ctx
+            .db()
+            .list_layer_providers(LayerProviderListingOptions {
+                offset: 0,
+                limit: 2,
+            })
+            .await
+            .unwrap();
 
-            ctx.db()
-                .load_layer_provider(DataProviderId::from_u128(
-                    0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5,
-                ))
-                .await
-                .unwrap();
+        assert_eq!(providers.len(), 1);
 
-            let providers = ctx
-                .db()
-                .list_layer_providers(LayerProviderListingOptions {
-                    offset: 0,
-                    limit: 2,
-                })
-                .await
-                .unwrap();
-
-            assert_eq!(providers.len(), 1);
-
-            assert_eq!(
-                providers[0],
-                LayerProviderListing {
-                    id: DataProviderId::from_u128(0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5),
-                    name: "Element 84 AWS STAC".to_owned(),
-                    description: "SentinelS2L2ACogsProviderDefinition".to_owned(),
-                }
-            );
-        })
-        .await;
+        assert_eq!(
+            providers[0],
+            LayerProviderListing {
+                id: DataProviderId::from_u128(0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5),
+                name: "Element 84 AWS STAC".to_owned(),
+                description: "SentinelS2L2ACogsProviderDefinition".to_owned(),
+            }
+        );
     }
 }

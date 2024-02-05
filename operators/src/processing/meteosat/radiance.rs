@@ -2,22 +2,24 @@ use std::sync::Arc;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
-    ClassificationMeasurement, ContinuousMeasurement, Measurement, RasterQueryRectangle,
-    RasterSpatialQueryRectangle,
+    BandSelection, ClassificationMeasurement, ContinuousMeasurement, Measurement,
+    RasterQueryRectangle, RasterSpatialQueryRectangle,
 };
 use geoengine_datatypes::raster::{
     MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 // Output type is always f32
 type PixelOut = f32;
@@ -69,7 +71,15 @@ impl RasterOperator for Radiance {
 
         let in_desc = input.result_descriptor();
 
-        match &in_desc.measurement {
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            in_desc.bands.len() == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: Radiance::TYPE_NAME
+            }
+        );
+
+        match &in_desc.bands[0].measurement {
             Measurement::Continuous(ContinuousMeasurement {
                 measurement: m,
                 unit: _,
@@ -104,13 +114,17 @@ impl RasterOperator for Radiance {
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
-            measurement: Measurement::Continuous(ContinuousMeasurement {
-                measurement: "radiance".into(),
-                unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
-            }),
             time: in_desc.time,
             geo_transform: in_desc.geo_transform,
             pixel_bounds: in_desc.pixel_bounds,
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                in_desc.bands[0].name.clone(),
+                Measurement::Continuous(ContinuousMeasurement {
+                    measurement: "radiance".into(),
+                    unit: Some("W·m^(-2)·sr^(-1)·cm^(-1)".into()),
+                }),
+            )])
+            .unwrap(),
         };
 
         let initialized_operator = InitializedRadiance {
@@ -134,36 +148,36 @@ impl InitializedRasterOperator for InitializedRadiance {
         let q = self.source.query_processor()?;
 
         Ok(match q {
-            TypedRasterQueryProcessor::U8(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::U16(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::U32(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::U64(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::I8(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::I16(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::I32(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::I64(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::F32(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
-            TypedRasterQueryProcessor::F64(p) => {
-                QueryProcessorOut(Box::new(RadianceProcessor::new(p)))
-            }
+            TypedRasterQueryProcessor::U8(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::U16(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::U32(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::U64(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::I8(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::I16(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::I32(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::I64(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::F32(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
+            TypedRasterQueryProcessor::F64(p) => QueryProcessorOut(Box::new(
+                RadianceProcessor::new(p, self.result_descriptor.clone()),
+            )),
         })
     }
 
@@ -177,6 +191,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     offset_key: RasterPropertiesKey,
     slope_key: RasterPropertiesKey,
 }
@@ -186,9 +201,10 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
-    pub fn new(source: Q) -> Self {
+    pub fn new(source: Q, result_descriptor: RasterResultDescriptor) -> Self {
         Self {
             source,
+            result_descriptor,
             offset_key: new_offset_key(),
             slope_key: new_slope_key(),
         }
@@ -221,11 +237,18 @@ where
 #[async_trait]
 impl<Q, P> QueryProcessor for RadianceProcessor<Q, P>
 where
-    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialQuery = RasterSpatialQueryRectangle>,
+    Q: QueryProcessor<
+        Output = RasterTile2D<P>,
+        SpatialQuery = RasterSpatialQueryRectangle,
+        Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
+    >,
     P: Pixel,
 {
     type Output = RasterTile2D<PixelOut>;
     type SpatialQuery = RasterSpatialQueryRectangle;
+    type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -235,6 +258,10 @@ where
         let src = self.source.query(query, ctx).await?;
         let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
     }
 }
 

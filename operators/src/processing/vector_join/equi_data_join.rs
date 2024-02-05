@@ -11,13 +11,14 @@ use geoengine_datatypes::collections::{
     GeometryRandomAccess,
 };
 use geoengine_datatypes::primitives::{
-    FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle, VectorSpatialQueryRectangle,
+    ColumnSelection, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
+    VectorSpatialQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::adapters::FeatureCollectionChunkMerger;
-use crate::engine::QueryProcessor;
 use crate::engine::{QueryContext, VectorQueryProcessor};
+use crate::engine::{QueryProcessor, VectorResultDescriptor};
 use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -25,6 +26,7 @@ use futures::TryStreamExt;
 
 /// Implements an inner equi-join between a `GeoFeatureCollection` stream and a `DataCollection` stream.
 pub struct EquiGeoToDataJoinProcessor<G> {
+    result_descriptor: VectorResultDescriptor,
     left_processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     right_processor: Box<dyn VectorQueryProcessor<VectorType = DataCollection>>,
     left_column: Arc<String>,
@@ -40,6 +42,7 @@ where
     FeatureCollectionRowBuilder<G>: GeoFeatureCollectionRowBuilder<G>,
 {
     pub fn new(
+        result_descriptor: VectorResultDescriptor,
         left_processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
         right_processor: Box<dyn VectorQueryProcessor<VectorType = DataCollection>>,
         left_column: String,
@@ -47,6 +50,7 @@ where
         right_translation_table: HashMap<String, String>,
     ) -> Self {
         Self {
+            result_descriptor,
             left_processor,
             right_processor,
             left_column: Arc::new(left_column),
@@ -353,6 +357,8 @@ where
 {
     type Output = FeatureCollection<G>;
     type SpatialQuery = VectorSpatialQueryRectangle;
+    type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -361,29 +367,32 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let result_stream = self
             .left_processor
-            .query(query, ctx)
+            .query(query.clone(), ctx)
             .await?
-            .and_then(move |left_collection| async move {
-                // This implementation is a nested-loop join
-                let left_collection = Arc::new(left_collection);
+            .and_then(move |left_collection| {
+                let query = query.clone();
+                async move {
+                    // This implementation is a nested-loop join
+                    let left_collection = Arc::new(left_collection);
 
-                let data_query = self.right_processor.query(query, ctx).await?;
+                    let data_query = self.right_processor.query(query, ctx).await?;
 
-                let out = data_query
-                    .flat_map(move |right_collection| {
-                        match right_collection.and_then(|right_collection| {
-                            self.join(
-                                left_collection.clone(),
-                                right_collection,
-                                ctx.chunk_byte_size().into(),
-                            )
-                        }) {
-                            Ok(batch_iter) => stream::iter(batch_iter).boxed(),
-                            Err(e) => stream::once(async { Err(e) }).boxed(),
-                        }
-                    })
-                    .boxed();
-                Ok(out)
+                    let out = data_query
+                        .flat_map(move |right_collection| {
+                            match right_collection.and_then(|right_collection| {
+                                self.join(
+                                    left_collection.clone(),
+                                    right_collection,
+                                    ctx.chunk_byte_size().into(),
+                                )
+                            }) {
+                                Ok(batch_iter) => stream::iter(batch_iter).boxed(),
+                                Err(e) => stream::once(async { Err(e) }).boxed(),
+                            }
+                        })
+                        .boxed();
+                    Ok(out)
+                }
             })
             .try_flatten();
 
@@ -392,17 +401,24 @@ where
                 .boxed(),
         )
     }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use futures::executor::block_on_stream;
 
-    use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
+    use geoengine_datatypes::collections::{
+        ChunksEqualIgnoringCacheHint, MultiPointCollection, VectorDataType,
+    };
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
     use crate::engine::{
@@ -440,11 +456,25 @@ mod tests {
             BoundingBox2D::new((f64::MIN, f64::MIN).into(), (f64::MAX, f64::MAX).into()).unwrap(),
             TimeInterval::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let processor = EquiGeoToDataJoinProcessor::new(
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: left
+                    .result_descriptor()
+                    .columns
+                    .clone()
+                    .into_iter()
+                    .chain(right.result_descriptor().columns.clone().into_iter())
+                    .collect(),
+                time: None,
+                bbox: None,
+            },
             left_processor,
             right_processor,
             left_join_column.to_string(),

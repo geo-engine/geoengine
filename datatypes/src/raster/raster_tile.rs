@@ -38,6 +38,8 @@ pub struct BaseTile<G> {
     /// The tile position is the position of the tile in the grid of tiles with origin at the origin of the global_geo_transform.
     /// This is NOT a pixel position inside the tile.
     pub tile_position: GridIdx2D,
+    // the band of the tile, relevant for multi-band raster
+    pub band: u32,
     /// The global geotransform to transform pixels into geographic coordinates
     pub global_geo_transform: GeoTransform,
     /// The pixels of the tile are stored as `Grid` or, in case they are all no-data as `NoDataGrid`.
@@ -149,6 +151,7 @@ impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I 
                 (Some(a), Some(b)) => {
                     if a.time != b.time
                         || a.tile_position != b.tile_position
+                        || a.band != b.band
                         || a.global_geo_transform != b.global_geo_transform
                         || a.grid_array != b.grid_array
                         || a.properties != b.properties
@@ -174,6 +177,7 @@ where
     pub fn new_with_tile_info(
         time: TimeInterval,
         tile_info: TileInformation,
+        band: u32,
         data: GridOrEmpty<D, T>,
         cache_hint: CacheHint,
     ) -> Self
@@ -198,6 +202,7 @@ where
         Self {
             time,
             tile_position: tile_info.global_tile_position,
+            band,
             global_geo_transform: tile_info.global_geo_transform,
             grid_array: data,
             properties: Default::default(),
@@ -209,6 +214,7 @@ where
     pub fn new_with_tile_info_and_properties(
         time: TimeInterval,
         tile_info: TileInformation,
+        band: u32,
         data: GridOrEmpty<D, T>,
         properties: RasterProperties,
         cache_hint: CacheHint,
@@ -231,6 +237,7 @@ where
         Self {
             time,
             tile_position: tile_info.global_tile_position,
+            band,
             global_geo_transform: tile_info.global_geo_transform,
             grid_array: data,
             properties,
@@ -242,6 +249,7 @@ where
     pub fn new(
         time: TimeInterval,
         tile_position: GridIdx2D,
+        band: u32,
         global_geo_transform: GeoTransform,
         data: GridOrEmpty<D, T>,
         cache_hint: CacheHint,
@@ -249,6 +257,7 @@ where
         Self {
             time,
             tile_position,
+            band,
             global_geo_transform,
             grid_array: data,
             properties: RasterProperties::default(),
@@ -260,6 +269,7 @@ where
     pub fn new_with_properties(
         time: TimeInterval,
         tile_position: GridIdx2D,
+        band: u32,
         global_geo_transform: GeoTransform,
         data: GridOrEmpty<D, T>,
         properties: RasterProperties,
@@ -268,6 +278,7 @@ where
         Self {
             time,
             tile_position,
+            band,
             global_geo_transform,
             grid_array: data,
             properties,
@@ -288,6 +299,7 @@ where
         Self {
             time,
             tile_position: [0, 0].into(),
+            band: 0,
             global_geo_transform,
             grid_array: data.into(),
             properties: RasterProperties::default(),
@@ -306,6 +318,7 @@ where
             grid_array: self.grid_array.into_materialized_masked_grid(),
             time: self.time,
             tile_position: self.tile_position,
+            band: 0,
             global_geo_transform: self.global_geo_transform,
             properties: self.properties,
             cache_hint: self.cache_hint.clone_with_current_datetime(),
@@ -411,6 +424,7 @@ where
             grid_array: mat_tile.grid_array.into(),
             global_geo_transform: mat_tile.global_geo_transform,
             tile_position: mat_tile.tile_position,
+            band: mat_tile.band,
             time: mat_tile.time,
             properties: mat_tile.properties,
             cache_hint: mat_tile.cache_hint,

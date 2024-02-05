@@ -9,7 +9,9 @@ use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::TryStreamExt;
-use geoengine_datatypes::primitives::{FeatureDataType, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{
+    ColumnSelection, FeatureDataType, PlotQueryRectangle, VectorQueryRectangle,
+};
 use geoengine_datatypes::{
     collections::FeatureCollection,
     plots::{Plot, PlotData},
@@ -164,10 +166,16 @@ where
 
     async fn plot_query<'a>(
         &'a self,
-        query: VectorQueryRectangle,
+        query: PlotQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let values = FeatureAttributeValues::<MAX_FEATURES>::default();
+
+        let query = VectorQueryRectangle::new(
+            query.spatial_query,
+            query.time_interval,
+            ColumnSelection::all(),
+        );
 
         let values = self
             .features
@@ -272,8 +280,8 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::PlotQueryRectangle;
+    use geoengine_datatypes::primitives::{CacheHint, PlotSeriesSelection};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
@@ -354,6 +362,7 @@ mod tests {
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::new(0.1, 0.1).unwrap(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -501,6 +510,7 @@ mod tests {
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::new(0.1, 0.1).unwrap(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -636,6 +646,7 @@ mod tests {
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::new(0.1, 0.1).unwrap(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )

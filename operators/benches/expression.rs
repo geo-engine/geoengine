@@ -1,7 +1,8 @@
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
     primitives::{
-        Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        BandSelection, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+        TimeInterval,
     },
     raster::{RasterDataType, RasterTile2D},
     util::test::TestDefault,
@@ -72,6 +73,7 @@ async fn main() {
         SpatialResolution::new(0.01, 0.01).unwrap(),
         execution_context.tiling_specification.origin_coordinate,
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        BandSelection::first(),
     );
 
     let mut times = NumberStatistics::default();
@@ -79,7 +81,7 @@ async fn main() {
     for _ in 0..RUNS {
         let (time, result) = time_it(|| async {
             let native_query = expression_processor
-                .raster_query(qrect, &query_context)
+                .raster_query(qrect.clone(), &query_context)
                 .await
                 .unwrap();
 

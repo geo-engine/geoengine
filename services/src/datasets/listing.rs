@@ -1,14 +1,13 @@
-use crate::api::model::datatypes::{DataId, DatasetId, DatasetName};
-use crate::api::model::operators::TypedResultDescriptor;
-use crate::datasets::storage::Dataset;
+use super::DatasetName;
+use crate::datasets::storage::{validate_tags, Dataset};
 use crate::error::Result;
 use crate::projects::Symbology;
 use crate::util::config::{get_config_element, DatasetService};
-
 use async_trait::async_trait;
+use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
-    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
+    MetaDataProvider, RasterResultDescriptor, TypedResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -16,7 +15,6 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use utoipa::{IntoParams, ToSchema};
-
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
@@ -34,6 +32,7 @@ pub struct DatasetListing {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, IntoParams, Validate)]
+#[into_params(parameter_in = Query)]
 pub struct DatasetListOptions {
     #[param(example = "Germany")]
     #[validate(length(min = 3, max = 256))]
@@ -45,6 +44,9 @@ pub struct DatasetListOptions {
     #[param(example = 2)]
     #[validate(custom = "validate_list_limit")]
     pub limit: u32,
+    #[param(example = "['tag1', 'tag2']")]
+    #[validate(custom = "validate_tags")]
+    pub tags: Option<Vec<String>>,
 }
 
 fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
@@ -81,7 +83,7 @@ pub trait DatasetProvider: Send
 
     async fn load_provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
 
-    async fn resolve_dataset_name_to_id(&self, name: &DatasetName) -> Result<DatasetId>;
+    async fn resolve_dataset_name_to_id(&self, name: &DatasetName) -> Result<Option<DatasetId>>;
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]

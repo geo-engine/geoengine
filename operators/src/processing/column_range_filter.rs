@@ -14,7 +14,8 @@ use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::primitives::{
-    FeatureDataType, FeatureDataValue, Geometry, VectorQueryRectangle, VectorSpatialQueryRectangle,
+    ColumnSelection, FeatureDataType, FeatureDataValue, Geometry, VectorQueryRectangle,
+    VectorSpatialQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
@@ -117,6 +118,8 @@ where
 {
     type Output = FeatureCollection<G>;
     type SpatialQuery = VectorSpatialQueryRectangle;
+    type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -173,6 +176,10 @@ where
             FeatureCollectionChunkMerger::new(filter_stream.fuse(), ctx.chunk_byte_size().into());
 
         Ok(merged_chunks_stream.boxed())
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        self.source.result_descriptor()
     }
 }
 
@@ -281,6 +288,7 @@ mod tests {
             BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             TimeInterval::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
 
         let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());

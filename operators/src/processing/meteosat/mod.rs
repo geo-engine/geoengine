@@ -38,12 +38,11 @@ mod test_util {
     use std::str::FromStr;
 
     use futures::StreamExt;
-    use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds, Coordinate2D};
-    use geoengine_datatypes::util::test::TestDefault;
-    use num_traits::AsPrimitive;
-
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
+    use geoengine_datatypes::hashmap;
+    use geoengine_datatypes::primitives::{
+        BandSelection, CacheHint, CacheTtlSeconds, Coordinate2D,
+    };
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
@@ -55,11 +54,13 @@ mod test_util {
         RasterPropertiesEntryType, RasterTile2D, TileInformation,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
+    use num_traits::AsPrimitive;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterOperator,
-        RasterResultDescriptor, WorkflowOperatorPath,
+        MockExecutionContext, MockQueryContext, QueryProcessor, RasterBandDescriptor,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::meteosat::{
@@ -134,6 +135,7 @@ mod test_util {
                 TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 0, 0)),
                 TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 15, 0)),
             ),
+            BandSelection::first(),
         )
     }
 
@@ -143,6 +145,7 @@ mod test_util {
             SpatialResolution::one(),
             (0., 0.).into(), // TODO: should be exe_ctx.tiling_specification.origin_coordinate
             Default::default(),
+            BandSelection::first(),
         )
     }
 
@@ -180,6 +183,7 @@ mod test_util {
                 tile_size_in_pixels: [3, 2].into(),
                 global_geo_transform: TestDefault::test_default(),
             },
+            0,
             raster,
             props,
             CacheHint::default(),
@@ -191,15 +195,19 @@ mod test_util {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: measurement.unwrap_or_else(|| {
-                        Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "raw".to_string(),
-                            unit: None,
-                        })
-                    }),
                     time: None,
                     geo_transform: GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
                     pixel_bounds: GridBoundingBox2D::new([-3, 0], [0, 2]).unwrap(),
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                        "band".into(),
+                        measurement.unwrap_or_else(|| {
+                            Measurement::Continuous(ContinuousMeasurement {
+                                measurement: "raw".to_string(),
+                                unit: None,
+                            })
+                        }),
+                    )])
+                    .unwrap(),
                 },
             },
         }
@@ -269,13 +277,17 @@ mod test_util {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81)
                     .into(),
-                measurement: Measurement::Continuous(ContinuousMeasurement {
-                    measurement: "raw".to_string(),
-                    unit: None,
-                }),
                 time: None,
                 geo_transform: GeoTransform::new(origin_coordinate, x_pixel_size, y_pixel_size),
                 pixel_bounds: GridShape2D::new_2d(3712, 3712).bounding_box(),
+                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                    "band".into(),
+                    Measurement::Continuous(ContinuousMeasurement {
+                        measurement: "raw".to_string(),
+                        unit: None,
+                    }),
+                )])
+                .unwrap(),
             },
             cache_ttl: CacheTtlSeconds::default(),
         };

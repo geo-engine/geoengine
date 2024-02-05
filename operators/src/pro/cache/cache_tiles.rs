@@ -493,6 +493,7 @@ where
             global_geo_transform: tile.global_geo_transform,
             properties: tile.properties,
             tile_position: tile.tile_position,
+            band: tile.band,
         }
     }
 
@@ -512,6 +513,7 @@ where
             global_geo_transform: self.global_geo_transform,
             properties: self.properties.clone(),
             tile_position: self.tile_position,
+            band: self.band,
         })
     }
 
@@ -610,12 +612,9 @@ impl TileCompression for Lz4FlexCompression {
 mod tests {
     use std::sync::Arc;
 
-    use geoengine_datatypes::{
-        primitives::{Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution},
-        raster::GeoTransform,
-        util::test::TestDefault,
+    use super::{
+        CompressedGridOrEmpty, CompressedMaskedGrid, CompressedRasterTile2D, LandingZoneQueryTiles,
     };
-
     use crate::pro::cache::{
         cache_tiles::CachedTiles,
         shared_cache::{
@@ -623,9 +622,13 @@ mod tests {
             RasterLandingQueryEntry,
         },
     };
-
-    use super::{
-        CompressedGridOrEmpty, CompressedMaskedGrid, CompressedRasterTile2D, LandingZoneQueryTiles,
+    use geoengine_datatypes::{
+        primitives::{
+            BandSelection, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
+            SpatialResolution,
+        },
+        raster::GeoTransform,
+        util::test::TestDefault,
     };
 
     fn create_test_tile() -> CompressedRasterTile2D<u8> {
@@ -642,6 +645,7 @@ mod tests {
             global_geo_transform: GeoTransform::test_default(),
             properties: Default::default(),
             tile_position: [0, 0].into(),
+            band: 0,
         }
     }
 
@@ -677,8 +681,10 @@ mod tests {
             SpatialResolution::zero_point_one(),
             Coordinate2D::new(0., 0.),
             Default::default(),
+            BandSelection::first(),
         );
-        let mut lq = RasterLandingQueryEntry::create_empty::<CompressedRasterTile2D<u8>>(query);
+        let mut lq =
+            RasterLandingQueryEntry::create_empty::<CompressedRasterTile2D<u8>>(query.clone());
         tile.move_element_into_landing_zone(lq.elements_mut())
             .unwrap();
         let mut cache_entry = CompressedRasterTile2D::<u8>::landing_zone_to_cache_entry(lq);
@@ -696,6 +702,7 @@ mod tests {
             SpatialResolution::one(),
             Coordinate2D::new(0., 0.),
             Default::default(),
+            BandSelection::first(),
         );
         assert!(tile.intersects_query(&query));
 
@@ -705,6 +712,7 @@ mod tests {
             SpatialResolution::one(),
             Coordinate2D::new(0., 0.),
             Default::default(),
+            BandSelection::first(),
         );
         assert!(tile.intersects_query(&query));
 
@@ -714,6 +722,7 @@ mod tests {
             SpatialResolution::one(),
             Coordinate2D::new(0., 0.),
             Default::default(),
+            BandSelection::first(),
         );
         assert!(!tile.intersects_query(&query));
     }
@@ -725,9 +734,10 @@ mod tests {
             SpatialResolution::one(),
             Coordinate2D::new(0., 0.),
             Default::default(),
+            BandSelection::first(),
         );
         let cache_query_entry = RasterCacheQueryEntry {
-            query: cache_entry_bounds,
+            query: cache_entry_bounds.clone(),
             elements: CachedTiles::U8(Arc::new(Vec::new())),
         };
 
@@ -741,6 +751,7 @@ mod tests {
             SpatialResolution::one(),
             Coordinate2D::new(0., 0.),
             Default::default(),
+            BandSelection::first(),
         );
         assert!(cache_query_entry.query().is_match(&query2));
 
@@ -750,6 +761,7 @@ mod tests {
             SpatialResolution::one(),
             Coordinate2D::new(0., 0.),
             Default::default(),
+            BandSelection::first(),
         );
         assert!(!cache_query_entry.query().is_match(&query3));
     }

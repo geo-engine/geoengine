@@ -1,12 +1,13 @@
 use futures::{future::BoxFuture, StreamExt};
 use geoengine_datatypes::{
-    operations::image::{Colorizer, DefaultColors, RgbaColor, ToPng},
+    operations::image::{Colorizer, RgbaColor, ToPng},
     primitives::{
         AxisAlignedRectangle, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInterval,
     },
     raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
+use snafu::ensure;
 use std::convert::TryInto;
 use tracing::{span, Level};
 
@@ -29,12 +30,20 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
 where
     T: Pixel,
 {
+    // TODO: support multi band colorizers
+    ensure!(
+        query_rect.attributes.count() == 1,
+        crate::error::OperationDoesNotSupportMultiBandQueriesYet {
+            operation: "raster_stream_to_png_bytes"
+        }
+    );
+
     let span = span!(Level::TRACE, "raster_stream_to_png_bytes");
     let _enter = span.enter();
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
-    let tile_stream = processor.query(query_rect, &query_ctx).await?;
+    let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
 
     // build png
     let dim = [height as usize, width as usize];
@@ -61,7 +70,7 @@ where
                     Ok(raster2d)
                 }
                 (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
-                    Ok(_) => Ok(raster2d),
+                    Ok(()) => Ok(raster2d),
                     Err(error) => Err(error.into()),
                 },
                 (Err(error), _) | (_, Err(error)) => Err(error),
@@ -97,10 +106,8 @@ pub fn default_colorizer_gradient<T: Pixel>() -> Result<Colorizer> {
                 .unwrap(),
         ],
         RgbaColor::transparent(),
-        DefaultColors::OverUnder {
-            over_color: RgbaColor::white(),
-            under_color: RgbaColor::black(),
-        },
+        RgbaColor::white(),
+        RgbaColor::black(),
     )
     .map_err(error::Error::from)
 }
@@ -109,14 +116,13 @@ pub fn default_colorizer_gradient<T: Pixel>() -> Result<Colorizer> {
 mod tests {
     use std::marker::PhantomData;
 
-    use geoengine_datatypes::{
-        primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
-        raster::TilingSpecification,
-        util::test::TestDefault,
-    };
-
     use crate::{
         engine::MockQueryContext, source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data,
+    };
+    use geoengine_datatypes::{
+        primitives::{BandSelection, Coordinate2D, SpatialPartition2D, SpatialResolution},
+        raster::TilingSpecification,
+        util::test::TestDefault,
     };
 
     use super::*;
@@ -127,9 +133,12 @@ mod tests {
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
+        let meta_data = create_ndvi_meta_data();
+
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: meta_data.result_descriptor.clone(),
             tiling_specification,
-            meta_data: Box::new(create_ndvi_meta_data()),
+            meta_data: Box::new(meta_data),
             _phantom_data: PhantomData,
         };
 
@@ -143,6 +152,7 @@ mod tests {
                 SpatialResolution::zero_point_one(),
                 Coordinate2D::new(0., 0.), // FIXME: check if this is correct here.
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
             ),
             ctx,
             600,

@@ -9,7 +9,7 @@ use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::{
-    SpatialBounded, VectorQueryRectangle, VectorSpatialQueryRectangle,
+    ColumnSelection, SpatialBounded, VectorQueryRectangle, VectorSpatialQueryRectangle,
 };
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
@@ -193,6 +193,7 @@ impl InitializedVectorOperator for InitializedCsvSource {
         Ok(TypedVectorQueryProcessor::MultiPoint(
             CsvSourceProcessor {
                 params: self.state.clone(),
+                result_descriptor: self.result_descriptor.clone(),
             }
             .boxed(),
         ))
@@ -397,12 +398,15 @@ impl Stream for CsvSourceStream {
 #[derive(Debug)]
 struct CsvSourceProcessor {
     params: CsvSourceParameters,
+    result_descriptor: VectorResultDescriptor,
 }
 
 #[async_trait]
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
     type SpatialQuery = VectorSpatialQueryRectangle;
+    type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -416,6 +420,10 @@ impl QueryProcessor for CsvSourceProcessor {
             10,
         )?
         .boxed())
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -572,12 +580,22 @@ x,y
             time: CsvTimeSpecification::None,
         };
 
-        let p = CsvSourceProcessor { params };
+        let p = CsvSourceProcessor {
+            params,
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: Default::default(),
+                time: None,
+                bbox: None,
+            },
+        };
 
         let query = VectorQueryRectangle::with_bounds_and_resolution(
             BoundingBox2D::new_unchecked(Coordinate2D::new(0., 0.), Coordinate2D::new(3., 3.)),
             TimeInterval::new_unchecked(0, 1),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new((10 * 8 * 2).into());
 

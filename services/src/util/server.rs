@@ -1,5 +1,5 @@
+use crate::api::model::responses::ErrorResponse;
 use crate::error::Result;
-use crate::handlers::ErrorResponse;
 use crate::util::config::get_config_element;
 
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
@@ -140,7 +140,7 @@ pub fn handle_json_payload_error(err: actix_web::error::JsonPayloadError) -> act
         .into(),
         JsonPayloadError::Deserialize(err) => ErrorResponse {
             error: "BodyDeserializeError".to_string(),
-            message: err.to_string(),
+            message: format!("Error in user input: {err}"),
         }
         .into(),
         JsonPayloadError::Serialize(err) => ErrorResponse {
@@ -421,7 +421,7 @@ impl CacheControlHeader for CacheHint {
             // from the time the response is sent. HTTP/1.1 servers SHOULD NOT send Expires dates more than one year in the future."
             s if s > 31_536_000 => HeaderValue::from_str("private, max-age=31536000")
                 .expect("should be a valid header value according to the HTTP standard"),
-            s if s == 0 => HeaderValue::from_str("no-cache")
+            0 => HeaderValue::from_str("no-cache")
                 .expect("should be a valid header value according to the HTTP standard"),
             s => HeaderValue::from_str(&format!("private, max-age={s}",))
                 .expect("should be a valid header value according to the HTTP standard"),

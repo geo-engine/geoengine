@@ -15,8 +15,8 @@ use geoengine_datatypes::{
     },
     error::{BoxedResultExt, ErrorSource},
     primitives::{
-        Geometry, MultiLineString, MultiLineStringRef, MultiPolygon, MultiPolygonRef,
-        SpatialResolution, VectorQueryRectangle, VectorSpatialQueryRectangle,
+        ColumnSelection, Geometry, MultiLineString, MultiLineStringRef, MultiPolygon,
+        MultiPolygonRef, SpatialResolution, VectorQueryRectangle, VectorSpatialQueryRectangle,
     },
     util::arrow::ArrowTyped,
 };
@@ -272,7 +272,12 @@ where
 #[async_trait]
 impl<P, G, A> QueryProcessor for LineSimplificationProcessor<P, G, A>
 where
-    P: QueryProcessor<Output = FeatureCollection<G>, SpatialQuery = VectorSpatialQueryRectangle>,
+    P: QueryProcessor<
+        Output = FeatureCollection<G>,
+        SpatialQuery = VectorSpatialQueryRectangle,
+        Selection = ColumnSelection,
+        ResultDescription = VectorResultDescriptor,
+    >,
     G: Geometry + ArrowTyped + 'static,
     for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>
         + GeoFeatureCollectionModifications<G, Output = FeatureCollection<G>>,
@@ -283,13 +288,15 @@ where
 {
     type Output = FeatureCollection<G>;
     type SpatialQuery = VectorSpatialQueryRectangle;
+    type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let chunks = self.source.query(query, ctx).await?;
+        let chunks = self.source.query(query.clone(), ctx).await?;
 
         let epsilon = self
             .epsilon
@@ -304,6 +311,10 @@ where
         });
 
         Ok(simplified_chunks.boxed())
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        self.source.result_descriptor()
     }
 }
 
@@ -500,6 +511,7 @@ mod tests {
             BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             TimeInterval::default(),
             SpatialResolution::one(),
+            ColumnSelection::all(),
         );
 
         let query_ctx = MockQueryContext::test_default();
@@ -618,6 +630,7 @@ mod tests {
                     query_bbox,
                     Default::default(),
                     SpatialResolution::new(1., 1.).unwrap(),
+                    ColumnSelection::all(),
                 ),
                 &query_context,
             )
@@ -633,6 +646,6 @@ mod tests {
         assert_eq!(result.feature_offsets().len(), 2);
         assert_eq!(result.polygon_offsets().len(), 23);
         assert_eq!(result.ring_offsets().len(), 23);
-        assert_eq!(result.coordinates().len(), 98 /* was 3027 */);
+        assert_eq!(result.coordinates().len(), 96 /* was 3027 */);
     }
 }

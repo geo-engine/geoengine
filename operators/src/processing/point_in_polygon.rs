@@ -157,7 +157,12 @@ impl InitializedVectorOperator for InitializedPointInPolygonFilter {
             .expect("checked in `PointInPolygonFilter` constructor");
 
         Ok(TypedVectorQueryProcessor::MultiPoint(
-            PointInPolygonFilterProcessor::new(point_processor, polygon_processor).boxed(),
+            PointInPolygonFilterProcessor::new(
+                self.result_descriptor.clone(),
+                point_processor,
+                polygon_processor,
+            )
+            .boxed(),
         ))
     }
 
@@ -171,16 +176,22 @@ impl InitializedVectorOperator for InitializedPointInPolygonFilter {
 }
 
 pub struct PointInPolygonFilterProcessor {
+    result_descriptor: VectorResultDescriptor,
     points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
     polygons: Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>,
 }
 
 impl PointInPolygonFilterProcessor {
     pub fn new(
+        result_descriptor: VectorResultDescriptor,
         points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
         polygons: Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>,
     ) -> Self {
-        Self { points, polygons }
+        Self {
+            result_descriptor,
+            points,
+            polygons,
+        }
     }
 
     fn filter_parallel(
@@ -267,59 +278,67 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let filtered_stream =
             self.points
-                .query(query, ctx)
+                .query(query.clone(), ctx)
                 .await?
-                .and_then(move |points| async move {
-                    if points.is_empty() {
-                        return Ok(points);
-                    }
+                .and_then(move |points| {
+                    let query: VectorQueryRectangle = query.clone();
+                    async move {
+                        if points.is_empty() {
+                            return Ok(points);
+                        }
 
-                    let initial_filter = BooleanArray::from(vec![false; points.len()]);
-                    let arc_points = Arc::new(points);
+                        let initial_filter = BooleanArray::from(vec![false; points.len()]);
+                        let arc_points = Arc::new(points);
 
-                    let (filter, cache_hint) = self
-                        .polygons
-                        .query(query, ctx)
-                        .await?
-                        .try_fold(
-                            (initial_filter, CacheHint::max_duration()),
-                            |acc, polygons| {
-                                let arc_points = arc_points.clone();
-                                async move {
-                                    let (filter, mut cache_hint) = acc;
-                                    let polygons = polygons;
+                        let (filter, cache_hint) = self
+                            .polygons
+                            .query(query.clone(), ctx)
+                            .await?
+                            .try_fold(
+                                (initial_filter, CacheHint::max_duration()),
+                                |acc, polygons| {
+                                    let arc_points = arc_points.clone();
+                                    async move {
+                                        let (filter, mut cache_hint) = acc;
+                                        let polygons = polygons;
 
-                                    cache_hint.merge_with(&polygons.cache_hint);
+                                        cache_hint.merge_with(&polygons.cache_hint);
 
-                                    if polygons.is_empty() {
-                                        return Ok((filter, cache_hint));
+                                        if polygons.is_empty() {
+                                            return Ok((filter, cache_hint));
+                                        }
+
+                                        Ok((
+                                            Self::filter_points(
+                                                ctx,
+                                                arc_points.clone(),
+                                                polygons,
+                                                &filter,
+                                            )
+                                            .await?,
+                                            cache_hint,
+                                        ))
                                     }
+                                },
+                            )
+                            .await?;
 
-                                    Ok((
-                                        Self::filter_points(
-                                            ctx,
-                                            arc_points.clone(),
-                                            polygons,
-                                            &filter,
-                                        )
-                                        .await?,
-                                        cache_hint,
-                                    ))
-                                }
-                            },
-                        )
-                        .await?;
+                        let mut new_points =
+                            arc_points.filter(filter).map_err(Into::<Error>::into)?;
+                        new_points.cache_hint = cache_hint;
 
-                    let mut new_points = arc_points.filter(filter).map_err(Into::<Error>::into)?;
-                    new_points.cache_hint = cache_hint;
-
-                    Ok(new_points)
+                        Ok(new_points)
+                    }
                 });
 
         Ok(
             FeatureCollectionChunkMerger::new(filtered_stream.fuse(), ctx.chunk_byte_size().into())
                 .boxed(),
         )
+    }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -346,10 +365,10 @@ mod tests {
     use std::str::FromStr;
 
     use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -459,6 +478,7 @@ mod tests {
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -516,6 +536,7 @@ mod tests {
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -584,6 +605,7 @@ mod tests {
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -673,13 +695,14 @@ mod tests {
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
 
         let ctx_one_chunk = MockQueryContext::new(ChunkByteSize::MAX);
         let ctx_minimal_chunks = MockQueryContext::new(ChunkByteSize::MIN);
 
         let query = query_processor
-            .query(query_rectangle, &ctx_minimal_chunks)
+            .query(query_rectangle.clone(), &ctx_minimal_chunks)
             .await
             .unwrap();
 
@@ -756,6 +779,7 @@ mod tests {
             BoundingBox2D::new((-10., -10.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();

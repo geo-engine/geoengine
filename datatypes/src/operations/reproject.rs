@@ -3,8 +3,8 @@ use crate::{
     primitives::{
         AxisAlignedRectangle, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
         MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
-        MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialQueryRectangle,
-        SpatialResolution,
+        MultiPolygonAccess, MultiPolygonRef,
+        SpatialBounded, SpatialQueryRectangle, SpatialResolution,
     },
     spatial_reference::SpatialReference,
     util::Result,

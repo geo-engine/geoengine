@@ -28,14 +28,10 @@
 )]
 
 pub mod api;
-#[cfg(not(feature = "pro"))]
-pub mod apidoc;
 pub mod contexts;
 pub mod datasets;
 pub mod error;
-pub mod handlers;
 pub mod layers;
-pub mod ogc;
 pub mod projects;
 #[cfg(not(feature = "pro"))]
 pub mod server;
@@ -50,3 +46,8 @@ pub mod workflows;
 pub mod pro;
 
 pub use geoengine_datatypes::test_data;
+
+// re-export test macro
+pub mod ge_context {
+    pub use geoengine_macros::test;
+}

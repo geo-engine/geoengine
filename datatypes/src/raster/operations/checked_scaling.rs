@@ -179,6 +179,7 @@ where
         RasterTile2D {
             grid_array: self.grid_array.transform_elements::<F>(slope, offset),
             global_geo_transform: self.global_geo_transform,
+            band: self.band,
             properties: self.properties,
             tile_position: self.tile_position,
             time: self.time,
@@ -312,6 +313,7 @@ mod tests {
         let t1 = RasterTile2D::new(
             TimeInterval::default(),
             [0, 0].into(),
+            0,
             geo,
             r1,
             CacheHint::default(),
@@ -370,6 +372,7 @@ mod tests {
         let t1 = RasterTile2D::new(
             TimeInterval::default(),
             [0, 0].into(),
+            0,
             geo,
             r1,
             CacheHint::default(),

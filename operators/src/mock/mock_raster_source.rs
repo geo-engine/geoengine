@@ -36,6 +36,7 @@ pub struct MockRasterSourceProcessor<T>
 where
     T: Pixel,
 {
+    pub result_descriptor: RasterResultDescriptor,
     pub data: Vec<RasterTile2D<T>>,
     pub tiling_specification: TilingSpecification,
 }
@@ -45,16 +46,19 @@ where
     T: Pixel,
 {
     fn new_unchecked(
+        result_descriptor: RasterResultDescriptor,
         data: Vec<RasterTile2D<T>>,
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
+            result_descriptor,
             data,
             tiling_specification,
         }
     }
 
     fn _new(
+        result_descriptor: RasterResultDescriptor,
         data: Vec<RasterTile2D<T>>,
         tiling_specification: TilingSpecification,
     ) -> Result<Self, MockRasterSourceError> {
@@ -70,6 +74,7 @@ where
         };
 
         Ok(Self {
+            result_descriptor,
             data,
             tiling_specification,
         })
@@ -134,11 +139,16 @@ where
         Ok(SparseTilesFillAdapter::new(
             inner_stream,
             tiling_strategy.tile_grid_box(query_spatial_partition),
+            self.result_descriptor.bands.count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::FixedValue(CacheExpiration::max()), // cache forever because we know all mock data
         )
         .boxed())
+    }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -261,8 +271,12 @@ where
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let processor = TypedRasterQueryProcessor::from(
-            MockRasterSourceProcessor::new_unchecked(self.data.clone(), self.tiling_specification)
-                .boxed(),
+            MockRasterSourceProcessor::new_unchecked(
+                self.result_descriptor.clone(),
+                self.data.clone(),
+                self.tiling_specification,
+            )
+            .boxed(),
         );
 
         Ok(processor)
@@ -280,20 +294,21 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
-    use geoengine_datatypes::primitives::CacheHint;
-    use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D, SpatialResolution};
+    use crate::engine::{
+        MockExecutionContext, MockQueryContext, QueryProcessor, RasterBandDescriptors,
+    };
+    use geoengine_datatypes::primitives::{
+        BandSelection, CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval,
+    };
     use geoengine_datatypes::raster::{
-        BoundedGrid, GeoTransform, Grid, MaskedGrid, RasterDataType, RasterProperties,
+        BoundedGrid, GeoTransform, Grid, Grid2D, MaskedGrid, RasterDataType, RasterProperties,
+        TileInformation,
     };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_datatypes::{
-        primitives::TimeInterval,
-        raster::{Grid2D, TileInformation},
-        spatial_reference::SpatialReference,
-    };
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn serde() {
         let raster =
             MaskedGrid::from(Grid2D::new([3, 2].into(), vec![1_u8, 2, 3, 4, 5, 6]).unwrap());
@@ -306,6 +321,7 @@ mod tests {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 2].into(),
             },
+            0,
             raster.into(),
             cache_hint,
         );
@@ -316,10 +332,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     geo_transform: GeoTransform::new((0., 0.).into(), 1., -1.),
                     pixel_bounds: GridShape2D::new_2d(3, 2).bounding_box(),
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -336,6 +352,7 @@ mod tests {
                         "end": 8_210_298_412_799_999_i64
                     },
                     "tilePosition": [0, 0],
+                    "band": 0,
                     "globalGeoTransform": {
                         "originCoordinate": {
                             "x": 0.0,
@@ -370,12 +387,27 @@ mod tests {
                 "resultDescriptor": {
                     "dataType": "U8",
                     "spatialReference": "EPSG:4326",
-                    "measurement": {
-                        "type": "unitless"
-                    },
                     "time": null,
-                    "bbox": null,
-                    "resolution": null
+                    "geoTransform": {
+                        "originCoordinate": {
+                            "x": 0.0,
+                            "y": 0.0
+                        },
+                        "xPixelSize": 1.0,
+                        "yPixelSize": -1.0
+                    },
+                    "pixelBounds": {
+                        "max": [2, 1],
+                        "min": [0, 0]
+                    },
+                    "bands": [
+                        {
+                            "name": "band",
+                            "measurement":  {
+                                "type": "unitless"
+                            }
+                        }
+                    ],
                 }
             }
         });
@@ -403,6 +435,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn zero_length_intervals() {
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams::<u8> {
@@ -410,6 +443,7 @@ mod tests {
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(1, 1),
                         tile_position: [-1, 0].into(),
+                        band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                             .unwrap()
@@ -420,6 +454,7 @@ mod tests {
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(1, 1),
                         tile_position: [-1, 1].into(),
+                        band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
                             .unwrap()
@@ -430,6 +465,7 @@ mod tests {
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 2),
                         tile_position: [-1, 0].into(),
+                        band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![13, 14, 15, 16, 17, 18])
                             .unwrap()
@@ -440,6 +476,7 @@ mod tests {
                     RasterTile2D {
                         time: TimeInterval::new_unchecked(2, 2),
                         tile_position: [-1, 1].into(),
+                        band: 0,
                         global_geo_transform: TestDefault::test_default(),
                         grid_array: Grid::new([3, 2].into(), vec![19, 20, 21, 22, 23, 24])
                             .unwrap()
@@ -451,10 +488,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     geo_transform: GeoTransform::new((0., -3.).into(), 1., -1.),
                     pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -482,6 +519,7 @@ mod tests {
             SpatialResolution::one(),
             execution_context.tiling_specification.origin_coordinate,
             TimeInterval::new_unchecked(1, 3),
+            BandSelection::first(),
         );
 
         let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();
@@ -505,6 +543,7 @@ mod tests {
             SpatialResolution::one(),
             execution_context.tiling_specification.origin_coordinate,
             TimeInterval::new_unchecked(2, 3),
+            BandSelection::first(),
         );
 
         let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();

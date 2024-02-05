@@ -4,11 +4,10 @@ use crate::api::model::operators::{
 };
 use crate::datasets::listing::Provenance;
 use crate::datasets::upload::{UploadId, VolumeName};
+use crate::datasets::DatasetName;
 use crate::projects::Symbology;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-
-use super::datatypes::DatasetName;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]
@@ -78,6 +77,35 @@ pub struct AddDataset {
     pub source_operator: String,
     pub symbology: Option<Symbology>,
     pub provenance: Option<Vec<Provenance>>,
+    pub tags: Option<Vec<String>>,
+}
+
+impl From<AddDataset> for crate::datasets::storage::AddDataset {
+    fn from(value: AddDataset) -> Self {
+        Self {
+            name: value.name,
+            display_name: value.display_name,
+            description: value.description,
+            source_operator: value.source_operator,
+            symbology: value.symbology,
+            provenance: value.provenance,
+            tags: value.tags,
+        }
+    }
+}
+
+impl From<crate::datasets::storage::AddDataset> for AddDataset {
+    fn from(value: crate::datasets::storage::AddDataset) -> Self {
+        Self {
+            name: value.name,
+            display_name: value.display_name,
+            description: value.description,
+            source_operator: value.source_operator,
+            symbology: value.symbology,
+            provenance: value.provenance,
+            tags: value.tags,
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]

@@ -26,8 +26,8 @@ use snafu::ResultExt;
 
 use crate::{
     engine::{
-        MockExecutionContext, RasterResultDescriptor, StaticMetaData, VectorColumnInfo,
-        VectorResultDescriptor,
+        MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
+        StaticMetaData, VectorColumnInfo, VectorResultDescriptor,
     },
     error::{self, Error},
     source::{
@@ -83,13 +83,13 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
         result_descriptor: RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement: Measurement::Unitless,
             time: Some(TimeInterval::new_unchecked(
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
                 TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
             )),
             geo_transform: GeoTransform::new((-180., 90.0).into(), 0.1, -0.1),
             pixel_bounds: GridShape2D::new([1800, 3600]).bounding_box(),
+            bands: RasterBandDescriptors::new_single_band(),
         },
         cache_ttl,
     }
@@ -233,10 +233,13 @@ pub fn raster_descriptor_from_dataset(
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
-        measurement: measurement_from_rasterband(dataset, band)?,
         time: None,
         geo_transform: data_geo_transfrom,
         pixel_bounds: data_shape.bounding_box(),
+        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+            "band".into(), // TODO: derive better name?
+            measurement_from_rasterband(dataset, band)?,
+        )])?,
     })
 }
 
@@ -257,10 +260,13 @@ pub fn raster_descriptor_from_dataset_and_sref(
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
-        measurement: measurement_from_rasterband(dataset, band)?,
         time: None,
         geo_transform: data_geo_transfrom,
         pixel_bounds: data_shape.bounding_box(),
+        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+            "band".into(), // TODO derive better name?
+            measurement_from_rasterband(dataset, band)?,
+        )])?,
     })
 }
 
@@ -284,7 +290,7 @@ fn measurement_from_rasterband(dataset: &Dataset, band: isize) -> Result<Measure
         // taken from `pub fn rasterband(&self, band_index: isize) -> Result<RasterBand>`
         let c_band = gdal_sys::GDALGetRasterBand(dataset.c_dataset(), band as std::os::raw::c_int);
         if c_band.is_null() {
-            return Err(_last_null_pointer_err("GDALGetRasterBand"))?;
+            Err(_last_null_pointer_err("GDALGetRasterBand"))?;
         }
 
         let str_ptr = gdal_sys::GDALGetRasterUnitType(c_band);

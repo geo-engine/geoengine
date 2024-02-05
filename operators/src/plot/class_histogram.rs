@@ -14,8 +14,8 @@ use futures::StreamExt;
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{BarChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, ClassificationMeasurement, Coordinate2D, FeatureDataType, Measurement,
-    PlotQueryRectangle, RasterQueryRectangle,
+    AxisAlignedRectangle, BandSelection, ClassificationMeasurement, ColumnSelection, Coordinate2D,
+    FeatureDataType, Measurement, PlotQueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -68,7 +68,14 @@ impl PlotOperator for ClassHistogram {
 
                 let in_desc = raster_source.result_descriptor();
 
-                let source_measurement = match &in_desc.measurement {
+                ensure!(
+                    in_desc.bands.len() == 1,
+                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                        operator: ClassHistogram::TYPE_NAME
+                    }
+                );
+
+                let source_measurement = match &in_desc.bands[0].measurement {
                     Measurement::Classification(measurement) => measurement.clone(),
                     _ => {
                         return Err(Error::InvalidOperatorSpec {
@@ -281,9 +288,11 @@ impl ClassHistogramRasterQueryProcessor {
             .map(|key| (*key, 0))
             .collect();
 
-        let raster_query_rect = RasterQueryRectangle::with_vector_query_and_grid_origin(
-            query,
+        let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_grid_origin(
+            query.spatial_query(),
             Coordinate2D::default(), // FIXME: this is the default tiling specification origin. The actual origin is not known here. It should be derived from the input result descriptor!
+            query.time_interval,
+            BandSelection::first(),
         );
 
         call_on_generic_raster_processor!(&self.input, processor => {
@@ -343,6 +352,12 @@ impl ClassHistogramVectorQueryProcessor {
             .map(|key| (*key, 0))
             .collect();
 
+        let query = VectorQueryRectangle::new(
+            query.spatial_query(),
+            query.time_interval,
+            ColumnSelection::all(), // TODO: figure out why this is a vector query?
+        );
+
         call_on_generic_vector_processor!(&self.input, processor => {
             let mut query = processor.query(query, ctx).await?;
 
@@ -395,9 +410,9 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-        RasterResultDescriptor, StaticMetaData, VectorColumnInfo, VectorOperator,
-        VectorResultDescriptor,
+        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterBandDescriptor,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, StaticMetaData,
+        VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -406,8 +421,8 @@ mod tests {
     use crate::test_data;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, DateTime, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
-        VectorQueryRectangle,
+        BoundingBox2D, DateTime, FeatureData, NoGeometry, PlotSeriesSelection, SpatialResolution,
+        TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::raster::{
@@ -485,6 +500,7 @@ mod tests {
                         global_tile_position: [0, 0].into(),
                         tile_size_in_pixels: [3, 2].into(),
                     },
+                    0,
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                         .unwrap()
                         .into(),
@@ -493,22 +509,26 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::classification(
-                        "test-class".to_string(),
-                        [
-                            (1, "A".to_string()),
-                            (2, "B".to_string()),
-                            (3, "C".to_string()),
-                            (4, "D".to_string()),
-                            (5, "E".to_string()),
-                            (6, "F".to_string()),
-                        ]
-                        .into_iter()
-                        .collect(),
-                    ),
                     time: None,
                     geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                     pixel_bounds: GridShape2D::new_2d(3, 2).bounding_box(),
+                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                        "bands".into(),
+                        Measurement::classification(
+                            "test-class".to_string(),
+                            [
+                                (1, "A".to_string()),
+                                (2, "B".to_string()),
+                                (3, "C".to_string()),
+                                (4, "D".to_string()),
+                                (5, "E".to_string()),
+                                (6, "F".to_string()),
+                            ]
+                            .into_iter()
+                            .collect(),
+                        ),
+                    )])
+                    .unwrap(),
                 },
             },
         }
@@ -545,6 +565,7 @@ mod tests {
                     BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -629,6 +650,7 @@ mod tests {
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -712,6 +734,7 @@ mod tests {
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -857,18 +880,22 @@ mod tests {
     async fn no_data_raster() {
         let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
 
-        let measurement = Measurement::classification(
-            "foo".to_string(),
-            [(1, "A".to_string())].into_iter().collect(),
-        );
+        let bands = RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+            "band".into(),
+            Measurement::Classification(ClassificationMeasurement {
+                measurement: "foo".to_string(),
+                classes: [(1, "A".to_string())].into_iter().collect(),
+            }),
+        )])
+        .unwrap();
 
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement,
             time: None,
             geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
             pixel_bounds: tile_size_in_pixels.bounding_box(),
+            bands,
         };
         let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
 
@@ -885,6 +912,7 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
+                        0,
                         Grid2D::new(tile_size_in_pixels, vec![0, 0, 0, 0, 0, 0])
                             .unwrap()
                             .into(),
@@ -913,6 +941,7 @@ mod tests {
                     BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -970,10 +999,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                PlotQueryRectangle::with_bounds_and_resolution(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1035,6 +1065,7 @@ mod tests {
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
@@ -1057,18 +1088,23 @@ mod tests {
     async fn single_value_raster_stream() {
         let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
 
-        let measurement = Measurement::classification(
-            "foo".to_string(),
-            [(4, "D".to_string())].into_iter().collect(),
-        );
+        let bands = RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+            "band".into(),
+            Measurement::Classification(ClassificationMeasurement {
+                measurement: "foo".to_string(),
+                classes: [(4, "D".to_string())].into_iter().collect(),
+            }),
+        )])
+        .unwrap();
 
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            measurement,
+
             time: None,
             geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
             pixel_bounds: tile_size_in_pixels.bounding_box(),
+            bands,
         };
         let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
@@ -1084,6 +1120,7 @@ mod tests {
                             global_tile_position: [0, 0].into(),
                             tile_size_in_pixels,
                         },
+                        0,
                         Grid2D::new(tile_size_in_pixels, vec![4; 6]).unwrap().into(),
                         CacheHint::default(),
                     )],
@@ -1106,10 +1143,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                PlotQueryRectangle::with_bounds_and_resolution(
                     BoundingBox2D::new((0., -3.).into(), (2., 0.).into()).unwrap(),
                     TimeInterval::new_instant(DateTime::new_utc(2013, 12, 1, 12, 0, 0)).unwrap(),
                     SpatialResolution::one(),
+                    PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )

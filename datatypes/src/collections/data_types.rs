@@ -1,25 +1,26 @@
-use crate::error;
-use gdal::vector::OGRwkbGeometryType;
-use std::collections::hash_map::Keys;
-use std::collections::HashMap;
-use std::convert::{TryFrom, TryInto};
-use std::ops::RangeBounds;
-
-use serde::{Deserialize, Serialize};
-
 use crate::collections::{
     DataCollection, FeatureCollectionError, FeatureCollectionInfos, FeatureCollectionModifications,
     FilterArray, FilteredColumnNameIter, GeometryCollection, MultiLineStringCollection,
     MultiPointCollection, MultiPolygonCollection, ToGeoJson,
 };
+use crate::error;
 use crate::error::Error;
 use crate::primitives::{
     Coordinate2D, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, TimeInterval,
 };
 use crate::util::Result;
+use gdal::vector::OGRwkbGeometryType;
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use std::collections::hash_map::Keys;
+use std::collections::HashMap;
+use std::convert::{TryFrom, TryInto};
+use std::ops::RangeBounds;
 
 /// An enum that contains all possible vector data types
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone)]
+#[derive(
+    Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone, FromSql, ToSql,
+)]
 pub enum VectorDataType {
     Data,
     MultiPoint,

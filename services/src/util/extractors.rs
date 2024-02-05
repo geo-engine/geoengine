@@ -7,7 +7,7 @@ use futures::FutureExt;
 use serde::de::DeserializeOwned;
 use validator::Validate;
 
-use crate::handlers::ErrorResponse;
+use crate::api::model::responses::ErrorResponse;
 
 /// A Json extractor that validates the content after deserialization
 #[derive(Debug)]
@@ -47,7 +47,7 @@ where
             .map(|res: Result<web::Json<T>, _>| match res {
                 Ok(data) => data
                     .validate()
-                    .map(|_| ValidatedJson(data.into_inner()))
+                    .map(|()| ValidatedJson(data.into_inner()))
                     .map_err(|validation_errors| {
                         ErrorResponse {
                             error: "ValidationError".to_string(),
@@ -123,7 +123,7 @@ where
             .map(|res: Result<web::Query<T>, _>| match res {
                 Ok(data) => data
                     .validate()
-                    .map(|_| ValidatedQuery(data.into_inner()))
+                    .map(|()| ValidatedQuery(data.into_inner()))
                     .map_err(|validation_errors| {
                         ErrorResponse {
                             error: "ValidationError".to_string(),

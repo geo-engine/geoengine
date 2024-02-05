@@ -4,7 +4,6 @@ use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId, ResamplingMethod};
 use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::MetaDataDefinition;
@@ -25,20 +24,23 @@ use crate::projects::Symbology;
 use crate::tasks::TaskContext;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
+pub use ebvportal_provider::EbvPortalDataProviderDefinition;
 use gdal::raster::{Dimension, GdalDataType, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::error::BoxedResultExt;
-use geoengine_datatypes::operations::image::{Colorizer, DefaultColors, RgbaColor};
+use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer, RgbaColor};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
     TimeInstance, TimeInterval, TimeStep, TimeStepIter, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
+use geoengine_datatypes::raster::{GdalGeoTransform, GridBoundingBox2D, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::canonicalize_subpath;
-use geoengine_operators::engine::RasterOperator;
-use geoengine_operators::engine::TypedOperator;
+use geoengine_datatypes::util::gdal::ResamplingMethod;
+use geoengine_operators::engine::{RasterBandDescriptor, RasterOperator};
+use geoengine_operators::engine::{RasterBandDescriptors, TypedOperator};
 use geoengine_operators::source::GdalSource;
 use geoengine_operators::source::GdalSourceParameters;
 use geoengine_operators::source::{
@@ -65,8 +67,6 @@ mod ebvportal_api;
 mod ebvportal_provider;
 pub mod error;
 mod overviews;
-
-pub use ebvportal_provider::EbvPortalDataProviderDefinition;
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
@@ -478,26 +478,6 @@ impl NetCdfCfDataProvider {
 
         let dimensions = data_array.dimensions().context(error::GdalMd)?;
 
-        let result_descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::from_gdal_data_type(
-                data_array
-                    .datatype()
-                    .numeric_datatype()
-                    .try_into()
-                    .unwrap_or(GdalDataType::Float64),
-            )
-            .unwrap_or(RasterDataType::F64),
-            spatial_reference: SpatialReference::try_from(
-                data_array.spatial_reference().context(error::GdalMd)?,
-            )
-            .context(error::CannotParseCrs)?
-            .into(),
-            measurement: derive_measurement(data_array.unit()),
-            time: None,
-            bbox: None,
-            resolution: None,
-        };
-
         let params = GdalDatasetParameters {
             file_path: gdal_path.into(),
             rasterband_channel: 0, // we calculate offsets below
@@ -517,6 +497,36 @@ impl NetCdfCfDataProvider {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+        };
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::from_gdal_data_type(
+                data_array
+                    .datatype()
+                    .numeric_datatype()
+                    .try_into()
+                    .unwrap_or(GdalDataType::Float64),
+            )
+            .unwrap_or(RasterDataType::F64),
+            spatial_reference: SpatialReference::try_from(
+                data_array.spatial_reference().context(error::GdalMd)?,
+            )
+            .context(error::CannotParseCrs)?
+            .into(),
+            time: None,
+            geo_transform: geo_transform.try_into().expect("GeoTransform must be valid"), // TODO: check how the axis in netcfd are stored
+            pixel_bounds: GridBoundingBox2D::new_min_max(
+                0,
+                0,
+                params.width as isize,
+                params.height as isize,
+            )
+            .expect("With or Hight cant be smaller than 0"),
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                "band".into(),
+                derive_measurement(data_array.unit()),
+            )])
+            .unwrap(),
         };
 
         let dimensions_time = dimensions
@@ -719,10 +729,8 @@ fn fallback_colorizer() -> Result<Colorizer> {
                 .into(),
         ],
         RgbaColor::transparent(),
-        DefaultColors::OverUnder {
-            over_color: RgbaColor::white(),
-            under_color: RgbaColor::black(),
-        },
+        RgbaColor::white(),
+        RgbaColor::black(),
     )
     .context(error::CannotCreateFallbackColorizer)
 }
@@ -881,7 +889,6 @@ impl TimeCoverage {
 
         let mut time_stamps = Vec::with_capacity(days_since_1860.len());
         for days in days_since_1860 {
-            let days = days;
             let hours = days * 24.;
             let seconds = hours * 60. * 60.;
             let milliseconds = seconds * 1_000.;
@@ -1241,7 +1248,10 @@ pub fn layer_from_netcdf_overview(
         },
         symbology: Some(Symbology::Raster(RasterSymbology {
             opacity: 1.0,
-            colorizer: colorizer.into(),
+            raster_colorizer: RasterColorizer::SingleBand {
+                band: 0,
+                band_colorizer: colorizer,
+            },
         })),
         properties: [(
             "author".to_string(),
@@ -1481,7 +1491,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let dataset = id.clone().into();
+        let dataset = id.clone();
         let path = self.path.clone();
         let overviews = self.overviews.clone();
         let cache_ttl = self.cache_ttl;
@@ -1536,34 +1546,20 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use crate::api::model::datatypes::ExternalDataId;
-    use crate::contexts::{SessionContext, SimpleApplicationContext};
-    use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
-    use crate::layers::storage::LayerProviderDb;
-
-    use crate::util::tests::with_temp_context;
-    use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
-    use geoengine_datatypes::plots::{PlotData, PlotMetaData};
+    use crate::tasks::util::NopTaskContext;
+    use geoengine_datatypes::dataset::ExternalDataId;
+    use geoengine_datatypes::primitives::BandSelection;
+    use geoengine_datatypes::raster::GeoTransform;
     use geoengine_datatypes::{
-        primitives::{
-            BoundingBox2D, PlotQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
+        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
         spatial_reference::SpatialReferenceAuthority,
         test_data,
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
-    use geoengine_operators::{
-        engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath},
-        plot::{
-            MeanRasterPixelValuesOverTime, MeanRasterPixelValuesOverTimeParams,
-            MeanRasterPixelValuesOverTimePosition,
-        },
-        processing::{Expression, ExpressionParams, ExpressionSources},
-        source::{
-            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-            GdalLoadingInfoTemporalSlice,
-        },
+    use geoengine_operators::engine::RasterBandDescriptors;
+    use geoengine_operators::source::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+        GdalLoadingInfoTemporalSlice,
     };
 
     #[test]
@@ -1939,20 +1935,17 @@ mod tests {
         };
 
         let metadata = provider
-            .meta_data(
-                &DataId::External(ExternalDataId {
-                    provider_id: NETCDF_CF_PROVIDER_ID,
-                    layer_id: LayerId(
-                        serde_json::json!({
-                            "fileName": "dataset_sm.nc",
-                            "groupNames": ["scenario_5", "metric_2"],
-                            "entity": 1
-                        })
-                        .to_string(),
-                    ),
-                })
-                .into(),
-            )
+            .meta_data(&DataId::External(ExternalDataId {
+                provider_id: NETCDF_CF_PROVIDER_ID,
+                layer_id: LayerId(
+                    serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_5", "metric_2"],
+                        "entity": 1
+                    })
+                    .to_string(),
+                ),
+            }))
             .await
             .unwrap();
 
@@ -1962,10 +1955,10 @@ mod tests {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
-                measurement: Measurement::Unitless,
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform: GeoTransform::test_default(),
+                pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 12, 12).unwrap(), // FIXME: findout the correct values
+                bands: RasterBandDescriptors::new_single_band(),
             }
         );
 
@@ -1981,6 +1974,7 @@ mod tests {
                     0.000_343_322_7, // 256 pixel
                 ),
                 TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
+                BandSelection::first(),
             ))
             .await
             .unwrap();
@@ -2066,20 +2060,17 @@ mod tests {
             .unwrap();
 
         let metadata = provider
-            .meta_data(
-                &DataId::External(ExternalDataId {
-                    provider_id: NETCDF_CF_PROVIDER_ID,
-                    layer_id: LayerId(
-                        serde_json::json!({
-                            "fileName": "dataset_sm.nc",
-                            "groupNames": ["scenario_5", "metric_2"],
-                            "entity": 1
-                        })
-                        .to_string(),
-                    ),
-                })
-                .into(),
-            )
+            .meta_data(&DataId::External(ExternalDataId {
+                provider_id: NETCDF_CF_PROVIDER_ID,
+                layer_id: LayerId(
+                    serde_json::json!({
+                        "fileName": "dataset_sm.nc",
+                        "groupNames": ["scenario_5", "metric_2"],
+                        "entity": 1
+                    })
+                    .to_string(),
+                ),
+            }))
             .await
             .unwrap();
 
@@ -2089,10 +2080,10 @@ mod tests {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
-                measurement: Measurement::Unitless,
                 time: None,
-                bbox: None,
-                resolution: Some(SpatialResolution::new_unchecked(1000.0, 1000.0)),
+                geo_transform: GeoTransform::test_default(),
+                pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 12, 12).unwrap(), // FIXME: findout the correct values
+                bands: RasterBandDescriptors::new_single_band(),
             }
         );
 
@@ -2108,6 +2099,7 @@ mod tests {
                     0.000_343_322_7, // 256 pixel
                 ),
                 TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
+                BandSelection::first(),
             ))
             .await
             .unwrap();
@@ -2235,15 +2227,13 @@ mod tests {
         );
     }
     /* FIXME: reactivate this test once there is an alignment operator
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_irregular_time_series() {
-        with_temp_context(|app_ctx, _| async move {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        #[ge_context::test]
+        async fn test_irregular_time_series(app_ctx: PostgresContext<NoTls>) {
+            let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let land_cover_dataset_id = add_land_cover_to_datasets(&ctx.db()).await;
+            let land_cover_dataset_id = add_land_cover_to_datasets(&ctx.db()).await;
 
-        let provider_definition  =
-            EbvPortalDataProviderDefinition {
+            let provider_definition = EbvPortalDataProviderDefinition {
                 name: "EBV Portal".to_string(),
                 path: test_data!("netcdf4d/").into(),
                 base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
@@ -2251,94 +2241,99 @@ mod tests {
                 cache_ttl: Default::default(),
             };
 
-        ctx.db()
-            .add_layer_provider(provider_definition.into())
-            .await
-            .unwrap();
+            ctx.db()
+                .add_layer_provider(provider_definition.into())
+                .await
+                .unwrap();
 
-        let operator = MeanRasterPixelValuesOverTime {
-            params: MeanRasterPixelValuesOverTimeParams {
-                time_position: MeanRasterPixelValuesOverTimePosition::Start,
-                area: false,
-            },
-            sources: Expression {
-                params: ExpressionParams {
-                    expression: "A".to_string(),
-                    output_type: RasterDataType::F64,
-                    output_measurement: None,
-                    map_no_data: false,
+            let operator = MeanRasterPixelValuesOverTime {
+                params: MeanRasterPixelValuesOverTimeParams {
+                    time_position: MeanRasterPixelValuesOverTimePosition::Start,
+                    area: false,
                 },
-                sources: ExpressionSources::new_a_b(
-                    GdalSource {
-                        params: GdalSourceParameters {
-                            data: geoengine_datatypes::dataset::NamedData::with_system_provider(
-                                EBV_PROVIDER_ID.to_string(),
-                                serde_json::json!({
-                                    "fileName": "dataset_irr_ts.nc",
-                                    "groupNames": ["metric_1"],
-                                    "entity": 0
-                                })
-                                .to_string(),
-                            ),
-                        },
-                    }
-                    .boxed(),
-                    GdalSource {
-                        params: GdalSourceParameters {
-                            data: geoengine_datatypes::dataset::NamedData::with_system_name(
-                                land_cover_dataset_id.to_string(),
-                            ),
-                        },
-                    }
-                    .boxed(),
-                ),
+                sources: Expression {
+                    params: ExpressionParams {
+                        expression: "A".to_string(),
+                        output_type: RasterDataType::F64,
+                        output_measurement: None,
+                        map_no_data: false,
+                    },
+                    sources: ExpressionSources::new_a_b(
+                        GdalSource {
+                            params: GdalSourceParameters {
+                                data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                    EBV_PROVIDER_ID.to_string(),
+                                    serde_json::json!({
+                                        "fileName": "dataset_irr_ts.nc",
+                                        "groupNames": ["metric_1"],
+                                        "entity": 0
+                                    })
+                                    .to_string(),
+                                ),
+                            },
+                        }
+                        .boxed(),
+                        GdalSource {
+                            params: GdalSourceParameters {
+                                data: geoengine_datatypes::dataset::NamedData::with_system_name(
+                                    land_cover_dataset_id.to_string(),
+                                ),
+                            },
+                        }
+                        .boxed(),
+                    ),
+                }
+                .boxed()
+                .into(),
             }
-            .boxed()
-            .into(),
+            .boxed();
+
+            // let execution_context = MockExecutionContext::test_default();
+            let execution_context = ctx.execution_context().unwrap();
+
+            let initialized_operator = operator
+                .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+                .await
+                .unwrap();
+
+            let TypedPlotQueryProcessor::JsonVega(processor) =
+                initialized_operator.query_processor().unwrap()
+            else {
+                panic!("wrong plot type");
+            };
+
+            let query_context = MockQueryContext::test_default();
+
+            let result = processor
+                .plot_query(
+                    PlotQueryRectangle::with_bounds_and_resolution(
+                        BoundingBox2D::new(
+                            (46.478_278_849, 40.584_655_660_000_1).into(),
+                            (87.323_796_021_000_1, 55.434_550_273).into(),
+                        )
+                        .unwrap(),
+                        TimeInterval::new(
+                            DateTime::new_utc(1900, 4, 1, 0, 0, 0),
+                            DateTime::new_utc_with_millis(2055, 4, 1, 0, 0, 0, 1),
+                        )
+                        .unwrap(),
+    <<<<<<< HEAD
+                        SpatialResolution::new_unchecked(0.1, 0.1),
+                    ),
+    =======
+                        spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
+                        attributes: PlotSeriesSelection::all(),
+                    },
+    >>>>>>> 9ebde23d180959a213cd0f52e49fc86f5d958313
+                    &query_context,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(result, PlotData {
+                vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.34280000000002},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.54399999999997}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
+                metadata: PlotMetaData::None,
+            });
         }
-        .boxed();
-
-        // let execution_context = MockExecutionContext::test_default();
-        let execution_context = ctx.execution_context().unwrap();
-
-        let initialized_operator = operator
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-            .await
-            .unwrap();
-
-        let TypedPlotQueryProcessor::JsonVega(processor) = initialized_operator.query_processor().unwrap() else {
-            panic!("wrong plot type");
-        };
-
-        let query_context = MockQueryContext::test_default();
-
-        let result = processor
-            .plot_query(
-                PlotQueryRectangle::with_bounds_and_resolution(
-                    BoundingBox2D::new(
-                        (46.478_278_849, 40.584_655_660_000_1).into(),
-                        (87.323_796_021_000_1, 55.434_550_273).into(),
-                    )
-                    .unwrap(),
-                    TimeInterval::new(
-                        DateTime::new_utc(1900, 4, 1, 0, 0, 0),
-                        DateTime::new_utc_with_millis(2055, 4, 1, 0, 0, 0, 1),
-                    )
-                    .unwrap(),
-                    SpatialResolution::new_unchecked(0.1, 0.1),
-                ),
-                &query_context,
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(result, PlotData {
-            vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.34280000000002},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.54399999999997}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
-            metadata: PlotMetaData::None,
-        });
-
-        })
-        .await;
-    }
-    */
+        */
 }

@@ -1,12 +1,14 @@
 use crate::api::model::datatypes::{
-    DataProviderId, DatasetId, LayerId, SpatialReference, SpatialReferenceOption, TimeInstance,
+    DataProviderId, DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance,
 };
+use crate::api::model::responses::ErrorResponse;
 use crate::datasets::external::aruna::error::ArunaProviderError;
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
-use crate::handlers::ErrorResponse;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
+use geoengine_datatypes::dataset::LayerId;
+use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::path::PathBuf;
 use strum::IntoStaticStr;
@@ -20,6 +22,7 @@ pub enum Error {
     DataType {
         source: geoengine_datatypes::error::Error,
     },
+    #[snafu(display("Operator: {}", source))]
     Operator {
         source: geoengine_operators::error::Error,
     },
@@ -128,6 +131,9 @@ pub enum Error {
     ))]
     ClearDatabaseOnStartupNotAllowed,
 
+    #[snafu(display("Database schema must not be `public`."))]
+    InvalidDatabaseSchema,
+
     #[snafu(display("Identifier does not have the right format."))]
     InvalidUuid,
     SessionNotInitialized,
@@ -194,6 +200,7 @@ pub enum Error {
 
     UploadFieldMissingFileName,
     UnknownUploadId,
+    UnknownModelId,
     PathIsNotAFile,
     Multipart {
         // TODO: this error is not send, so this does not work
@@ -203,6 +210,15 @@ pub enum Error {
     InvalidUploadFileName,
     InvalidDatasetIdNamespace,
     DuplicateDatasetId,
+    #[snafu(display("Dataset name '{}' already exists", dataset_name))]
+    DatasetNameAlreadyExists {
+        dataset_name: String,
+        dataset_id: DatasetId,
+    },
+    #[snafu(display("Dataset name '{}' does not exist", dataset_name))]
+    UnknownDatasetName {
+        dataset_name: String,
+    },
     InvalidDatasetName,
     DatasetInvalidLayerName {
         layer_name: String,
@@ -245,6 +261,8 @@ pub enum Error {
 
     PangaeaNoTsv,
     GfbioMissingAbcdField,
+    #[snafu(display("The response from the EDR server does not match the expected format."))]
+    EdrInvalidMetadataFormat,
     ExpectedExternalDataId,
     InvalidExternalDataId {
         provider: DataProviderId,
@@ -338,8 +356,8 @@ pub enum Error {
         found: String,
     },
 
-    #[snafu(context(false))]
-    TaskError {
+    #[snafu(context(false), display("TaskError: {}", source))]
+    Task {
         source: crate::tasks::TaskError,
     },
 
@@ -354,7 +372,7 @@ pub enum Error {
 
     #[snafu(context(false))]
     WorkflowApi {
-        source: crate::handlers::workflows::WorkflowApiError,
+        source: crate::api::handlers::workflows::WorkflowApiError,
     },
 
     SubPathMustNotEscapeBasePath {
@@ -384,8 +402,8 @@ pub enum Error {
     },
 
     #[cfg(feature = "pro")]
-    #[snafu(context(false))]
-    OidcError {
+    #[snafu(context(false), display("OidcError: {}", source))]
+    Oidc {
         source: crate::pro::users::OidcError,
     },
 
@@ -416,6 +434,7 @@ pub enum Error {
     ProviderDoesNotSupportBrowsing,
 
     InvalidPath,
+    CouldNotGetMlModelPath,
 
     InvalidWorkflowOutputType,
 
@@ -424,7 +443,38 @@ pub enum Error {
         message: String,
     },
 
+    // TODO: refactor error
+    #[cfg(feature = "pro")]
+    #[snafu(context(false))]
+    MachineLearning {
+        source: crate::pro::machine_learning::ml_error::MachineLearningError,
+    },
+
+    #[snafu(display("NotNan error: {}", source))]
+    InvalidNotNanFloatKey {
+        source: ordered_float::FloatIsNan,
+    },
+
     UnexpectedInvalidDbTypeConversion,
+
+    #[snafu(display(
+        "Unexpected database version during migration, expected `{}` but found `{}`",
+        expected,
+        found
+    ))]
+    UnexpectedDatabaseVersionDuringMigration {
+        expected: String,
+        found: String,
+    },
+
+    #[snafu(display("Raster band names must be unique. Found {duplicate_key} more than once."))]
+    RasterBandNamesMustBeUnique {
+        duplicate_key: String,
+    },
+    #[snafu(display("Raster band names must not be empty"))]
+    RasterBandNameMustNotBeEmpty,
+    #[snafu(display("Raster band names must not be longer than 256 bytes"))]
+    RasterBandNameTooLong,
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -523,5 +573,11 @@ impl From<proj::ProjError> for Error {
 impl From<tokio::task::JoinError> for Error {
     fn from(source: tokio::task::JoinError) -> Self {
         Error::TokioJoin { source }
+    }
+}
+
+impl From<ordered_float::FloatIsNan> for Error {
+    fn from(source: FloatIsNan) -> Self {
+        Error::InvalidNotNanFloatKey { source }
     }
 }

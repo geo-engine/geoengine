@@ -12,7 +12,7 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::primitives::{Geometry, TimeInterval};
+use geoengine_datatypes::primitives::{ColumnSelection, Geometry, TimeInterval};
 use geoengine_datatypes::primitives::{TimeInstance, TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use log::debug;
@@ -130,6 +130,7 @@ impl InitializedVectorOperator for InitializedVectorTimeProjection {
         Ok(
             call_on_generic_vector_processor!(source_processor, processor => VectorTimeProjectionProcessor {
                 processor,
+                result_descriptor: self.result_descriptor.clone(),
                 step: self.step,
                 step_reference: self.step_reference,
             }.boxed().into()),
@@ -146,6 +147,7 @@ where
     G: Geometry,
 {
     processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+    result_descriptor: VectorResultDescriptor,
     step: TimeStep,
     step_reference: TimeInstance,
 }
@@ -162,7 +164,7 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let query = self.expand_query_rectangle(query)?;
+        let query = self.expand_query_rectangle(&query)?;
         let stream = self
             .processor
             .vector_query(query, ctx)
@@ -173,13 +175,17 @@ where
             .boxed();
         Ok(stream)
     }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 impl<G> VectorTimeProjectionProcessor<G>
 where
     G: Geometry + ArrowTyped + 'static,
 {
-    fn expand_query_rectangle(&self, query: VectorQueryRectangle) -> Result<VectorQueryRectangle> {
+    fn expand_query_rectangle(&self, query: &VectorQueryRectangle) -> Result<VectorQueryRectangle> {
         Ok(expand_query_rectangle(
             self.step,
             self.step_reference,
@@ -233,11 +239,12 @@ where
 fn expand_query_rectangle(
     step: TimeStep,
     step_reference: TimeInstance,
-    query: VectorQueryRectangle,
+    query: &VectorQueryRectangle,
 ) -> Result<VectorQueryRectangle, TimeProjectionError> {
     Ok(VectorQueryRectangle::new(
         query.spatial_query,
         expand_time_interval(step, step_reference, query.time_interval)?,
+        ColumnSelection::all(),
     ))
 }
 
@@ -465,6 +472,7 @@ mod tests {
                     )
                     .unwrap(),
                     SpatialResolution::one(),
+                    ColumnSelection::all(),
                 ),
                 &query_context,
             )
@@ -569,6 +577,7 @@ mod tests {
                     )
                     .unwrap(),
                     SpatialResolution::one(),
+                    ColumnSelection::all(),
                 ),
                 &query_context,
             )

@@ -147,10 +147,10 @@ mod tests {
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
     use futures::{StreamExt, TryStreamExt};
     use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval, VectorQueryRectangle,
     };
+    use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::{DataCollection, MultiPointCollection},
@@ -188,11 +188,12 @@ mod tests {
             BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
             Default::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
         let cx = MockQueryContext::new((std::mem::size_of::<Coordinate2D>() * 2).into());
 
         let number_of_source_chunks = processor
-            .query(qrect, &cx)
+            .query(qrect.clone(), &cx)
             .await
             .unwrap()
             .fold(0_usize, |i, _| async move { i + 1 })
@@ -261,6 +262,7 @@ mod tests {
             BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
             Default::default(),
             SpatialResolution::zero_point_one(),
+            ColumnSelection::all(),
         );
         let cx = MockQueryContext::new((0).into());
 

@@ -1,11 +1,12 @@
+pub mod error;
 pub mod postgres_projectdb;
 mod project;
 mod projectdb;
 
 pub use project::{
-    ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerType, LayerUpdate,
-    LayerVisibility, LineSymbology, LoadVersion, NumberParam, OrderBy, Plot, PlotUpdate,
-    PointSymbology, PolygonSymbology, Project, ProjectFilter, ProjectId, ProjectLayer,
+    ColorParam, CreateProject, Delete as ProjectUpdateToken, DerivedColor, DerivedNumber,
+    LayerType, LayerUpdate, LayerVisibility, LineSymbology, LoadVersion, NumberParam, OrderBy,
+    Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project, ProjectId, ProjectLayer,
     ProjectListOptions, ProjectListing, ProjectVersion, ProjectVersionId, RasterSymbology,
     STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };

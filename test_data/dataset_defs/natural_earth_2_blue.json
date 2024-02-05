@@ -14,25 +14,29 @@
     "symbology": {
       "type": "raster",
       "opacity": 1,
-      "colorizer": {
-        "type": "linearGradient",
-        "breakpoints": [
-          {
-            "value": 0,
-            "color": [247, 251, 255, 255]
-          },
-          {
-            "value": 127,
-            "color": [106, 173, 213, 255]
-          },
-          {
-            "value": 255,
-            "color": [246, 250, 254, 255]
-          }
-        ],
-        "noDataColor": [0, 0, 0, 0],
-        "underColor": [247, 251, 255, 255],
-        "overColor": [246, 250, 254, 255]
+      "rasterColorizer": {
+        "type": "singleBand",
+        "band": 0,
+        "bandColorizer": {
+          "type": "linearGradient",
+          "breakpoints": [
+            {
+              "value": 0,
+              "color": [247, 251, 255, 255]
+            },
+            {
+              "value": 127,
+              "color": [106, 173, 213, 255]
+            },
+            {
+              "value": 255,
+              "color": [246, 250, 254, 255]
+            }
+          ],
+          "noDataColor": [0, 0, 0, 0],
+          "underColor": [247, 251, 255, 255],
+          "overColor": [246, 250, 254, 255]
+        }
       }
     }
   },
@@ -41,9 +45,6 @@
     "resultDescriptor": {
       "dataType": "U8",
       "spatialReference": "EPSG:4326",
-      "measurement": {
-        "type": "unitless"
-      },
       "time": {
         "start": "-262144-01-01T00:00:00+00:00",
         "end": "+262143-12-31T23:59:59.999+00:00"
@@ -55,7 +56,15 @@
       "resolution": {
         "x": 0.09999999999999,
         "y": 0.09999999999999
-      }
+      },
+      "bands": [
+        {
+          "name": "blue",
+          "measurement": {
+            "type": "unitless"
+          }
+        }
+      ]
     },
     "params": {
       "filePath": "test_data/raster/natural_earth_2/NE2_150M_SR_W.tif",

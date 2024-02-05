@@ -12,7 +12,9 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, RasterSpatialQueryRectangle};
+use geoengine_datatypes::primitives::{
+    BandSelection, RasterQueryRectangle, RasterSpatialQueryRectangle,
+};
 use geoengine_datatypes::raster::{
     Grid2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
 };
@@ -63,7 +65,7 @@ impl NeighborhoodParams {
         match self {
             Self::WeightsMatrix { weights } => {
                 let x_size = weights.len();
-                let y_size = weights.get(0).map_or(0, Vec::len);
+                let y_size = weights.first().map_or(0, Vec::len);
                 GridShape2D::new([x_size, y_size])
             }
             Self::Rectangle { dimensions } => GridShape2D::new(*dimensions),
@@ -149,6 +151,14 @@ impl RasterOperator for NeighborhoodAggregate {
 
         let initialized_source = self.sources.initialize_sources(path, context).await?;
         let raster_source = initialized_source.raster;
+
+        // TODO: implement multi-band functionality and remove this check
+        ensure!(
+            raster_source.result_descriptor().bands.len() == 1,
+            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+                operator: NeighborhoodAggregate::TYPE_NAME
+            }
+        );
 
         let initialized_operator = InitializedNeighborhoodAggregate {
             name,
@@ -236,13 +246,20 @@ where
 #[async_trait]
 impl<Q, P, A> QueryProcessor for NeighborhoodAggregateProcessor<Q, P, A>
 where
-    Q: QueryProcessor<Output = RasterTile2D<P>, SpatialQuery = RasterSpatialQueryRectangle>,
+    Q: QueryProcessor<
+        Output = RasterTile2D<P>,
+        SpatialQuery = RasterSpatialQueryRectangle,
+        Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
+    >,
     P: Pixel,
     f64: AsPrimitive<P>,
     A: AggregateFunction + 'static,
 {
     type Output = RasterTile2D<P>;
     type SpatialQuery = RasterSpatialQueryRectangle;
+    type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -265,6 +282,10 @@ where
             crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
         ))
     }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        self.source.result_descriptor()
+    }
 }
 
 #[cfg(test)]
@@ -273,7 +294,10 @@ mod tests {
     use super::*;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterOperator, RasterResultDescriptor},
+        engine::{
+            MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
+            RasterResultDescriptor,
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
         source::{GdalSource, GdalSourceParameters},
         util::{gdal::add_ndvi_dataset, raster_stream_to_png::raster_stream_to_png_bytes},
@@ -281,10 +305,10 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         dataset::NamedData,
-        operations::image::{Colorizer, DefaultColors, RgbaColor},
+        operations::image::{Colorizer, RgbaColor},
         primitives::{
-            CacheHint, Coordinate2D, DateTime, Measurement, RasterQueryRectangle,
-            SpatialPartition2D, SpatialResolution, TimeInstance, TimeInterval,
+            CacheHint, Coordinate2D, DateTime, RasterQueryRectangle, SpatialPartition2D,
+            SpatialResolution, TimeInstance, TimeInterval,
         },
         raster::{
             GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, RasterDataType, RasterTile2D,
@@ -434,6 +458,7 @@ mod tests {
             SpatialResolution::one(),
             exe_ctx.tiling_specification.origin_coordinate,
             TimeInterval::new_unchecked(0, 20),
+            BandSelection::first(),
         );
         let query_ctx = MockQueryContext::test_default();
 
@@ -488,6 +513,7 @@ mod tests {
             SpatialResolution::one(),
             exe_ctx.tiling_specification.origin_coordinate,
             TimeInterval::new_unchecked(0, 20),
+            BandSelection::first(),
         );
         let query_ctx = MockQueryContext::test_default();
 
@@ -506,6 +532,7 @@ mod tests {
                     tile_size_in_pixels: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![1, 2, 3, 7, 8, 9, 13, 14, 15]).unwrap(),
                 ),
@@ -518,6 +545,7 @@ mod tests {
                     tile_size_in_pixels: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![4, 5, 6, 10, 11, 12, 16, 17, 18]).unwrap(),
                 ),
@@ -530,6 +558,7 @@ mod tests {
                     tile_size_in_pixels: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![18, 17, 16, 12, 11, 10, 6, 5, 4]).unwrap(),
                 ),
@@ -542,6 +571,7 @@ mod tests {
                     tile_size_in_pixels: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![15, 14, 13, 9, 8, 7, 3, 2, 1]).unwrap(),
                 ),
@@ -572,6 +602,7 @@ mod tests {
                     tile_size_in_pixels: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![1, 2, 3, 7, 8, 9, 13, 14, 15]).unwrap(),
                 ),
@@ -584,6 +615,7 @@ mod tests {
                     tile_size_in_pixels: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![4, 5, 6, 10, 11, 12, 16, 17, 18]).unwrap(),
                 ),
@@ -596,6 +628,7 @@ mod tests {
                     tile_size_in_pixels: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![18, 17, 16, 12, 11, 10, 6, 5, 4]).unwrap(),
                 ),
@@ -608,6 +641,7 @@ mod tests {
                     tile_size_in_pixels: [3, 3].into(),
                     global_geo_transform: TestDefault::test_default(),
                 },
+                0,
                 GridOrEmpty::from(
                     Grid2D::new([3, 3].into(), vec![15, 14, 13, 9, 8, 7, 3, 2, 1]).unwrap(),
                 ),
@@ -621,10 +655,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    measurement: Measurement::Unitless,
                     time: None,
                     geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                     pixel_bounds: GridBoundingBox2D::new([-3, 0], [0, 6]).unwrap(),
+                    bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
@@ -666,6 +700,7 @@ mod tests {
             SpatialResolution::one(),
             exe_ctx.tiling_specification.origin_coordinate,
             TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
+            BandSelection::first(),
         );
         let query_ctx = MockQueryContext::test_default();
 
@@ -675,10 +710,8 @@ mod tests {
                 (255.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            DefaultColors::OverUnder {
-                over_color: RgbaColor::white(),
-                under_color: RgbaColor::black(),
-            },
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 
@@ -736,6 +769,7 @@ mod tests {
             SpatialResolution::one(),
             exe_ctx.tiling_specification.origin_coordinate,
             TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
+            BandSelection::first(),
         );
         let query_ctx = MockQueryContext::test_default();
 
@@ -747,10 +781,8 @@ mod tests {
                 (255.0, RgbaColor::black()).try_into().unwrap(),
             ],
             RgbaColor::transparent(),
-            DefaultColors::OverUnder {
-                over_color: RgbaColor::white(),
-                under_color: RgbaColor::black(),
-            },
+            RgbaColor::white(),
+            RgbaColor::black(),
         )
         .unwrap();
 

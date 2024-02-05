@@ -8,6 +8,7 @@ mod meteosat;
 mod neighborhood_aggregate;
 mod point_in_polygon;
 mod raster_scaling;
+mod raster_stacker;
 mod raster_type_conversion;
 mod raster_vector_join;
 mod rasterization;
@@ -18,6 +19,9 @@ mod time_projection;
 mod time_shift;
 mod vector_join;
 
+pub use circle_merging_quadtree::{
+    InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
+};
 pub use expression::{Expression, ExpressionError, ExpressionParams, ExpressionSources};
 pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
 pub use line_simplification::{
@@ -31,6 +35,7 @@ pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
     PointInPolygonTester,
 };
+pub use raster_stacker::{RasterStacker, RasterStackerParams};
 pub use raster_type_conversion::{RasterTypeConversionParams, RasterTypeConversionQueryProcessor};
 pub use raster_vector_join::{
     FeatureAggregationMethod, RasterVectorJoin, RasterVectorJoinParams, TemporalAggregationMethod,

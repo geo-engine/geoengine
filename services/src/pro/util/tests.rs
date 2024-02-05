@@ -1,14 +1,12 @@
 use crate::{
-    api::model::{
-        datatypes::{DatasetId, DatasetName, NamedData},
-        services::AddDataset,
-    },
+    api::handlers,
     contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
     datasets::{
         listing::Provenance,
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
+        AddDataset, DatasetName,
     },
-    handlers, pro,
+    pro,
     pro::{
         contexts::{ProApplicationContext, ProGeoEngineDb, ProPostgresContext},
         permissions::{Permission, PermissionDb, Role},
@@ -32,9 +30,11 @@ use actix_web::dev::ServiceResponse;
 use actix_web::{http, middleware, test, web, App};
 use futures_util::Future;
 use geoengine_datatypes::{
+    dataset::{DatasetId, NamedData},
     primitives::DateTime,
     raster::TilingSpecification,
     spatial_reference::SpatialReferenceOption,
+    test_data,
     util::{test::TestDefault, Identifier},
 };
 use geoengine_operators::{
@@ -125,14 +125,15 @@ pub async fn send_pro_test_request(
             )
             .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
-            .configure(pro::handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
+            .configure(pro::api::handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::layers::init_layer_routes::<ProPostgresContext<NoTls>>)
+            .configure(pro::api::handlers::machine_learning::init_ml_routes::<ProPostgresContext<NoTls>>)
             .configure(
-                pro::handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>,
+                pro::api::handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>,
             )
             .configure(handlers::plots::init_plot_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::projects::init_project_routes::<ProPostgresContext<NoTls>>)
-            .configure(pro::handlers::users::init_user_routes::<ProPostgresContext<NoTls>>)
+            .configure(pro::api::handlers::users::init_user_routes::<ProPostgresContext<NoTls>>)
             .configure(
                 handlers::spatial_references::init_spatial_reference_routes::<
                     ProPostgresContext<NoTls>,
@@ -148,6 +149,307 @@ pub async fn send_pro_test_request(
     test::call_service(&app, req.to_request())
         .await
         .map_into_boxed_body()
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn register_ndvi_workflow_helper<C: ProApplicationContext>(
+    app_ctx: &C,
+) -> (Workflow, WorkflowId)
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let (_, dataset) = add_ndvi_to_datasets(app_ctx, true, true).await;
+
+    let workflow = Workflow {
+        operator: TypedOperator::Raster(
+            GdalSource {
+                params: GdalSourceParameters { data: dataset },
+            }
+            .boxed(),
+        ),
+    };
+
+    let session = UserSession::mock();
+
+    let id = app_ctx
+        .session_context(session)
+        .db()
+        .register_workflow(workflow.clone())
+        .await
+        .unwrap();
+
+    (workflow, id)
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_ndvi_to_datasets<C: ProApplicationContext>(
+    app_ctx: &C,
+    share_with_users: bool,
+    share_with_anonymous: bool,
+) -> (DatasetId, NamedData)
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let dataset_name = DatasetName {
+        namespace: None,
+        name: "NDVI".to_string(),
+    };
+
+    let ndvi = DatasetDefinition {
+        properties: AddDataset {
+            name: Some(dataset_name.clone()),
+            display_name: "NDVI".to_string(),
+            description: "NDVI data from MODIS".to_string(),
+            source_operator: "GdalSource".to_string(),
+            symbology: None,
+            provenance: Some(vec![Provenance {
+                citation: "Sample Citation".to_owned(),
+                license: "Sample License".to_owned(),
+                uri: "http://example.org/".to_owned(),
+            }]),
+            tags: Some(vec!["raster".to_owned(), "test".to_owned()]),
+        },
+        meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
+    };
+
+    let system_session = UserSession::admin_session();
+
+    let db = app_ctx.session_context(system_session).db();
+
+    let dataset_id = db
+        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
+        .await
+        .expect("dataset db access")
+        .id;
+
+    if share_with_users {
+        db.add_permission(
+            Role::registered_user_role_id(),
+            dataset_id,
+            Permission::Read,
+        )
+        .await
+        .unwrap();
+    }
+
+    if share_with_anonymous {
+        db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+            .await
+            .unwrap();
+    }
+
+    (dataset_id, dataset_name.into())
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_ports_to_datasets<C: ProApplicationContext>(
+    app_ctx: &C,
+    share_with_users: bool,
+    share_with_anonymous: bool,
+) -> (DatasetId, NamedData)
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let dataset_name = DatasetName {
+        namespace: None,
+        name: "ne_10m_ports".to_string(),
+    };
+
+    let ndvi = DatasetDefinition {
+        properties: AddDataset {
+            name: Some(dataset_name.clone()),
+            display_name: "Natural Earth 10m Ports".to_string(),
+            description: "Ports from Natural Earth".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: Some(vec![Provenance {
+                citation: "Sample Citation".to_owned(),
+                license: "Sample License".to_owned(),
+                uri: "http://example.org/".to_owned(),
+            }]),
+            tags: Some(vec!["vector".to_owned(), "test".to_owned()]),
+        },
+        meta_data: MetaDataDefinition::OgrMetaData(create_ports_meta_data()),
+    };
+
+    let system_session = UserSession::admin_session();
+
+    let db = app_ctx.session_context(system_session).db();
+
+    let dataset_id = db
+        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
+        .await
+        .expect("dataset db access")
+        .id;
+
+    if share_with_users {
+        db.add_permission(
+            Role::registered_user_role_id(),
+            dataset_id,
+            Permission::Read,
+        )
+        .await
+        .unwrap();
+    }
+
+    if share_with_anonymous {
+        db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+            .await
+            .unwrap();
+    }
+
+    (dataset_id, dataset_name.into())
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn admin_login<C: ProApplicationContext>(ctx: &C) -> UserSession
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let user_config = get_config_element::<super::config::User>().unwrap();
+
+    ctx.login(UserCredentials {
+        email: user_config.admin_email.clone(),
+        password: user_config.admin_password.clone(),
+    })
+    .await
+    .unwrap()
+}
+
+/// Loads a pretrained mock model from disk
+pub async fn load_mock_model_from_disk() -> Result<String, std::io::Error> {
+    let path = test_data!("pro/ml/")
+        .join("b764bf81-e21d-4eb8-bf01-fac9af13faee")
+        .join("mock_model.json");
+
+    tokio::fs::read_to_string(path).await
+}
+
+/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
+///
+/// # Panics
+///
+/// Panics if the `PostgresContext` could not be created.
+///
+pub async fn with_pro_temp_context<F, Fut, R>(f: F) -> R
+where
+    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+        + std::panic::UnwindSafe
+        + Send
+        + 'static,
+    Fut: Future<Output = R>,
+{
+    with_pro_temp_context_from_spec(
+        TestDefault::test_default(),
+        TestDefault::test_default(),
+        get_config_element::<Quota>().unwrap(),
+        None::<fn() -> OidcRequestDb>,
+        f,
+    )
+    .await
+}
+
+/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
+///
+/// # Panics
+///
+/// Panics if the `PostgresContext` could not be created.
+///
+pub async fn with_pro_temp_context_from_spec<F, Fut, R>(
+    exe_ctx_tiling_spec: TilingSpecification,
+    query_ctx_chunk_size: ChunkByteSize,
+    quota_config: Quota,
+    oidc_db: Option<impl FnOnce() -> OidcRequestDb + std::panic::UnwindSafe + Send + 'static>,
+    f: F,
+) -> R
+where
+    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+        + std::panic::UnwindSafe
+        + Send
+        + 'static,
+    Fut: Future<Output = R>,
+{
+    let (_permit, pg_config, schema) = setup_db().await;
+
+    // catch all panics and clean up first…
+    let executed_fn = {
+        let pg_config = pg_config.clone();
+        std::panic::catch_unwind(move || {
+            tokio::task::block_in_place(move || {
+                Handle::current().block_on(async move {
+                    let ctx = ProPostgresContext::new_with_context_spec(
+                        pg_config.clone(),
+                        tokio_postgres::NoTls,
+                        exe_ctx_tiling_spec,
+                        query_ctx_chunk_size,
+                        quota_config,
+                        oidc_db.map(|oidc_db| oidc_db()),
+                    )
+                    .await
+                    .unwrap();
+                    f(ctx, pg_config.clone()).await
+                })
+            })
+        })
+    };
+
+    tear_down_db(pg_config, &schema).await;
+
+    match executed_fn {
+        Ok(res) => res,
+        Err(err) => std::panic::resume_unwind(err),
+    }
+}
+
+/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
+///
+/// # Panics
+///
+/// Panics if the `PostgresContext` could not be created.
+///
+pub async fn with_pro_temp_context_and_oidc<O, F, Fut, R>(
+    oidc_db: O,
+    cache_config: Cache,
+    quota_config: Quota,
+    f: F,
+) -> R
+where
+    O: FnOnce() -> OidcRequestDb + std::panic::UnwindSafe + Send + 'static,
+    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+        + std::panic::UnwindSafe
+        + Send
+        + 'static,
+    Fut: Future<Output = R>,
+{
+    let (_permit, pg_config, schema) = setup_db().await;
+
+    // catch all panics and clean up first…
+    let executed_fn = {
+        let pg_config = pg_config.clone();
+        std::panic::catch_unwind(move || {
+            tokio::task::block_in_place(move || {
+                Handle::current().block_on(async move {
+                    let ctx = ProPostgresContext::new_with_oidc(
+                        pg_config.clone(),
+                        tokio_postgres::NoTls,
+                        oidc_db(),
+                        cache_config,
+                        quota_config,
+                    )
+                    .await
+                    .unwrap();
+                    f(ctx, pg_config.clone()).await
+                })
+            })
+        })
+    };
+
+    tear_down_db(pg_config, &schema).await;
+
+    match executed_fn {
+        Ok(res) => res,
+        Err(err) => std::panic::resume_unwind(err),
+    }
 }
 
 #[cfg(test)]
@@ -320,294 +622,5 @@ pub(in crate::pro) mod mock_oidc {
         result.set_expires_in(mock_token_config.duration.as_ref());
 
         result
-    }
-}
-
-#[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper<C: ProApplicationContext>(
-    app_ctx: &C,
-) -> (Workflow, WorkflowId)
-where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-{
-    let (_, dataset) = add_ndvi_to_datasets(app_ctx, true, true).await;
-
-    let workflow = Workflow {
-        operator: TypedOperator::Raster(
-            GdalSource {
-                params: GdalSourceParameters {
-                    data: dataset.into(),
-                },
-            }
-            .boxed(),
-        ),
-    };
-
-    let session = UserSession::mock();
-
-    let id = app_ctx
-        .session_context(session)
-        .db()
-        .register_workflow(workflow.clone())
-        .await
-        .unwrap();
-
-    (workflow, id)
-}
-
-#[allow(clippy::missing_panics_doc)]
-pub async fn add_ndvi_to_datasets<C: ProApplicationContext>(
-    app_ctx: &C,
-    share_with_users: bool,
-    share_with_anonymous: bool,
-) -> (DatasetId, NamedData)
-where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-{
-    let dataset_name = DatasetName {
-        namespace: None,
-        name: "NDVI".to_string(),
-    };
-
-    let ndvi = DatasetDefinition {
-        properties: AddDataset {
-            name: Some(dataset_name.clone()),
-            display_name: "NDVI".to_string(),
-            description: "NDVI data from MODIS".to_string(),
-            source_operator: "GdalSource".to_string(),
-            symbology: None,
-            provenance: Some(vec![Provenance {
-                citation: "Sample Citation".to_owned(),
-                license: "Sample License".to_owned(),
-                uri: "http://example.org/".to_owned(),
-            }]),
-        },
-        meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data()),
-    };
-
-    let system_session = UserSession::admin_session();
-
-    let db = app_ctx.session_context(system_session).db();
-
-    let dataset_id = db
-        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
-        .await
-        .expect("dataset db access")
-        .id;
-
-    if share_with_users {
-        db.add_permission(
-            Role::registered_user_role_id(),
-            dataset_id,
-            Permission::Read,
-        )
-        .await
-        .unwrap();
-    }
-
-    if share_with_anonymous {
-        db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
-            .await
-            .unwrap();
-    }
-
-    (dataset_id, dataset_name.into())
-}
-
-#[allow(clippy::missing_panics_doc)]
-pub async fn add_ports_to_datasets<C: ProApplicationContext>(
-    app_ctx: &C,
-    share_with_users: bool,
-    share_with_anonymous: bool,
-) -> (DatasetId, NamedData)
-where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-{
-    let dataset_name = DatasetName {
-        namespace: None,
-        name: "ne_10m_ports".to_string(),
-    };
-
-    let ndvi = DatasetDefinition {
-        properties: AddDataset {
-            name: Some(dataset_name.clone()),
-            display_name: "Natural Earth 10m Ports".to_string(),
-            description: "Ports from Natural Earth".to_string(),
-            source_operator: "OgrSource".to_string(),
-            symbology: None,
-            provenance: Some(vec![Provenance {
-                citation: "Sample Citation".to_owned(),
-                license: "Sample License".to_owned(),
-                uri: "http://example.org/".to_owned(),
-            }]),
-        },
-        meta_data: MetaDataDefinition::OgrMetaData(create_ports_meta_data()),
-    };
-
-    let system_session = UserSession::admin_session();
-
-    let db = app_ctx.session_context(system_session).db();
-
-    let dataset_id = db
-        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
-        .await
-        .expect("dataset db access")
-        .id;
-
-    if share_with_users {
-        db.add_permission(
-            Role::registered_user_role_id(),
-            dataset_id,
-            Permission::Read,
-        )
-        .await
-        .unwrap();
-    }
-
-    if share_with_anonymous {
-        db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
-            .await
-            .unwrap();
-    }
-
-    (dataset_id, dataset_name.into())
-}
-
-#[allow(clippy::missing_panics_doc)]
-pub async fn admin_login<C: ProApplicationContext>(ctx: &C) -> UserSession
-where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-{
-    let user_config = get_config_element::<super::config::User>().unwrap();
-
-    ctx.login(UserCredentials {
-        email: user_config.admin_email.clone(),
-        password: user_config.admin_password.clone(),
-    })
-    .await
-    .unwrap()
-}
-
-/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
-///
-/// # Panics
-///
-/// Panics if the `PostgresContext` could not be created.
-///
-pub async fn with_pro_temp_context<F, Fut, R>(f: F) -> R
-where
-    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
-        + std::panic::UnwindSafe
-        + Send
-        + 'static,
-    Fut: Future<Output = R>,
-{
-    with_pro_temp_context_from_spec(
-        TestDefault::test_default(),
-        TestDefault::test_default(),
-        get_config_element::<Quota>().unwrap(),
-        f,
-    )
-    .await
-}
-
-/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
-///
-/// # Panics
-///
-/// Panics if the `PostgresContext` could not be created.
-///
-pub async fn with_pro_temp_context_from_spec<F, Fut, R>(
-    exe_ctx_tiling_spec: TilingSpecification,
-    query_ctx_chunk_size: ChunkByteSize,
-    quota_config: Quota,
-    f: F,
-) -> R
-where
-    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
-        + std::panic::UnwindSafe
-        + Send
-        + 'static,
-    Fut: Future<Output = R>,
-{
-    let (_permit, pg_config, schema) = setup_db().await;
-
-    // catch all panics and clean up first…
-    let executed_fn = {
-        let pg_config = pg_config.clone();
-        std::panic::catch_unwind(move || {
-            tokio::task::block_in_place(move || {
-                Handle::current().block_on(async move {
-                    let ctx = ProPostgresContext::new_with_context_spec(
-                        pg_config.clone(),
-                        tokio_postgres::NoTls,
-                        exe_ctx_tiling_spec,
-                        query_ctx_chunk_size,
-                        quota_config,
-                    )
-                    .await
-                    .unwrap();
-                    f(ctx, pg_config.clone()).await
-                })
-            })
-        })
-    };
-
-    tear_down_db(pg_config, &schema).await;
-
-    match executed_fn {
-        Ok(res) => res,
-        Err(err) => std::panic::resume_unwind(err),
-    }
-}
-
-/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
-///
-/// # Panics
-///
-/// Panics if the `PostgresContext` could not be created.
-///
-pub async fn with_pro_temp_context_and_oidc<O, F, Fut, R>(
-    oidc_db: O,
-    cache_config: Cache,
-    quota_config: Quota,
-    f: F,
-) -> R
-where
-    O: FnOnce() -> OidcRequestDb + std::panic::UnwindSafe + Send + 'static,
-    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
-        + std::panic::UnwindSafe
-        + Send
-        + 'static,
-    Fut: Future<Output = R>,
-{
-    let (_permit, pg_config, schema) = setup_db().await;
-
-    // catch all panics and clean up first…
-    let executed_fn = {
-        let pg_config = pg_config.clone();
-        std::panic::catch_unwind(move || {
-            tokio::task::block_in_place(move || {
-                Handle::current().block_on(async move {
-                    let ctx = ProPostgresContext::new_with_oidc(
-                        pg_config.clone(),
-                        tokio_postgres::NoTls,
-                        oidc_db(),
-                        cache_config,
-                        quota_config,
-                    )
-                    .await
-                    .unwrap();
-                    f(ctx, pg_config.clone()).await
-                })
-            })
-        })
-    };
-
-    tear_down_db(pg_config, &schema).await;
-
-    match executed_fn {
-        Ok(res) => res,
-        Err(err) => std::panic::resume_unwind(err),
     }
 }

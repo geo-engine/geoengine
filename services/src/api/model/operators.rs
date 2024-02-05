@@ -1,37 +1,111 @@
+use super::datatypes::{
+    BoundingBox2D, FeatureDataType, Measurement, RasterDataType, SpatialPartition2D,
+    SpatialReferenceOption, TimeInterval, VectorDataType,
+};
 use crate::api::model::datatypes::{
-    Coordinate2D, DateTimeParseFormat, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
-    QueryRectangle, RasterPropertiesEntryType, RasterPropertiesKey, SpatialResolution, StringPair,
-    TimeInstance, TimeStep, VectorQueryRectangle,
+    CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, GdalConfigOption, MultiLineString,
+    MultiPoint, MultiPolygon, NoGeometry, QueryRectangle, RasterPropertiesEntryType,
+    RasterPropertiesKey, SpatialResolution, TimeInstance, TimeStep, VectorQueryRectangle,
+};
+use crate::error::{
+    RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique, Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{CacheTtlSeconds, AxisAlignedRectangle};
+use geoengine_datatypes::primitives::AxisAlignedRectangle;
+use geoengine_datatypes::util::ByteSize;
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,
 };
-use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde::{Deserialize, Deserializer, Serialize};
+use snafu::ensure;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use utoipa::ToSchema;
 
-use super::datatypes::{
-    BoundingBox2D, FeatureDataType, Measurement, RasterDataType, SpatialPartition2D,
-    SpatialReferenceOption, TimeInterval, VectorDataType,
-};
-
 /// A `ResultDescriptor` for raster queries
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, ToSql, FromSql)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
+    #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
-    pub measurement: Measurement,
     pub time: Option<TimeInterval>,
     pub bbox: Option<SpatialPartition2D>,
     pub resolution: Option<SpatialResolution>,
+    pub bands: RasterBandDescriptors,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct RasterBandDescriptors(Vec<RasterBandDescriptor>);
+
+impl RasterBandDescriptors {
+    pub fn new(bands: Vec<RasterBandDescriptor>) -> Result<Self> {
+        let mut names = HashSet::new();
+        for value in &bands {
+            ensure!(!value.name.is_empty(), RasterBandNameMustNotBeEmpty);
+            ensure!(value.name.byte_size() <= 256, RasterBandNameTooLong);
+            ensure!(
+                names.insert(&value.name),
+                RasterBandNamesMustBeUnique {
+                    duplicate_key: value.name.clone()
+                }
+            );
+        }
+
+        Ok(Self(bands))
+    }
+}
+
+impl<'de> Deserialize<'de> for RasterBandDescriptors {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let vec = Vec::deserialize(deserializer)?;
+        RasterBandDescriptors::new(vec).map_err(serde::de::Error::custom)
+    }
+}
+
+impl From<geoengine_operators::engine::RasterBandDescriptors> for RasterBandDescriptors {
+    fn from(value: geoengine_operators::engine::RasterBandDescriptors) -> Self {
+        Self(value.into_vec().into_iter().map(Into::into).collect())
+    }
+}
+
+impl From<RasterBandDescriptors> for geoengine_operators::engine::RasterBandDescriptors {
+    fn from(value: RasterBandDescriptors) -> Self {
+        geoengine_operators::engine::RasterBandDescriptors::new(
+            value.0.into_iter().map(Into::into).collect(),
+        )
+        .expect("RasterBandDescriptors should be valid, because the API descriptors are valid")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+pub struct RasterBandDescriptor {
+    pub name: String,
+    pub measurement: Measurement,
+}
+
+impl From<geoengine_operators::engine::RasterBandDescriptor> for RasterBandDescriptor {
+    fn from(value: geoengine_operators::engine::RasterBandDescriptor) -> Self {
+        Self {
+            name: value.name,
+            measurement: value.measurement.into(),
+        }
+    }
+}
+
+impl From<RasterBandDescriptor> for geoengine_operators::engine::RasterBandDescriptor {
+    fn from(value: RasterBandDescriptor) -> Self {
+        Self {
+            name: value.name,
+            measurement: value.measurement.into(),
+        }
+    }
 }
 
 impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultDescriptor {
@@ -39,21 +113,26 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
-            measurement: value.measurement.into(),
             time: value.time.map(Into::into),
             bbox: Some(value.spatial_bounds().into()), // TODO: maybe change the field to GeoTransform and pixel bounds
             resolution: Some(value.geo_transform.spatial_resolution().into()),
+            bands: value.bands.into(),
         }
     }
 }
 
 impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultDescriptor {
     fn from(value: RasterResultDescriptor) -> Self {
-
         // FIXME: this is a hack to get the geo transform from the bbox and resolution
 
-        let bbox: geoengine_datatypes::primitives::SpatialPartition2D = value.bbox.expect("we need the bbox to create a geo transform").into();
-        let resolution: geoengine_datatypes::primitives::SpatialResolution = value.resolution.expect("we need the resolution to create a geo transform").into();
+        let bbox: geoengine_datatypes::primitives::SpatialPartition2D = value
+            .bbox
+            .expect("we need the bbox to create a geo transform")
+            .into();
+        let resolution: geoengine_datatypes::primitives::SpatialResolution = value
+            .resolution
+            .expect("we need the resolution to create a geo transform")
+            .into();
 
         let geo_transform = geoengine_datatypes::raster::GeoTransform::new(
             bbox.upper_left(),
@@ -62,17 +141,20 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
         );
 
         let pixel_bounds = geoengine_datatypes::raster::GridBoundingBox2D::new_min_max(
-            0, (bbox.size_y() / resolution.y).ceil() as isize, 0 , (bbox.size_x() / resolution.x).ceil() as isize,
-        ).expect("creating pixel bounds with 0., 0. start should work");
-
+            0,
+            (bbox.size_y() / resolution.y).ceil() as isize,
+            0,
+            (bbox.size_x() / resolution.x).ceil() as isize,
+        )
+        .expect("creating pixel bounds with 0., 0. start should work");
 
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
-            measurement: value.measurement.into(),
             time: value.time.map(Into::into),
             geo_transform,
             pixel_bounds,
+            bands: value.bands.into(),
         }
     }
 }
@@ -130,6 +212,7 @@ impl<'a> ToSchema<'a> for TypedOperator {
 #[serde(rename_all = "camelCase")]
 pub struct VectorResultDescriptor {
     pub data_type: VectorDataType,
+    #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
     pub columns: HashMap<String, VectorColumnInfo>,
     pub time: Option<TimeInterval>,
@@ -194,9 +277,10 @@ impl From<VectorColumnInfo> for geoengine_operators::engine::VectorColumnInfo {
 }
 
 /// A `ResultDescriptor` for plot queries
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, ToSchema, ToSql, FromSql)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotResultDescriptor {
+    #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
     pub time: Option<TimeInterval>,
     pub bbox: Option<BoundingBox2D>,
@@ -276,7 +360,7 @@ impl From<VectorResultDescriptor> for TypedResultDescriptor {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema, FromSql, ToSql)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct MockDatasetDataSourceLoadingInfo {
     pub points: Vec<Coordinate2D>,
 }
@@ -301,7 +385,11 @@ impl From<MockDatasetDataSourceLoadingInfo>
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[aliases(
+    MockMetaData = StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>,
+    OgrMetaData = StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticMetaData<L, R, Q> {
     pub loading_info: L,
@@ -383,11 +471,6 @@ where
     }
 }
 
-pub type MockMetaData =
-    StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>;
-pub type OgrMetaData =
-    StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>;
-
 impl From<MockMetaData>
     for geoengine_operators::engine::StaticMetaData<
         geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
@@ -420,46 +503,7 @@ impl From<OgrMetaData>
     }
 }
 
-impl<'a> ToSchema<'a> for MockMetaData {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "MockMetaData",
-            ObjectBuilder::new()
-                .property(
-                    "loadingInfo",
-                    Ref::from_schema_name("MockDatasetDataSourceLoadingInfo"),
-                )
-                .required("loadingInfo")
-                .property(
-                    "resultDescriptor",
-                    Ref::from_schema_name("VectorResultDescriptor"),
-                )
-                .required("resultDescriptor")
-                .into(),
-        )
-    }
-}
-
-impl<'a> ToSchema<'a> for OgrMetaData {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "OgrMetaData",
-            ObjectBuilder::new()
-                .property("loadingInfo", Ref::from_schema_name("OgrSourceDataset"))
-                .required("loadingInfo")
-                .property(
-                    "resultDescriptor",
-                    Ref::from_schema_name("VectorResultDescriptor"),
-                )
-                .required("resultDescriptor")
-                .into(),
-        )
-    }
-}
-
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema, FromSql, ToSql)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
@@ -475,7 +519,7 @@ impl From<geoengine_operators::source::GdalMetaDataStatic> for GdalMetaDataStati
             time: value.time.map(Into::into),
             params: value.params.into(),
             result_descriptor: value.result_descriptor.into(),
-            cache_ttl: value.cache_ttl,
+            cache_ttl: value.cache_ttl.into(),
         }
     }
 }
@@ -486,7 +530,7 @@ impl From<GdalMetaDataStatic> for geoengine_operators::source::GdalMetaDataStati
             time: value.time.map(Into::into),
             params: value.params.into(),
             result_descriptor: value.result_descriptor.into(),
-            cache_ttl: value.cache_ttl,
+            cache_ttl: value.cache_ttl.into(),
         }
     }
 }
@@ -527,7 +571,7 @@ impl From<geoengine_operators::source::OgrSourceDataset> for OgrSourceDataset {
             on_error: value.on_error.into(),
             sql_query: value.sql_query,
             attribute_query: value.attribute_query,
-            cache_ttl: value.cache_ttl,
+            cache_ttl: value.cache_ttl.into(),
         }
     }
 }
@@ -546,7 +590,7 @@ impl From<OgrSourceDataset> for geoengine_operators::source::OgrSourceDataset {
             on_error: value.on_error.into(),
             sql_query: value.sql_query,
             attribute_query: value.attribute_query,
-            cache_ttl: value.cache_ttl,
+            cache_ttl: value.cache_ttl.into(),
         }
     }
 }
@@ -607,7 +651,7 @@ impl From<OgrSourceTimeFormat> for geoengine_operators::source::OgrSourceTimeFor
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, ToSql, FromSql)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum UnixTimeStampType {
     EpochSeconds,
@@ -634,7 +678,7 @@ impl From<UnixTimeStampType> for geoengine_operators::source::UnixTimeStampType 
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum OgrSourceErrorSpec {
     Ignore,
@@ -669,7 +713,6 @@ pub enum OgrSourceDatasetTimeType {
         start_format: OgrSourceTimeFormat,
         duration: OgrSourceDurationSpec,
     },
-    #[serde(rename = "start+end")]
     #[serde(rename_all = "camelCase")]
     StartEnd {
         start_field: String,
@@ -677,7 +720,6 @@ pub enum OgrSourceDatasetTimeType {
         end_field: String,
         end_format: OgrSourceTimeFormat,
     },
-    #[serde(rename = "start+duration")]
     #[serde(rename_all = "camelCase")]
     StartDuration {
         start_field: String,
@@ -906,7 +948,7 @@ impl From<geoengine_operators::source::GdalMetaDataRegular> for GdalMetaDataRegu
                 .collect(),
             data_time: value.data_time.into(),
             step: value.step.into(),
-            cache_ttl: value.cache_ttl,
+            cache_ttl: value.cache_ttl.into(),
         }
     }
 }
@@ -923,12 +965,10 @@ impl From<GdalMetaDataRegular> for geoengine_operators::source::GdalMetaDataRegu
                 .collect(),
             data_time: value.data_time.into(),
             step: value.step.into(),
-            cache_ttl: value.cache_ttl,
+            cache_ttl: value.cache_ttl.into(),
         }
     }
 }
-
-pub type GdalConfigOption = StringPair;
 
 /// Parameters for loading data using Gdal
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
@@ -950,8 +990,6 @@ pub struct GdalDatasetParameters {
     // Configs as key, value pairs that will be set as thread local config options, e.g.
     // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
     // TODO: validate the config options: only allow specific keys and specific values
-    // TODO: remove, when <https://github.com/juhaku/utoipa/issues/429> is fixed
-    #[schema(value_type = Option<Vec<StringPair>>)]
     pub gdal_config_options: Option<Vec<GdalConfigOption>>,
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
@@ -1002,7 +1040,7 @@ impl From<GdalDatasetParameters> for geoengine_operators::source::GdalDatasetPar
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema, FromSql, ToSql)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 pub struct GdalSourceTimePlaceholder {
     pub format: DateTimeParseFormat,
     pub reference: TimeReference,
@@ -1026,7 +1064,7 @@ impl From<GdalSourceTimePlaceholder> for geoengine_operators::source::GdalSource
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, ToSchema, FromSql, ToSql)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalDatasetGeoTransform {
     pub origin_coordinate: Coordinate2D,
@@ -1054,7 +1092,7 @@ impl From<GdalDatasetGeoTransform> for geoengine_operators::source::GdalDatasetG
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, ToSchema, FromSql, ToSql)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, ToSchema)]
 pub enum FileNotFoundHandling {
     NoData, // output tiles filled with nodata
     Error,  // return error tile
@@ -1078,7 +1116,7 @@ impl From<FileNotFoundHandling> for geoengine_operators::source::FileNotFoundHan
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema, FromSql, ToSql)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 pub struct GdalMetadataMapping {
     pub source_key: RasterPropertiesKey,
     pub target_key: RasterPropertiesKey,
@@ -1105,7 +1143,7 @@ impl From<GdalMetadataMapping> for geoengine_operators::source::GdalMetadataMapp
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, FromSql, ToSql)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum TimeReference {
     Start,
@@ -1158,7 +1196,7 @@ impl From<geoengine_operators::source::GdalMetadataNetCdfCf> for GdalMetadataNet
             end: value.end.into(),
             step: value.step.into(),
             band_offset: value.band_offset,
-            cache_ttl: value.cache_ttl,
+            cache_ttl: value.cache_ttl.into(),
         }
     }
 }
@@ -1172,12 +1210,12 @@ impl From<GdalMetadataNetCdfCf> for geoengine_operators::source::GdalMetadataNet
             end: value.end.into(),
             step: value.step.into(),
             band_offset: value.band_offset,
-            cache_ttl: value.cache_ttl,
+            cache_ttl: value.cache_ttl.into(),
         }
     }
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema, FromSql, ToSql)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataList {
     pub result_descriptor: RasterResultDescriptor,
@@ -1203,7 +1241,7 @@ impl From<GdalMetaDataList> for geoengine_operators::source::GdalMetaDataList {
 }
 
 /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema, FromSql, ToSql)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
@@ -1219,7 +1257,7 @@ impl From<geoengine_operators::source::GdalLoadingInfoTemporalSlice>
         Self {
             time: value.time.into(),
             params: value.params.map(Into::into),
-            cache_ttl: value.cache_ttl,
+            cache_ttl: value.cache_ttl.into(),
         }
     }
 }
@@ -1231,12 +1269,12 @@ impl From<GdalLoadingInfoTemporalSlice>
         Self {
             time: value.time.into(),
             params: value.params.map(Into::into),
-            cache_ttl: value.cache_ttl,
+            cache_ttl: value.cache_ttl.into(),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum CsvHeader {
     Yes,
@@ -1287,5 +1325,54 @@ impl From<FormatSpecifics> for geoengine_operators::source::FormatSpecifics {
                 header: header.into(),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn it_checks_duplicates_while_deserializing_band_descriptors() {
+        assert_eq!(
+            serde_json::from_value::<RasterBandDescriptors>(json!([{
+                "name": "foo",
+                "measurement": {
+                    "type": "unitless"
+                }
+            },{
+                "name": "bar",
+                "measurement": {
+                    "type": "unitless"
+                }
+            }]))
+            .unwrap(),
+            RasterBandDescriptors::new(vec![
+                RasterBandDescriptor {
+                    name: "foo".into(),
+                    measurement: Measurement::Unitless
+                },
+                RasterBandDescriptor {
+                    name: "bar".into(),
+                    measurement: Measurement::Unitless
+                },
+            ])
+            .unwrap()
+        );
+
+        assert!(serde_json::from_value::<RasterBandDescriptors>(json!([{
+            "name": "foo",
+            "measurement": {
+                "type": "unitless"
+            }
+        },{
+            "name": "foo",
+            "measurement": {
+                "type": "unitless"
+            }
+        }]))
+        .is_err());
     }
 }

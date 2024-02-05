@@ -1,6 +1,5 @@
-use crate::pro::contexts::ProPostgresContext;
 use crate::pro::users::UserAuth;
-use crate::util::openapi_examples::RunnableExample;
+use crate::{pro::contexts::ProPostgresContext, util::openapi_examples::RunnableExample};
 use actix_web::dev::ServiceResponse;
 use actix_web::test::TestRequest;
 use std::future::Future;

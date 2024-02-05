@@ -1,9 +1,17 @@
 use std::{marker::PhantomData, sync::Arc};
 
+use super::compiled::LinkedExpression;
+use crate::{
+    adapters::{QueryWrapper, RasterArrayTimeAdapter, RasterTimeAdapter},
+    engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterResultDescriptor},
+    util::Result,
+};
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use geoengine_datatypes::{
-    primitives::{CacheHint, RasterQueryRectangle, RasterSpatialQueryRectangle, TimeInterval},
+    primitives::{
+        BandSelection, CacheHint, RasterQueryRectangle, RasterSpatialQueryRectangle, TimeInterval,
+    },
     raster::{
         ConvertDataType, FromIndexFnParallel, GeoTransform, GridIdx2D, GridIndexAccess,
         GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess, MapElementsParallel, Pixel,
@@ -13,19 +21,12 @@ use geoengine_datatypes::{
 use libloading::Symbol;
 use num_traits::AsPrimitive;
 
-use crate::{
-    adapters::{QueryWrapper, RasterArrayTimeAdapter, RasterTimeAdapter},
-    engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor},
-    util::Result,
-};
-
-use super::compiled::LinkedExpression;
-
 pub struct ExpressionQueryProcessor<TO, Sources>
 where
     TO: Pixel,
 {
     pub sources: Sources,
+    pub result_descriptor: RasterResultDescriptor,
     pub phantom_data: PhantomData<TO>,
     pub program: Arc<LinkedExpression>,
     pub map_no_data: bool,
@@ -35,9 +36,15 @@ impl<TO, Sources> ExpressionQueryProcessor<TO, Sources>
 where
     TO: Pixel,
 {
-    pub fn new(program: LinkedExpression, sources: Sources, map_no_data: bool) -> Self {
+    pub fn new(
+        program: LinkedExpression,
+        sources: Sources,
+        result_descriptor: RasterResultDescriptor,
+        map_no_data: bool,
+    ) -> Self {
         Self {
             sources,
+            result_descriptor,
             program: Arc::new(program),
             phantom_data: PhantomData,
             map_no_data,
@@ -53,6 +60,8 @@ where
 {
     type Output = RasterTile2D<TO>;
     type SpatialQuery = RasterSpatialQueryRectangle;
+    type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'b>(
         &'b self,
@@ -88,6 +97,7 @@ where
                 Ok(RasterTile2D::new(
                     out_time,
                     out_tile_position,
+                    0,
                     out_global_geo_transform,
                     out,
                     cache_hint,
@@ -95,6 +105,10 @@ where
             });
 
         Ok(stream.boxed())
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

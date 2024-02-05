@@ -324,6 +324,11 @@ pub enum Error {
         base: PathBuf,
         sub_path: PathBuf,
     },
+
+    UnexpectedInvalidDbTypeConversion,
+
+    DuplicateBandInQueryBandSelection,
+    QueryBandSelectionMustNotBeEmpty,
 }
 
 impl From<arrow::error::ArrowError> for Error {

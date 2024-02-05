@@ -1,8 +1,8 @@
+use crate::api::handlers;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::{Error, Result};
-use crate::handlers;
 use crate::pro;
-use crate::pro::apidoc::ApiDoc;
+use crate::pro::api::ApiDoc;
 
 use crate::pro::contexts::ProPostgresContext;
 use crate::util::config::{self, get_config_element};
@@ -45,12 +45,13 @@ where
     HttpServer::new(move || {
         let mut api = web::scope(&api_prefix)
             .configure(configure_extractors)
-            .configure(pro::handlers::datasets::init_dataset_routes::<C>)
+            .configure(pro::api::handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
-            .configure(pro::handlers::permissions::init_permissions_routes::<C>)
+            .configure(pro::api::handlers::machine_learning::init_ml_routes::<C>)
+            .configure(pro::api::handlers::permissions::init_permissions_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(handlers::projects::init_project_routes::<C>)
-            .configure(pro::handlers::users::init_user_routes::<C>)
+            .configure(pro::api::handlers::users::init_user_routes::<C>)
             .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
             .configure(handlers::upload::init_upload_routes::<C>)
             .configure(handlers::tasks::init_task_routes::<C>)
@@ -84,7 +85,7 @@ where
                 "EBV",
                 "../api-docs/ebv/openapi.json",
                 "/api-docs/ebv/openapi.json",
-                crate::handlers::ebv::ApiDoc::openapi(),
+                crate::api::handlers::ebv::ApiDoc::openapi(),
             );
         }
 
@@ -146,7 +147,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let cache_config: crate::pro::util::config::Cache = get_config_element()?;
     let quota_config: crate::pro::util::config::Quota = get_config_element()?;
 
-    if user_config.user_registration {
+    if user_config.registration {
         info!("User Registration: enabled");
     } else {
         info!("User Registration: disabled");
@@ -173,7 +174,7 @@ pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     }
 
     if cache_config.enabled {
-        info!("Cache: enabled ({} MB)", cache_config.cache_size_in_mb);
+        info!("Cache: enabled ({} MB)", cache_config.size_in_mb);
     } else {
         info!("Cache: disabled");
     }
@@ -218,7 +219,7 @@ async fn start_postgres(
         let db_config = config::get_config_element::<config::Postgres>()?;
 
         let ctx = ProPostgresContext::new_with_data(
-            bb8_postgres::tokio_postgres::Config::from(db_config),
+            bb8_postgres::tokio_postgres::Config::try_from(db_config)?,
             NoTls,
             data_path_config.dataset_defs_path,
             data_path_config.provider_defs_path,

@@ -1,20 +1,18 @@
-use std::collections::HashMap;
-
-use async_trait::async_trait;
-use geoengine_datatypes::primitives::{
-    CacheTtlSeconds, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
-};
-use serde::{Deserialize, Serialize};
-
+use super::{GdalDatasetParameters, GdalSourceTimePlaceholder};
 use crate::{
     engine::{MetaData, RasterResultDescriptor},
     error::Error,
     util::Result,
 };
+use async_trait::async_trait;
+use geoengine_datatypes::primitives::{
+    CacheTtlSeconds, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
+};
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-use super::{GdalDatasetParameters, GdalSourceTimePlaceholder};
-
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
@@ -182,7 +180,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 // TODO: custom deserializer that checks that that params are sorted and do not overlap
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataList {
     pub result_descriptor: RasterResultDescriptor,
@@ -487,7 +485,7 @@ impl Iterator for GdalLoadingInfoTemporalSliceIterator {
 }
 
 /// one temporal slice of the dataset that requires reading from exactly one Gdal dataset
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalLoadingInfoTemporalSlice {
     pub time: TimeInterval,
@@ -501,7 +499,7 @@ mod tests {
     use geoengine_datatypes::{
         hashmap,
         primitives::{
-            Coordinate2D, DateTime, DateTimeParseFormat, Measurement, SpatialPartition2D,
+            BandSelection, Coordinate2D, DateTime, DateTimeParseFormat, SpatialPartition2D,
             SpatialResolution, TimeGranularity,
         },
         raster::{BoundedGrid, GeoTransform, GridShape2D, RasterDataType},
@@ -509,7 +507,10 @@ mod tests {
         util::test::TestDefault,
     };
 
-    use crate::source::{FileNotFoundHandling, GdalDatasetGeoTransform, TimeReference};
+    use crate::{
+        engine::RasterBandDescriptors,
+        source::{FileNotFoundHandling, GdalDatasetGeoTransform, TimeReference},
+    };
 
     use super::*;
 
@@ -520,10 +521,10 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
                 pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
+                bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
                 file_path: "/foo/bar_%TIME%.tiff".into(),
@@ -566,10 +567,10 @@ mod tests {
             RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
                 pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
+                bands: RasterBandDescriptors::new_single_band(),
             }
         );
     }
@@ -584,6 +585,7 @@ mod tests {
                     SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
                     SpatialResolution::one(),
                     TimeInterval::new_unchecked(0, 30),
+                    BandSelection::first()
                 ))
                 .await
                 .unwrap()
@@ -623,6 +625,7 @@ mod tests {
                     SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
                     SpatialResolution::one(),
                     TimeInterval::default(),
+                    BandSelection::first()
                 ))
                 .await
                 .unwrap()
@@ -664,6 +667,7 @@ mod tests {
                     SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
                     SpatialResolution::one(),
                     TimeInterval::new_unchecked(-10, -5),
+                    BandSelection::first()
                 ))
                 .await
                 .unwrap()
@@ -690,6 +694,7 @@ mod tests {
                     SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
                     SpatialResolution::one(),
                     TimeInterval::new_unchecked(50, 55),
+                    BandSelection::first()
                 ))
                 .await
                 .unwrap()
@@ -716,6 +721,7 @@ mod tests {
                     SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
                     SpatialResolution::one(),
                     TimeInterval::new_unchecked(0, 22),
+                    BandSelection::first()
                 ))
                 .await
                 .unwrap()
@@ -751,6 +757,7 @@ mod tests {
                     SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
                     SpatialResolution::one(),
                     TimeInterval::new_unchecked(0, 20),
+                    BandSelection::first()
                 ))
                 .await
                 .unwrap()
@@ -785,10 +792,10 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
                 pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
+                bands: RasterBandDescriptors::new_single_band(),
             },
             params: vec![
                 GdalLoadingInfoTemporalSlice {
@@ -853,10 +860,10 @@ mod tests {
             RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
                 pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
+                bands: RasterBandDescriptors::new_single_band()
             }
         );
 
@@ -866,6 +873,7 @@ mod tests {
                     SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
                     SpatialResolution::one(),
                     TimeInterval::new_unchecked(0, 3),
+                    BandSelection::first()
                 ))
                 .await
                 .unwrap()
@@ -896,10 +904,10 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 geo_transform: GeoTransform::new((0., 0.).into(), 1., -1.),
                 pixel_bounds: GridShape2D::new_2d(128, 128).bounding_box(),
+                bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -931,6 +939,7 @@ mod tests {
             SpatialResolution::one(),
             Coordinate2D::new(0., 0.), // FIXME: is this correct here?
             TimeInterval::new(time_start, time_end).unwrap(),
+            BandSelection::first(),
         );
 
         let loading_info = metadata.loading_info(query).await.unwrap();
@@ -964,10 +973,10 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
                 pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
+                bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -998,6 +1007,7 @@ mod tests {
             SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
             SpatialResolution::one(),
             TimeInterval::new(time_start, time_end).unwrap(),
+            BandSelection::first(),
         );
 
         let loading_info = metadata.loading_info(query).await.unwrap();
@@ -1031,10 +1041,10 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                measurement: Measurement::Unitless,
                 time: None,
                 geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
                 pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
+                bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
                 file_path: "path/to/ds".into(),
@@ -1069,6 +1079,7 @@ mod tests {
                 TimeInstance::from(DateTime::new_utc(2009, 7, 1, 0, 0, 0)),
                 TimeInstance::from(DateTime::new_utc(2013, 3, 1, 0, 0, 0)),
             ),
+            BandSelection::first(),
         );
 
         let loading_info = metadata.loading_info(query).await.unwrap();

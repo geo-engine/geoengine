@@ -1,15 +1,19 @@
-use std::collections::HashMap;
-
+use crate::datasets::listing::{Provenance, ProvenanceOutput};
+use crate::error::{Error, Result};
+use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
+    LayerListing, ProviderLayerCollectionId, ProviderLayerId,
+};
+use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::util::postgres::DatabaseConnectionConfig;
+use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
-use geoengine_datatypes::primitives::CacheTtlSeconds;
-use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-use tokio_postgres::NoTls;
-
 use geoengine_datatypes::collections::VectorDataType;
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
@@ -23,18 +27,12 @@ use geoengine_operators::source::{
     GdalLoadingInfo, OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
     OgrSourceErrorSpec, OgrSourceParameters,
 };
-
-use crate::api::model::datatypes::{DataId, DataProviderId, LayerId};
-use crate::datasets::listing::{Provenance, ProvenanceOutput};
-use crate::error::{Error, Result};
-use crate::layers::external::{DataProvider, DataProviderDefinition};
-use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
-    LayerListing, ProviderLayerCollectionId, ProviderLayerId,
-};
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
-use crate::util::postgres::DatabaseConnectionConfig;
-use crate::workflows::workflow::Workflow;
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+use std::collections::HashMap;
+use std::fmt::Write;
+use tokio_postgres::NoTls;
 
 pub const GBIF_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0x1c01_dbb9_e3ab_f9a2_06f5_228b_a4b6_bf7a);
@@ -163,14 +161,13 @@ impl GbifDataProvider {
             OFFSET $3;
             "#,
             schema = self.db_config.schema,
-            filter = filters
-                .iter()
-                .enumerate()
-                .map(|(index, (column, _))| format!(
-                    r#" AND "{column}" = ${index}"#,
-                    index = index + 4
-                ))
-                .collect::<String>()
+            filter = filters.iter().enumerate().fold(
+                String::new(),
+                |mut output, (index, (column, _))| {
+                    let _ = write!(output, r#" AND "{column}" = ${index}"#, index = index + 4);
+                    output
+                }
+            )
         );
 
         let stmt = conn.prepare(query).await?;
@@ -222,14 +219,13 @@ impl GbifDataProvider {
             "#,
             schema = self.db_config.schema,
             column = column,
-            filter = filters
-                .iter()
-                .enumerate()
-                .map(|(index, (column, _))| format!(
-                    r#" AND "{column}" = ${index}"#,
-                    index = index + 3
-                ))
-                .collect::<String>()
+            filter = filters.iter().enumerate().fold(
+                String::new(),
+                |mut output, (index, (column, _))| {
+                    let _ = write!(output, r#" AND "{column}" = ${index}"#, index = index + 3);
+                    output
+                }
+            )
         );
         let stmt = conn.prepare(query).await?;
         let limit = &i64::from(options.limit);
@@ -950,30 +946,27 @@ impl DataProvider for GbifDataProvider {
 
 #[cfg(test)]
 mod tests {
-    use std::future::Future;
-    use std::{fs::File, io::Read, path::PathBuf};
-
+    use super::*;
+    use crate::layers::layer::Layer;
+    use crate::layers::layer::ProviderLayerCollectionId;
+    use crate::test_data;
+    use crate::util::config::{get_config_element, Postgres};
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
-    use rand::RngCore;
-    use tokio::runtime::Handle;
-    use tokio_postgres::Config;
-
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
+    use geoengine_datatypes::dataset::ExternalDataId;
+    use geoengine_datatypes::primitives::ColumnSelection;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, CacheHint, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
-
-    use crate::api::model::datatypes::{ExternalDataId, LayerId};
-    use crate::layers::layer::Layer;
-    use crate::layers::layer::ProviderLayerCollectionId;
-    use crate::test_data;
-    use crate::util::config::{get_config_element, Postgres};
-
-    use super::*;
+    use rand::RngCore;
+    use std::future::Future;
+    use std::{fs::File, io::Read, path::PathBuf};
+    use tokio::runtime::Handle;
+    use tokio_postgres::Config;
 
     /// Create a schema with test tables and return the schema name
     async fn create_test_data(db_config: &Postgres) -> String {
@@ -1538,13 +1531,10 @@ mod tests {
                 let meta: Box<
                     dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
                 > = provider
-                    .meta_data(
-                        &DataId::External(ExternalDataId {
-                            provider_id: GBIF_PROVIDER_ID,
-                            layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
-                        })
-                        .into(),
-                    )
+                    .meta_data(&DataId::External(ExternalDataId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                    }))
                     .await
                     .map_err(|e| e.to_string())?;
 
@@ -1637,6 +1627,7 @@ mod tests {
                         BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                         TimeInterval::default(),
                         SpatialResolution::zero_point_one(),
+                        ColumnSelection::all(),
                     ))
                     .await
                     .map_err(|e| e.to_string())?;
@@ -1756,18 +1747,24 @@ mod tests {
                 let meta: Box<
                     dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
                 > = provider
-                    .meta_data(
-                        &DataId::External(ExternalDataId {
-                            provider_id: GBIF_PROVIDER_ID,
-                            layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
-                        })
-                        .into(),
-                    )
+                    .meta_data(&DataId::External(ExternalDataId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                    }))
                     .await
                     .map_err(|e| e.to_string())?;
 
-                let processor: OgrSourceProcessor<MultiPoint> =
-                    OgrSourceProcessor::new(meta, vec![]);
+                let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
+                    VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        columns: HashMap::new(),
+                        time: None,
+                        bbox: None,
+                    },
+                    meta,
+                    vec![],
+                );
 
                 let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
                     BoundingBox2D::new(
@@ -1777,6 +1774,7 @@ mod tests {
                     .unwrap(),
                     TimeInterval::default(),
                     SpatialResolution::zero_point_one(),
+                    ColumnSelection::all(),
                 );
                 let ctx = MockQueryContext::test_default();
 
