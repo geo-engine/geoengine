@@ -1,9 +1,11 @@
+use super::geo_feature_collection::ReplaceRawArrayCoords;
 use crate::collections::{
     BuilderProvider, FeatureCollection, FeatureCollectionInfos, FeatureCollectionIterator,
     FeatureCollectionRow, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
     GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
+use crate::util::helpers::indices_for_split_at;
 use crate::util::Result;
 use crate::{
     primitives::MultiLineString,
@@ -18,8 +20,6 @@ use arrow::{
 use rayon::iter::plumbing::Producer;
 use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use std::{slice, sync::Arc};
-
-use super::geo_feature_collection::ReplaceRawArrayCoords;
 
 /// This collection contains temporal multi polygons and miscellaneous data.
 pub type MultiPolygonCollection = FeatureCollection<MultiPolygon>;
@@ -261,6 +261,35 @@ impl<'l> ParallelIterator for MultiPolygonParIterator<'l> {
     }
 }
 
+impl<'l> Producer for MultiPolygonIterator<'l> {
+    type Item = MultiPolygonRef<'l>;
+
+    type IntoIter = MultiPolygonIterator<'l>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self
+    }
+
+    fn split_at(self, index: usize) -> (Self, Self) {
+        let (left_index, left_length_right_index, right_length) =
+            indices_for_split_at(self.index, self.length, index);
+
+        let left = Self::IntoIter {
+            geometry_column: self.geometry_column,
+            index: left_index,
+            length: left_length_right_index,
+        };
+
+        let right = Self::IntoIter {
+            geometry_column: self.geometry_column,
+            index: left_length_right_index,
+            length: right_length,
+        };
+
+        (left, right)
+    }
+}
+
 impl<'l> Producer for MultiPolygonParIterator<'l> {
     type Item = MultiPolygonRef<'l>;
 
@@ -271,29 +300,8 @@ impl<'l> Producer for MultiPolygonParIterator<'l> {
     }
 
     fn split_at(self, index: usize) -> (Self, Self) {
-        // Example:
-        //   Index: 0, Length 3
-        //   Split at 1
-        //   Left: Index: 0, Length: 1 -> Elements: 0
-        //   Right: Index: 1, Length: 3 -> Elements: 1, 2
-
-        // The index is between self.0.index and self.0.length,
-        // so we have to transform it to a global index
-        let global_index = self.0.index + index;
-
-        let left = Self(Self::IntoIter {
-            geometry_column: self.0.geometry_column,
-            index: self.0.index,
-            length: global_index,
-        });
-
-        let right = Self(Self::IntoIter {
-            geometry_column: self.0.geometry_column,
-            index: global_index,
-            length: self.0.length,
-        });
-
-        (left, right)
+        let (left, right) = self.0.split_at(index);
+        (Self(left), Self(right))
     }
 }
 

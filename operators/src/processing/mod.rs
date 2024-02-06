@@ -22,7 +22,10 @@ mod vector_join;
 pub use circle_merging_quadtree::{
     InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
 };
-pub use expression::{Expression, ExpressionError, ExpressionParams};
+pub use expression::{
+    initialize_expression_dependencies, Expression, ExpressionParams, RasterExpressionError,
+    VectorExpression, VectorExpressionError, VectorExpressionParams,
+};
 pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
 pub use line_simplification::{
     LineSimplification, LineSimplificationError, LineSimplificationParams,

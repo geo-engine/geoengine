@@ -1,3 +1,7 @@
+use rayon::iter::{
+    plumbing::Producer, IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
+};
+
 /// This macro allows comparing float slices using [`float_cmp::approx_eq`].
 #[macro_export]
 macro_rules! assert_approx_eq {
@@ -83,6 +87,124 @@ where
     }
 }
 
+impl<I, T> DoubleEndedIterator for SomeIter<I, T>
+where
+    I: Iterator<Item = T> + DoubleEndedIterator,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.inner_iterator.next_back().map(Into::into)
+    }
+}
+
+impl<I, T> ExactSizeIterator for SomeIter<I, T> where I: Iterator<Item = T> + ExactSizeIterator {}
+
+/// Converts an `ParallelIterator<Item=T>` to an `ParallelIterator<Item=Option<T>>`
+#[derive(Clone, Debug)]
+pub struct SomeParIter<I, T>
+where
+    I: Iterator<Item = T>,
+{
+    inner_iterator: SomeIter<I, T>,
+}
+
+impl<I, T> SomeParIter<I, T>
+where
+    I: Iterator<Item = T>,
+{
+    pub fn new(iterator: SomeIter<I, T>) -> Self {
+        Self {
+            inner_iterator: iterator,
+        }
+    }
+}
+
+impl<I, T> IntoParallelIterator for SomeIter<I, T>
+where
+    I: Iterator<Item = T> + ExactSizeIterator + DoubleEndedIterator + Producer + Send,
+    T: Send,
+{
+    type Item = Option<T>;
+    type Iter = SomeParIter<I, T>;
+
+    fn into_par_iter(self) -> Self::Iter {
+        SomeParIter::new(self)
+    }
+}
+
+impl<I, T> ParallelIterator for SomeParIter<I, T>
+where
+    I: Iterator<Item = T> + ExactSizeIterator + DoubleEndedIterator + Producer + Send,
+    T: Send,
+{
+    type Item = Option<T>;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        rayon::iter::plumbing::bridge(self, consumer)
+    }
+}
+
+impl<I, T> Producer for SomeIter<I, T>
+where
+    I: Iterator<Item = T> + ExactSizeIterator + DoubleEndedIterator + Producer + Send,
+    T: Send,
+{
+    type Item = Option<T>;
+
+    type IntoIter = SomeIter<I, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::new(self.inner_iterator)
+    }
+
+    fn split_at(self, index: usize) -> (Self, Self) {
+        let (left, right) = self.inner_iterator.split_at(index);
+        (Self::new(left), Self::new(right))
+    }
+}
+
+impl<I, T> Producer for SomeParIter<I, T>
+where
+    I: Iterator<Item = T> + ExactSizeIterator + DoubleEndedIterator + Producer + Send,
+    T: Send,
+{
+    type Item = Option<T>;
+
+    type IntoIter = SomeIter<I, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner_iterator
+    }
+
+    fn split_at(self, index: usize) -> (Self, Self) {
+        let (left, right) = self.inner_iterator.split_at(index);
+        (SomeParIter::new(left), SomeParIter::new(right))
+    }
+}
+
+impl<I, T> IndexedParallelIterator for SomeParIter<I, T>
+where
+    I: Iterator<Item = T> + ExactSizeIterator + DoubleEndedIterator + Producer + Send,
+    T: Send,
+{
+    fn len(&self) -> usize {
+        self.inner_iterator.inner_iterator.len()
+    }
+
+    fn drive<C: rayon::iter::plumbing::Consumer<Self::Item>>(self, consumer: C) -> C::Result {
+        rayon::iter::plumbing::bridge(self, consumer)
+    }
+
+    fn with_producer<CB: rayon::iter::plumbing::ProducerCallback<Self::Item>>(
+        self,
+        callback: CB,
+    ) -> CB::Output {
+        callback.callback(self)
+    }
+}
+
 /// snap `value` to previous `step` multiple from `start`
 pub fn snap_prev(start: f64, step: f64, value: f64) -> f64 {
     start + ((value - start) / step).floor() * step
@@ -98,6 +220,29 @@ pub fn snap_next(start: f64, step: f64, value: f64) -> f64 {
 #[inline]
 pub fn equals_or_both_nan<T: PartialEq>(value: &T, no_data_value: &T) -> bool {
     value == no_data_value || (value != value && no_data_value != no_data_value)
+}
+
+/// Helper function for `split_at` of a `rayon::iter::plumbing::Producer`.
+///
+/// It returns `(left_index, left_length_right_index, right_length)`.
+pub fn indices_for_split_at(
+    index: usize,
+    length: usize,
+    split_index: usize,
+) -> (usize, usize, usize) {
+    // Example:
+    //   Index: 0, Length 3
+    //   Split at 1
+    //   Left: Index: 0, Length: 1 -> Elements: 0
+    //   Right: Index: 1, Length: 3 -> Elements: 1, 2
+
+    debug_assert!(index + split_index <= length, "split index out of bounds");
+
+    let left_index = index;
+    let left_length_right_index = left_index + split_index;
+    let right_length = length;
+
+    (left_index, left_length_right_index, right_length)
 }
 
 #[cfg(test)]
@@ -199,5 +344,12 @@ mod tests {
         let no_data_value = Some(f32::NAN);
 
         assert!(equals_or_both_nan(&value, &no_data_value));
+    }
+
+    #[test]
+    fn split_at_helper() {
+        let (left_index, left_length_right_index, right_length) = indices_for_split_at(0, 3, 1);
+        assert_eq!((left_index, left_length_right_index), (0, 1));
+        assert_eq!((left_length_right_index, right_length), (1, 3));
     }
 }

@@ -1,1008 +1,135 @@
-use self::{
-    codegen::ExpressionAst, compiled::LinkedExpression, parser::ExpressionParser,
-    query_processor::ExpressionInput,
-};
-use crate::{
-    engine::{
-        CanonicOperatorName, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
-        RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterQueryProcessor,
-        RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
-        WorkflowOperatorPath,
-    },
-    error::InvalidNumberOfExpressionInputBands,
-    processing::expression::{codegen::Parameter, query_processor::ExpressionQueryProcessor},
-    util::Result,
-};
-use async_trait::async_trait;
-use geoengine_datatypes::{primitives::Measurement, raster::RasterDataType};
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-
-pub use self::error::ExpressionError;
-
-mod codegen;
-mod compiled;
 mod error;
-mod functions;
-mod parser;
-mod query_processor;
+mod raster_operator;
+mod raster_query_processor;
+mod vector_operator;
 
-/// Parameters for the `Expression` operator.
-/// * The `expression` must only contain simple arithmetic
-///     calculations.
-/// * `output_type` is the data type of the produced raster tiles.
-/// * `output_no_data_value` is the no data value of the output raster
-/// * `output_measurement` is the measurement description of the output
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ExpressionParams {
-    pub expression: String,
-    pub output_type: RasterDataType,
-    pub output_measurement: Option<Measurement>,
-    pub map_no_data: bool,
-}
-/// The `Expression` operator calculates an expression for all pixels of the input rasters bands and
-/// produces raster tiles of a given output type
-pub type Expression = Operator<ExpressionParams, SingleRasterSource>;
+pub use error::{RasterExpressionError, VectorExpressionError};
+pub use raster_operator::{Expression, ExpressionParams}; // TODO: rename to `RasterExpression`
+pub use vector_operator::{VectorExpression, VectorExpressionParams};
 
-/// Create a parameter name from an index.
-/// Starts with `A`.
+use self::error::ExpressionDependenciesInitializationError;
+use crate::util::Result;
+use geoengine_datatypes::primitives::{
+    AsGeoOption, MultiLineString, MultiLineStringRef, MultiPoint, MultiPointRef, MultiPolygon,
+    MultiPolygonRef, NoGeometry,
+};
+use geoengine_expression::{error::ExpressionExecutionError, ExpressionDependencies};
+use std::sync::{Arc, OnceLock};
+
+/// The expression dependencies are initialized once and then reused for all expression evaluations.
+static EXPRESSION_DEPENDENCIES: OnceLock<
+    Result<ExpressionDependencies, Arc<ExpressionExecutionError>>,
+> = OnceLock::new();
+
+/// Initializes the expression dependencies once so that they can be reused for all expression evaluations.
+/// Compiling the dependencies takes a while, so this can drastically improve performance on the first expression call.
 ///
-/// ## Note
+/// If it fails, you can retry or terminate the program.
 ///
-/// This function only makes sense for indices between 0 and 25.
-///
-fn index_to_parameter(index: usize) -> String {
-    let index = index as u32;
-    let start_index = 'A' as u32;
+pub async fn initialize_expression_dependencies(
+) -> Result<(), ExpressionDependenciesInitializationError> {
+    crate::util::spawn_blocking(|| {
+        let dependencies = ExpressionDependencies::new()?;
 
-    let parameter = char::from_u32(start_index + index).unwrap_or_default();
-
-    parameter.to_string()
+        // if set returns an error, it was initialized before so it is ok for this functions purpose
+        let _ = EXPRESSION_DEPENDENCIES.set(Ok(dependencies));
+        Ok(())
+    })
+    .await?
 }
 
-#[typetag::serde]
-#[async_trait]
-impl RasterOperator for Expression {
-    async fn _initialize(
-        self: Box<Self>,
-        path: WorkflowOperatorPath,
-        context: &dyn crate::engine::ExecutionContext,
-    ) -> Result<Box<dyn InitializedRasterOperator>> {
-        let name = CanonicOperatorName::from(&self);
-
-        let source = self.sources.initialize_sources(path, context).await?.raster;
-
-        let in_descriptor = source.result_descriptor();
-
-        ensure!(
-            !in_descriptor.bands.is_empty() && in_descriptor.bands.len() <= 8,
-            InvalidNumberOfExpressionInputBands {
-                found: in_descriptor.bands.len()
-            }
-        );
-
-        // we refer to raster bands by A, B, C, …
-        let parameters = (0..in_descriptor.bands.len())
-            .map(|i| {
-                let parameter = index_to_parameter(i);
-                Parameter::Number(parameter.into())
-            })
-            .collect::<Vec<_>>();
-
-        let expression = ExpressionParser::new(&parameters)?.parse(
-            "expression", // TODO: generate and store a unique name
-            &self.params.expression,
-        )?;
-
-        let result_descriptor = RasterResultDescriptor {
-            data_type: self.params.output_type,
-            spatial_reference: in_descriptor.spatial_reference,
-            time: in_descriptor.time,
-            bbox: in_descriptor.bbox,
-            resolution: in_descriptor.resolution,
-            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                "expression".into(), // TODO: how to name the band?
-                self.params
-                    .output_measurement
-                    .as_ref()
-                    .map_or(Measurement::Unitless, Measurement::clone),
-            )])?,
-        };
-
-        let initialized_operator = InitializedExpression {
-            name,
-            result_descriptor,
-            source,
-            expression,
-            map_no_data: self.params.map_no_data,
-        };
-
-        Ok(initialized_operator.boxed())
-    }
-
-    span_fn!(Expression);
+fn generate_expression_dependencies(
+) -> Result<ExpressionDependencies, Arc<ExpressionExecutionError>> {
+    ExpressionDependencies::new().map_err(Arc::new)
 }
 
-impl OperatorName for Expression {
-    const TYPE_NAME: &'static str = "Expression";
+fn get_expression_dependencies(
+) -> Result<&'static ExpressionDependencies, Arc<ExpressionExecutionError>> {
+    EXPRESSION_DEPENDENCIES
+        .get_or_init(generate_expression_dependencies)
+        .as_ref()
+        .map_err(Clone::clone)
 }
 
-pub struct InitializedExpression {
-    name: CanonicOperatorName,
-    result_descriptor: RasterResultDescriptor,
-    source: Box<dyn InitializedRasterOperator>,
-    expression: ExpressionAst,
-    map_no_data: bool,
+/// Convenience trait for converting [`geoengine_datatypes`] types to [`geoengine_expression`] types.
+trait AsExpressionGeo: AsGeoOption {
+    type ExpressionGeometryType: Send;
+
+    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType>;
 }
 
-/// Macro for generating the match cases for number of bands to the `ExpressionInput` struct.
-macro_rules! generate_match_cases {
-    ($num_bands:expr, $output_type:expr, $expression:expr, $source_processor:expr, $result_descriptor:expr, $map_no_data:expr, $($x:expr),*) => {
-        match $num_bands {
-            $(
-                $x => call_generic_raster_processor!(
-                    $output_type,
-                    ExpressionQueryProcessor::new(
-                        $expression,
-                        ExpressionInput::<$x> {
-                            raster: $source_processor,
-                        },
-                        $result_descriptor,
-                        $map_no_data.clone(),
-                    )
-                    .boxed()
-                ),
-            )*
-            _ => unreachable!("number of bands was checked to be between 1 and 8"),
-        }
-    };
+/// Convenience trait for converting [`geoengine_expression`] types to [`geoengine_datatypes`] types.
+trait FromExpressionGeo: Sized {
+    type ExpressionGeometryType: Send;
+
+    fn from_expression_geo(geom: Self::ExpressionGeometryType) -> Option<Self>;
 }
 
-impl InitializedRasterOperator for InitializedExpression {
-    fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        let output_type = self.result_descriptor().data_type;
+impl<'c> AsExpressionGeo for MultiPointRef<'c> {
+    type ExpressionGeometryType = geoengine_expression::MultiPoint;
 
-        let expression = LinkedExpression::new(&self.expression)?;
-
-        let source_processor = self.source.query_processor()?.into_f64();
-
-        Ok(generate_match_cases!(
-            self.source.result_descriptor().bands.len(),
-            output_type,
-            expression,
-            source_processor,
-            self.result_descriptor.clone(),
-            self.map_no_data,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8
-        ))
-    }
-
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
-    }
-
-    fn canonic_name(&self) -> CanonicOperatorName {
-        self.name.clone()
+    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
+        self.as_geo_option().map(Into::into)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::engine::{
-        MockExecutionContext, MockQueryContext, MultipleRasterSources, QueryProcessor,
-    };
-    use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use crate::processing::{RasterStacker, RasterStackerParams};
-    use futures::StreamExt;
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
-    use geoengine_datatypes::primitives::{
-        Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-    };
-    use geoengine_datatypes::raster::{
-        Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, TileInformation,
-        TilingSpecification,
-    };
-    use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_datatypes::util::test::TestDefault;
+impl<'c> AsExpressionGeo for MultiLineStringRef<'c> {
+    type ExpressionGeometryType = geoengine_expression::MultiLineString;
 
-    #[test]
-    fn deserialize_params() {
-        let s =
-            r#"{"expression":"1*A","outputType":"F64","outputMeasurement":null,"mapNoData":false}"#;
-
-        assert_eq!(
-            serde_json::from_str::<ExpressionParams>(s).unwrap(),
-            ExpressionParams {
-                expression: "1*A".to_owned(),
-                output_type: RasterDataType::F64,
-                output_measurement: None,
-                map_no_data: false,
-            }
-        );
+    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
+        self.as_geo_option().map(Into::into)
     }
+}
 
-    #[test]
-    fn serialize_params() {
-        let s =
-            r#"{"expression":"1*A","outputType":"F64","outputMeasurement":null,"mapNoData":false}"#;
+impl<'c> AsExpressionGeo for MultiPolygonRef<'c> {
+    type ExpressionGeometryType = geoengine_expression::MultiPolygon;
 
-        assert_eq!(
-            s,
-            serde_json::to_string(&ExpressionParams {
-                expression: "1*A".to_owned(),
-                output_type: RasterDataType::F64,
-                output_measurement: None,
-                map_no_data: false,
-            })
-            .unwrap()
-        );
+    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
+        self.as_geo_option().map(Into::into)
     }
+}
 
-    #[test]
-    fn serialize_params_no_data() {
-        let s =
-            r#"{"expression":"1*A","outputType":"F64","outputMeasurement":null,"mapNoData":false}"#;
+impl AsExpressionGeo for NoGeometry {
+    // fallback type
+    type ExpressionGeometryType = geoengine_expression::MultiPoint;
 
-        assert_eq!(
-            s,
-            serde_json::to_string(&ExpressionParams {
-                expression: "1*A".to_owned(),
-                output_type: RasterDataType::F64,
-                output_measurement: None,
-                map_no_data: false,
-            })
-            .unwrap()
-        );
+    fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
+        self.as_geo_option().map(Into::into)
     }
+}
 
-    #[tokio::test]
-    async fn basic_unary() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
+impl FromExpressionGeo for MultiPoint {
+    type ExpressionGeometryType = geoengine_expression::MultiPoint;
 
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let raster_a = make_raster(Some(3));
-
-        let o = Expression {
-            params: ExpressionParams {
-                expression: "2 * A".to_string(),
-                output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
-                map_no_data: false,
-            },
-            sources: SingleRasterSource { raster: raster_a },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
-        .await
-        .unwrap();
-
-        let processor = o.query_processor().unwrap().get_i8().unwrap();
-
-        let ctx = MockQueryContext::new(1.into());
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
-
-        assert_eq!(result.len(), 1);
-
-        assert_eq!(
-            result[0].as_ref().unwrap().grid_array,
-            GridOrEmpty::from(
-                MaskedGrid2D::new(
-                    Grid2D::new([3, 2].into(), vec![2, 4, 0, 8, 10, 12],).unwrap(),
-                    Grid2D::new([3, 2].into(), vec![true, true, false, true, true, true],).unwrap()
-                )
-                .unwrap()
-            )
-        );
+    fn from_expression_geo(geom: Self::ExpressionGeometryType) -> Option<Self> {
+        let geo_geom: geo::MultiPoint = geom.into();
+        geo_geom.try_into().ok()
     }
+}
 
-    #[tokio::test]
-    async fn unary_map_no_data() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
+impl FromExpressionGeo for MultiLineString {
+    type ExpressionGeometryType = geoengine_expression::MultiLineString;
 
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let raster_a = make_raster(Some(3));
-
-        let o = Expression {
-            params: ExpressionParams {
-                expression: "2 * A".to_string(),
-                output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
-                map_no_data: true,
-            },
-            sources: SingleRasterSource { raster: raster_a },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
-        .await
-        .unwrap();
-
-        let processor = o.query_processor().unwrap().get_i8().unwrap();
-
-        let ctx = MockQueryContext::new(1.into());
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
-
-        assert_eq!(result.len(), 1);
-
-        assert_eq!(
-            result[0].as_ref().unwrap().grid_array,
-            GridOrEmpty::from(
-                MaskedGrid2D::new(
-                    Grid2D::new([3, 2].into(), vec![2, 4, 0, 8, 10, 12],).unwrap(), // pixels with no data are turned to Default::default() wich is 0. And 0 is the out_no_data value.
-                    Grid2D::new([3, 2].into(), vec![true, true, false, true, true, true],).unwrap()
-                )
-                .unwrap()
-            )
-        );
+    fn from_expression_geo(geom: Self::ExpressionGeometryType) -> Option<Self> {
+        let geo_geom: geo::MultiLineString = geom.into();
+        Some(geo_geom.into())
     }
+}
 
-    #[tokio::test]
-    async fn basic_binary() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
+impl FromExpressionGeo for MultiPolygon {
+    type ExpressionGeometryType = geoengine_expression::MultiPolygon;
 
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let raster_a = make_raster(None);
-        let raster_b = make_raster(None);
-
-        let o = Expression {
-            params: ExpressionParams {
-                expression: "A+B".to_string(),
-                output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
-                map_no_data: false,
-            },
-            sources: SingleRasterSource {
-                raster: RasterStacker {
-                    params: RasterStackerParams {},
-                    sources: MultipleRasterSources {
-                        rasters: vec![raster_a, raster_b],
-                    },
-                }
-                .boxed(),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
-        .await
-        .unwrap();
-
-        let processor = o.query_processor().unwrap().get_i8().unwrap();
-
-        let ctx = MockQueryContext::new(1.into());
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
-
-        assert_eq!(result.len(), 1);
-
-        assert_eq!(
-            result[0].as_ref().unwrap().grid_array,
-            Grid2D::new([3, 2].into(), vec![2, 4, 6, 8, 10, 12],)
-                .unwrap()
-                .into()
-        );
+    fn from_expression_geo(geom: Self::ExpressionGeometryType) -> Option<Self> {
+        let geo_geom: geo::MultiPolygon = geom.into();
+        Some(geo_geom.into())
     }
+}
 
-    #[tokio::test]
-    async fn basic_coalesce() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
+impl FromExpressionGeo for NoGeometry {
+    // fallback type
+    type ExpressionGeometryType = geoengine_expression::MultiPoint;
 
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let raster_a = make_raster(Some(3));
-        let raster_b = make_raster(None);
-
-        let o = Expression {
-            params: ExpressionParams {
-                expression: "if A IS NODATA {
-                       B * 2
-                   } else if A == 6 {
-                       NODATA
-                   } else {
-                       A
-                   }"
-                .to_string(),
-                output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
-                map_no_data: true,
-            },
-            sources: SingleRasterSource {
-                raster: RasterStacker {
-                    params: RasterStackerParams {},
-                    sources: MultipleRasterSources {
-                        rasters: vec![raster_a, raster_b],
-                    },
-                }
-                .boxed(),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
-        .await
-        .unwrap();
-
-        let processor = o.query_processor().unwrap().get_i8().unwrap();
-
-        let ctx = MockQueryContext::new(1.into());
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
-
-        assert_eq!(result.len(), 1);
-
-        assert_eq!(
-            result[0].as_ref().unwrap().grid_array,
-            GridOrEmpty::from(
-                MaskedGrid2D::new(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 6, 4, 5, 0],).unwrap(),
-                    Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false],).unwrap()
-                )
-                .unwrap()
-            )
-        );
-    }
-
-    #[tokio::test]
-    async fn basic_ternary() {
-        let no_data_value = 3;
-        let no_data_value_option = Some(no_data_value);
-
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
-
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let raster_a = make_raster(no_data_value_option);
-        let raster_b = make_raster(no_data_value_option);
-        let raster_c = make_raster(no_data_value_option);
-
-        let o = Expression {
-            params: ExpressionParams {
-                expression: "A+B+C".to_string(),
-                output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
-                map_no_data: false,
-            },
-            sources: SingleRasterSource {
-                raster: RasterStacker {
-                    params: RasterStackerParams {},
-                    sources: MultipleRasterSources {
-                        rasters: vec![raster_a, raster_b, raster_c],
-                    },
-                }
-                .boxed(),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
-        .await
-        .unwrap();
-
-        let processor = o.query_processor().unwrap().get_i8().unwrap();
-
-        let ctx = MockQueryContext::new(1.into());
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
-
-        assert_eq!(result.len(), 1);
-
-        let first_result = result[0].as_ref().unwrap();
-
-        assert!(!first_result.is_empty());
-
-        let grid = match &first_result.grid_array {
-            GridOrEmpty::Grid(g) => g,
-            GridOrEmpty::Empty(_) => panic!(),
-        };
-
-        let res: Vec<Option<i8>> = grid.masked_element_deref_iterator().collect();
-
-        assert_eq!(
-            res,
-            [Some(3), Some(6), None, Some(12), Some(15), Some(18)] // third is None is because all inputs are masked because 3 == no_data_value
-        );
-    }
-
-    #[tokio::test]
-    async fn octave_inputs() {
-        let no_data_value = 0;
-        let no_data_value_option = Some(no_data_value);
-
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
-
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let raster_a = make_raster(no_data_value_option);
-        let raster_b = make_raster(no_data_value_option);
-        let raster_c = make_raster(no_data_value_option);
-        let raster_d = make_raster(no_data_value_option);
-        let raster_e = make_raster(no_data_value_option);
-        let raster_f = make_raster(no_data_value_option);
-        let raster_g = make_raster(no_data_value_option);
-        let raster_h = make_raster(no_data_value_option);
-
-        let o = Expression {
-            params: ExpressionParams {
-                expression: "A+B+C+D+E+F+G+H".to_string(),
-                output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
-                map_no_data: false,
-            },
-            sources: SingleRasterSource {
-                raster: RasterStacker {
-                    params: RasterStackerParams {},
-                    sources: MultipleRasterSources {
-                        rasters: vec![
-                            raster_a, raster_b, raster_c, raster_d, raster_e, raster_f, raster_g,
-                            raster_h,
-                        ],
-                    },
-                }
-                .boxed(),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
-        .await
-        .unwrap();
-
-        let processor = o.query_processor().unwrap().get_i8().unwrap();
-
-        let ctx = MockQueryContext::new(1.into());
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
-
-        assert_eq!(result.len(), 1);
-
-        assert_eq!(
-            result[0].as_ref().unwrap().grid_array,
-            Grid2D::new([3, 2].into(), vec![8, 16, 24, 32, 40, 48],)
-                .unwrap()
-                .into()
-        );
-    }
-
-    #[tokio::test]
-    async fn test_functions() {
-        let no_data_value = 0;
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
-
-        let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let raster_a = make_raster(Some(no_data_value));
-
-        let o = Expression {
-            params: ExpressionParams {
-                expression: "min(A * pi(), 10)".to_string(),
-                output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
-                map_no_data: false,
-            },
-            sources: SingleRasterSource {
-                raster: RasterStacker {
-                    params: RasterStackerParams {},
-                    sources: MultipleRasterSources {
-                        rasters: vec![raster_a],
-                    },
-                }
-                .boxed(),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
-        .await
-        .unwrap();
-
-        let processor = o.query_processor().unwrap().get_i8().unwrap();
-
-        let ctx = MockQueryContext::new(1.into());
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
-
-        assert_eq!(result.len(), 1);
-
-        assert_eq!(
-            result[0].as_ref().unwrap().grid_array,
-            Grid2D::new([3, 2].into(), vec![3, 6, 9, 10, 10, 10],)
-                .unwrap()
-                .into()
-        );
-    }
-
-    fn make_raster(no_data_value: Option<i8>) -> Box<dyn RasterOperator> {
-        make_raster_with_cache_hint(no_data_value, CacheHint::no_cache())
-    }
-
-    fn make_raster_with_cache_hint(
-        no_data_value: Option<i8>,
-        cache_hint: CacheHint,
-    ) -> Box<dyn RasterOperator> {
-        let raster = Grid2D::<i8>::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap();
-
-        let real_raster = if let Some(no_data_value) = no_data_value {
-            MaskedGrid2D::from(raster)
-                .map_elements(|e: Option<i8>| e.filter(|v| *v != no_data_value))
-                .into()
-        } else {
-            GridOrEmpty::from(raster)
-        };
-
-        let raster_tile = RasterTile2D::new_with_tile_info(
-            TimeInterval::default(),
-            TileInformation {
-                global_tile_position: [-1, 0].into(),
-                tile_size_in_pixels: [3, 2].into(),
-                global_geo_transform: TestDefault::test_default(),
-            },
-            0,
-            real_raster,
-            cache_hint,
-        );
-
-        MockRasterSource {
-            params: MockRasterSourceParams {
-                data: vec![raster_tile],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::I8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
-            },
-        }
-        .boxed()
-    }
-
-    #[tokio::test]
-    async fn it_attaches_cache_hint_1() {
-        let no_data_value = 0;
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
-
-        let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let cache_hint = CacheHint::seconds(1234);
-        let raster_a = make_raster_with_cache_hint(Some(no_data_value), cache_hint);
-
-        let o = Expression {
-            params: ExpressionParams {
-                expression: "min(A * pi(), 10)".to_string(),
-                output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
-                map_no_data: false,
-            },
-            sources: SingleRasterSource {
-                raster: RasterStacker {
-                    params: RasterStackerParams {},
-                    sources: MultipleRasterSources {
-                        rasters: vec![raster_a],
-                    },
-                }
-                .boxed(),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
-        .await
-        .unwrap();
-
-        let processor = o.query_processor().unwrap().get_i8().unwrap();
-
-        let ctx = MockQueryContext::new(1.into());
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
-
-        assert_eq!(result.len(), 1);
-
-        assert!(
-            result[0].as_ref().unwrap().cache_hint.total_ttl_seconds() > CacheTtlSeconds::new(0)
-                && result[0].as_ref().unwrap().cache_hint.total_ttl_seconds()
-                    <= cache_hint.total_ttl_seconds()
-        );
-    }
-
-    #[tokio::test]
-    async fn it_attaches_cache_hint_2() {
-        let no_data_value = 0;
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
-
-        let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let cache_hint_a = CacheHint::seconds(1234);
-        let raster_a = make_raster_with_cache_hint(Some(no_data_value), cache_hint_a);
-
-        let cache_hint_b = CacheHint::seconds(4567);
-        let raster_b = make_raster_with_cache_hint(Some(no_data_value), cache_hint_b);
-
-        let o = Expression {
-            params: ExpressionParams {
-                expression: "A + B".to_string(),
-                output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
-                map_no_data: false,
-            },
-            sources: SingleRasterSource {
-                raster: RasterStacker {
-                    params: RasterStackerParams {},
-                    sources: MultipleRasterSources {
-                        rasters: vec![raster_a, raster_b],
-                    },
-                }
-                .boxed(),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
-        .await
-        .unwrap();
-
-        let processor = o.query_processor().unwrap().get_i8().unwrap();
-
-        let ctx = MockQueryContext::new(1.into());
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
-
-        assert_eq!(result.len(), 1);
-
-        assert_eq!(
-            result[0].as_ref().unwrap().cache_hint.expires(),
-            cache_hint_a.merged(&cache_hint_b).expires()
-        );
-    }
-
-    #[tokio::test]
-    async fn it_attaches_cache_hint_3() {
-        let no_data_value = 0;
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
-        };
-
-        let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-
-        let cache_hint_a = CacheHint::seconds(1234);
-        let raster_a = make_raster_with_cache_hint(Some(no_data_value), cache_hint_a);
-
-        let cache_hint_b = CacheHint::seconds(4567);
-        let raster_b = make_raster_with_cache_hint(Some(no_data_value), cache_hint_b);
-
-        let cache_hint_c = CacheHint::seconds(7891);
-        let raster_c = make_raster_with_cache_hint(Some(no_data_value), cache_hint_c);
-
-        let o = Expression {
-            params: ExpressionParams {
-                expression: "A + B".to_string(),
-                output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
-                map_no_data: false,
-            },
-            sources: SingleRasterSource {
-                raster: RasterStacker {
-                    params: RasterStackerParams {},
-                    sources: MultipleRasterSources {
-                        rasters: vec![raster_a, raster_b, raster_c],
-                    },
-                }
-                .boxed(),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
-        .await
-        .unwrap();
-
-        let processor = o.query_processor().unwrap().get_i8().unwrap();
-
-        let ctx = MockQueryContext::new(1.into());
-        let result_stream = processor
-            .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
-                &ctx,
-            )
-            .await
-            .unwrap();
-
-        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
-
-        assert_eq!(result.len(), 1);
-
-        assert_eq!(
-            result[0].as_ref().unwrap().cache_hint.expires(),
-            cache_hint_a
-                .merged(&cache_hint_b)
-                .merged(&cache_hint_c)
-                .expires()
-        );
+    fn from_expression_geo(_geom: Self::ExpressionGeometryType) -> Option<Self> {
+        None
     }
 }
