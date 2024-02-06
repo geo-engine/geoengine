@@ -31,7 +31,8 @@ pub use geo_feature_collection::{
 
 pub use data_collection::DataCollection;
 pub use data_types::{
-    TypedFeatureCollection, TypedFeatureCollectionRef, VectorDataType, VectorDataTyped,
+    GeoVectorDataType, TypedFeatureCollection, TypedFeatureCollectionRef, VectorDataType,
+    VectorDataTyped,
 };
 pub use multi_line_string_collection::MultiLineStringCollection;
 pub use multi_point_collection::MultiPointCollection;

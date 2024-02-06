@@ -263,7 +263,7 @@ mod tests {
         assert_eq!(schema.metadata()[Y_SIZE_KEY], "3");
         assert_eq!(
             schema.metadata()[TIME_KEY],
-            "{\"start\":-8334632851200000,\"end\":8210298412799999}"
+            "{\"start\":-8334601228800000,\"end\":8210266876799999}"
         );
         assert_eq!(schema.metadata()[SPATIAL_REF_KEY], "EPSG:4326");
 
@@ -312,7 +312,7 @@ mod tests {
         assert_eq!(schema.metadata()[Y_SIZE_KEY], "3");
         assert_eq!(
             schema.metadata()[TIME_KEY],
-            "{\"start\":-8334632851200000,\"end\":8210298412799999}"
+            "{\"start\":-8334601228800000,\"end\":8210266876799999}"
         );
         assert_eq!(schema.metadata()[SPATIAL_REF_KEY], "EPSG:4326");
 
