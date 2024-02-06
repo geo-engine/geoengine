@@ -2732,7 +2732,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-expression"
-version = "0.1.0"
+version = "0.8.0"
 dependencies = [
  "cargo",
  "geo 0.27.0",
