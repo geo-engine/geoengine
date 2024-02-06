@@ -10,6 +10,7 @@ use arrow::error::ArrowError;
 use fallible_iterator::FallibleIterator;
 use float_cmp::{ApproxEq, F64Margin};
 use postgres_types::{FromSql, ToSql};
+use proj::Coord;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::{TryFrom, TryInto};
@@ -108,6 +109,30 @@ impl TryFrom<Vec<(f64, f64)>> for MultiPoint {
 
     fn try_from(coordinates: Vec<(f64, f64)>) -> Result<Self, Self::Error> {
         MultiPoint::new(coordinates.into_iter().map(Into::into).collect())
+    }
+}
+
+impl<'g> From<&MultiPointRef<'g>> for geo::MultiPoint<f64> {
+    fn from(geometry: &MultiPointRef<'g>) -> Self {
+        let points: Vec<geo::Point<f64>> = geometry
+            .point_coordinates
+            .iter()
+            .map(|coordinate| geo::Point::new(coordinate.x(), coordinate.y()))
+            .collect();
+        geo::MultiPoint(points)
+    }
+}
+
+impl TryFrom<geo::MultiPoint<f64>> for MultiPoint {
+    type Error = crate::error::Error;
+
+    fn try_from(geometry: geo::MultiPoint<f64>) -> Result<Self> {
+        let points = geometry.0;
+        let coordinates = points
+            .into_iter()
+            .map(|point| Coordinate2D::new(point.x(), point.y()))
+            .collect();
+        MultiPoint::new(coordinates)
     }
 }
 

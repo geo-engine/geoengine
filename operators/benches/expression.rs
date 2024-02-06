@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
+
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
     primitives::{
@@ -124,7 +126,7 @@ where
     let start = std::time::Instant::now();
     let result = f().await;
     let end = start.elapsed();
-    let secs = end.as_secs() as f64 + end.subsec_nanos() as f64 / 1_000_000_000.0;
+    let secs = end.as_secs() as f64 + f64::from(end.subsec_nanos()) / 1_000_000_000.0;
 
     // println!("{} took {} seconds", name, secs);
 

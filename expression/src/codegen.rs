@@ -1,17 +1,10 @@
-use std::{collections::BTreeSet, fmt::Debug};
-
+use super::error::{ExpressionParserError, ExpressionSemanticError};
+use crate::functions::Function;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
-use snafu::ensure;
+use std::{collections::BTreeSet, fmt::Debug, hash::Hash};
 
-use super::{
-    error::{self, ExpressionError},
-    functions::{init_functions, FUNCTIONS},
-};
-
-type Result<T, E = ExpressionError> = std::result::Result<T, E>;
-
-// TODO: prefix for variables and functions
+type Result<T, E = ExpressionParserError> = std::result::Result<T, E>;
 
 /// An expression as an abstract syntax tree.
 /// Allows genering Rust code.
@@ -21,29 +14,46 @@ pub struct ExpressionAst {
     name: Identifier,
     root: AstNode,
     parameters: Vec<Parameter>,
+    out_type: DataType,
     functions: BTreeSet<AstFunction>,
-    // TODO: dtype Float or Int
 }
 
 impl ExpressionAst {
     pub fn new(
         name: Identifier,
         parameters: Vec<Parameter>,
+        out_type: DataType,
         functions: BTreeSet<AstFunction>,
         root: AstNode,
     ) -> Result<ExpressionAst> {
-        ensure!(!name.as_ref().is_empty(), error::EmptyExpressionName);
+        if name.as_ref().is_empty() {
+            return Err(ExpressionSemanticError::EmptyExpressionName.into_definition_parser_error());
+        }
 
         Ok(Self {
             name,
             root,
             parameters,
+            out_type,
             functions,
         })
     }
 
+    /// Outputs the generated code (file) as a string.
     pub fn code(&self) -> String {
         self.to_token_stream().to_string()
+    }
+
+    /// Outputs the generated code (file) as a formatted string.
+    pub fn pretty_code(&self) -> String {
+        match syn::parse2(self.to_token_stream()) {
+            Ok(code) => prettyplease::unparse(&code),
+            Err(e) => {
+                // fallback to unformatted code
+                log::error!("Cannot parse expression: {e}");
+                self.code()
+            }
+        }
     }
 
     pub fn name(&self) -> &str {
@@ -53,7 +63,7 @@ impl ExpressionAst {
 
 impl ToTokens for ExpressionAst {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let dtype = format_ident!("{}", "f64");
+        Prelude.to_tokens(tokens);
 
         for function in &self.functions {
             function.to_tokens(tokens);
@@ -63,21 +73,17 @@ impl ToTokens for ExpressionAst {
         let params: Vec<TokenStream> = self
             .parameters
             .iter()
-            .map(|p| match p {
-                Parameter::Number(param) => quote! { #param: Option<#dtype> },
+            .map(|p| {
+                let param = p.identifier();
+                let dtype = p.data_type();
+                quote! { #param: Option<#dtype> }
             })
             .collect();
         let content = &self.root;
 
-        tokens.extend(quote! {
-            #[inline]
-            fn apply(a: Option<#dtype>, b: Option<#dtype>, f: fn(#dtype, #dtype) -> #dtype) -> Option<#dtype> {
-                match (a, b) {
-                    (Some(a), Some(b)) => Some(f(a, b)),
-                    _ => None,
-                }
-            }
+        let dtype = self.out_type;
 
+        tokens.extend(quote! {
             #[no_mangle]
             pub extern "Rust" fn #fn_name (#(#params),*) -> Option<#dtype> {
                 #content
@@ -86,18 +92,34 @@ impl ToTokens for ExpressionAst {
     }
 }
 
+/// Generic imports and settings before the actual expression function.
+pub struct Prelude;
+
+impl ToTokens for Prelude {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.extend(quote! {
+            #![allow(unused_variables)] // expression inputs that are not used
+            #![allow(unused_parens)] // safety-first parentheses in generated code
+            #![allow(non_snake_case)] // we use double underscores for generated function names
+            #![allow(unused_imports)] // TODO: only import dependencies that are actually used
+
+            extern crate geoengine_expression_deps;
+
+            use geoengine_expression_deps::*;
+        });
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum AstNode {
     Constant(f64),
     NoData,
-    Variable(Identifier),
-    Operation {
-        left: Box<AstNode>,
-        op: AstOperator,
-        right: Box<AstNode>,
+    Variable {
+        name: Identifier,
+        data_type: DataType,
     },
     Function {
-        name: Identifier,
+        function: Function,
         args: Vec<AstNode>,
     },
     Branch {
@@ -110,17 +132,33 @@ pub enum AstNode {
     },
 }
 
+impl AstNode {
+    pub fn data_type(&self) -> DataType {
+        match self {
+            // - only support number constants
+            // - no data is a number for now
+            Self::Constant(_) | Self::NoData => DataType::Number,
+
+            Self::Variable { data_type, .. } => *data_type,
+
+            Self::Function { function, .. } => function.output_type(),
+
+            // we have to check beforehand that all branches have the same type
+            Self::Branch { else_branch, .. } => else_branch.data_type(),
+
+            Self::AssignmentsAndExpression { expression, .. } => expression.data_type(),
+        }
+    }
+}
+
 impl ToTokens for AstNode {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let new_tokens = match self {
             Self::Constant(n) => quote! { Some(#n) },
             Self::NoData => quote! { None },
-            Self::Variable(v) => quote! { #v },
-            Self::Operation { left, op, right } => {
-                quote! { apply(#left, #right, #op) }
-            }
-            Self::Function { name, args } => {
-                let fn_name = format_ident!("import_{}__{}", name.as_ref(), args.len());
+            Self::Variable { name, .. } => quote! { #name },
+            Self::Function { function, args } => {
+                let fn_name = function.name();
                 quote! { #fn_name(#(#args),*) }
             }
             AstNode::Branch {
@@ -210,27 +248,6 @@ impl AsRef<str> for Identifier {
 impl std::fmt::Display for Identifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         std::fmt::Display::fmt(&self.0, f)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum AstOperator {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-}
-
-impl ToTokens for AstOperator {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        let new_tokens = match self {
-            AstOperator::Add => quote! { std::ops::Add::add },
-            AstOperator::Subtract => quote! { std::ops::Sub::sub },
-            AstOperator::Multiply => quote! { std::ops::Mul::mul },
-            AstOperator::Divide => quote! { std::ops::Div::div },
-        };
-
-        tokens.extend(new_tokens);
     }
 }
 
@@ -332,38 +349,110 @@ impl ToTokens for Assignment {
 #[derive(Debug, Clone)]
 pub enum Parameter {
     Number(Identifier),
+    MultiPoint(Identifier),
+    MultiLineString(Identifier),
+    MultiPolygon(Identifier),
 }
 
 impl AsRef<str> for Parameter {
     fn as_ref(&self) -> &str {
         match self {
-            Self::Number(identifier) => identifier.as_ref(),
+            Self::Number(identifier)
+            | Self::MultiPoint(identifier)
+            | Self::MultiLineString(identifier)
+            | Self::MultiPolygon(identifier) => identifier.as_ref(),
+        }
+    }
+}
+
+impl Parameter {
+    pub fn identifier(&self) -> &Identifier {
+        match self {
+            Self::Number(identifier)
+            | Self::MultiPoint(identifier)
+            | Self::MultiLineString(identifier)
+            | Self::MultiPolygon(identifier) => identifier,
+        }
+    }
+
+    pub fn data_type(&self) -> DataType {
+        match self {
+            Self::Number(_) => DataType::Number,
+            Self::MultiPoint(_) => DataType::MultiPoint,
+            Self::MultiLineString(_) => DataType::MultiLineString,
+            Self::MultiPolygon(_) => DataType::MultiPolygon,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DataType {
+    Number,
+    MultiPoint,
+    MultiLineString,
+    MultiPolygon,
+}
+
+impl std::fmt::Display for DataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        let s = match self {
+            Self::Number => "number",
+            Self::MultiPoint => "geometry (multipoint)",
+            Self::MultiLineString => "geometry (multilinestring)",
+            Self::MultiPolygon => "geometry (multipolygon)",
+        };
+
+        write!(f, "{s}")
+    }
+}
+
+impl ToTokens for DataType {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.extend(match self {
+            Self::Number => quote! { f64 },
+            Self::MultiPoint => {
+                quote! { MultiPoint }
+            }
+            Self::MultiLineString => {
+                quote! { MultiLineString }
+            }
+            Self::MultiPolygon => {
+                quote! { MultiPolygon }
+            }
+        });
+    }
+}
+
+impl DataType {
+    pub fn group_name(&self) -> &str {
+        match self {
+            Self::Number => "number",
+            Self::MultiPoint | Self::MultiLineString | Self::MultiPolygon => "geometry",
+        }
+    }
+
+    /// A unique short name without spaces, etc.
+    pub fn call_name_suffix(self) -> char {
+        match self {
+            Self::Number => 'n',
+            Self::MultiPoint => 'p',
+            Self::MultiLineString => 'l',
+            Self::MultiPolygon => 'q',
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AstFunction {
-    pub name: Identifier,
-    pub num_parameters: usize,
+    pub function: Function,
 }
 
 impl ToTokens for AstFunction {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let Some(function) = FUNCTIONS
-            .get_or_init(init_functions)
-            .get(self.name.as_ref())
-        else {
-            return; // do nothing if, for some reason, the function doesn't exist
-        };
-
-        let prefixed_fn_name =
-            format_ident!("import_{}__{}", self.name.as_ref(), self.num_parameters);
-
+        let function = &self.function;
         tokens.extend(quote! {
             #[inline]
+            #function
         });
-
-        tokens.extend((function.token_fn)(self.num_parameters, prefixed_fn_name));
     }
 }

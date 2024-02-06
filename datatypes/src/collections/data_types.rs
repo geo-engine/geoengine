@@ -28,6 +28,17 @@ pub enum VectorDataType {
     MultiPolygon,
 }
 
+/// An enum that contains all geometry vector data types
+#[derive(
+    Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone, FromSql, ToSql,
+)]
+#[allow(clippy::enum_variant_names)] // important to have full name here
+pub enum GeoVectorDataType {
+    MultiPoint,
+    MultiLineString,
+    MultiPolygon,
+}
+
 impl VectorDataType {
     pub fn try_from_ogr_type_code(code: u32) -> Result<Self> {
         Ok(match code {
@@ -50,6 +61,22 @@ impl VectorDataType {
 impl std::fmt::Display for VectorDataType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{self:?}")
+    }
+}
+
+impl std::fmt::Display for GeoVectorDataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        VectorDataType::from(*self).fmt(f)
+    }
+}
+
+impl From<GeoVectorDataType> for VectorDataType {
+    fn from(geo_type: GeoVectorDataType) -> Self {
+        match geo_type {
+            GeoVectorDataType::MultiPoint => VectorDataType::MultiPoint,
+            GeoVectorDataType::MultiLineString => VectorDataType::MultiLineString,
+            GeoVectorDataType::MultiPolygon => VectorDataType::MultiPolygon,
+        }
     }
 }
 

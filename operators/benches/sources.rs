@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
+
 use std::time::Instant;
 use std::{hint::black_box, marker::PhantomData};
 
