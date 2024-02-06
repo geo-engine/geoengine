@@ -48,14 +48,14 @@ where
 
         let mut pos = 3;
         let order_sql = if options.order == OrderBy::NameAsc {
-            "name ASC"
+            "display_name ASC"
         } else {
-            "name DESC"
+            "display_name DESC"
         };
 
         let filter_sql = if options.filter.is_some() {
             pos += 1;
-            format!("AND (name).name ILIKE ${pos} ESCAPE '\\'")
+            format!("AND display_name ILIKE ${pos} ESCAPE '\\'")
         } else {
             String::new()
         };
