@@ -2698,7 +2698,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-datatypes"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -2732,7 +2732,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-expression"
-version = "0.1.0"
+version = "0.8.0"
 dependencies = [
  "cargo",
  "geo 0.27.0",
@@ -2759,7 +2759,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-macros"
-version = "0.1.0"
+version = "0.8.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2768,7 +2768,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-operators"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arrow",
  "async-stream",
@@ -2821,7 +2821,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-services"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "actix",
  "actix-files",

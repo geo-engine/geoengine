@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
+
 use std::{hint::black_box, time::Instant};
 
 use geoengine_operators::util::create_rayon_thread_pool;
@@ -13,7 +15,7 @@ fn work(num_threads: usize) {
                 }
             });
         }
-    })
+    });
 }
 
 fn main() {

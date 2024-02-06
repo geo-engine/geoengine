@@ -270,14 +270,14 @@ fn binary() {
     assert_eq!(array.value_length(), mem::size_of::<TimeInterval>() as i32);
 
     assert_eq!(
-        unsafe { &*(array.value(0).as_ptr() as *const TimeInterval) },
+        unsafe { &*array.value(0).as_ptr().cast::<TimeInterval>() },
         &TimeInterval::new(0, 1).unwrap(),
     );
 
     assert_eq!(
         unsafe {
             slice::from_raw_parts(
-                array.value_data().as_ptr() as *const TimeInterval,
+                array.value_data().as_ptr().cast::<TimeInterval>(),
                 array.len(),
             )
         },
@@ -491,7 +491,7 @@ fn multipoints() {
         .values();
     assert_eq!(floats.len(), 10);
     let coordinates: &[Coordinate2D] =
-        unsafe { slice::from_raw_parts(floats.as_ptr() as *const Coordinate2D, floats.len()) };
+        unsafe { slice::from_raw_parts(floats.as_ptr().cast::<Coordinate2D>(), floats.len()) };
 
     assert_eq!(coordinates[4], Coordinate2D::new(41., 42.));
 }
@@ -601,7 +601,7 @@ fn multipoint_builder_bytes() {
 
     let floats: &[Coordinate2D] = unsafe {
         std::slice::from_raw_parts(
-            first_multi_point.value(0).as_ptr() as *const _,
+            first_multi_point.value(0).as_ptr().cast(),
             first_multi_point.len(),
         )
     };
@@ -613,7 +613,7 @@ fn multipoint_builder_bytes() {
 
     let floats: &[Coordinate2D] = unsafe {
         std::slice::from_raw_parts(
-            second_multi_point.value(0).as_ptr() as *const _,
+            second_multi_point.value(0).as_ptr().cast(),
             second_multi_point.len(),
         )
     };

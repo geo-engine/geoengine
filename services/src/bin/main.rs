@@ -20,10 +20,15 @@ async fn main() {
         .await
         .expect("successful compilation process is necessary for expression operators to work");
 
-    start_server().await.unwrap();
+    start_server().await.expect("the server has to start");
 }
 
 #[cfg(not(feature = "pro"))]
+/// Starts the server.
+///
+///  # Panics
+///  - if the logging configuration is not valid
+///
 pub async fn start_server() -> Result<()> {
     reroute_gdal_logging();
     let logging_config: config::Logging = get_config_element()?;
@@ -32,13 +37,15 @@ pub async fn start_server() -> Result<()> {
     let registry = tracing_subscriber::Registry::default();
 
     // create a filter for the log message level in console output
-    let console_filter = EnvFilter::try_new(&logging_config.log_spec).unwrap();
+    let console_filter =
+        EnvFilter::try_new(&logging_config.log_spec).expect("to have a valid log spec");
 
     // create a log layer for output to the console and add it to the registry
     let registry = registry.with(console_layer_with_filter(console_filter));
 
     // create a filter for the log message level in file output. Since the console_filter is not copy or clone, we have to create a new one. TODO: allow a different log level for file output.
-    let file_filter = EnvFilter::try_new(&logging_config.log_spec).unwrap();
+    let file_filter =
+        EnvFilter::try_new(&logging_config.log_spec).expect("to have a valid log spec");
 
     // create a log layer for output to a file and add it to the registry
     let (file_layer, _fw_drop_guard) = if logging_config.log_to_file {
@@ -59,6 +66,11 @@ pub async fn start_server() -> Result<()> {
 }
 
 #[cfg(feature = "pro")]
+/// Starts the server.
+///
+///  # Panics
+///  - if the logging configuration is not valid
+///
 pub async fn start_server() -> Result<()> {
     reroute_gdal_logging();
     let logging_config: config::Logging = get_config_element()?;
@@ -67,13 +79,15 @@ pub async fn start_server() -> Result<()> {
     let registry = tracing_subscriber::Registry::default();
 
     // create a filter for the log message level in console output
-    let console_filter = EnvFilter::try_new(&logging_config.log_spec).unwrap();
+    let console_filter =
+        EnvFilter::try_new(&logging_config.log_spec).expect("to have a valid log spec");
 
     // create a log layer for output to the console and add it to the registry
     let registry = registry.with(console_layer_with_filter(console_filter));
 
     // create a filter for the log message level in file output. Since the console_filter is not copy or clone, we have to create a new one. TODO: allow a different log level for file output.
-    let file_filter = EnvFilter::try_new(&logging_config.log_spec).unwrap();
+    let file_filter =
+        EnvFilter::try_new(&logging_config.log_spec).expect("to have a valid log spec");
 
     // create a log layer for output to a file and add it to the registry
     let (file_layer, _fw_drop_guard) = if logging_config.log_to_file {
@@ -183,7 +197,7 @@ where
             Cleanup::KeepLogFiles(7),
         )
         .try_build_with_handle()
-        .unwrap();
+        .expect("file log writer has to be created successfully");
 
     let layer = tracing_subscriber::fmt::layer()
         .with_file(false)
@@ -203,19 +217,19 @@ fn reroute_gdal_logging() {
         match error_type {
             gdal::errors::CplErrType::None => {
                 // should never log anything
-                log::info!(target: target, "GDAL None {}: {}", error_num, error_msg)
+                log::info!(target: target, "GDAL None {}: {}", error_num, error_msg);
             }
             gdal::errors::CplErrType::Debug => {
-                log::debug!(target: target, "GDAL Debug {}: {}", error_num, error_msg)
+                log::debug!(target: target, "GDAL Debug {}: {}", error_num, error_msg);
             }
             gdal::errors::CplErrType::Warning => {
-                log::warn!(target: target, "GDAL Warning {}: {}", error_num, error_msg)
+                log::warn!(target: target, "GDAL Warning {}: {}", error_num, error_msg);
             }
             gdal::errors::CplErrType::Failure => {
-                log::error!(target: target, "GDAL Failure {}: {}", error_num, error_msg)
+                log::error!(target: target, "GDAL Failure {}: {}", error_num, error_msg);
             }
             gdal::errors::CplErrType::Fatal => {
-                log::error!(target: target, "GDAL Fatal {}: {}", error_num, error_msg)
+                log::error!(target: target, "GDAL Fatal {}: {}", error_num, error_msg);
             }
         };
     });

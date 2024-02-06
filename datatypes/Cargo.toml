@@ -1,12 +1,12 @@
 [package]
 name = "geoengine-datatypes"
-version = "0.7.0"
-authors = [
-    "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
-    "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
-    "Michael Mattig <mattig@mathematik.uni-marburg.de>",
-]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+publish.workspace = true
+license-file.workspace = true
+documentation.workspace = true
+repository.workspace = true
 
 [features]
 # This compiles Geo Engine Pro
@@ -67,3 +67,6 @@ harness = false
 [[bench]]
 name = "masked_grid_mapping"
 harness = false
+
+[lints]
+workspace = true
