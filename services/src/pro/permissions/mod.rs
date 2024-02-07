@@ -143,6 +143,7 @@ impl TryFrom<(String, String)> for ResourceId {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct PermissionListing {
     pub resource_id: ResourceId,
     pub role: Role,

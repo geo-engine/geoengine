@@ -76,7 +76,7 @@ pub struct PermissionListOptions {
     pub offset: u32,
 }
 
-/// Adds a new permission.
+/// Lists permission for a given resource.
 #[utoipa::path(
     tag = "Permissions",
     get,
@@ -203,16 +203,24 @@ where
 mod tests {
 
     use super::*;
-    use crate::pro::{
-        contexts::ProPostgresContext,
-        ge_context,
-        users::{UserAuth, UserCredentials, UserRegistration},
-        util::tests::{add_ndvi_to_datasets, add_ports_to_datasets, admin_login},
+    use crate::{
+        pro::{
+            contexts::ProPostgresContext,
+            ge_context,
+            users::{UserAuth, UserCredentials, UserRegistration},
+            util::tests::{
+                add_ndvi_to_datasets, add_ports_to_datasets, admin_login, send_pro_test_request,
+            },
+        },
+        util::tests::read_body_string,
     };
+    use actix_http::header;
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_operators::{
         engine::{RasterOperator, VectorOperator, WorkflowOperatorPath},
         source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
     };
+    use serde_json::{json, Value};
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
@@ -309,5 +317,66 @@ mod tests {
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .is_ok());
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_lists_permissions(app_ctx: ProPostgresContext<NoTls>) {
+        let admin_session = admin_login(&app_ctx).await;
+
+        let (gdal_dataset_id, _) = add_ndvi_to_datasets(&app_ctx, true, true).await;
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/permissions/resources/dataset/{gdal_dataset_id}?offset=0&limit=10",
+            ))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, app_ctx).await;
+
+        let res_status = res.status();
+        let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
+        assert_eq!(res_status, 200, "{res_body}");
+
+        assert_eq!(
+            res_body,
+            json!([{
+                   "permission":"Owner",
+                   "resourceId":  {
+                       "id": gdal_dataset_id.to_string(),
+                       "type": "DatasetId"
+                   },
+                   "role": {
+                       "id": "d5328854-6190-4af9-ad69-4e74b0961ac9",
+                       "name":
+                       "admin"
+                   }
+               }, {
+                   "permission": "Read",
+                   "resourceId": {
+                       "id": gdal_dataset_id.to_string(),
+                       "type": "DatasetId"
+                   },
+                   "role": {
+                       "id": "fd8e87bf-515c-4f36-8da6-1a53702ff102",
+                       "name": "anonymous"
+                   }
+               }, {
+                   "permission": "Read",
+                   "resourceId": {
+                       "id": gdal_dataset_id.to_string(),
+                       "type": "DatasetId"
+                   },
+                   "role": {
+                       "id": "4e8081b6-8aa6-4275-af0c-2fa2da557d28",
+                       "name":
+                       "user"
+                   }
+               }]
+            )
+        );
     }
 }
