@@ -248,6 +248,26 @@ where
         })
     }
 
+    async fn load_loading_info(&self, dataset: &DatasetId) -> Result<MetaDataDefinition> {
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+            SELECT 
+                meta_data 
+            FROM 
+                datasets
+            WHERE
+                id = $1;",
+            )
+            .await?;
+
+        let row = conn.query_one(&stmt, &[dataset]).await?;
+
+        Ok(row.get(0))
+    }
+
     async fn resolve_dataset_name_to_id(
         &self,
         dataset_name: &DatasetName,

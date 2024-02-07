@@ -1,6 +1,7 @@
-use super::{Permission, PermissionDb, ResourceId, RoleId};
+use super::{Permission, PermissionDb, PermissionListing, ResourceId, RoleId};
 use crate::error::{self, Error, Result};
 use crate::pro::contexts::ProPostgresDb;
+use crate::pro::permissions::Role;
 use async_trait::async_trait;
 use snafu::ensure;
 use tokio_postgres::{
@@ -98,6 +99,14 @@ pub trait TxPermissionDb {
         resource: R,
         tx: &tokio_postgres::Transaction<'_>,
     ) -> Result<()>;
+
+    async fn list_permissions_in_tx<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        offset: u32,
+        limit: u32,
+        tx: &tokio_postgres::Transaction<'_>,
+    ) -> Result<Vec<PermissionListing>>;
 }
 
 #[async_trait]
@@ -266,6 +275,59 @@ where
 
         Ok(())
     }
+
+    async fn list_permissions_in_tx<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        offset: u32,
+        limit: u32,
+        tx: &tokio_postgres::Transaction<'_>,
+    ) -> Result<Vec<PermissionListing>> {
+        let resource: ResourceId = resource.into();
+
+        ensure!(
+            self.has_permission_in_tx(resource.clone(), Permission::Owner, tx)
+                .await?,
+            error::PermissionDenied
+        );
+
+        let stmt = tx
+            .prepare(&format!(
+                "
+            SELECT 
+                r.id, r.name, p.permission 
+            FROM 
+                permissions p JOIN roles r ON (p.role_id = r.id) 
+            WHERE 
+                {resource_type} = $1
+            ORDER BY r.name ASC
+            OFFSET $2
+            LIMIT $3;",
+                resource_type = resource.resource_type_name()
+            ))
+            .await?;
+
+        let rows = tx
+            .query(
+                &stmt,
+                &[&resource.uuid()?, &(i64::from(offset)), &(i64::from(limit))],
+            )
+            .await?;
+
+        let permissions = rows
+            .into_iter()
+            .map(|row| PermissionListing {
+                resource_id: resource.clone(),
+                role: Role {
+                    id: row.get(0),
+                    name: row.get(1),
+                },
+                permission: row.get(2),
+            })
+            .collect();
+
+        Ok(permissions)
+    }
 }
 
 #[async_trait]
@@ -365,5 +427,23 @@ where
         tx.commit().await?;
 
         Ok(())
+    }
+
+    async fn list_permissions<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<PermissionListing>> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        let permissions = self
+            .list_permissions_in_tx(resource, offset, limit, &tx)
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(permissions)
     }
 }

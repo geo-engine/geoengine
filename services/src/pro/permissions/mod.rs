@@ -1,5 +1,5 @@
 use super::users::UserId;
-use crate::error::Result;
+use crate::error::{self, Error, Result};
 use crate::identifier;
 use crate::layers::listing::LayerCollectionId;
 use crate::projects::ProjectId;
@@ -8,8 +8,10 @@ use geoengine_datatypes::dataset::{DatasetId, LayerId};
 use geoengine_datatypes::pro::MlModelId;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
 use std::str::FromStr;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 pub mod postgres_permissiondb;
 
@@ -114,6 +116,40 @@ impl From<DatasetId> for ResourceId {
     }
 }
 
+impl TryFrom<(String, String)> for ResourceId {
+    type Error = Error;
+
+    fn try_from(value: (String, String)) -> Result<Self> {
+        Ok(match value.0.as_str() {
+            "layer" => ResourceId::Layer(LayerId(value.1)),
+            "layer_collection" => ResourceId::LayerCollection(LayerCollectionId(value.1)),
+            "project" => {
+                ResourceId::Project(ProjectId(Uuid::from_str(&value.1).context(error::Uuid)?))
+            }
+            "dataset" => {
+                ResourceId::DatasetId(DatasetId(Uuid::from_str(&value.1).context(error::Uuid)?))
+            }
+            "model" => {
+                ResourceId::ModelId(MlModelId(Uuid::from_str(&value.1).context(error::Uuid)?))
+            }
+            _ => {
+                return Err(Error::InvalidResourceId {
+                    resource_type: value.0,
+                    resource_id: value.1,
+                })
+            }
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionListing {
+    pub resource_id: ResourceId,
+    pub role: Role,
+    pub permission: Permission,
+}
+
 /// Management and checking of permissions.
 // TODO: accept references of things that are Into<ResourceId> as well
 #[async_trait]
@@ -160,4 +196,13 @@ pub trait PermissionDb {
         &self,
         resource: R,
     ) -> Result<()>;
+
+    /// list all `permission` for `resource`.
+    /// Requires `Owner` permission for `resource`.
+    async fn list_permissions<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<PermissionListing>>;
 }

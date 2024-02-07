@@ -112,6 +112,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::create_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
+        handlers::datasets::get_loading_info_handler,
         handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::plots::get_plot_handler,
         handlers::projects::list_projects_handler,
