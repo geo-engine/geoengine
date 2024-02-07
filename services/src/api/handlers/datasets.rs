@@ -54,6 +54,10 @@ where
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
+                web::resource("/{dataset}/loadingInfo")
+                    .route(web::get().to(get_loading_info_handler::<C>)),
+            )
+            .service(
                 web::resource("/{dataset}")
                     .route(web::get().to(get_dataset_handler::<C>))
                     .route(web::delete().to(delete_dataset_handler::<C>)),
@@ -205,6 +209,44 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
         .load_dataset(&dataset_id)
         .await
         .context(CannotLoadDataset)?;
+
+    Ok(web::Json(dataset))
+}
+
+/// Retrieves the loading information of a dataset
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/dataset/{dataset}/loadingInfo",
+    responses(
+        (status = 200, description = "OK", body = MetaDataDefinition)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn get_loading_info_handler<C: ApplicationContext>(
+    dataset: web::Path<DatasetName>,
+    session: C::Session,
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let real_dataset = dataset.into_inner();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id.ok_or(error::Error::UnknownDatasetName {
+        dataset_name: real_dataset.to_string(),
+    })?;
+
+    let dataset = session_ctx.load_loading_info(&dataset_id).await?;
 
     Ok(web::Json(dataset))
 }
@@ -2354,6 +2396,95 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert!(db.load_dataset(&dataset_id).await.is_err());
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_gets_loading_info(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = ctx.session().id();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
+        let ds = AddDataset {
+            name: None,
+            display_name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+        };
+
+        let meta = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor,
+            phantom: Default::default(),
+        });
+
+        let db = ctx.db();
+        let DatasetIdAndName { id, name: _ } = db.add_dataset(ds.into(), meta).await?;
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{id}/loadingInfo"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        let res_status = res.status();
+        let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
+        assert_eq!(res_status, 200, "{res_body}");
+
+        assert_eq!(
+            res_body,
+            json!({
+                "loadingInfo":  {
+                    "attributeQuery": null,
+                    "cacheTtl": 0,
+                    "columns": null,
+                    "dataType": null,
+                    "defaultGeometry": null,
+                    "fileName": "",
+                    "forceOgrSpatialFilter": false,
+                    "forceOgrTimeFilter": false,
+                    "layerName": "",
+                    "onError": "ignore",
+                    "sqlQuery": null,
+                    "time":  {
+                        "type": "none"
+                    }
+                },
+                 "resultDescriptor":  {
+                    "bbox": null,
+                    "columns":  {},
+                    "dataType": "Data",
+                    "spatialReference": "",
+                    "time": null
+                },
+                "type": "OgrMetaData"
+            })
+        );
 
         Ok(())
     }

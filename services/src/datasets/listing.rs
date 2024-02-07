@@ -1,3 +1,4 @@
+use super::storage::MetaDataDefinition;
 use super::DatasetName;
 use crate::datasets::storage::{validate_tags, Dataset};
 use crate::error::Result;
@@ -81,6 +82,8 @@ pub trait DatasetProvider: Send
     async fn load_dataset(&self, dataset: &DatasetId) -> Result<Dataset>;
 
     async fn load_provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput>;
+
+    async fn load_loading_info(&self, dataset: &DatasetId) -> Result<MetaDataDefinition>;
 
     async fn resolve_dataset_name_to_id(&self, name: &DatasetName) -> Result<Option<DatasetId>>;
 

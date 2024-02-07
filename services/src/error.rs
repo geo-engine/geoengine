@@ -475,6 +475,12 @@ pub enum Error {
     RasterBandNameMustNotBeEmpty,
     #[snafu(display("Raster band names must not be longer than 256 bytes"))]
     RasterBandNameTooLong,
+
+    #[snafu(display("Resource id is invalid: type: {}, id: {}", resource_type, resource_id))]
+    InvalidResourceId {
+        resource_type: String,
+        resource_id: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
