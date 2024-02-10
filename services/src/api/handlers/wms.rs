@@ -133,7 +133,8 @@ where
 )]
 async fn wms_capabilities_handler<C>(
     workflow: web::Path<WorkflowId>,
-    _request: web::Query<GetCapabilities>,
+    // TODO: incorporate `GetCapabilities` request
+    // _request: web::Query<GetCapabilities>,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse>
@@ -434,11 +435,15 @@ fn raster_colorizer_from_style(styles: &str) -> Result<Option<RasterColorizer>> 
         ("session_token" = [])
     )
 )]
-#[allow(clippy::unused_async)] // required by handler signature
+#[allow(
+    clippy::unused_async, // the function signature of request handlers requires it
+    clippy::no_effect_underscore_binding // need `_session` to quire authentication
+)]
 async fn wms_legend_graphic_handler<C: ApplicationContext>(
-    _workflow: web::Path<WorkflowId>,
-    _request: web::Query<GetLegendGraphic>,
-    _app_ctx: web::Data<C>,
+    // TODO: incorporate workflow and `GetLegendGraphic` query
+    // _workflow: web::Path<WorkflowId>,
+    // _request: web::Query<GetLegendGraphic>,
+    // _app_ctx: web::Data<C>,
     _session: C::Session,
 ) -> HttpResponse {
     HttpResponse::NotImplemented().finish()
