@@ -62,14 +62,12 @@ opentelemetry = { version = "0.21", default-features = false, features = [
 opentelemetry-jaeger = "0.20"
 ordered-float = { version = "4.2", features = ["serde"] }
 num-traits = "0.2"
-paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive", "array-impls"] }
 proj = "0.22" # needs to stay fixed to use fixed proj version
 proj-sys = "0.19" # needs to stay fixed to use fixed proj version
 pwhash = "1.0"
 rand = "0.8"
 rayon = "1.8"
-regex = "1.10"
 reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
@@ -87,7 +85,6 @@ tokio = { version = "1.36", features = [
   "rt-multi-thread",
 ] }
 tokio-postgres = { version = "0.7" }
-tokio-util = { version = "0.7", features = ["codec"] }
 tonic = { version = "0.9", features = [
   "tls",
   "tls-roots",
