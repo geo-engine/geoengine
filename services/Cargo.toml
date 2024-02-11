@@ -40,7 +40,6 @@ chrono = { version = "0.4", features = ["serde"] }
 config = "0.14"
 derive_builder = "0.13"
 erased-serde = "0.4"
-fallible-iterator = "0.3" # only for postgres-protocol
 flexi_logger = { version = "0.27", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
@@ -52,9 +51,6 @@ geoengine-datatypes = { path = "../datatypes" }
 geoengine-macros = { path = "../macros" }
 geoengine-operators = { path = "../operators" }
 geojson = { version = "0.24", features = ["geo-types"] }
-image = "0.24"
-itertools = "0.12"
-lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
 oauth2 = "4.4.2"
@@ -68,7 +64,6 @@ ordered-float = { version = "4.2", features = ["serde"] }
 num-traits = "0.2"
 paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive", "array-impls"] }
-postgres-protocol = "0.6"
 proj = "0.22" # needs to stay fixed to use fixed proj version
 proj-sys = "0.19" # needs to stay fixed to use fixed proj version
 pwhash = "1.0"
