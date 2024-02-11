@@ -2770,7 +2770,6 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
- "serial_test",
  "snafu",
  "stream-cancel",
  "tempfile",
