@@ -155,7 +155,10 @@ fn proj_proj_string(srs_string: &str) -> Option<String> {
     }
 }
 
-#[allow(clippy::unused_async)] // the function signature of request handlers requires it
+#[allow(
+    clippy::unused_async, // the function signature of request handlers requires it
+    clippy::no_effect_underscore_binding // need `_session` to quire authentication
+)]
 #[utoipa::path(
     tag = "Spatial References",
     get,

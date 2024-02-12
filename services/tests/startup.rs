@@ -2,7 +2,6 @@
 
 use assert_cmd::prelude::*;
 use geoengine_services::test_data;
-use serial_test::serial;
 use std::{
     io::BufRead,
     process::{Command, Stdio},
@@ -46,7 +45,6 @@ impl DroppingServer {
     }
 }
 
-#[serial]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn it_starts_without_warnings_and_accepts_connections() {
     use geoengine_services::util::config::get_config_element;
