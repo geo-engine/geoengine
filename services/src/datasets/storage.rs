@@ -94,7 +94,7 @@ pub struct AutoCreateDataset {
     pub tags: Option<Vec<String>>,
 }
 
-fn validate_main_file(main_file: &String) -> Result<(), ValidationError> {
+fn validate_main_file(main_file: &str) -> Result<(), ValidationError> {
     if main_file.is_empty() || main_file.contains('/') || main_file.contains("..") {
         return Err(ValidationError::new("Invalid upload file name"));
     }
