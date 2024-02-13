@@ -21,11 +21,11 @@ pro = [
 [dependencies]
 actix = { version = "0.13", default-features = false }
 actix-files = "0.6"
-actix-http = { version = "3.3", features = ["ws"] }
+actix-http = { version = "3.6", features = ["ws"] }
 actix-multipart = "0.6"
-actix-rt = "2.8"
-actix-web = "4.3"
-actix-web-actors = "4.2"
+actix-rt = "2.9"
+actix-web = "4.5"
+actix-web-actors = "4.3"
 actix-web-httpauth = "0.8"
 aruna-rust-api = { version = "1.0.0-rc.6" }
 async-trait = "0.1"
@@ -35,12 +35,11 @@ bb8-postgres = { version = "0.8", features = [
   "with-chrono-0_4",
   "with-serde_json-1",
 ] }
-bytes = "1.0"
+bytes = "1.5"
 chrono = { version = "0.4", features = ["serde"] }
-config = "0.13"
-derive_builder = "0.12"
+config = "0.14"
+derive_builder = "0.13"
 erased-serde = "0.4"
-fallible-iterator = "0.2" # only for postgres-protocol
 flexi_logger = { version = "0.27", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
@@ -52,39 +51,34 @@ geoengine-datatypes = { path = "../datatypes" }
 geoengine-macros = { path = "../macros" }
 geoengine-operators = { path = "../operators" }
 geojson = { version = "0.24", features = ["geo-types"] }
-image = "0.24"
 itertools = "0.12"
-lazy_static = "1.4"
 log = "0.4"
 mime = "0.3"
-oauth2 = "4.2.3"
-openidconnect = "3.1"
+oauth2 = "4.4.2"
+openidconnect = "3.4"
 # `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-jaeger`
 opentelemetry = { version = "0.21", default-features = false, features = [
   "trace",
 ] }
 opentelemetry-jaeger = "0.20"
-ordered-float = { version = "4.1", features = ["serde"] }
+ordered-float = { version = "4.2", features = ["serde"] }
 num-traits = "0.2"
-paste = "1.0"
 postgres-types = { version = "0.2", features = ["derive", "array-impls"] }
-postgres-protocol = "0.6"
-proj = "0.22"
-proj-sys = "0.19"
+proj = "0.22" # needs to stay fixed to use fixed proj version
+proj-sys = "0.19" # needs to stay fixed to use fixed proj version
 pwhash = "1.0"
 rand = "0.8"
-rayon = "1.5"
-regex = "1.5"
+rayon = "1.8"
 reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
-serde_with = "3.0"
+serde_with = "3.6"
 snafu = "0.8"
 stream-cancel = "0.8"
-strum = { version = "0.25", features = ["derive"] }
+strum = { version = "0.26", features = ["derive"] }
 time = "0.3"
-tokio = { version = "1.15", features = [
+tokio = { version = "1.36", features = [
   "macros",
   "fs",
   "signal",
@@ -92,7 +86,6 @@ tokio = { version = "1.15", features = [
   "rt-multi-thread",
 ] }
 tokio-postgres = { version = "0.7" }
-tokio-util = { version = "0.7", features = ["codec"] }
 tonic = { version = "0.9", features = [
   "tls",
   "tls-roots",
@@ -106,21 +99,21 @@ tracing-subscriber = { version = "0.3", features = [
   "tracing-log",
 ] }
 typetag = "0.2"
-url = { version = "2.2", features = ["serde"] }
-utoipa = { version = "4.0", features = [
+url = { version = "2.5", features = ["serde"] }
+utoipa = { version = "4.2", features = [
   "actix_extras",
   "chrono",
   "url",
   "uuid",
 ] }
-utoipa-swagger-ui = { version = "5.0", features = ["actix-web"] }
-uuid = { version = "1.1", features = [
+utoipa-swagger-ui = { version = "6.0", features = ["actix-web"] }
+uuid = { version = "1.7", features = [
   "serde",
   "v4",
   "v5",
 ] } # must be compatible with `bb8-postgres`
 validator = { version = "0.16", features = ["derive"] }
-walkdir = "2.3"
+walkdir = "2.4"
 xgboost-rs = { version = "0.3", optional = true, features = ["use_serde"] }
 zip = "0.6"
 assert-json-diff = "2.0.2"
@@ -130,10 +123,10 @@ nix = { version = "0.27", features = ["socket"] }
 
 [dev-dependencies]
 assert_cmd = "2.0"
-httptest = "0.15.2"
+httptest = "0.15.5"
 prost = "0.11"      # must be compatbile with aruna-rust-api
-serial_test = "2.0"
-tempfile = "3.1"
+serial_test = "3.0"
+tempfile = "3.10"
 xml-rs = "0.8"
 
 [build-dependencies]

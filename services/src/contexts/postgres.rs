@@ -452,7 +452,7 @@ impl TryFrom<config::Postgres> for Config {
 mod tests {
     use super::*;
     use crate::datasets::external::aruna::ArunaDataProviderDefinition;
-    use crate::datasets::external::gbif::GbifDataProviderDefinition;
+    use crate::datasets::external::gbif::{GbifDataProvider, GbifDataProviderDefinition};
     use crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition;
     use crate::datasets::external::gfbio_collections::GfbioCollectionsDataProviderDefinition;
     use crate::datasets::external::netcdfcf::{
@@ -4568,6 +4568,7 @@ mod tests {
                 },
                 cache_ttl: CacheTtlSeconds::new(0),
                 autocomplete_timeout: 3,
+                columns: GbifDataProvider::all_columns(),
             }],
         )
         .await;
@@ -4708,6 +4709,7 @@ mod tests {
                         },
                         cache_ttl: CacheTtlSeconds::new(0),
                         autocomplete_timeout: 3,
+                        columns: GbifDataProvider::all_columns(),
                     },
                 ),
                 TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(

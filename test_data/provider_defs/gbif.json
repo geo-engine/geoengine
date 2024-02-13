@@ -12,5 +12,6 @@
     "schema": "gbif"
   },
   "cacheTtl": 0,
-  "autocompleteTimeout": 5
+  "autocompleteTimeout": 5,
+  "columns": ["gbifid", "basisofrecord", "scientificname"]
 }

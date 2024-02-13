@@ -20,6 +20,7 @@ impl DatabaseConnectionConfig {
             .password(&self.password)
             .host(&self.host)
             .dbname(&self.database)
+            .port(self.port)
             .options(&format!("-c search_path={}", self.schema));
         config
     }
