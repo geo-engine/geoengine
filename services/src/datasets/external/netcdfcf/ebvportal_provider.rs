@@ -16,8 +16,10 @@ use crate::{
             LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
         },
     },
+    util::postgres::DatabaseConnectionConfig,
 };
 use async_trait::async_trait;
+use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
 use geoengine_datatypes::{
     dataset::{DataId, DataProviderId, LayerId},
     primitives::{CacheTtlSeconds, RasterQueryRectangle, VectorQueryRectangle},
@@ -31,6 +33,7 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::{path::PathBuf, str::FromStr};
+use tokio_postgres::NoTls;
 
 /// Singleton Provider with id `77d0bf11-986e-43f5-b11d-898321f1854c`
 pub const EBV_PROVIDER_ID: DataProviderId =
@@ -41,9 +44,13 @@ pub const EBV_PROVIDER_ID: DataProviderId =
 pub struct EbvPortalDataProviderDefinition {
     pub name: String,
     pub description: String,
-    pub priority: Option<i16>,
-    pub path: PathBuf,
+    pub listing_priority: Option<i16>,
     pub base_url: Url,
+    /// Path were the NetCDF data can be found
+    pub data: PathBuf,
+    /// Database configuration for storing metadata of overviews
+    pub metadata_db_config: DatabaseConnectionConfig,
+    /// Path were overview files are stored
     pub overviews: PathBuf,
     #[serde(default)]
     pub cache_ttl: CacheTtlSeconds,
@@ -67,8 +74,14 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefiniti
             netcdf_cf_provider: NetCdfCfDataProvider {
                 name: self.name,
                 description: self.description,
-                path: self.path,
+                data: self.data,
                 overviews: self.overviews,
+                metadata_db: Pool::builder()
+                    .build(PostgresConnectionManager::new(
+                        self.metadata_db_config.pg_config(),
+                        NoTls,
+                    ))
+                    .await?,
                 cache_ttl: self.cache_ttl,
             },
         }))
@@ -87,7 +100,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefiniti
     }
 
     fn priority(&self) -> i16 {
-        self.priority.unwrap_or(0)
+        self.listing_priority.unwrap_or(0)
     }
 }
 
@@ -392,7 +405,7 @@ impl EbvPortalDataProvider {
             .ebv_api
             .get_ebv_subdatasets(
                 NetCdfCfDataProviderPaths {
-                    provider_path: self.netcdf_cf_provider.path.clone(),
+                    provider_path: self.netcdf_cf_provider.data.clone(),
                     overview_path: self.netcdf_cf_provider.overviews.clone(),
                 },
                 dataset_id,
@@ -462,7 +475,7 @@ impl EbvPortalDataProvider {
             .ebv_api
             .get_ebv_subdatasets(
                 NetCdfCfDataProviderPaths {
-                    provider_path: self.netcdf_cf_provider.path.clone(),
+                    provider_path: self.netcdf_cf_provider.data.clone(),
                     overview_path: self.netcdf_cf_provider.overviews.clone(),
                 },
                 dataset,
@@ -623,7 +636,7 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
                     .ebv_api
                     .get_ebv_subdatasets(
                         NetCdfCfDataProviderPaths {
-                            provider_path: self.netcdf_cf_provider.path.clone(),
+                            provider_path: self.netcdf_cf_provider.data.clone(),
                             overview_path: self.netcdf_cf_provider.overviews.clone(),
                         },
                         dataset,
@@ -699,6 +712,7 @@ mod tests {
 
     use crate::{
         contexts::{PostgresContext, SessionContext, SimpleApplicationContext},
+        datasets::external::netcdfcf::test_db_config,
         ge_context,
     };
 
@@ -851,10 +865,11 @@ mod tests {
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
-            priority: None,
-            path: test_data!("netcdf4d").into(),
+            listing_priority: None,
+            data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -991,10 +1006,11 @@ mod tests {
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
-            priority: None,
-            path: test_data!("netcdf4d").into(),
+            listing_priority: None,
+            data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1159,10 +1175,11 @@ mod tests {
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
-            priority: None,
-            path: test_data!("netcdf4d").into(),
+            listing_priority: None,
+            data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1398,10 +1415,11 @@ mod tests {
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
-            priority: None,
-            path: test_data!("netcdf4d").into(),
+            listing_priority: None,
+            data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1559,10 +1577,11 @@ mod tests {
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
-            priority: None,
-            path: test_data!("netcdf4d").into(),
+            listing_priority: None,
+            data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())

@@ -590,6 +590,7 @@ mod tests {
 
     use super::*;
     use crate::contexts::PostgresContext;
+    use crate::datasets::external::netcdfcf::test_db_config;
     use crate::ge_context;
     use crate::{
         contexts::SimpleApplicationContext,
@@ -646,9 +647,10 @@ mod tests {
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
                     description: "test".to_string(),
-                    priority: None,
-                    path: test_data!("netcdf4d").to_path_buf(),
+                    listing_priority: None,
+                    data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
+                    metadata_db_config: test_db_config(),
                     cache_ttl: Default::default(),
                 }
                 .into(),
@@ -731,9 +733,10 @@ mod tests {
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
                     description: "test".to_string(),
-                    priority: None,
-                    path: test_data!("netcdf4d").to_path_buf(),
+                    listing_priority: None,
+                    data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
+                    metadata_db_config: test_db_config(),
                     cache_ttl: Default::default(),
                 }
                 .into(),
@@ -783,9 +786,10 @@ mod tests {
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
                     description: "test".to_string(),
-                    priority: None,
-                    path: test_data!("netcdf4d").to_path_buf(),
+                    listing_priority: None,
+                    data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
+                    metadata_db_config: test_db_config(),
                     cache_ttl: Default::default(),
                 }
                 .into(),

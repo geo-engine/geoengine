@@ -1204,9 +1204,10 @@ mod tests {
         let provider = NetCdfCfDataProviderDefinition {
             name: "netcdfcf".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
-            priority: Some(33),
-            path: test_data!("netcdf4d/").into(),
+            listing_priority: Some(33),
+            data: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
+            metadata_db_config: crate::datasets::external::netcdfcf::test_db_config(),
             cache_ttl: CacheTtlSeconds::new(0),
         };
 

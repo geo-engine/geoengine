@@ -1,10 +1,11 @@
 pub use self::ebvportal_provider::{EbvPortalDataProvider, EBV_PROVIDER_ID};
 pub use self::error::NetCdfCf4DProviderError;
+use self::metadata::all_migrations;
 use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
-use crate::contexts::GeoEngineDb;
+use crate::contexts::{migrate_database, GeoEngineDb};
 use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::MetaDataDefinition;
@@ -23,8 +24,11 @@ use crate::layers::listing::{LayerCollectionId, ProviderCapabilities, SearchCapa
 use crate::projects::RasterSymbology;
 use crate::projects::Symbology;
 use crate::tasks::TaskContext;
+use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
+use bb8_postgres::bb8::Pool;
+use bb8_postgres::PostgresConnectionManager;
 pub use ebvportal_provider::EbvPortalDataProviderDefinition;
 use gdal::raster::{Dimension, GdalDataType, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
@@ -62,11 +66,13 @@ use std::collections::HashMap;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use tokio_postgres::NoTls;
 use walkdir::{DirEntry, WalkDir};
 
 mod ebvportal_api;
 mod ebvportal_provider;
 pub mod error;
+mod metadata;
 mod overviews;
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
@@ -80,8 +86,12 @@ pub const NETCDF_CF_PROVIDER_ID: DataProviderId =
 pub struct NetCdfCfDataProviderDefinition {
     pub name: String,
     pub description: String,
-    pub priority: Option<i16>,
-    pub path: PathBuf,
+    pub listing_priority: Option<i16>,
+    /// Path were the NetCDF data can be found
+    pub data: PathBuf,
+    /// Database configuration for storing metadata of overviews
+    pub metadata_db_config: DatabaseConnectionConfig,
+    /// Path were overview files are stored
     pub overviews: PathBuf,
     #[serde(default)]
     pub cache_ttl: CacheTtlSeconds,
@@ -91,19 +101,36 @@ pub struct NetCdfCfDataProviderDefinition {
 pub struct NetCdfCfDataProvider {
     pub name: String,
     pub description: String,
-    pub path: PathBuf,
+    pub data: PathBuf,
     pub overviews: PathBuf,
+    pub metadata_db: Pool<PostgresConnectionManager<NoTls>>,
     pub cache_ttl: CacheTtlSeconds,
 }
 
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for NetCdfCfDataProviderDefinition {
     async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
+        let mut pg_pool_builder = Pool::builder();
+        if self.metadata_db_config.schema == "pg_temp" {
+            // having more than one connection with `pg_temp` leads to different temp schemata being used
+            pg_pool_builder = pg_pool_builder.max_size(1);
+        }
+
+        let metadata_db = pg_pool_builder
+            .build(PostgresConnectionManager::new(
+                self.metadata_db_config.pg_config(),
+                NoTls,
+            ))
+            .await?;
+
+        migrate_database(&mut metadata_db.get().await?, &all_migrations()).await?;
+
         Ok(Box::new(NetCdfCfDataProvider {
             name: self.name,
             description: self.description,
-            path: self.path,
+            data: self.data,
             overviews: self.overviews,
+            metadata_db,
             cache_ttl: self.cache_ttl,
         }))
     }
@@ -121,7 +148,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for NetCdfCfDataProviderDefinitio
     }
 
     fn priority(&self) -> i16 {
-        self.priority.unwrap_or(0)
+        self.listing_priority.unwrap_or(0)
     }
 }
 
@@ -605,7 +632,7 @@ impl NetCdfCfDataProvider {
 
         let mut files = vec![];
 
-        for entry in WalkDir::new(&self.path)
+        for entry in WalkDir::new(&self.data)
             .into_iter()
             .filter_entry(|e| !is_overview_dir(e))
         {
@@ -621,7 +648,7 @@ impl NetCdfCfDataProvider {
                 continue;
             }
 
-            match path.strip_prefix(&self.path) {
+            match path.strip_prefix(&self.data) {
                 Ok(path) => files.push(path.to_owned()),
                 Err(_) => {
                     // we can safely ignore it since it must be a file in the provider path
@@ -640,7 +667,7 @@ impl NetCdfCfDataProvider {
         task_context: &C,
     ) -> Result<OverviewGeneration> {
         create_overviews(
-            &self.path,
+            &self.data,
             dataset_path,
             &self.overviews,
             resampling_method,
@@ -653,7 +680,7 @@ impl NetCdfCfDataProvider {
     }
 
     fn is_netcdf_file(&self, path: &Path) -> bool {
-        let real_path = self.path.join(path);
+        let real_path = self.data.join(path);
         real_path.is_file() && real_path.extension() == Some("nc".as_ref())
     }
 }
@@ -1417,42 +1444,42 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
         let id = NetCdfLayerCollectionId::from_str(&collection.0)?;
         Ok(match id {
             NetCdfLayerCollectionId::Path { path }
-                if canonicalize_subpath(&self.path, &path).is_ok()
-                    && self.path.join(&path).is_dir() =>
+                if canonicalize_subpath(&self.data, &path).is_ok()
+                    && self.data.join(&path).is_dir() =>
             {
                 listing_from_dir(
                     &self.name,
                     collection,
                     &self.overviews,
-                    &self.path,
+                    &self.data,
                     &path,
                     &options,
                 )
                 .await?
             }
             NetCdfLayerCollectionId::Path { path }
-                if canonicalize_subpath(&self.path, &path).is_ok()
+                if canonicalize_subpath(&self.data, &path).is_ok()
                     && self.is_netcdf_file(&path) =>
             {
                 listing_from_netcdf_file(
                     collection,
                     path,
                     &[],
-                    self.path.clone(),
+                    self.data.clone(),
                     self.overviews.clone(),
                     &options,
                 )
                 .await?
             }
             NetCdfLayerCollectionId::Group { path, groups }
-                if canonicalize_subpath(&self.path, &path).is_ok()
+                if canonicalize_subpath(&self.data, &path).is_ok()
                     && self.is_netcdf_file(&path) =>
             {
                 listing_from_netcdf_file(
                     collection,
                     path,
                     &groups,
-                    self.path.clone(),
+                    self.data.clone(),
                     self.overviews.clone(),
                     &options,
                 )
@@ -1477,7 +1504,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
             } => {
                 let rp = path.clone();
 
-                let provider_path = self.path.clone();
+                let provider_path = self.data.clone();
                 let overviews_path = self.overviews.clone();
 
                 let tree = tokio::task::spawn_blocking(move || {
@@ -1510,7 +1537,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         geoengine_operators::error::Error,
     > {
         let dataset = id.clone();
-        let path = self.path.clone();
+        let path = self.data.clone();
         let overviews = self.overviews.clone();
         let cache_ttl = self.cache_ttl;
         crate::util::spawn_blocking(move || {
@@ -1562,12 +1589,39 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 }
 
 #[cfg(test)]
+pub(crate) fn test_db_config() -> DatabaseConnectionConfig {
+    let db_config =
+        crate::util::config::get_config_element::<crate::util::config::Postgres>().unwrap();
+    DatabaseConnectionConfig {
+        host: db_config.host,
+        port: db_config.port,
+        database: db_config.database,
+        schema: db_config.schema,
+        user: db_config.user,
+        password: db_config.password,
+    }
+}
+
+#[cfg(test)]
+async fn test_db() -> Pool<PostgresConnectionManager<NoTls>> {
+    Pool::builder()
+        .max_size(1) // unwised to have to separate connections point to `pg_temp`
+        .build(PostgresConnectionManager::new(
+            test_db_config().pg_config(),
+            NoTls,
+        ))
+        .await
+        .unwrap()
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::contexts::{PostgresContext, SessionContext, SimpleApplicationContext};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::ge_context;
     use crate::layers::storage::LayerProviderDb;
+    use crate::util::tests::initialize_debugging_in_test;
     use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
@@ -1758,12 +1812,15 @@ mod tests {
 
     #[ge_context::test]
     async fn test_listing(app_ctx: PostgresContext<NoTls>) {
+        initialize_debugging_in_test(); // TODO: remove
+
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
-            priority: Some(-2),
-            path: test_data!("netcdf4d").into(),
+            listing_priority: Some(-2),
+            data: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1832,9 +1889,10 @@ mod tests {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
-            priority: Some(-3),
-            path: test_data!("netcdf4d").into(),
+            listing_priority: Some(-3),
+            data: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1891,9 +1949,10 @@ mod tests {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
-            priority: Some(-4),
-            path: test_data!("netcdf4d").into(),
+            listing_priority: Some(-4),
+            data: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1974,8 +2033,9 @@ mod tests {
         let provider = NetCdfCfDataProvider {
             name: "Test Provider".to_string(),
             description: "Test Provider".to_string(),
-            path: test_data!("netcdf4d/").to_path_buf(),
+            data: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
+            metadata_db: test_db().await,
             cache_ttl: Default::default(),
         };
 
@@ -2067,13 +2127,14 @@ mod tests {
         );
     }
 
-    #[test]
-    fn list_files() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn list_files() {
         let provider = NetCdfCfDataProvider {
             name: "Test Provider".to_string(),
             description: "Test Provider".to_string(),
-            path: test_data!("netcdf4d/").to_path_buf(),
+            data: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
+            metadata_db: test_db().await,
             cache_ttl: Default::default(),
         };
 
@@ -2097,8 +2158,9 @@ mod tests {
         let provider = NetCdfCfDataProvider {
             name: "Test Provider".to_string(),
             description: "Test Provider".to_string(),
-            path: test_data!("netcdf4d/").to_path_buf(),
+            data: test_data!("netcdf4d/").to_path_buf(),
             overviews: overview_folder.path().to_path_buf(),
+            metadata_db: test_db().await,
             cache_ttl: Default::default(),
         };
 
@@ -2198,9 +2260,10 @@ mod tests {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
-            priority: Some(-5),
-            path: test_data!("netcdf4d").into(),
+            listing_priority: Some(-5),
+            data: test_data!("netcdf4d").into(),
             overviews: overview_folder.path().to_path_buf(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -2286,10 +2349,11 @@ mod tests {
         let provider_definition = EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
             description: "EBV Portal".to_string(),
-            priority: Some(-1),
-            path: test_data!("netcdf4d/").into(),
+            listing_priority: Some(-1),
+            data: test_data!("netcdf4d/").into(),
             base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
             overviews: test_data!("netcdf4d/overviews/").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         };
 
