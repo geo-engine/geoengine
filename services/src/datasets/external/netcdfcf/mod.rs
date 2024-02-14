@@ -1,5 +1,6 @@
 pub use self::ebvportal_provider::{EbvPortalDataProvider, EBV_PROVIDER_ID};
 pub use self::error::NetCdfCf4DProviderError;
+use self::loading::{create_layer, create_layer_collection};
 use self::metadata::all_migrations;
 use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
@@ -21,11 +22,8 @@ use crate::layers::layer::ProviderLayerId;
 use crate::layers::layer::{CollectionItem, LayerCollection};
 use crate::layers::listing::LayerCollectionProvider;
 use crate::layers::listing::{LayerCollectionId, ProviderCapabilities, SearchCapabilities};
-use crate::projects::RasterSymbology;
-use crate::projects::Symbology;
 use crate::tasks::TaskContext;
 use crate::util::postgres::DatabaseConnectionConfig;
-use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
@@ -34,7 +32,7 @@ use gdal::raster::{Dimension, GdalDataType, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::error::BoxedResultExt;
-use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer, RgbaColor};
+use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
@@ -44,10 +42,8 @@ use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::util::gdal::ResamplingMethod;
-use geoengine_operators::engine::{RasterBandDescriptor, RasterOperator};
-use geoengine_operators::engine::{RasterBandDescriptors, TypedOperator};
-use geoengine_operators::source::GdalSource;
-use geoengine_operators::source::GdalSourceParameters;
+use geoengine_operators::engine::RasterBandDescriptor;
+use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetadataNetCdfCf,
@@ -60,7 +56,6 @@ use geoengine_operators::{
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use snafu::{OptionExt, ResultExt};
 use std::collections::HashMap;
 use std::io::BufReader;
@@ -72,6 +67,7 @@ use walkdir::{DirEntry, WalkDir};
 mod ebvportal_api;
 mod ebvportal_provider;
 pub mod error;
+mod loading;
 mod metadata;
 mod overviews;
 
@@ -86,7 +82,7 @@ pub const NETCDF_CF_PROVIDER_ID: DataProviderId =
 pub struct NetCdfCfDataProviderDefinition {
     pub name: String,
     pub description: String,
-    pub listing_priority: Option<i16>,
+    pub priority: Option<i16>,
     /// Path were the NetCDF data can be found
     pub data: PathBuf,
     /// Database configuration for storing metadata of overviews
@@ -148,7 +144,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for NetCdfCfDataProviderDefinitio
     }
 
     fn priority(&self) -> i16 {
-        self.listing_priority.unwrap_or(0)
+        self.priority.unwrap_or(0)
     }
 }
 
@@ -1251,63 +1247,22 @@ pub fn layer_from_netcdf_overview(
         ((colorizer.min_value(), colorizer.max_value()), colorizer)
     };
 
-    Ok(Layer {
-        id: ProviderLayerId {
-            provider_id,
-            layer_id: layer_id.clone(),
+    Ok(create_layer(
+        provider_id,
+        layer_id,
+        &NetCdfCf4DDatasetId {
+            file_name: overview.file_name,
+            group_names: groups.to_owned(),
+            entity,
         },
-        name: netcdf_entity.name.clone(),
-        description: netcdf_entity.name,
-        workflow: Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
-                            provider_id.to_string(),
-                            json!({
-                                "fileName": overview.file_name,
-                                "groupNames": groups,
-                                "entity": entity
-                            })
-                            .to_string(),
-                        ),
-                    },
-                }
-                .boxed(),
-            ),
-        },
-        symbology: Some(Symbology::Raster(RasterSymbology {
-            opacity: 1.0,
-            raster_colorizer: RasterColorizer::SingleBand {
-                band: 0,
-                band_colorizer: colorizer,
-            },
-        })),
-        properties: [(
-            "author".to_string(),
-            format!(
-                "{}, {}, {}",
-                overview
-                    .creator_name
-                    .unwrap_or_else(|| "unknown".to_string()),
-                overview
-                    .creator_email
-                    .unwrap_or_else(|| "unknown".to_string()),
-                overview
-                    .creator_institution
-                    .unwrap_or_else(|| "unknown".to_string())
-            ),
-        )
-            .into()]
-        .into_iter()
-        .collect(),
-        metadata: [
-            ("timeSteps".to_string(), serde_json::to_string(&time_steps)?),
-            ("dataRange".to_string(), serde_json::to_string(&data_range)?),
-        ]
-        .into_iter()
-        .collect(),
-    })
+        netcdf_entity,
+        colorizer,
+        overview.creator_name,
+        overview.creator_email,
+        overview.creator_institution,
+        &time_steps,
+        data_range,
+    )?)
 }
 
 async fn listing_from_netcdf_file(
@@ -1336,24 +1291,6 @@ async fn listing_from_netcdf_file(
         || (tree.title, tree.summary),
         |g| (g.title.clone(), g.description.clone()),
     );
-
-    let properties = if groups.is_empty() {
-        [(
-            "author".to_string(),
-            format!(
-                "{}, {}, {}",
-                tree.creator_name.unwrap_or_else(|| "unknown".to_string()),
-                tree.creator_email.unwrap_or_else(|| "unknown".to_string()),
-                tree.creator_institution
-                    .unwrap_or_else(|| "unknown".to_string())
-            ),
-        )
-            .into()]
-        .into_iter()
-        .collect()
-    } else {
-        vec![]
-    };
 
     let groups_list = group.map_or(tree.groups, |g| g.groups);
 
@@ -1406,17 +1343,20 @@ async fn listing_from_netcdf_file(
             .collect::<crate::error::Result<Vec<CollectionItem>>>()?
     };
 
-    Ok(LayerCollection {
-        id: ProviderLayerCollectionId {
-            provider_id: NETCDF_CF_PROVIDER_ID,
-            collection_id: collection.clone(),
-        },
+    Ok(create_layer_collection(
+        NETCDF_CF_PROVIDER_ID,
+        collection.clone(),
         name,
         description,
         items,
-        entry_label: None,
-        properties,
-    })
+        if groups.is_empty() {
+            tree.creator_name
+        } else {
+            None
+        },
+        tree.creator_email,
+        tree.creator_institution,
+    ))
 }
 
 #[async_trait]
@@ -1635,11 +1575,12 @@ mod tests {
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
     use geoengine_operators::engine::{
-        MultipleRasterSources, RasterBandDescriptors, SingleRasterSource,
+        MultipleRasterSources, RasterBandDescriptors, RasterOperator, SingleRasterSource,
     };
     use geoengine_operators::processing::{
         RasterStacker, RasterStackerParams, RasterTypeConversion, RasterTypeConversionParams,
     };
+    use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::{
         engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath},
         plot::{
@@ -1812,12 +1753,12 @@ mod tests {
 
     #[ge_context::test]
     async fn test_listing(app_ctx: PostgresContext<NoTls>) {
-        initialize_debugging_in_test(); // TODO: remove
+        // initialize_debugging_in_test(); // TODO: remove
 
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
-            listing_priority: Some(-2),
+            priority: Some(-2),
             data: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
             metadata_db_config: test_db_config(),
@@ -1889,7 +1830,7 @@ mod tests {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
-            listing_priority: Some(-3),
+            priority: Some(-3),
             data: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
             metadata_db_config: test_db_config(),
@@ -1949,7 +1890,7 @@ mod tests {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
-            listing_priority: Some(-4),
+            priority: Some(-4),
             data: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
             metadata_db_config: test_db_config(),
@@ -2260,7 +2201,7 @@ mod tests {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
-            listing_priority: Some(-5),
+            priority: Some(-5),
             data: test_data!("netcdf4d").into(),
             overviews: overview_folder.path().to_path_buf(),
             metadata_db_config: test_db_config(),
@@ -2342,6 +2283,8 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn test_irregular_time_series(app_ctx: PostgresContext<NoTls>) {
+        // initialize_debugging_in_test(); // TODO: remove
+
         let ctx = app_ctx.default_session_context().await.unwrap();
 
         let land_cover_dataset_id = add_land_cover_to_datasets(&ctx.db()).await;
@@ -2349,7 +2292,7 @@ mod tests {
         let provider_definition = EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
             description: "EBV Portal".to_string(),
-            listing_priority: Some(-1),
+            priority: Some(-1),
             data: test_data!("netcdf4d/").into(),
             base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
             overviews: test_data!("netcdf4d/overviews/").into(),

@@ -941,7 +941,7 @@ mod tests {
         let provider = NetCdfCfDataProviderDefinition {
             name: "netcdfcf".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
-            listing_priority: Some(21),
+            priority: Some(21),
             data: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
             metadata_db_config: crate::datasets::external::netcdfcf::test_db_config(),
@@ -4624,7 +4624,7 @@ mod tests {
             [EbvPortalDataProviderDefinition {
                 name: "ebv".to_string(),
                 description: "EBV".to_string(),
-                listing_priority: None,
+                priority: None,
                 data: "a_path".into(),
                 base_url: "http://base".try_into().unwrap(),
                 overviews: "another_path".into(),
@@ -4647,7 +4647,7 @@ mod tests {
             [NetCdfCfDataProviderDefinition {
                 name: "netcdfcf".to_string(),
                 description: "netcdfcf".to_string(),
-                listing_priority: Some(33),
+                priority: Some(33),
                 data: "a_path".into(),
                 overviews: "another_path".into(),
                 metadata_db_config: DatabaseConnectionConfig {
@@ -4751,7 +4751,7 @@ mod tests {
                     EbvPortalDataProviderDefinition {
                         name: "ebv".to_string(),
                         description: "ebv".to_string(),
-                        listing_priority: Some(33),
+                        priority: Some(33),
                         data: "a_path".into(),
                         base_url: "http://base".try_into().unwrap(),
                         overviews: "another_path".into(),
@@ -4770,7 +4770,7 @@ mod tests {
                     NetCdfCfDataProviderDefinition {
                         name: "netcdfcf".to_string(),
                         description: "netcdfcf".to_string(),
-                        listing_priority: Some(33),
+                        priority: Some(33),
                         data: "a_path".into(),
                         overviews: "another_path".into(),
                         metadata_db_config: DatabaseConnectionConfig {

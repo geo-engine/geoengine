@@ -647,7 +647,7 @@ mod tests {
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
                     description: "test".to_string(),
-                    listing_priority: None,
+                    priority: None,
                     data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
                     metadata_db_config: test_db_config(),
@@ -733,7 +733,7 @@ mod tests {
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
                     description: "test".to_string(),
-                    listing_priority: None,
+                    priority: None,
                     data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
                     metadata_db_config: test_db_config(),
@@ -786,7 +786,7 @@ mod tests {
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
                     description: "test".to_string(),
-                    listing_priority: None,
+                    priority: None,
                     data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
                     metadata_db_config: test_db_config(),

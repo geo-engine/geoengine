@@ -214,4 +214,14 @@ pub enum NetCdfCf4DProviderError {
         source: Box<dyn ErrorSource>,
     },
     UnsupportedMetaDataDefinition,
+
+    #[snafu(display("Cannot serialize layer definition: {source}"))]
+    CannotSerializeLayer {
+        source: serde_json::Error,
+    },
+
+    #[snafu(display("Cannot serialize layer collection definition: {source}"))]
+    CannotSerializeLayerCollection {
+        source: serde_json::Error,
+    },
 }

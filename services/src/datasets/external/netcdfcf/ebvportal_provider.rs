@@ -44,7 +44,7 @@ pub const EBV_PROVIDER_ID: DataProviderId =
 pub struct EbvPortalDataProviderDefinition {
     pub name: String,
     pub description: String,
-    pub listing_priority: Option<i16>,
+    pub priority: Option<i16>,
     pub base_url: Url,
     /// Path were the NetCDF data can be found
     pub data: PathBuf,
@@ -100,7 +100,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefiniti
     }
 
     fn priority(&self) -> i16 {
-        self.listing_priority.unwrap_or(0)
+        self.priority.unwrap_or(0)
     }
 }
 
@@ -865,7 +865,7 @@ mod tests {
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
-            listing_priority: None,
+            priority: None,
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
@@ -1006,7 +1006,7 @@ mod tests {
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
-            listing_priority: None,
+            priority: None,
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
@@ -1175,7 +1175,7 @@ mod tests {
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
-            listing_priority: None,
+            priority: None,
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
@@ -1415,7 +1415,7 @@ mod tests {
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
-            listing_priority: None,
+            priority: None,
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
@@ -1577,7 +1577,7 @@ mod tests {
         let provider = Box::new(EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
-            listing_priority: None,
+            priority: None,
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),

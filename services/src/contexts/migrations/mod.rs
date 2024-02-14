@@ -15,6 +15,7 @@ pub mod migration_0002_dataset_listing_provider;
 pub mod migration_0003_gbif_config;
 pub mod migration_0004_dataset_listing_provider_prio;
 pub mod migration_0005_gbif_column_selection;
+pub mod migration_0006_ebv_provider;
 
 /// All migrations that are available. The migrations are applied in the order they are defined here, starting from the current version of the database.
 ///
@@ -28,5 +29,6 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0003GbifConfig),
         Box::new(Migration0004DatasetListingProviderPrio),
         Box::new(Migration0005GbifColumnSelection),
+        Box::new(migration_0006_ebv_provider::Migration0006EbvProvider),
     ]
 }
