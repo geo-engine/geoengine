@@ -129,36 +129,60 @@ pub fn create_layer(
     })
 }
 
-fn create_loading_info(
+pub enum ParamModification {
+    File {
+        file_path: PathBuf,
+        time_instance: TimeInstance,
+    },
+    Channel {
+        channel: usize,
+        time_instance: TimeInstance,
+    },
+}
+
+pub fn create_loading_info(
     result_descriptor: RasterResultDescriptor,
-    params_blueprint: GdalDatasetParameters,
-    files: &[(TimeInstance, PathBuf)],
+    params_blueprint: &GdalDatasetParameters,
+    modifications: impl Iterator<Item = ParamModification>,
     cache_ttl: CacheTtlSeconds,
 ) -> GdalMetaDataList {
     GdalMetaDataList {
         result_descriptor,
-        params: files
-            .iter()
-            .map(|(time, file_path)| {
-                create_loading_info_part(&params_blueprint, file_path, *time, cache_ttl)
-            })
+        params: modifications
+            .map(|modification| create_loading_info_part(params_blueprint, modification, cache_ttl))
             .collect(),
     }
 }
 
 fn create_loading_info_part(
     params_blueprint: &GdalDatasetParameters,
-    file_path: &Path,
-    time_instance: TimeInstance,
+    modification: ParamModification,
     cache_ttl: CacheTtlSeconds,
 ) -> GdalLoadingInfoTemporalSlice {
     let mut params = params_blueprint.clone();
 
-    params.file_path =
-        file_path.with_file_name(time_instance.as_datetime_string_with_millis() + ".tiff");
+    let time = match modification {
+        ParamModification::File {
+            file_path,
+            time_instance,
+        } => {
+            params.file_path =
+                file_path.with_file_name(time_instance.as_datetime_string_with_millis() + ".tiff");
+
+            time_instance.into()
+        }
+        ParamModification::Channel {
+            channel,
+            time_instance,
+        } => {
+            params.rasterband_channel = channel;
+
+            time_instance.into()
+        }
+    };
 
     GdalLoadingInfoTemporalSlice {
-        time: time_instance.into(),
+        time,
         params: Some(params),
         cache_ttl,
     }

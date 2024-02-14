@@ -7,6 +7,7 @@ use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
 use self::overviews::{create_overviews, METADATA_FILE_NAME};
 use crate::contexts::{migrate_database, GeoEngineDb};
+use crate::datasets::external::netcdfcf::loading::{create_loading_info, ParamModification};
 use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::storage::MetaDataDefinition;
@@ -34,7 +35,7 @@ use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
-    CacheTtlSeconds, DateTime, Measurement, RasterQueryRectangle, TimeInstance, TimeInterval,
+    CacheTtlSeconds, DateTime, Measurement, RasterQueryRectangle, TimeInstance,
     VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
@@ -452,10 +453,11 @@ impl NetCdfCfDataProvider {
         })?;
 
         let group_path = dataset_id.group_names.join("/");
-        let gdal_path = format!(
+        let gdal_path: PathBuf = format!(
             "NETCDF:{path}:/{group_path}/ebv_cube",
             path = path.to_string_lossy()
-        );
+        )
+        .into();
 
         let dataset = gdal_open_dataset_ex(
             &path,
@@ -530,7 +532,7 @@ impl NetCdfCfDataProvider {
         };
 
         let params = GdalDatasetParameters {
-            file_path: gdal_path.into(),
+            file_path: gdal_path.clone(),
             rasterband_channel: 0, // we calculate offsets below
             geo_transform,
             file_not_found_handling: FileNotFoundHandling::Error,
@@ -554,24 +556,20 @@ impl NetCdfCfDataProvider {
             .get(TIME_DIMENSION_INDEX)
             .map(Dimension::size)
             .unwrap_or_default();
-        let mut params_list = Vec::with_capacity(time_coverage.number_of_time_steps());
-        for (i, time_instance) in time_coverage.time_steps().iter().enumerate() {
-            let mut params = params.clone();
 
-            params.rasterband_channel = dataset_id.entity * dimensions_time + i + 1;
-
-            params_list.push(GdalLoadingInfoTemporalSlice {
-                time: TimeInterval::new_instant(*time_instance)
-                    .context(error::InvalidTimeCoverageInterval)?,
-                params: Some(params),
-                cache_ttl,
-            });
-        }
-
-        Ok(Box::new(GdalMetaDataList {
+        Ok(Box::new(create_loading_info(
             result_descriptor,
-            params: params_list,
-        }))
+            &params,
+            time_coverage
+                .time_steps()
+                .iter()
+                .enumerate()
+                .map(|(i, time_instance)| ParamModification::Channel {
+                    channel: dataset_id.entity * dimensions_time + i + 1,
+                    time_instance: *time_instance,
+                }),
+            cache_ttl,
+        )))
     }
 
     fn meta_data_from_overviews(

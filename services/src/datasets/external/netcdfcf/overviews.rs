@@ -1,6 +1,12 @@
 use super::{error, NetCdfCf4DProviderError, TimeCoverage};
 use crate::{
-    datasets::{external::netcdfcf::NetCdfCfDataProvider, storage::MetaDataDefinition},
+    datasets::{
+        external::netcdfcf::{
+            loading::{create_loading_info, ParamModification},
+            NetCdfCfDataProvider,
+        },
+        storage::MetaDataDefinition,
+    },
     tasks::{TaskContext, TaskStatusInfo},
     util::{config::get_config_element, path_with_base_path},
 };
@@ -732,28 +738,19 @@ fn generate_loading_info(
     // we change the cache ttl when returning the overview metadata in the provider
     let cache_ttl = CacheTtlSeconds::default();
 
-    let mut params_list = Vec::with_capacity(time_coverage.number_of_time_steps());
-    for time_instance in time_coverage.time_steps() {
-        let mut params = params.clone();
-
-        params.file_path = params
-            .file_path
-            .with_file_name(time_instance.as_datetime_string_with_millis() + ".tiff");
-
-        let time_interval = TimeInterval::new_instant(*time_instance)
-            .context(error::InvalidTimeCoverageInterval)?;
-
-        params_list.push(GdalLoadingInfoTemporalSlice {
-            time: time_interval,
-            params: Some(params),
-            cache_ttl,
-        });
-    }
-
-    Ok(MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
+    Ok(create_loading_info(
         result_descriptor,
-        params: params_list,
-    }))
+        &params,
+        time_coverage
+            .time_steps()
+            .iter()
+            .map(|time_instance| ParamModification::File {
+                file_path: params.file_path.clone(),
+                time_instance: *time_instance,
+            }),
+        cache_ttl,
+    )
+    .into())
 }
 
 pub fn remove_overviews(dataset_path: &Path, overview_path: &Path, force: bool) -> Result<()> {
