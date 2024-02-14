@@ -15,17 +15,14 @@ use gdal::{
 use gdal_sys::GDALGetRasterStatistics;
 use geoengine_datatypes::{
     error::BoxedResultExt,
-    primitives::{DateTimeParseFormat, TimeInstance, TimeInterval},
+    primitives::{TimeInstance, TimeInterval},
     util::gdal::ResamplingMethod,
 };
 use geoengine_datatypes::{
     primitives::CacheTtlSeconds, spatial_reference::SpatialReference, util::canonicalize_subpath,
 };
 use geoengine_operators::{
-    source::{
-        GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
-        GdalSourceTimePlaceholder, TimeReference,
-    },
+    source::{GdalLoadingInfoTemporalSlice, GdalMetaDataList},
     util::gdal::{
         gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
         raster_descriptor_from_dataset_and_sref,
@@ -233,7 +230,7 @@ pub fn create_overviews<C: TaskContext>(
 
     let root_group = dataset.root_group().context(error::GdalMd)?;
     let group_tree = root_group.group_tree()?;
-    let time_coverage = TimeCoverage::from_root_group(&root_group)?;
+    let time_coverage = TimeCoverage::from_dimension(&root_group)?;
 
     if !out_folder_path.exists() {
         fs::create_dir_all(&out_folder_path).boxed_context(error::InvalidDirectory)?;
@@ -454,7 +451,7 @@ fn index_subdataset<C: TaskContext>(
         &raster_creation_options
     );
 
-    let time_steps = time_coverage.time_steps()?;
+    let time_steps = time_coverage.time_steps();
 
     let (mut value_min, mut value_max) = (f64::INFINITY, -f64::INFINITY);
 
@@ -723,7 +720,7 @@ fn generate_loading_info(
             .boxed_context(error::CannotGenerateLoadingInfo)?
     };
 
-    let mut params = gdal_parameters_from_dataset(
+    let params = gdal_parameters_from_dataset(
         dataset,
         TIFF_BAND_INDEX,
         overview_dataset_path,
@@ -735,59 +732,28 @@ fn generate_loading_info(
     // we change the cache ttl when returning the overview metadata in the provider
     let cache_ttl = CacheTtlSeconds::default();
 
-    Ok(match *time_coverage {
-        TimeCoverage::Regular { start, end, step } => {
-            let time_interval =
-                TimeInterval::new(start, end).context(error::InvalidTimeCoverageInterval)?;
+    let mut params_list = Vec::with_capacity(time_coverage.number_of_time_steps());
+    for time_instance in time_coverage.time_steps() {
+        let mut params = params.clone();
 
-            let placeholder = "%_START_TIME_%".to_string();
-            params.file_path = params
-                .file_path
-                .with_file_name(placeholder.clone() + ".tiff");
+        params.file_path = params
+            .file_path
+            .with_file_name(time_instance.as_datetime_string_with_millis() + ".tiff");
 
-            MetaDataDefinition::GdalMetaDataRegular(GdalMetaDataRegular {
-                result_descriptor,
-                params,
-                step,
-                time_placeholders: [(
-                    placeholder,
-                    GdalSourceTimePlaceholder {
-                        format: DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3fZ".to_string()),
-                        reference: TimeReference::Start,
-                    },
-                )]
-                .into_iter()
-                .collect(),
-                data_time: time_interval,
+        let time_interval = TimeInterval::new_instant(*time_instance)
+            .context(error::InvalidTimeCoverageInterval)?;
 
-                cache_ttl,
-            })
-        }
-        TimeCoverage::List { ref time_stamps } => {
-            let mut params_list = Vec::with_capacity(time_stamps.len());
-            for time_instance in time_stamps {
-                let mut params = params.clone();
+        params_list.push(GdalLoadingInfoTemporalSlice {
+            time: time_interval,
+            params: Some(params),
+            cache_ttl,
+        });
+    }
 
-                params.file_path = params
-                    .file_path
-                    .with_file_name(time_instance.as_datetime_string_with_millis() + ".tiff");
-
-                let time_interval = TimeInterval::new_instant(*time_instance)
-                    .context(error::InvalidTimeCoverageInterval)?;
-
-                params_list.push(GdalLoadingInfoTemporalSlice {
-                    time: time_interval,
-                    params: Some(params),
-                    cache_ttl,
-                });
-            }
-
-            MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
-                result_descriptor,
-                params: params_list,
-            })
-        }
-    })
+    Ok(MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
+        result_descriptor,
+        params: params_list,
+    }))
 }
 
 pub fn remove_overviews(dataset_path: &Path, overview_path: &Path, force: bool) -> Result<()> {
@@ -810,7 +776,6 @@ pub fn remove_overviews(dataset_path: &Path, overview_path: &Path, force: bool) 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::{
         datasets::{
             external::netcdfcf::{NetCdfEntity, NetCdfGroup as FullNetCdfGroup, NetCdfOverview},
@@ -819,9 +784,8 @@ mod tests {
         tasks::util::NopTaskContext,
     };
     use geoengine_datatypes::{
-        hashmap,
         operations::image::{Colorizer, RgbaColor},
-        primitives::{DateTime, SpatialResolution, TimeGranularity, TimeStep},
+        primitives::{DateTime, SpatialResolution},
         raster::RasterDataType,
         spatial_reference::SpatialReference,
         test_data,
@@ -829,10 +793,7 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{RasterBandDescriptors, RasterResultDescriptor},
-        source::{
-            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-            GdalMetaDataRegular,
-        },
+        source::{FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters},
     };
     use std::io::BufReader;
 
@@ -860,13 +821,11 @@ mod tests {
         let loading_info = generate_loading_info(
             &dataset,
             Path::new("foo/bar.tif"),
-            &TimeCoverage::Regular {
-                start: DateTime::new_utc(2020, 1, 1, 0, 0, 0).into(),
-                end: DateTime::new_utc(2021, 1, 1, 0, 0, 0).into(),
-                step: TimeStep {
-                    granularity: TimeGranularity::Months,
-                    step: 1,
-                },
+            &TimeCoverage {
+                time_stamps: vec![
+                    DateTime::new_utc(2020, 1, 1, 0, 0, 0).into(),
+                    DateTime::new_utc(2020, 2, 1, 0, 0, 0).into(),
+                ],
             },
             None,
         )
@@ -874,7 +833,7 @@ mod tests {
 
         assert_eq!(
             loading_info,
-            MetaDataDefinition::GdalMetaDataRegular(GdalMetaDataRegular {
+            MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -883,45 +842,66 @@ mod tests {
                     resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
-                params: GdalDatasetParameters {
-                    file_path: Path::new("foo/%_START_TIME_%.tiff").into(),
-                    rasterband_channel: 1,
-                    geo_transform: GdalDatasetGeoTransform {
-                        origin_coordinate: (50., 55.).into(),
-                        x_pixel_size: 1.,
-                        y_pixel_size: -1.,
+                params: vec![
+                    GdalLoadingInfoTemporalSlice {
+                        time: TimeInterval::new(
+                            DateTime::new_utc(2020, 1, 1, 0, 0, 0),
+                            DateTime::new_utc(2020, 1, 1, 0, 0, 0)
+                        )
+                        .unwrap(),
+                        params: Some(GdalDatasetParameters {
+                            file_path: Path::new("foo/2020-01-01T00:00:00.000Z.tiff").into(),
+                            rasterband_channel: 1,
+                            geo_transform: GdalDatasetGeoTransform {
+                                origin_coordinate: (50., 55.).into(),
+                                x_pixel_size: 1.,
+                                y_pixel_size: -1.,
+                            },
+                            width: 5,
+                            height: 5,
+                            file_not_found_handling: FileNotFoundHandling::Error,
+                            no_data_value: Some(-9999.0),
+                            properties_mapping: None,
+                            gdal_open_options: None,
+                            gdal_config_options: None,
+                            allow_alphaband_as_mask: true,
+                            retry: None,
+                        }),
+                        cache_ttl: CacheTtlSeconds::default(),
                     },
-                    width: 5,
-                    height: 5,
-                    file_not_found_handling: FileNotFoundHandling::Error,
-                    no_data_value: Some(-9999.0),
-                    properties_mapping: None,
-                    gdal_open_options: None,
-                    gdal_config_options: None,
-                    allow_alphaband_as_mask: true,
-                    retry: None,
-                },
-                step: TimeStep {
-                    granularity: TimeGranularity::Months,
-                    step: 1,
-                },
-                time_placeholders: hashmap! {
-                    "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
-                        format: DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3fZ".to_string()),
-                        reference: TimeReference::Start,
+                    GdalLoadingInfoTemporalSlice {
+                        time: TimeInterval::new(
+                            DateTime::new_utc(2020, 2, 1, 0, 0, 0),
+                            DateTime::new_utc(2020, 2, 1, 0, 0, 0)
+                        )
+                        .unwrap(),
+                        params: Some(GdalDatasetParameters {
+                            file_path: Path::new("foo/2020-02-01T00:00:00.000Z.tiff").into(),
+                            rasterband_channel: 1,
+                            geo_transform: GdalDatasetGeoTransform {
+                                origin_coordinate: (50., 55.).into(),
+                                x_pixel_size: 1.,
+                                y_pixel_size: -1.,
+                            },
+                            width: 5,
+                            height: 5,
+                            file_not_found_handling: FileNotFoundHandling::Error,
+                            no_data_value: Some(-9999.0),
+                            properties_mapping: None,
+                            gdal_open_options: None,
+                            gdal_config_options: None,
+                            allow_alphaband_as_mask: true,
+                            retry: None,
+                        }),
+                        cache_ttl: CacheTtlSeconds::default(),
                     },
-                },
-                data_time: TimeInterval::new(
-                    DateTime::new_utc(2020, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2021, 1, 1, 0, 0, 0)
-                )
-                .unwrap(),
-                cache_ttl: CacheTtlSeconds::default(),
+                ],
             })
         );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
     async fn test_index_subdataset() {
         hide_gdal_errors();
 
@@ -940,13 +920,12 @@ mod tests {
                 array_path: "/metric_1/ebv_cube".to_string(),
                 number_of_entities: 3,
             },
-            &TimeCoverage::Regular {
-                start: DateTime::new_utc(2000, 1, 1, 0, 0, 0).into(),
-                end: DateTime::new_utc(2003, 1, 1, 0, 0, 0).into(),
-                step: TimeStep {
-                    granularity: TimeGranularity::Years,
-                    step: 1,
-                },
+            &TimeCoverage {
+                time_stamps: vec![
+                    DateTime::new_utc(2000, 1, 1, 0, 0, 0).into(),
+                    DateTime::new_utc(2001, 1, 1, 0, 0, 0).into(),
+                    DateTime::new_utc(2002, 1, 1, 0, 0, 0).into(),
+                ],
             },
             None,
             &NopTaskContext,
@@ -970,7 +949,7 @@ mod tests {
             std::fs::read_to_string(tempdir_path.join("1/loading_info.json")).unwrap();
         assert_eq!(
             serde_json::from_str::<MetaDataDefinition>(&sample_loading_info).unwrap(),
-            MetaDataDefinition::GdalMetaDataRegular(GdalMetaDataRegular {
+            MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -979,40 +958,86 @@ mod tests {
                     resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
-                params: GdalDatasetParameters {
-                    file_path: tempdir_path.join("1/%_START_TIME_%.tiff"),
-                    rasterband_channel: 1,
-                    geo_transform: GdalDatasetGeoTransform {
-                        origin_coordinate: (50., 55.).into(),
-                        x_pixel_size: 1.,
-                        y_pixel_size: -1.,
+                params: vec![
+                    GdalLoadingInfoTemporalSlice {
+                        time: TimeInterval::new(
+                            DateTime::new_utc(2000, 1, 1, 0, 0, 0),
+                            DateTime::new_utc(2000, 1, 1, 0, 0, 0)
+                        )
+                        .unwrap(),
+                        params: Some(GdalDatasetParameters {
+                            file_path: tempdir_path.join("1/2000-01-01T00:00:00.000Z.tiff"),
+                            rasterband_channel: 1,
+                            geo_transform: GdalDatasetGeoTransform {
+                                origin_coordinate: (50., 55.).into(),
+                                x_pixel_size: 1.,
+                                y_pixel_size: -1.,
+                            },
+                            width: 5,
+                            height: 5,
+                            file_not_found_handling: FileNotFoundHandling::Error,
+                            no_data_value: Some(-9999.0),
+                            properties_mapping: None,
+                            gdal_open_options: None,
+                            gdal_config_options: None,
+                            allow_alphaband_as_mask: true,
+                            retry: None,
+                        }),
+                        cache_ttl: CacheTtlSeconds::default(),
                     },
-                    width: 5,
-                    height: 5,
-                    file_not_found_handling: FileNotFoundHandling::Error,
-                    no_data_value: Some(-9999.0),
-                    properties_mapping: None,
-                    gdal_open_options: None,
-                    gdal_config_options: None,
-                    allow_alphaband_as_mask: true,
-                    retry: None,
-                },
-                step: TimeStep {
-                    granularity: TimeGranularity::Years,
-                    step: 1,
-                },
-                time_placeholders: hashmap! {
-                    "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
-                        format: DateTimeParseFormat::custom("%Y-%m-%dT%H:%M:%S%.3fZ".to_string()),
-                        reference: TimeReference::Start,
+                    GdalLoadingInfoTemporalSlice {
+                        time: TimeInterval::new(
+                            DateTime::new_utc(2001, 1, 1, 0, 0, 0),
+                            DateTime::new_utc(2001, 1, 1, 0, 0, 0)
+                        )
+                        .unwrap(),
+                        params: Some(GdalDatasetParameters {
+                            file_path: tempdir_path.join("1/2001-01-01T00:00:00.000Z.tiff"),
+                            rasterband_channel: 1,
+                            geo_transform: GdalDatasetGeoTransform {
+                                origin_coordinate: (50., 55.).into(),
+                                x_pixel_size: 1.,
+                                y_pixel_size: -1.,
+                            },
+                            width: 5,
+                            height: 5,
+                            file_not_found_handling: FileNotFoundHandling::Error,
+                            no_data_value: Some(-9999.0),
+                            properties_mapping: None,
+                            gdal_open_options: None,
+                            gdal_config_options: None,
+                            allow_alphaband_as_mask: true,
+                            retry: None,
+                        }),
+                        cache_ttl: CacheTtlSeconds::default(),
                     },
-                },
-                data_time: TimeInterval::new(
-                    DateTime::new_utc(2000, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2003, 1, 1, 0, 0, 0)
-                )
-                .unwrap(),
-                cache_ttl: CacheTtlSeconds::default(),
+                    GdalLoadingInfoTemporalSlice {
+                        time: TimeInterval::new(
+                            DateTime::new_utc(2002, 1, 1, 0, 0, 0),
+                            DateTime::new_utc(2002, 1, 1, 0, 0, 0)
+                        )
+                        .unwrap(),
+                        params: Some(GdalDatasetParameters {
+                            file_path: tempdir_path.join("1/2002-01-01T00:00:00.000Z.tiff"),
+                            rasterband_channel: 1,
+                            geo_transform: GdalDatasetGeoTransform {
+                                origin_coordinate: (50., 55.).into(),
+                                x_pixel_size: 1.,
+                                y_pixel_size: -1.,
+                            },
+                            width: 5,
+                            height: 5,
+                            file_not_found_handling: FileNotFoundHandling::Error,
+                            no_data_value: Some(-9999.0),
+                            properties_mapping: None,
+                            gdal_open_options: None,
+                            gdal_config_options: None,
+                            allow_alphaband_as_mask: true,
+                            retry: None,
+                        }),
+                        cache_ttl: CacheTtlSeconds::default(),
+                    },
+                ],
             })
         );
     }
@@ -1089,13 +1114,12 @@ mod tests {
                         name: "entity03".to_string(),
                     }
                 ],
-                time_coverage: TimeCoverage::Regular {
-                    start: DateTime::new_utc(2000, 1, 1, 0, 0, 0).into(),
-                    end: DateTime::new_utc(2003, 1, 1, 0, 0, 0).into(),
-                    step: TimeStep {
-                        granularity: TimeGranularity::Years,
-                        step: 1
-                    }
+                time_coverage: TimeCoverage {
+                    time_stamps: vec![
+                        DateTime::new_utc(2000, 1, 1, 0, 0, 0).into(),
+                        DateTime::new_utc(2001, 1, 1, 0, 0, 0).into(),
+                        DateTime::new_utc(2002, 1, 1, 0, 0, 0).into(),
+                    ],
                 },
                 colorizer: Colorizer::LinearGradient {
                     breakpoints: vec![

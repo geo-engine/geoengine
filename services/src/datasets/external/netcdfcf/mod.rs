@@ -33,10 +33,9 @@ use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
-use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
-    DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
-    TimeInstance, TimeInterval, TimeStep, TimeStepIter, VectorQueryRectangle,
+    CacheTtlSeconds, DateTime, Measurement, RasterQueryRectangle, TimeInstance, TimeInterval,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -46,7 +45,7 @@ use geoengine_operators::engine::RasterBandDescriptor;
 use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-    GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetadataNetCdfCf,
+    GdalLoadingInfoTemporalSlice, GdalMetaDataList,
 };
 use geoengine_operators::util::gdal::gdal_open_dataset_ex;
 use geoengine_operators::{
@@ -56,7 +55,7 @@ use geoengine_operators::{
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
-use snafu::{OptionExt, ResultExt};
+use snafu::ResultExt;
 use std::collections::HashMap;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -364,7 +363,7 @@ impl NetCdfCfDataProvider {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let time_coverage = TimeCoverage::from_root_group(&root_group)?;
+        let time_coverage = TimeCoverage::from_dimension(&root_group)?;
 
         let colorizer = load_colorizer(&path).or_else(|error| {
             debug!("Use fallback colorizer: {:?}", error);
@@ -439,10 +438,6 @@ impl NetCdfCfDataProvider {
                     }
                     Ok(Box::new(loading_info))
                 }
-                MetaDataDefinition::GdalMetaDataRegular(mut loading_info) => {
-                    loading_info.cache_ttl = cache_ttl;
-                    Ok(Box::new(loading_info))
-                }
                 _ => Err(NetCdfCf4DProviderError::UnsupportedMetaDataDefinition),
             };
         }
@@ -475,7 +470,7 @@ impl NetCdfCfDataProvider {
 
         let root_group = dataset.root_group().context(error::GdalMd)?;
 
-        let time_coverage = TimeCoverage::from_root_group(&root_group)?;
+        let time_coverage = TimeCoverage::from_dimension(&root_group)?;
 
         let geo_transform = {
             let crs_array = root_group
@@ -559,37 +554,24 @@ impl NetCdfCfDataProvider {
             .get(TIME_DIMENSION_INDEX)
             .map(Dimension::size)
             .unwrap_or_default();
-        Ok(match time_coverage {
-            TimeCoverage::Regular { start, end, step } => Box::new(GdalMetadataNetCdfCf {
-                params,
-                result_descriptor,
-                start,
-                end, // TODO: Use this or time dimension size (number of steps)?
-                step,
-                band_offset: dataset_id.entity * dimensions_time,
+        let mut params_list = Vec::with_capacity(time_coverage.number_of_time_steps());
+        for (i, time_instance) in time_coverage.time_steps().iter().enumerate() {
+            let mut params = params.clone();
+
+            params.rasterband_channel = dataset_id.entity * dimensions_time + i + 1;
+
+            params_list.push(GdalLoadingInfoTemporalSlice {
+                time: TimeInterval::new_instant(*time_instance)
+                    .context(error::InvalidTimeCoverageInterval)?,
+                params: Some(params),
                 cache_ttl,
-            }),
-            TimeCoverage::List { time_stamps } => {
-                let mut params_list = Vec::with_capacity(time_stamps.len());
-                for (i, time_instance) in time_stamps.iter().enumerate() {
-                    let mut params = params.clone();
+            });
+        }
 
-                    params.rasterband_channel = dataset_id.entity * dimensions_time + i + 1;
-
-                    params_list.push(GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new_instant(*time_instance)
-                            .context(error::InvalidTimeCoverageInterval)?,
-                        params: Some(params),
-                        cache_ttl,
-                    });
-                }
-
-                Box::new(GdalMetaDataList {
-                    result_descriptor,
-                    params: params_list,
-                })
-            }
-        })
+        Ok(Box::new(GdalMetaDataList {
+            result_descriptor,
+            params: params_list,
+        }))
     }
 
     fn meta_data_from_overviews(
@@ -615,9 +597,6 @@ impl NetCdfCfDataProvider {
         match loading_info {
             MetaDataDefinition::GdalMetaDataList(loading_info) => {
                 Some(MetaDataDefinition::GdalMetaDataList(loading_info))
-            }
-            MetaDataDefinition::GdalMetaDataRegular(loading_info) => {
-                Some(MetaDataDefinition::GdalMetaDataRegular(loading_info))
             }
             _ => None, // we only support some definitions here
         }
@@ -780,121 +759,13 @@ fn parse_geo_transform(input: &str) -> Result<GdalDatasetGeoTransform> {
     Ok(gdal_geo_transform.into())
 }
 
-fn parse_date(input: &str) -> Result<DateTime> {
-    if let Ok(year) = input.parse::<i32>() {
-        return DateTime::new_utc_checked(year, 1, 1, 0, 0, 0)
-            .context(error::TimeCoverageYearOverflows { year });
-    }
-
-    DateTime::parse_from_str(input, &DateTimeParseFormat::ymd()).map_err(|e| {
-        NetCdfCf4DProviderError::CannotParseTimeCoverageDate {
-            source: Box::new(e),
-        }
-    })
-}
-
-fn parse_time_step(input: &str) -> Result<Option<TimeStep>> {
-    let Some(duration_str) = input.strip_prefix('P') else {
-        return Err(NetCdfCf4DProviderError::TimeCoverageResolutionMustStartWithP);
-    };
-
-    let parts = duration_str
-        .split('-')
-        .map(str::parse)
-        .collect::<Result<Vec<u32>, std::num::ParseIntError>>()
-        .context(error::TimeCoverageResolutionMustConsistsOnlyOfIntParts)?;
-
-    // check if the time step string contains only zeros.
-    if parts.iter().all(num_traits::Zero::is_zero) {
-        return Ok(None);
-    }
-
-    if parts.is_empty() {
-        return Err(NetCdfCf4DProviderError::TimeCoverageResolutionPartsMustNotBeEmpty);
-    }
-
-    Ok(Some(match parts.as_slice() {
-        [year, 0, 0, ..] => TimeStep {
-            granularity: TimeGranularity::Years,
-            step: *year,
-        },
-        [0, month, 0, ..] => TimeStep {
-            granularity: TimeGranularity::Months,
-            step: *month,
-        },
-        [0, 0, day, ..] => TimeStep {
-            granularity: TimeGranularity::Days,
-            step: *day,
-        },
-        // TODO: fix format and parse other options
-        _ => return Err(NetCdfCf4DProviderError::NotYetImplemented),
-    }))
-}
-
-fn parse_time_coverage(start: &str, end: &str, resolution: &str) -> Result<TimeCoverage> {
-    // TODO: parse datetimes
-
-    let start: TimeInstance = parse_date(start)?.into();
-    let end: TimeInstance = parse_date(end)?.into();
-    let step_option = parse_time_step(resolution)?;
-
-    if let Some(step) = step_option {
-        // add one step to provide a right side boundary for the close-open interval
-        let end = (end + step).context(error::CannotDefineTimeCoverageEnd)?;
-        return Ok(TimeCoverage::Regular { start, end, step });
-    }
-
-    // there is no step. Data must be valid for start. TODO: Should this be a TimeInterval?
-    Ok(TimeCoverage::List {
-        time_stamps: vec![start],
-    })
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum TimeCoverage {
-    #[serde(rename_all = "camelCase")]
-    Regular {
-        start: TimeInstance,
-        end: TimeInstance,
-        step: TimeStep,
-    },
-    #[serde(rename_all = "camelCase")]
-    List { time_stamps: Vec<TimeInstance> },
+#[serde(rename_all = "camelCase")]
+pub struct TimeCoverage {
+    time_stamps: Vec<TimeInstance>,
 }
 
 impl TimeCoverage {
-    fn from_root_group(root_group: &Group) -> Result<TimeCoverage> {
-        let start = root_group
-            .attribute("time_coverage_start")
-            .context(error::MissingTimeCoverageStart)?
-            .read_as_string();
-        let end = root_group
-            .attribute("time_coverage_end")
-            .context(error::MissingTimeCoverageEnd)?
-            .read_as_string();
-        let step = root_group
-            .attribute("time_coverage_resolution")
-            .context(error::MissingTimeCoverageResolution)?
-            .read_as_string();
-
-        // we can parse coverages starting with `P`,
-        let time_p_res = parse_time_coverage(&start, &end, &step);
-        if time_p_res.is_ok() {
-            debug!(
-                "Using time parsed from: start: {start}, end:{end}, step: {step} -> {:?} ",
-                time_p_res.as_ref().expect("was just checked with ok")
-            );
-            return time_p_res;
-        }
-
-        // something went wrong parsing a regular time as defined in the NetCDF CF standard.
-        debug!("Could not parse time from: start: {start}, end:{end}, step: {step}");
-
-        // try to read time from dimension:
-        Self::from_dimension(root_group)
-    }
-
     fn from_dimension(root_group: &Group) -> Result<TimeCoverage> {
         // TODO: are there other variants for the time unit?
         // `:units = "days since 1860-01-01 00:00:00.0";`
@@ -925,34 +796,15 @@ impl TimeCoverage {
             );
         }
 
-        Ok(TimeCoverage::List { time_stamps })
+        Ok(Self { time_stamps })
     }
 
-    fn number_of_time_steps(&self) -> Result<u32> {
-        match self {
-            TimeCoverage::Regular { start, end, step } => {
-                let time_interval = TimeInterval::new(*start, *end);
-                let time_steps = time_interval
-                    .and_then(|time_interval| step.num_steps_in_interval(time_interval));
-                time_steps.context(error::InvalidTimeCoverageInterval)
-            }
-            TimeCoverage::List { time_stamps } => Ok(time_stamps.len() as u32),
-        }
+    fn number_of_time_steps(&self) -> usize {
+        self.time_stamps.len()
     }
 
-    fn time_steps(&self) -> Result<Vec<TimeInstance>> {
-        match self {
-            TimeCoverage::Regular {
-                start,
-                end: _,
-                step,
-            } => {
-                let time_step_iter = TimeStepIter::new(*start, *step, self.number_of_time_steps()?)
-                    .context(error::InvalidTimeCoverageInterval)?;
-                Ok(time_step_iter.collect())
-            }
-            TimeCoverage::List { time_stamps } => Ok(time_stamps.clone()),
-        }
+    fn time_steps(&self) -> &[TimeInstance] {
+        self.time_stamps.as_slice()
     }
 }
 
@@ -1224,16 +1076,7 @@ pub fn layer_from_netcdf_overview(
             id: layer_id.clone(),
         })?;
 
-    let time_steps = match overview.time_coverage {
-        TimeCoverage::Regular { start, end, step } => {
-            if step.step == 0 {
-                vec![start]
-            } else {
-                TimeStepIter::new_with_interval(TimeInterval::new(start, end)?, step)?.collect()
-            }
-        }
-        TimeCoverage::List { time_stamps } => time_stamps,
-    };
+    let time_steps = overview.time_coverage.time_stamps;
 
     let group = find_group(overview.groups, groups)?.ok_or(Error::InvalidLayerId)?;
 
@@ -1674,83 +1517,6 @@ mod tests {
         assert_eq!(id.to_string(), "root/foo/bar/baz.nc/group1/group2/7.entity");
     }
 
-    #[test]
-    fn test_parse_time_coverage() {
-        let result = parse_time_coverage("2010", "2020", "P0001-00-00").unwrap();
-        let expected = TimeCoverage::Regular {
-            start: TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),
-            end: TimeInstance::from(DateTime::new_utc(2021, 1, 1, 0, 0, 0)),
-            step: TimeStep {
-                granularity: TimeGranularity::Years,
-                step: 1,
-            },
-        };
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_parse_zero_time_coverage() {
-        let result = parse_time_coverage("2010", "2020", "P0000-00-00").unwrap();
-        assert_eq!(
-            result,
-            TimeCoverage::List {
-                time_stamps: vec![DateTime::new_utc(2010, 1, 1, 0, 0, 0).into()]
-            }
-        );
-    }
-
-    #[test]
-    fn test_parse_date() {
-        assert_eq!(
-            parse_date("2010").unwrap(),
-            DateTime::new_utc(2010, 1, 1, 0, 0, 0)
-        );
-        assert_eq!(
-            parse_date("-1000").unwrap(),
-            DateTime::new_utc(-1000, 1, 1, 0, 0, 0)
-        );
-        assert_eq!(
-            parse_date("2010-04-02").unwrap(),
-            DateTime::new_utc(2010, 4, 2, 0, 0, 0)
-        );
-        assert_eq!(
-            parse_date("-1000-04-02").unwrap(),
-            DateTime::new_utc(-1000, 4, 2, 0, 0, 0)
-        );
-    }
-
-    #[test]
-    fn test_parse_time_step() {
-        assert_eq!(
-            parse_time_step("P0001-00-00").unwrap(),
-            Some(TimeStep {
-                granularity: TimeGranularity::Years,
-                step: 1,
-            })
-        );
-        assert_eq!(
-            parse_time_step("P0005-00-00").unwrap(),
-            Some(TimeStep {
-                granularity: TimeGranularity::Years,
-                step: 5,
-            })
-        );
-        assert_eq!(
-            parse_time_step("P0010-00-00").unwrap(),
-            Some(TimeStep {
-                granularity: TimeGranularity::Years,
-                step: 10,
-            })
-        );
-        assert_eq!(
-            parse_time_step("P0000-06-00").unwrap(),
-            Some(TimeStep {
-                granularity: TimeGranularity::Months,
-                step: 6,
-            })
-        );
-    }
-
     #[ge_context::test]
     async fn test_listing(app_ctx: PostgresContext<NoTls>) {
         // initialize_debugging_in_test(); // TODO: remove
@@ -2015,7 +1781,7 @@ mod tests {
                     (44.033_203_125, 0.703_125_25).into(),
                 )
                 .unwrap(),
-                time_interval: TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
+                time_interval: TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
                 spatial_resolution: SpatialResolution::new_unchecked(
                     0.000_343_322_7, // 256 pixel
                     0.000_343_322_7, // 256 pixel
@@ -2044,7 +1810,7 @@ mod tests {
         assert_eq!(
             loading_info_parts[0],
             GdalLoadingInfoTemporalSlice {
-                time: TimeInterval::new_unchecked(946_684_800_000, 1_262_304_000_000),
+                time: TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
                 params: Some(GdalDatasetParameters {
                     file_path,
                     rasterband_channel: 4,
@@ -2144,7 +1910,7 @@ mod tests {
                     (44.033_203_125, 0.703_125_25).into(),
                 )
                 .unwrap(),
-                time_interval: TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
+                time_interval: TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
                 spatial_resolution: SpatialResolution::new_unchecked(
                     0.000_343_322_7, // 256 pixel
                     0.000_343_322_7, // 256 pixel
@@ -2168,7 +1934,7 @@ mod tests {
         assert_eq!(
             loading_info_parts[0],
             GdalLoadingInfoTemporalSlice {
-                time: TimeInterval::new_unchecked(946_684_800_000, 1_262_304_000_000),
+                time: TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
                 params: Some(GdalDatasetParameters {
                     file_path,
                     rasterband_channel: 1,
