@@ -9,6 +9,7 @@ use crate::layers::layer::{
 };
 use crate::layers::listing::{
     LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+    SearchParameters, SearchType, SearchTypes,
 };
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
@@ -81,7 +82,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for GfbioAbcdDataProviderDefiniti
     }
 }
 
-// TODO: make schema, table names and column names configurable like in crawler
+// TODO: make table names and column names configurable like in crawler
 #[derive(Debug)]
 pub struct GfbioAbcdDataProvider {
     name: String,
@@ -210,7 +211,14 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             listing: true,
-            search: SearchCapabilities::none(),
+            search: SearchCapabilities {
+                search_types: SearchTypes {
+                    fulltext: true,
+                    prefix: true,
+                },
+                autocomplete: true,
+                filters: None,
+            },
         }
     }
 
@@ -346,6 +354,140 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
             properties: vec![],
             metadata: HashMap::new(),
         })
+    }
+
+    async fn search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<LayerCollection> {
+        ensure!(
+            *collection_id == self.get_root_layer_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection_id.clone()
+            }
+        );
+
+        let search_pattern = match search.search_type {
+            SearchType::Fulltext => format!("%{}%", search.search_string),
+            SearchType::Prefix => format!("{}%", search.search_string),
+        };
+
+        let conn = self.pool.get().await?;
+
+        let stmt = conn
+            .prepare(&format!(
+                r#"
+                SELECT surrogate_key, "{title}", "{details}"
+                FROM {schema}.abcd_datasets
+                WHERE "{title}" ILIKE $3
+                ORDER BY "{title}"
+                LIMIT $1
+                OFFSET $2;"#,
+                title = self
+                    .column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/Description/Representation/Title")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                details = self
+                    .column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/Description/Representation/Details")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                schema = self.db_config.schema
+            ))
+            .await?;
+
+        let rows = conn
+            .query(
+                &stmt,
+                &[
+                    &i64::from(search.limit),
+                    &i64::from(search.offset),
+                    &search_pattern,
+                ],
+            )
+            .await?;
+
+        let items: Vec<_> = rows
+            .into_iter()
+            .map(|row| {
+                CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: GFBIO_PROVIDER_ID,
+                        layer_id: LayerId(row.get::<usize, i32>(0).to_string()),
+                    },
+                    name: row.get(1),
+                    description: row.try_get(2).unwrap_or_else(|_| String::new()),
+                    properties: vec![],
+                })
+            })
+            .collect();
+
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: GFBIO_PROVIDER_ID,
+                collection_id: collection_id.clone(),
+            },
+            name: "GFBio".to_owned(),
+            description: "GFBio".to_owned(),
+            items,
+            entry_label: None,
+            properties: vec![],
+        })
+    }
+
+    async fn autocomplete_search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<Vec<String>> {
+        ensure!(
+            *collection_id == self.get_root_layer_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection_id.clone()
+            }
+        );
+
+        let search_pattern = match search.search_type {
+            SearchType::Fulltext => format!("%{}%", search.search_string),
+            SearchType::Prefix => format!("{}%", search.search_string),
+        };
+
+        let conn = self.pool.get().await?;
+
+        let stmt = conn
+            .prepare(&format!(
+                r#"
+                SELECT "{title}"
+                FROM {schema}.abcd_datasets
+                WHERE "{title}" ILIKE $3
+                ORDER BY "{title}"
+                LIMIT $1
+                OFFSET $2;"#,
+                title = self
+                    .column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/Description/Representation/Title")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                schema = self.db_config.schema
+            ))
+            .await?;
+
+        let rows = conn
+            .query(
+                &stmt,
+                &[
+                    &i64::from(search.limit),
+                    &i64::from(search.offset),
+                    &search_pattern,
+                ],
+            )
+            .await?;
+
+        let items: Vec<_> = rows
+            .into_iter()
+            .map(|row| row.get::<usize, String>(0))
+            .collect();
+
+        Ok(items)
     }
 }
 
@@ -615,12 +757,138 @@ mod tests {
                 },
                 name: "GFBio".to_string(),
                 description: "GFBio".to_string(),
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GFBIO_PROVIDER_ID,
+                            layer_id: LayerId("1".to_string()),
+                        },
+                        name: "Example Title".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GFBIO_PROVIDER_ID,
+                            layer_id: LayerId("2".to_string()),
+                        },
+                        name: "Example Title 2".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    })
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_searches_fulltext(app_ctx: PostgresContext<NoTls>) {
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let provider = Box::new(GfbioAbcdDataProviderDefinition {
+            name: "GFBio".to_string(),
+            description: "GFBio".to_string(),
+            priority: None,
+            db_config: DatabaseConnectionConfig {
+                host: db_config.host.clone(),
+                port: db_config.port,
+                database: db_config.database.clone(),
+                schema: test_schema.clone(),
+                user: db_config.user.clone(),
+                password: db_config.password.clone(),
+            },
+            cache_ttl: Default::default(),
+        })
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .await
+        .unwrap();
+
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+        let collection = provider
+            .search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "title".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    collection_id: root_id.clone(),
+                },
+                name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GFBIO_PROVIDER_ID,
+                            layer_id: LayerId("1".to_string()),
+                        },
+                        name: "Example Title".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GFBIO_PROVIDER_ID,
+                            layer_id: LayerId("2".to_string()),
+                        },
+                        name: "Example Title 2".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    })
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &root_id.clone(),
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "title 2".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        cleanup_test_data(&db_config, test_schema).await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    collection_id: root_id,
+                },
+                name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
-                        layer_id: LayerId("1".to_string()),
+                        layer_id: LayerId("2".to_string()),
                     },
-                    name: "Example Title".to_string(),
+                    name: "Example Title 2".to_string(),
                     description: String::new(),
                     properties: vec![],
                 })],
@@ -628,6 +896,294 @@ mod tests {
                 properties: vec![],
             }
         );
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_searches_prefix(app_ctx: PostgresContext<NoTls>) {
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let provider = Box::new(GfbioAbcdDataProviderDefinition {
+            name: "GFBio".to_string(),
+            description: "GFBio".to_string(),
+            priority: None,
+            db_config: DatabaseConnectionConfig {
+                host: db_config.host.clone(),
+                port: db_config.port,
+                database: db_config.database.clone(),
+                schema: test_schema.clone(),
+                user: db_config.user.clone(),
+                password: db_config.password.clone(),
+            },
+            cache_ttl: Default::default(),
+        })
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .await
+        .unwrap();
+
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+        let collection = provider
+            .search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "title".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    collection_id: root_id.clone(),
+                },
+                name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &root_id.clone(),
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "example".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    collection_id: root_id.clone(),
+                },
+                name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GFBIO_PROVIDER_ID,
+                            layer_id: LayerId("1".to_string()),
+                        },
+                        name: "Example Title".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GFBIO_PROVIDER_ID,
+                            layer_id: LayerId("2".to_string()),
+                        },
+                        name: "Example Title 2".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    })
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &root_id.clone(),
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "example title 2".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        cleanup_test_data(&db_config, test_schema).await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    collection_id: root_id,
+                },
+                name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: GFBIO_PROVIDER_ID,
+                        layer_id: LayerId("2".to_string()),
+                    },
+                    name: "Example Title 2".to_string(),
+                    description: String::new(),
+                    properties: vec![],
+                })],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_autocompletes_fulltext_search(app_ctx: PostgresContext<NoTls>) {
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let provider = Box::new(GfbioAbcdDataProviderDefinition {
+            name: "GFBio".to_string(),
+            description: "GFBio".to_string(),
+            priority: None,
+            db_config: DatabaseConnectionConfig {
+                host: db_config.host.clone(),
+                port: db_config.port,
+                database: db_config.database.clone(),
+                schema: test_schema.clone(),
+                user: db_config.user.clone(),
+                password: db_config.password.clone(),
+            },
+            cache_ttl: Default::default(),
+        })
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .await
+        .unwrap();
+
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+        let items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "title".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        let items = items.unwrap();
+
+        assert_eq!(
+            items,
+            vec!["Example Title".to_string(), "Example Title 2".to_string()]
+        );
+
+        let items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "title 2".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        cleanup_test_data(&db_config, test_schema).await;
+
+        let items = items.unwrap();
+
+        assert_eq!(items, vec!["Example Title 2".to_string()]);
+    }
+
+    #[ge_context::test]
+    async fn it_autocompletes_prefix_search(app_ctx: PostgresContext<NoTls>) {
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let provider = Box::new(GfbioAbcdDataProviderDefinition {
+            name: "GFBio".to_string(),
+            description: "GFBio".to_string(),
+            priority: None,
+            db_config: DatabaseConnectionConfig {
+                host: db_config.host.clone(),
+                port: db_config.port,
+                database: db_config.database.clone(),
+                schema: test_schema.clone(),
+                user: db_config.user.clone(),
+                password: db_config.password.clone(),
+            },
+            cache_ttl: Default::default(),
+        })
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .await
+        .unwrap();
+
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+        let items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "title".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        let items = items.unwrap();
+
+        assert_eq!(items, Vec::<String>::new());
+
+        let items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "example".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        let items = items.unwrap();
+
+        assert_eq!(
+            items,
+            vec!["Example Title".to_string(), "Example Title 2".to_string()]
+        );
+
+        let items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "example title 2".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        cleanup_test_data(&db_config, test_schema).await;
+
+        let items = items.unwrap();
+
+        assert_eq!(items, vec!["Example Title 2".to_string()]);
     }
 
     #[allow(clippy::too_many_lines)]
