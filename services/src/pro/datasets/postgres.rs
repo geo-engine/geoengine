@@ -9,6 +9,7 @@ use crate::error::{self, Error, Result};
 use crate::pro::contexts::ProPostgresDb;
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Permission, RoleId};
+use crate::projects::Symbology;
 use async_trait::async_trait;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
@@ -644,6 +645,32 @@ where
         tx.commit().await?;
 
         Ok(DatasetIdAndName { id, name })
+    }
+
+    async fn update_dataset_symbology(
+        &self,
+        dataset: DatasetId,
+        symbology: &Symbology,
+    ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        ensure!(
+            self.has_permission_in_tx(dataset, Permission::Owner, &tx)
+                .await?,
+            error::PermissionDenied
+        );
+
+        let stmt = tx
+            .prepare("UPDATE datasets SET symbology = $2 WHERE id = $1;")
+            .await?;
+
+        tx.execute(&stmt, &[&dataset, &symbology]).await?;
+
+        tx.commit().await?;
+
+        Ok(())
     }
 
     async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {

@@ -275,8 +275,7 @@ impl MetaDataDefinition {
 #[async_trait]
 pub trait DatasetDb: DatasetStore + DatasetProvider + UploadDb + Send + Sync {}
 
-/// Allow storage of meta data of a particular storage type, e.g. `HashMapStorable` meta data for
-/// `HashMapDatasetDB`
+/// Storage of datasets
 #[async_trait]
 pub trait DatasetStore {
     async fn add_dataset(
@@ -284,6 +283,12 @@ pub trait DatasetStore {
         dataset: AddDataset,
         meta_data: MetaDataDefinition,
     ) -> Result<DatasetIdAndName>;
+
+    async fn update_dataset_symbology(
+        &self,
+        dataset: DatasetId,
+        symbology: &Symbology,
+    ) -> Result<()>;
 
     async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
 }

@@ -1,11 +1,11 @@
 use crate::{
-    api::handlers::datasets::{
-        adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
-        delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
-        suggest_meta_data_handler,
-    },
     api::{
-        handlers::datasets::get_loading_info_handler,
+        handlers::datasets::{
+            adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
+            delete_dataset_handler, get_dataset_handler, get_loading_info_handler,
+            list_datasets_handler, list_volumes_handler, suggest_meta_data_handler,
+            update_dataset_symbology_handler,
+        },
         model::{
             responses::datasets::{errors::*, DatasetNameResponse},
             services::{CreateDataset, DataPath, DatasetDefinition},
@@ -40,6 +40,10 @@ where
             .service(
                 web::resource("/{dataset}/loadingInfo")
                     .route(web::get().to(get_loading_info_handler::<C>)),
+            )
+            .service(
+                web::resource("/{dataset}/symbology")
+                    .route(web::post().to(update_dataset_symbology_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}")
