@@ -46,7 +46,6 @@ use geoengine_operators::engine::RasterBandDescriptor;
 use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-    GdalLoadingInfoTemporalSlice, GdalMetaDataList,
 };
 use geoengine_operators::util::gdal::gdal_open_dataset_ex;
 use geoengine_operators::{
@@ -633,19 +632,47 @@ impl NetCdfCfDataProvider {
         Ok(files)
     }
 
-    pub fn create_overviews<C: TaskContext>(
+    pub async fn create_overviews<C: TaskContext + 'static>(
         &self,
         dataset_path: &Path,
         resampling_method: Option<ResamplingMethod>,
-        task_context: &C,
+        task_context: C,
     ) -> Result<OverviewGeneration> {
-        create_overviews(
+        let mut db_connection = self
+            .metadata_db
+            .get()
+            .await
+            .boxed_context(error::DatabaseConnection)?;
+
+        let transaction = db_connection
+            .transaction()
+            .await
+            .boxed_context(error::DatabaseTransaction)?;
+
+        // check constraints at the end to speed up insertions
+        transaction
+            .batch_execute("SET CONSTRAINTS ALL DEFERRED")
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+
+        let result = create_overviews(
             &self.data,
             dataset_path,
             &self.overviews,
             resampling_method,
             task_context,
+            &transaction,
         )
+        .await;
+
+        if result.is_ok() {
+            transaction
+                .commit()
+                .await
+                .boxed_context(error::DatabaseTransactionCommit)?;
+        }
+
+        result
     }
 
     pub fn remove_overviews(&self, dataset_path: &Path, force: bool) -> Result<()> {
@@ -1385,14 +1412,26 @@ pub(crate) fn test_db_config() -> DatabaseConnectionConfig {
 
 #[cfg(test)]
 async fn test_db() -> Pool<PostgresConnectionManager<NoTls>> {
-    Pool::builder()
+    let db = Pool::builder()
         .max_size(1) // unwised to have to separate connections point to `pg_temp`
         .build(PostgresConnectionManager::new(
             test_db_config().pg_config(),
             NoTls,
         ))
         .await
-        .unwrap()
+        .unwrap();
+
+    migrate_database(&mut db.get().await.unwrap(), &all_migrations())
+        .await
+        .unwrap();
+
+    db
+}
+
+#[cfg(test)]
+async fn test_db_connection(
+) -> bb8_postgres::bb8::PooledConnection<'static, PostgresConnectionManager<NoTls>> {
+    test_db().await.get_owned().await.unwrap()
 }
 
 #[cfg(test)]
@@ -1402,7 +1441,6 @@ mod tests {
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::ge_context;
     use crate::layers::storage::LayerProviderDb;
-    use crate::util::tests::initialize_debugging_in_test;
     use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
@@ -1517,7 +1555,7 @@ mod tests {
 
     #[ge_context::test]
     async fn test_listing(app_ctx: PostgresContext<NoTls>) {
-        // initialize_debugging_in_test(); // TODO: remove
+        // crate::util::tests::initialize_debugging_in_test(); // TODO: remove
 
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
@@ -1870,7 +1908,8 @@ mod tests {
         };
 
         provider
-            .create_overviews(Path::new("dataset_sm.nc"), None, &NopTaskContext)
+            .create_overviews(Path::new("dataset_sm.nc"), None, NopTaskContext)
+            .await
             .unwrap();
 
         let metadata = provider
@@ -2047,7 +2086,7 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn test_irregular_time_series(app_ctx: PostgresContext<NoTls>) {
-        // initialize_debugging_in_test(); // TODO: remove
+        // crate::util::tests::initialize_debugging_in_test(); // TODO: remove
 
         let ctx = app_ctx.default_session_context().await.unwrap();
 

@@ -23,7 +23,7 @@ use geoengine_operators::{
     },
 };
 use snafu::ResultExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub fn create_layer_collection(
     provider_id: DataProviderId,

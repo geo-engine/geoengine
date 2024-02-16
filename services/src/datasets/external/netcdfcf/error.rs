@@ -224,4 +224,24 @@ pub enum NetCdfCf4DProviderError {
     CannotSerializeLayerCollection {
         source: serde_json::Error,
     },
+
+    #[snafu(display("Cannot get database connection: {source}"))]
+    DatabaseConnection {
+        source: Box<dyn ErrorSource>,
+    },
+
+    #[snafu(display("Cannot start database transaction: {source}"))]
+    DatabaseTransaction {
+        source: Box<dyn ErrorSource>,
+    },
+
+    #[snafu(display("Cannot commit overview to database: {source}"))]
+    DatabaseTransactionCommit {
+        source: Box<dyn ErrorSource>,
+    },
+
+    #[snafu(display("Unexpected execution error: Please contact the system administrator"))]
+    UnexpectedExecution {
+        source: Box<dyn ErrorSource>,
+    },
 }

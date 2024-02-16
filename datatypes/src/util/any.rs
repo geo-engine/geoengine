@@ -3,6 +3,8 @@ use std::{any::Any, sync::Arc};
 /// Easy `Any`-casting by propagating the call to the underlying implementor
 pub trait AsAny: Any {
     fn as_any(&self) -> &dyn std::any::Any;
+
+    fn into_box_any(self: Box<Self>) -> Box<dyn Any>;
 }
 
 impl<T> AsAny for T
@@ -11,6 +13,10 @@ where
 {
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+
+    fn into_box_any(self: Box<Self>) -> Box<dyn Any> {
+        Box::new(self)
     }
 }
 

@@ -68,7 +68,7 @@ CREATE TYPE "SpatialReference" AS (
 -- TABLE DEFINITIONS
 
 CREATE TABLE overviews (
-    file_name text NOT NULL PRIMARY KEY,
+    file_name text PRIMARY KEY NOT NULL,
     title text NOT NULL,
     summary text NOT NULL,
     spatial_reference "SpatialReference" NOT NULL,
@@ -79,28 +79,37 @@ CREATE TABLE overviews (
 );
 
 CREATE TABLE groups (
-    file_name text NOT NULL REFERENCES overviews (file_name),
+    file_name text NOT NULL REFERENCES overviews (
+        file_name
+    ) ON DELETE CASCADE DEFERRABLE,
     name text [] NOT NULL,
     title text NOT NULL,
     description text NOT NULL,
-    data_type "RasterDataType" NOT NULL,
-    data_range float [2] NOT NULL,
+    data_type "RasterDataType",
+    data_range float [2],
     unit text NOT NULL,
 
-    PRIMARY KEY (file_name, name)
+    -- TODO: check if we need it
+    PRIMARY KEY (file_name, name) DEFERRABLE
 );
 
 CREATE TABLE entities (
-    file_name text NOT NULL REFERENCES overviews (file_name),
+    file_name text NOT NULL REFERENCES overviews (
+        file_name
+    ) ON DELETE CASCADE DEFERRABLE,
     id bigint NOT NULL,
     name text NOT NULL,
 
-    PRIMARY KEY (file_name, id)
+    -- TODO: check if we need it
+    PRIMARY KEY (file_name, id) DEFERRABLE
 );
 
 CREATE TABLE timestamps (
-    file_name text NOT NULL REFERENCES overviews (file_name),
+    file_name text NOT NULL REFERENCES overviews (
+        file_name
+    ) ON DELETE CASCADE DEFERRABLE,
     "time" bigint NOT NULL,
 
-    PRIMARY KEY (file_name, "time")
+    -- TODO: check if we need it
+    PRIMARY KEY (file_name, "time") DEFERRABLE
 );

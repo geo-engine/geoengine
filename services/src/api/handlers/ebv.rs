@@ -21,6 +21,7 @@ use actix_web::{
 };
 use futures::channel::oneshot;
 use futures::lock::Mutex;
+use futures_util::Future;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -126,13 +127,14 @@ where
 
 /// returns the `EbvPortalDataProvider` if it is defined, otherwise the `NetCdfCfDataProvider` if it is defined.
 /// Otherwise an erorr is returned.
-async fn with_netcdfcf_provider<C: SessionContext, T, F>(
-    ctx: &C,
+async fn with_netcdfcf_provider<C: SessionContext, T, F, Fut>(
+    ctx: Arc<C>,
     f: F,
 ) -> Result<T, NetCdfCf4DProviderError>
 where
     T: Send + 'static,
-    F: FnOnce(&NetCdfCfDataProvider) -> Result<T, NetCdfCf4DProviderError> + Send + 'static,
+    F: FnOnce(&NetCdfCfDataProvider) -> Fut,
+    Fut: Future<Output = Result<T, NetCdfCf4DProviderError>>,
 {
     let db = ctx.db();
 
@@ -141,26 +143,53 @@ where
     let netcdf_provider = db.load_layer_provider(NETCDF_CF_PROVIDER_ID).await;
 
     match (ebv_provider, netcdf_provider) {
-        (Ok(ebv_provider), _) => crate::util::spawn_blocking(move || {
+        (Ok(ebv_provider), _) => {
             let concrete_provider = ebv_provider
                 .as_any()
                 .downcast_ref::<EbvPortalDataProvider>()
                 .ok_or(NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?;
 
+            // TODO: check that this does not block
             f(&concrete_provider.netcdf_cf_provider)
-        })
-        .await
-        .boxed_context(crate::datasets::external::netcdfcf::error::Internal)?,
-        (Err(_), Ok(netcdf_provider)) => crate::util::spawn_blocking(move || {
+                .await
+                .boxed_context(crate::datasets::external::netcdfcf::error::Internal)
+        }
+        (Err(_), Ok(netcdf_provider)) => {
             let concrete_provider = netcdf_provider
                 .as_any()
                 .downcast_ref::<NetCdfCfDataProvider>()
                 .ok_or(NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?;
 
+            // TODO: check that this does not block
             f(concrete_provider)
-        })
+        }
         .await
-        .boxed_context(crate::datasets::external::netcdfcf::error::Internal)?,
+        .boxed_context(crate::datasets::external::netcdfcf::error::Internal),
+        _ => Err(NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable),
+    }
+}
+
+async fn retrieve_netcdf_cf_provider<C: SessionContext>(
+    ctx: Arc<C>,
+) -> Result<Box<NetCdfCfDataProvider>, NetCdfCf4DProviderError> {
+    let db = ctx.db();
+
+    let ebv_provider: Result<Box<dyn DataProvider>> = db.load_layer_provider(EBV_PROVIDER_ID).await;
+    let netcdf_provider: Result<Box<dyn DataProvider>> =
+        db.load_layer_provider(NETCDF_CF_PROVIDER_ID).await;
+
+    match (ebv_provider, netcdf_provider) {
+        (Ok(ebv_provider), _) => Ok(Box::new(
+            ebv_provider
+                .into_box_any()
+                .downcast::<EbvPortalDataProvider>()
+                .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?
+                .netcdf_cf_provider,
+        )),
+        (Err(_), Ok(netcdf_provider)) => Ok(netcdf_provider
+            .into_box_any()
+            .downcast::<NetCdfCfDataProvider>()
+            .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?),
         _ => Err(NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable),
     }
 }
@@ -230,12 +259,13 @@ impl<C: SessionContext> EbvMultiOverviewTask<C> {
         ctx: Arc<C>,
         resampling_method: Option<ResamplingMethod>,
     ) -> Result<Self, NetCdfCf4DProviderError> {
-        let files = with_netcdfcf_provider(ctx.as_ref(), move |provider| {
-            provider.list_files().map_err(|_| {
+        let files = with_netcdfcf_provider(ctx.clone(), move |provider| {
+            let files = provider.list_files().map_err(|_| {
                 NetCdfCf4DProviderError::CdfCfProviderCannotListFiles {
                     id: NETCDF_CF_PROVIDER_ID,
                 }
-            })
+            });
+            async move { files }
         })
         .await?;
         Ok(Self {
@@ -432,30 +462,34 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewTask<C> {
         let file = self.file.clone();
         let resampling_method = self.params.resampling_method.map(Into::into);
 
-        let response = with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
-            // TODO: provide some detailed pct status
+        let provider = retrieve_netcdf_cf_provider(self.ctx.clone())
+            .await
+            .map_err(ErrorSource::boxed)?;
 
-            match provider.create_overviews(&file, resampling_method, &ctx) {
-                Ok(OverviewGeneration::Created) => Ok(NetCdfCfOverviewResponse {
-                    success: vec![file],
-                    skip: vec![],
-                    error: vec![],
-                }),
-                Ok(OverviewGeneration::Skipped) => Ok(NetCdfCfOverviewResponse {
-                    success: vec![],
-                    skip: vec![file],
-                    error: vec![],
-                }),
-                Err(e) => {
-                    debug!("Error during overview creation: {:?}", &e);
-                    Err(NetCdfCf4DProviderError::CannotCreateOverview {
-                        dataset: file,
-                        source: Box::new(e),
-                    })
-                }
+        // TODO: provide some detailed pct status
+
+        let response = match provider
+            .create_overviews(&file, resampling_method, ctx)
+            .await
+        {
+            Ok(OverviewGeneration::Created) => Ok(NetCdfCfOverviewResponse {
+                success: vec![file],
+                skip: vec![],
+                error: vec![],
+            }),
+            Ok(OverviewGeneration::Skipped) => Ok(NetCdfCfOverviewResponse {
+                success: vec![],
+                skip: vec![file],
+                error: vec![],
+            }),
+            Err(e) => {
+                debug!("Error during overview creation: {:?}", &e);
+                Err(NetCdfCf4DProviderError::CannotCreateOverview {
+                    dataset: file,
+                    source: Box::new(e),
+                })
             }
-        })
-        .await;
+        };
 
         response
             .map(TaskStatusInfo::boxed)
@@ -465,10 +499,12 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewTask<C> {
     async fn cleanup_on_error(&self, _ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
         let file = self.file.clone();
 
-        let response = with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
-            provider
+        let response = with_netcdfcf_provider(self.ctx.clone(), move |provider| {
+            let result = provider
                 .remove_overviews(&file, false)
-                .boxed_context(error::CannotRemoveOverviews)
+                .boxed_context(error::CannotRemoveOverviews);
+
+            async move { result }
         })
         .await;
 
@@ -556,10 +592,11 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvRemoveOverviewTask<C> {
         let file = self.file.clone();
         let force = self.params.force;
 
-        let response = with_netcdfcf_provider(self.ctx.as_ref(), move |provider| {
-            provider
+        let response = with_netcdfcf_provider(self.ctx.clone(), move |provider| {
+            let result = provider
                 .remove_overviews(&file, force)
-                .boxed_context(error::CannotRemoveOverviews)
+                .boxed_context(error::CannotRemoveOverviews);
+            async move { result }
         })
         .await;
 

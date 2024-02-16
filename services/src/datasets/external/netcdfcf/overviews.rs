@@ -20,19 +20,14 @@ use gdal::{
 };
 use gdal_sys::GDALGetRasterStatistics;
 use geoengine_datatypes::{
-    error::BoxedResultExt,
-    primitives::{TimeInstance, TimeInterval},
-    util::gdal::ResamplingMethod,
+    error::BoxedResultExt, primitives::TimeInstance, util::gdal::ResamplingMethod,
 };
 use geoengine_datatypes::{
     primitives::CacheTtlSeconds, spatial_reference::SpatialReference, util::canonicalize_subpath,
 };
-use geoengine_operators::{
-    source::{GdalLoadingInfoTemporalSlice, GdalMetaDataList},
-    util::gdal::{
-        gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
-        raster_descriptor_from_dataset_and_sref,
-    },
+use geoengine_operators::util::gdal::{
+    gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
+    raster_descriptor_from_dataset_and_sref,
 };
 use log::debug;
 use snafu::ResultExt;
@@ -43,6 +38,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
+use tokio_postgres::Transaction;
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
@@ -211,66 +207,107 @@ impl NetCdfVisitor for Group<'_> {
     }
 }
 
-pub fn create_overviews<C: TaskContext>(
+pub async fn create_overviews<C: TaskContext + 'static>(
     provider_path: &Path,
     dataset_path: &Path,
     overview_path: &Path,
     resampling_method: Option<ResamplingMethod>,
-    task_context: &C,
+    task_context: C,
+    db_transaction: &Transaction<'_>,
 ) -> Result<OverviewGeneration> {
     let file_path = canonicalize_subpath(provider_path, dataset_path)
         .boxed_context(error::DatasetIsNotInProviderPath)?;
     let out_folder_path = path_with_base_path(overview_path, dataset_path)
         .boxed_context(error::DatasetIsNotInProviderPath)?;
 
-    let dataset = gdal_open_dataset_ex(
-        &file_path,
-        DatasetOptions {
-            open_flags: GdalOpenFlags::GDAL_OF_READONLY | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
-            allowed_drivers: Some(&["netCDF"]),
-            open_options: None,
-            sibling_files: None,
-        },
-    )
-    .boxed_context(error::CannotOpenNetCdfDataset)?;
-
-    let root_group = dataset.root_group().context(error::GdalMd)?;
-    let group_tree = root_group.group_tree()?;
-    let time_coverage = TimeCoverage::from_dimension(&root_group)?;
-
     if !out_folder_path.exists() {
-        fs::create_dir_all(&out_folder_path).boxed_context(error::InvalidDirectory)?;
+        let out_folder_path = out_folder_path.clone();
+        crate::util::spawn_blocking(move || {
+            fs::create_dir_all(out_folder_path).boxed_context(error::InvalidDirectory)
+        })
+        .await
+        .boxed_context(error::UnexpectedExecution)??;
     }
 
     // must have this flag before any write operations
     let in_progress_flag = InProgressFlag::create(&out_folder_path)?;
 
-    let conversion_metadata = group_tree.conversion_metadata(&file_path, &out_folder_path);
-    let number_of_conversions = conversion_metadata.len();
+    let (task_context, creation_status, stats_for_group): (
+        C,
+        OverviewGeneration,
+        HashMap<String, (f64, f64)>,
+    ) = {
+        let out_folder_path = out_folder_path.clone();
 
-    let mut stats_for_group = HashMap::<String, (f64, f64)>::new();
+        crate::util::spawn_blocking(move || {
+            let dataset = gdal_open_dataset_ex(
+                &file_path,
+                DatasetOptions {
+                    open_flags: GdalOpenFlags::GDAL_OF_READONLY
+                        | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
+                    allowed_drivers: Some(&["netCDF"]),
+                    open_options: None,
+                    sibling_files: None,
+                },
+            )
+            .boxed_context(error::CannotOpenNetCdfDataset)?;
 
-    for (i, conversion) in conversion_metadata.into_iter().enumerate() {
-        match index_subdataset(
-            &conversion,
-            &time_coverage,
-            resampling_method,
-            task_context,
-            &mut stats_for_group,
-            i,
-            number_of_conversions,
-        ) {
-            Ok(OverviewGeneration::Created) => (),
-            Ok(OverviewGeneration::Skipped) => return Ok(OverviewGeneration::Skipped),
-            Err(e) => return Err(e),
-        }
+            let root_group = dataset.root_group().context(error::GdalMd)?;
+            let group_tree = root_group.group_tree()?;
+            let time_coverage = TimeCoverage::from_dimension(&root_group)?;
+
+            let conversion_metadata = group_tree.conversion_metadata(&file_path, &out_folder_path);
+            let number_of_conversions = conversion_metadata.len();
+
+            let mut stats_for_group = HashMap::<String, (f64, f64)>::new();
+
+            for (i, conversion) in conversion_metadata.into_iter().enumerate() {
+                match index_subdataset(
+                    &conversion,
+                    &time_coverage,
+                    resampling_method,
+                    &task_context,
+                    &mut stats_for_group,
+                    i,
+                    number_of_conversions,
+                ) {
+                    Ok(OverviewGeneration::Created) => (),
+                    Ok(OverviewGeneration::Skipped) => {
+                        return Ok((task_context, OverviewGeneration::Skipped, stats_for_group))
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+
+            Ok((task_context, OverviewGeneration::Created, stats_for_group))
+        })
+    }
+    .await
+    .boxed_context(error::UnexpectedExecution)??;
+
+    if let OverviewGeneration::Skipped = creation_status {
+        return Ok(OverviewGeneration::Skipped);
     }
 
     emit_status(
-        task_context,
+        &task_context,
         OVERVIEW_GENERATION_OF_TOTAL_PCT,
         "Collecting metadata".to_string(),
     );
+
+    match store_db_metadata(
+        provider_path,
+        dataset_path,
+        &out_folder_path,
+        &stats_for_group,
+        db_transaction,
+    )
+    .await
+    {
+        Ok(OverviewGeneration::Created) => (),
+        Ok(OverviewGeneration::Skipped) => return Ok(OverviewGeneration::Skipped),
+        Err(e) => return Err(e),
+    };
 
     match store_metadata(
         provider_path,
@@ -375,6 +412,187 @@ impl Drop for InProgressFlag {
             log::error!("Cannot remove in progress flag: {}", e);
         }
     }
+}
+
+#[allow(clippy::too_many_lines)] // TODO: refactor
+async fn store_db_metadata(
+    provider_path: &Path,
+    dataset_path: &Path,
+    out_folder_path: &Path,
+    stats_for_group: &HashMap<String, (f64, f64)>,
+    db_transaction: &Transaction<'_>,
+) -> Result<OverviewGeneration> {
+    let metadata = NetCdfCfDataProvider::build_netcdf_tree(
+        provider_path,
+        None,
+        dataset_path,
+        stats_for_group,
+    )?;
+
+    // TODO: think about pipelining the requests
+    // https://docs.rs/tokio-postgres/latest/tokio_postgres/#pipelining
+
+    // TODO: should we have an error here instead?
+    db_transaction
+        .execute(
+            "DELETE FROM overviews WHERE file_name = $1",
+            &[&metadata.file_name],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    db_transaction
+        .execute(
+            "INSERT INTO overviews (
+                            file_name,
+                            title,
+                            summary,
+                            spatial_reference,
+                            colorizer,
+                            creator_name,
+                            creator_email,
+                            creator_institution
+                        ) VALUES (
+                            $1,
+                            $2,
+                            $3,
+                            $4,
+                            $5,
+                            $6,
+                            $7,
+                            $8
+                        );",
+            &[
+                &metadata.file_name,
+                &metadata.title,
+                &metadata.summary,
+                &metadata.spatial_reference,
+                &metadata.colorizer,
+                &metadata.creator_name,
+                &metadata.creator_email,
+                &metadata.creator_institution,
+            ],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    let group_statement = db_transaction
+        .prepare_typed(
+            "INSERT INTO groups (
+            file_name,
+            name,
+            title,
+            description,
+            data_range,
+            unit,
+            data_type
+        ) VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7
+        );",
+            &[
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT_ARRAY,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::FLOAT8_ARRAY,
+                tokio_postgres::types::Type::TEXT,
+                // we omit `data_type`
+            ],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    let mut group_stack = metadata
+        .groups
+        .iter()
+        .map(|group| (vec![group.name.as_str()], group))
+        .collect::<Vec<_>>();
+
+    while let Some((group_path, group)) = group_stack.pop() {
+        for subgroup in &group.groups {
+            let mut subgroup_path = group_path.clone();
+            subgroup_path.push(subgroup.name.as_str());
+            group_stack.push((subgroup_path, subgroup));
+        }
+
+        db_transaction
+            .execute(
+                &group_statement,
+                &[
+                    &metadata.file_name,
+                    &group_path,
+                    &group.title,
+                    &group.description,
+                    &group.data_range.map(|(min, max)| [min, max]),
+                    &group.unit,
+                    &group.data_type,
+                ],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+    }
+
+    let entity_statement = db_transaction
+        .prepare_typed(
+            "INSERT INTO entities (
+            file_name,
+            id,
+            name
+        ) VALUES (
+            $1,
+            $2,
+            $3
+        );",
+            &[
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::INT8,
+                tokio_postgres::types::Type::TEXT,
+            ],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    for entity in &metadata.entities {
+        db_transaction
+            .execute(
+                &entity_statement,
+                &[&metadata.file_name, &(entity.id as i64), &entity.name],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+    }
+
+    let timestamp_statement = db_transaction
+        .prepare_typed(
+            r#"INSERT INTO timestamps (
+            file_name,
+            "time"
+        ) VALUES (
+            $1,
+            $2
+        );"#,
+            &[
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::INT8,
+            ],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    for time_step in metadata.time_coverage.time_steps() {
+        db_transaction
+            .execute(&timestamp_statement, &[&metadata.file_name, &time_step])
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+    }
+
+    Ok(OverviewGeneration::Created)
 }
 
 fn store_metadata(
@@ -775,14 +993,16 @@ mod tests {
     use super::*;
     use crate::{
         datasets::{
-            external::netcdfcf::{NetCdfEntity, NetCdfGroup as FullNetCdfGroup, NetCdfOverview},
+            external::netcdfcf::{
+                test_db_connection, NetCdfEntity, NetCdfGroup as FullNetCdfGroup, NetCdfOverview,
+            },
             storage::MetaDataDefinition,
         },
         tasks::util::NopTaskContext,
     };
     use geoengine_datatypes::{
         operations::image::{Colorizer, RgbaColor},
-        primitives::{DateTime, SpatialResolution},
+        primitives::{DateTime, SpatialResolution, TimeInterval},
         raster::RasterDataType,
         spatial_reference::SpatialReference,
         test_data,
@@ -790,7 +1010,10 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{RasterBandDescriptors, RasterResultDescriptor},
-        source::{FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters},
+        source::{
+            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+            GdalLoadingInfoTemporalSlice, GdalMetaDataList,
+        },
     };
     use std::io::BufReader;
 
@@ -1180,13 +1403,18 @@ mod tests {
 
         let overview_folder = tempfile::tempdir().unwrap();
 
+        let mut db = test_db_connection().await;
+        let transaction = db.transaction().await.unwrap();
+
         create_overviews(
             test_data!("netcdf4d"),
             Path::new("dataset_m.nc"),
             overview_folder.path(),
             None,
-            &NopTaskContext,
+            NopTaskContext,
+            &transaction,
         )
+        .await
         .unwrap();
 
         let dataset_folder = overview_folder.path().join("dataset_m.nc");
@@ -1221,13 +1449,18 @@ mod tests {
 
         let overview_folder = tempfile::tempdir().unwrap();
 
+        let mut db = test_db_connection().await;
+        let transaction = db.transaction().await.unwrap();
+
         create_overviews(
             test_data!("netcdf4d"),
             Path::new("dataset_irr_ts.nc"),
             overview_folder.path(),
             None,
-            &NopTaskContext,
+            NopTaskContext,
+            &transaction,
         )
+        .await
         .unwrap();
 
         let dataset_folder = overview_folder.path().join("dataset_irr_ts.nc");
@@ -1366,13 +1599,18 @@ mod tests {
 
         let dataset_path = Path::new("dataset_m.nc");
 
+        let mut db = test_db_connection().await;
+        let transaction = db.transaction().await.unwrap();
+
         create_overviews(
             test_data!("netcdf4d"),
             dataset_path,
             overview_folder.path(),
             None,
-            &NopTaskContext,
+            NopTaskContext,
+            &transaction,
         )
+        .await
         .unwrap();
 
         assert!(!is_empty(overview_folder.path()));
