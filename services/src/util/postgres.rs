@@ -19,7 +19,8 @@ impl DatabaseConnectionConfig {
             .user(&self.user)
             .password(&self.password)
             .host(&self.host)
-            .dbname(&self.database);
+            .dbname(&self.database)
+            .port(self.port);
         config
     }
 

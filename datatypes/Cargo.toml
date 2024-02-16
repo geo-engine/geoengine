@@ -13,24 +13,20 @@ repository.workspace = true
 pro = []
 
 [dependencies]
-arrow = { version = "49.0", features = [
-    "ipc_compression",
-    # TODO: activate SIMD when stable
-] }
-arrow-array = "49.0"
-arrow-ord = "49.0"
-bytes = "1.0" # for postgres-types impls
+arrow = { version = "50.0", features = ["ipc_compression"] }
+arrow-array = "50.0"
+arrow-ord = "50.0"
+bytes = "1.5" # for postgres-types impls
 chrono = "0.4"
 fallible-iterator = "0.2" # only for postgres-protocol
 float-cmp = "0.9"
 gdal = "0.16"
-geo-types = "0.7"
 geo = "0.27"
 geojson = "0.24"
 image = "0.24"
 num = "0.4"
 num-traits = "0.2"
-ordered-float = { version = "4.1", features = ["serde"] }
+ordered-float = { version = "4.2", features = ["serde"] }
 paste = "1.0"
 postgres-protocol = { version = "0.6" }
 postgres-types = { version = "0.2", features = [
@@ -39,18 +35,18 @@ postgres-types = { version = "0.2", features = [
     "with-chrono-0_4",
     "with-uuid-1",
 ] }
-proj = "0.22"
-rayon = "1.5"
+proj = "0.22" # needs to stay fixed to use fixed proj version
+rayon = "1.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_with = "3.0"
+serde_with = "3.6"
 snafu = "0.8"
-uuid = { version = "1.1", features = ["serde", "v4", "v5"] }
+uuid = { version = "1.7", features = ["serde", "v4", "v5"] }
 wkt = "0.10"
 
 [dev-dependencies]
 criterion = "0.5"
-tempfile = "3.1"
+tempfile = "3.10"
 
 [[bench]]
 name = "multi_point_collection"

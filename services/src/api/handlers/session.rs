@@ -88,6 +88,7 @@ pub(crate) async fn session_handler<C: ApplicationContext>(session: C::Session) 
         ("session_token" = [])
     )
 )]
+#[allow(clippy::no_effect_underscore_binding)] // need `_session` to quire authentication
 async fn session_project_handler<C: SimpleApplicationContext>(
     project: web::Path<ProjectId>,
     _session: C::Session,
@@ -113,6 +114,7 @@ async fn session_project_handler<C: SimpleApplicationContext>(
         ("session_token" = [])
     )
 )]
+#[allow(clippy::no_effect_underscore_binding)] // need `_session` to quire authentication
 async fn session_view_handler<C: SimpleApplicationContext>(
     _session: C::Session,
     app_ctx: web::Data<C>,

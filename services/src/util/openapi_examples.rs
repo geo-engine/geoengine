@@ -630,9 +630,11 @@ mod tests {
         _x: String,
     }
 
-    // adding path and query parameter to ensure parameter insertion works
     #[post("/test/{id}")]
-    #[allow(clippy::unused_async)] // the function signature of request handlers requires it
+    #[allow(
+        clippy::unused_async, // the function signature of request handlers requires it
+        clippy::no_effect_underscore_binding // adding path and query parameter to ensure parameter insertion works
+    )]
     async fn dummy_handler(
         _id: web::Path<u32>,
         _params: web::Query<DummyQueryParams>,

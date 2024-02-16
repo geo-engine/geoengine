@@ -167,10 +167,11 @@ where
         ("session_token" = [])
     )
 )]
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines)] // long xml body
 async fn wfs_capabilities_handler<C>(
     workflow_id: web::Path<WorkflowId>,
-    _request: web::Query<GetCapabilities>,
+    // TODO: react on capabilities
+    // _request: web::Query<GetCapabilities>,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse>

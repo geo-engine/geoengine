@@ -59,6 +59,25 @@ VALUES (
     'Example',
     'CC-BY-SA',
     'Creative Commons Attribution-Share Alike'
+), (
+    2,
+    'urn:gfbio.org:abcd:1',
+    'http://example.org/abcd.xml',
+    'http://example.org',
+    'Example Data Center',
+    'mail@example.org',
+    NULL,
+    'http://creativecommons.org/licenses/by-sa/3.0/',
+    'http://example.org',
+    'Example Description',
+    'mail@example.org',
+    NULL,
+    '2014-01-01 00:00:0',
+    'Example Title 2',
+    'ExampleAuthor',
+    'Example',
+    'CC-BY-SA',
+    'Creative Commons Attribution-Share Alike'
 );
 
 
