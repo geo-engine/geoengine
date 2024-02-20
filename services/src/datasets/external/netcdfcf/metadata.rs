@@ -1,6 +1,9 @@
 use crate::contexts::{DatabaseVersion, Migration};
 use crate::error::Result;
 use async_trait::async_trait;
+use geoengine_datatypes::operations::image::Colorizer;
+use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use tokio_postgres::Transaction;
 
 /// All migrations that are available. The migrations are applied in the order they are defined here, starting from the current version of the database.
@@ -43,4 +46,28 @@ impl Migration for Migration0000Initial {
 
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NetCdfGroupMetadata {
+    pub name: String,
+    pub title: String,
+    pub description: String,
+    // TODO: would actually be nice if it were inside dataset/entity
+    pub data_type: Option<RasterDataType>,
+    pub data_range: Option<(f64, f64)>,
+    // TODO: would actually be nice if it were inside dataset/entity
+    pub unit: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NetCdfOverviewMetadata {
+    pub file_name: String,
+    pub title: String,
+    pub summary: String,
+    pub spatial_reference: SpatialReference,
+    pub colorizer: Colorizer,
+    pub creator_name: Option<String>,
+    pub creator_email: Option<String>,
+    pub creator_institution: Option<String>,
 }

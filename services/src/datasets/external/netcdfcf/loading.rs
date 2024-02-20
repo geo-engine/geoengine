@@ -1,9 +1,14 @@
-use super::{error, NetCdfCf4DDatasetId, NetCdfEntity, Result};
+use super::{
+    error,
+    metadata::{NetCdfGroupMetadata, NetCdfOverviewMetadata},
+    netcdf_entity_to_layer_id, netcdf_group_to_layer_collection_id, NetCdfCf4DDatasetId,
+    NetCdfEntity, Result,
+};
 use crate::{
     layers::{
         layer::{
-            CollectionItem, Layer, LayerCollection, Property, ProviderLayerCollectionId,
-            ProviderLayerId,
+            CollectionItem, Layer, LayerCollection, LayerCollectionListing, LayerListing, Property,
+            ProviderLayerCollectionId, ProviderLayerId,
         },
         listing::LayerCollectionId,
     },
@@ -24,6 +29,83 @@ use geoengine_operators::{
 };
 use snafu::ResultExt;
 use std::path::PathBuf;
+
+pub fn create_layer_collection_from_parts(
+    provider_id: DataProviderId,
+    collection_id: LayerCollectionId,
+    group_path: &[String],
+    overview: NetCdfOverviewMetadata,
+    group: Option<NetCdfGroupMetadata>,
+    subgroups: Vec<NetCdfGroupMetadata>,
+    entities: impl Iterator<Item = NetCdfEntity>,
+) -> LayerCollection {
+    let (name, description) = if let Some(group) = group {
+        (group.title, group.description)
+    } else {
+        (overview.title, overview.summary)
+    };
+    let (creator_name, creator_email, creator_institution) = if group_path.is_empty() {
+        (
+            overview.creator_name,
+            overview.creator_email,
+            overview.creator_institution,
+        )
+    } else {
+        (None, None, None)
+    };
+
+    let items = if subgroups.is_empty() {
+        entities
+            .map(|entity| {
+                CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id,
+                        layer_id: netcdf_entity_to_layer_id(
+                            overview.file_name.clone().into(),
+                            group_path.to_owned(),
+                            entity.id,
+                        ),
+                    },
+                    name: entity.name,
+                    description: String::new(),
+                    properties: vec![],
+                })
+            })
+            .collect::<Vec<CollectionItem>>()
+    } else {
+        let group_path = group_path.to_owned();
+        subgroups
+            .into_iter()
+            .map(|group| {
+                let mut out_groups = group_path.clone();
+                out_groups.push(group.name.clone());
+                CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id,
+                        collection_id: netcdf_group_to_layer_collection_id(
+                            overview.file_name.clone().into(),
+                            out_groups,
+                        ),
+                    },
+                    name: group.title.clone(),
+                    description: group.description,
+                    properties: Default::default(),
+                })
+            })
+            .collect::<Vec<CollectionItem>>()
+    };
+
+    create_layer_collection(
+        provider_id,
+        collection_id,
+        name,
+        description,
+        items,
+        creator_name,
+        creator_email,
+        creator_institution,
+    )
+}
 
 pub fn create_layer_collection(
     provider_id: DataProviderId,
