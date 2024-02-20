@@ -662,11 +662,11 @@ where
             error::PermissionDenied
         );
 
-        let stmt = tx
-            .prepare("UPDATE datasets SET symbology = $2 WHERE id = $1;")
-            .await?;
-
-        tx.execute(&stmt, &[&dataset, &symbology]).await?;
+        tx.execute(
+            "UPDATE datasets SET symbology = $2 WHERE id = $1;",
+            &[&dataset, &symbology],
+        )
+        .await?;
 
         tx.commit().await?;
 

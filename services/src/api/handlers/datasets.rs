@@ -2570,7 +2570,7 @@ mod tests {
             },
         });
 
-        let req = actix_web::test::TestRequest::post()
+        let req = actix_web::test::TestRequest::put()
             .uri(&format!("/dataset/{dataset_name}/symbology"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
