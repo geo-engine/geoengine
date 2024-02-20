@@ -43,7 +43,7 @@ where
             )
             .service(
                 web::resource("/{dataset}/symbology")
-                    .route(web::post().to(update_dataset_symbology_handler::<C>)),
+                    .route(web::put().to(update_dataset_symbology_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}")

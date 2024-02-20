@@ -62,7 +62,7 @@ where
             )
             .service(
                 web::resource("/{dataset}/symbology")
-                    .route(web::post().to(update_dataset_symbology_handler::<C>)),
+                    .route(web::put().to(update_dataset_symbology_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}")
@@ -261,7 +261,7 @@ pub async fn get_loading_info_handler<C: ApplicationContext>(
 /// Updates the dataset's symbology
 #[utoipa::path(
     tag = "Datasets",
-    post,
+    put,
     path = "/dataset/{dataset}/symbology",
     responses(
         (status = 200, description = "OK"),
