@@ -1,3 +1,4 @@
+use crate::api::model::services::UpdateDataset;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::listing::{OrderBy, ProvenanceOutput};
 use crate::datasets::postgres::resolve_dataset_name_to_id;
@@ -645,6 +646,39 @@ where
         tx.commit().await?;
 
         Ok(DatasetIdAndName { id, name })
+    }
+
+    async fn update_dataset(&self, dataset: DatasetId, update: UpdateDataset) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        ensure!(
+            self.has_permission_in_tx(dataset, Permission::Owner, &tx)
+                .await?,
+            error::PermissionDenied
+        );
+
+        let stmt = tx
+            .prepare(
+                "UPDATE datasets SET name = $2, display_name = $3, description = $4 WHERE id = $1;",
+            )
+            .await?;
+
+        tx.execute(
+            &stmt,
+            &[
+                &dataset,
+                &update.name,
+                &update.display_name,
+                &update.description,
+            ],
+        )
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
     }
 
     async fn update_dataset_symbology(

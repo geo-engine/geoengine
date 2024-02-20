@@ -3,7 +3,7 @@ use crate::{
         responses::datasets::{errors::*, DatasetNameResponse},
         services::{
             AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
-            MetaDataSuggestion,
+            MetaDataSuggestion, UpdateDataset,
         },
     },
     contexts::{ApplicationContext, SessionContext},
@@ -67,6 +67,7 @@ where
             .service(
                 web::resource("/{dataset}")
                     .route(web::get().to(get_dataset_handler::<C>))
+                    .route(web::post().to(update_dataset_handler::<C>))
                     .route(web::delete().to(delete_dataset_handler::<C>)),
             )
             .service(web::resource("").route(web::post().to(create_dataset_handler::<C>))), // must come last to not match other routes
@@ -218,6 +219,58 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
         .context(CannotLoadDataset)?;
 
     Ok(web::Json(dataset))
+}
+
+/// Update details about a dataset using the internal name.
+#[utoipa::path(
+    tag = "Datasets",
+    post,
+    path = "/dataset/{dataset}",
+    responses(
+        (status = 200, description = "OK" ),
+        (status = 400, description = "Bad request", body = ErrorResponse, examples(
+            ("Referenced an unknown dataset" = (value = json!({
+                "error": "CannotLoadDataset",
+                "message": "CannotLoadDataset: UnknownDatasetName"
+            })))
+        )),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn update_dataset_handler<C: ApplicationContext>(
+    dataset: web::Path<DatasetName>,
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    update: web::Json<UpdateDataset>,
+) -> Result<impl Responder, UpdateDatasetError> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let real_dataset = dataset.into_inner();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await
+        .context(CannotLoadDatasetForUpdate)?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id
+        .ok_or(error::Error::UnknownDatasetName {
+            dataset_name: real_dataset.to_string(),
+        })
+        .context(CannotLoadDatasetForUpdate)?;
+
+    session_ctx
+        .update_dataset(dataset_id, update.into_inner())
+        .await
+        .context(CannotUpdateDataset)?;
+
+    Ok(HttpResponse::Ok())
 }
 
 /// Retrieves the loading information of a dataset
