@@ -7,6 +7,7 @@ use crate::datasets::storage::{Dataset, DatasetDb, DatasetStore, MetaDataDefinit
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error::{self, Result};
+use crate::projects::Symbology;
 use async_trait::async_trait;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
@@ -546,6 +547,22 @@ where
         .await?;
 
         Ok(DatasetIdAndName { id, name })
+    }
+
+    async fn update_dataset_symbology(
+        &self,
+        dataset: DatasetId,
+        symbology: &Symbology,
+    ) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+
+        conn.execute(
+            "UPDATE datasets SET symbology = $2 WHERE id = $1;",
+            &[&dataset, &symbology],
+        )
+        .await?;
+
+        Ok(())
     }
 
     async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {

@@ -1425,6 +1425,8 @@ impl<'a> ToSchema<'a> for Breakpoint {
             ObjectBuilder::new()
                 .property("value", Object::with_type(SchemaType::Number))
                 .property("color", Ref::from_schema_name("RgbaColor"))
+                .required("value")
+                .required("color")
                 .into(),
         )
     }
