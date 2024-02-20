@@ -1,8 +1,10 @@
 use crate::{
-    api::model::responses::datasets::{errors::*, DatasetNameResponse},
-    api::model::services::{
-        AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
-        MetaDataSuggestion,
+    api::model::{
+        responses::datasets::{errors::*, DatasetNameResponse},
+        services::{
+            AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
+            MetaDataSuggestion,
+        },
     },
     contexts::{ApplicationContext, SessionContext},
     datasets::{
@@ -12,6 +14,7 @@ use crate::{
         DatasetName,
     },
     error::{self, Result},
+    projects::Symbology,
     util::{
         config::{get_config_element, Data},
         extractors::{ValidatedJson, ValidatedQuery},
@@ -56,6 +59,10 @@ where
             .service(
                 web::resource("/{dataset}/loadingInfo")
                     .route(web::get().to(get_loading_info_handler::<C>)),
+            )
+            .service(
+                web::resource("/{dataset}/symbology")
+                    .route(web::put().to(update_dataset_symbology_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}")
@@ -249,6 +256,49 @@ pub async fn get_loading_info_handler<C: ApplicationContext>(
     let dataset = session_ctx.load_loading_info(&dataset_id).await?;
 
     Ok(web::Json(dataset))
+}
+
+/// Updates the dataset's symbology
+#[utoipa::path(
+    tag = "Datasets",
+    put,
+    path = "/dataset/{dataset}/symbology",
+    responses(
+        (status = 200, description = "OK"),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn update_dataset_symbology_handler<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    dataset: web::Path<DatasetName>,
+    symbology: web::Json<Symbology>,
+) -> Result<impl Responder> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let real_dataset = dataset.into_inner();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id.ok_or(error::Error::UnknownDatasetName {
+        dataset_name: real_dataset.to_string(),
+    })?;
+
+    session_ctx
+        .update_dataset_symbology(dataset_id, &symbology.into_inner())
+        .await?;
+
+    Ok(HttpResponse::Ok())
 }
 
 /// Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume.
@@ -1153,9 +1203,10 @@ mod tests {
     use crate::datasets::upload::{UploadId, VolumeName};
     use crate::datasets::DatasetIdAndName;
     use crate::error::Result;
-    use crate::projects::{PointSymbology, Symbology};
+    use crate::projects::{PointSymbology, RasterSymbology, Symbology};
     use crate::util::tests::{
-        read_body_json, read_body_string, send_test_request, SetMultipartBody, TestDataUploads,
+        add_ndvi_to_datasets, read_body_json, read_body_string, send_test_request,
+        SetMultipartBody, TestDataUploads,
     };
     use crate::{ge_context, test_data};
     use actix_web;
@@ -1165,6 +1216,7 @@ mod tests {
     use geoengine_datatypes::collections::{
         GeometryCollection, MultiPointCollection, VectorDataType,
     };
+    use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
     use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection, SpatialResolution};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -2485,6 +2537,52 @@ mod tests {
                 "type": "OgrMetaData"
             })
         );
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_gets_updates_symbology(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
+
+        let session_id = ctx.session().id();
+
+        let symbology = Symbology::Raster(RasterSymbology {
+            opacity: 1.0,
+            raster_colorizer: RasterColorizer::SingleBand {
+                band: 0,
+                band_colorizer: geoengine_datatypes::operations::image::Colorizer::linear_gradient(
+                    vec![
+                        (0.0, RgbaColor::white())
+                            .try_into()
+                            .expect("valid breakpoint"),
+                        (10_000.0, RgbaColor::black())
+                            .try_into()
+                            .expect("valid breakpoint"),
+                    ],
+                    RgbaColor::transparent(),
+                    RgbaColor::white(),
+                    RgbaColor::black(),
+                )
+                .expect("valid colorizer"),
+            },
+        });
+
+        let req = actix_web::test::TestRequest::put()
+            .uri(&format!("/dataset/{dataset_name}/symbology"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(symbology.clone());
+        let res = send_test_request(req, app_ctx).await;
+
+        let res_status = res.status();
+        assert_eq!(res_status, 200);
+
+        let dataset = ctx.db().load_dataset(&dataset_id).await?;
+
+        assert_eq!(dataset.symbology, Some(symbology));
 
         Ok(())
     }
