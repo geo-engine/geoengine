@@ -580,11 +580,11 @@ where
     ) -> Result<()> {
         let conn = self.conn_pool.get().await?;
 
-        let stmt = conn
-            .prepare("UPDATE datasets SET symbology = $2 WHERE id = $1;")
-            .await?;
-
-        conn.execute(&stmt, &[&dataset, &symbology]).await?;
+        conn.execute(
+            "UPDATE datasets SET symbology = $2 WHERE id = $1;",
+            &[&dataset, &symbology],
+        )
+        .await?;
 
         Ok(())
     }

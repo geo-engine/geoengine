@@ -62,7 +62,7 @@ where
             )
             .service(
                 web::resource("/{dataset}/symbology")
-                    .route(web::post().to(update_dataset_symbology_handler::<C>)),
+                    .route(web::put().to(update_dataset_symbology_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}")
@@ -314,7 +314,7 @@ pub async fn get_loading_info_handler<C: ApplicationContext>(
 /// Updates the dataset's symbology
 #[utoipa::path(
     tag = "Datasets",
-    post,
+    put,
     path = "/dataset/{dataset}/symbology",
     responses(
         (status = 200, description = "OK"),
@@ -2623,7 +2623,7 @@ mod tests {
             },
         });
 
-        let req = actix_web::test::TestRequest::post()
+        let req = actix_web::test::TestRequest::put()
             .uri(&format!("/dataset/{dataset_name}/symbology"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
