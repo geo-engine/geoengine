@@ -1,6 +1,6 @@
 pub use self::ebvportal_provider::{EbvPortalDataProvider, EBV_PROVIDER_ID};
 pub use self::error::NetCdfCf4DProviderError;
-use self::loading::{create_layer, create_layer_collection, create_layer_collection_from_parts};
+use self::loading::{create_layer, create_layer_collection_from_parts};
 use self::metadata::{all_migrations, NetCdfGroupMetadata, NetCdfOverviewMetadata};
 use self::overviews::remove_overviews;
 use self::overviews::InProgressFlag;
@@ -17,9 +17,7 @@ use crate::layers::external::DataProviderDefinition;
 use crate::layers::layer::Layer;
 use crate::layers::layer::LayerCollectionListOptions;
 use crate::layers::layer::LayerCollectionListing;
-use crate::layers::layer::LayerListing;
 use crate::layers::layer::ProviderLayerCollectionId;
-use crate::layers::layer::ProviderLayerId;
 use crate::layers::layer::{CollectionItem, LayerCollection};
 use crate::layers::listing::LayerCollectionProvider;
 use crate::layers::listing::{LayerCollectionId, ProviderCapabilities, SearchCapabilities};
@@ -852,9 +850,9 @@ impl TimeCoverage {
         Ok(Self { time_stamps })
     }
 
-    fn number_of_time_steps(&self) -> usize {
-        self.time_stamps.len()
-    }
+    // fn number_of_time_steps(&self) -> usize {
+    //     self.time_stamps.len()
+    // }
 
     fn time_steps(&self) -> &[TimeInstance] {
         self.time_stamps.as_slice()
@@ -942,8 +940,8 @@ fn path_to_string(path: &Path) -> String {
         .join("/")
 }
 
-fn netcdf_group_to_layer_collection_id(path: PathBuf, groups: Vec<String>) -> LayerCollectionId {
-    LayerCollectionId(format!("{}/{}", path_to_string(&path), groups.join("/")))
+fn netcdf_group_to_layer_collection_id(path: &Path, groups: &[String]) -> LayerCollectionId {
+    LayerCollectionId(format!("{}/{}", path_to_string(path), groups.join("/")))
 }
 
 impl TryFrom<NetCdfLayerCollectionId> for LayerCollectionId {
@@ -953,7 +951,7 @@ impl TryFrom<NetCdfLayerCollectionId> for LayerCollectionId {
         Ok(match id {
             NetCdfLayerCollectionId::Path { path } => LayerCollectionId(path_to_string(&path)),
             NetCdfLayerCollectionId::Group { path, groups } => {
-                netcdf_group_to_layer_collection_id(path, groups)
+                netcdf_group_to_layer_collection_id(&path, &groups)
             }
             NetCdfLayerCollectionId::Entity { .. } => {
                 return Err(crate::error::Error::InvalidLayerCollectionId)
@@ -962,10 +960,10 @@ impl TryFrom<NetCdfLayerCollectionId> for LayerCollectionId {
     }
 }
 
-fn netcdf_entity_to_layer_id(path: PathBuf, groups: Vec<String>, entity: usize) -> LayerId {
+fn netcdf_entity_to_layer_id(path: &Path, groups: &[String], entity: usize) -> LayerId {
     LayerId(format!(
         "{}/{}/{}.entity",
-        path_to_string(&path),
+        path_to_string(path),
         groups.join("/"),
         entity
     ))
@@ -980,7 +978,7 @@ impl TryFrom<NetCdfLayerCollectionId> for LayerId {
                 path,
                 groups,
                 entity,
-            } => netcdf_entity_to_layer_id(path, groups, entity),
+            } => netcdf_entity_to_layer_id(&path, &groups, entity),
             _ => return Err(crate::error::Error::InvalidLayerId),
         })
     }
@@ -1208,26 +1206,39 @@ async fn listing_from_netcdf_file(
             creator_institution: row.get("creator_institution"),
         };
 
-        dbg!(&overview_metadata);
+        // dbg!(&overview_metadata);
+
+        // dbg!(db_transaction
+        //     .query("SELECT file_name, name FROM groups;", &[])
+        //     .await
+        //     .unwrap()
+        //     .iter()
+        //     .map(|row| (
+        //         row.get::<_, String>("file_name"),
+        //         row.get::<_, Vec<String>>("name")
+        //     ))
+        //     .collect::<Vec<_>>());
 
         let group_metadata = db_transaction
             .query_opt(
-                r#"SELECT
-                name,
-                title,
-                description,
-                data_type :: "RasterDataType",
-                data_range,
-                unit
-            FROM groups
-            WHERE
-                file_name = $1 AND
-                name = $2"#,
+                r#"
+                SELECT
+                    name,
+                    title,
+                    description,
+                    data_type :: "RasterDataType",
+                    data_range,
+                    unit
+                FROM groups
+                WHERE
+                    file_name = $1 AND
+                    name = $2
+                "#,
                 &[&query_file_name, &groups],
             )
             .await?
             .map(|row| NetCdfGroupMetadata {
-                name: row.get("name"),
+                name: row.get::<_, Vec<String>>("name").pop().unwrap_or_default(),
                 title: row.get("title"),
                 description: row.get("description"),
                 data_type: row.get("data_type"),
@@ -1237,14 +1248,87 @@ async fn listing_from_netcdf_file(
                 unit: row.get("unit"),
             });
 
+        let subgroups: Vec<NetCdfGroupMetadata> = db_transaction
+            .query(
+                r#"
+                SELECT
+                    name,
+                    title,
+                    description,
+                    data_type :: "RasterDataType",
+                    data_range,
+                    unit
+                FROM groups
+                WHERE
+                    file_name = $1 AND
+                    name[:$3] = $2 AND
+                    array_length(name, 1) = ($3 + 1)
+                ORDER BY name ASC
+                OFFSET $4
+                LIMIT $5
+                "#,
+                &[
+                    &query_file_name,
+                    &groups,
+                    &(groups.len() as i32),
+                    &i64::from(options.offset),
+                    &i64::from(options.limit),
+                ],
+            )
+            .await?
+            .into_iter()
+            .map(|row| NetCdfGroupMetadata {
+                name: row.get::<_, Vec<String>>("name").pop().unwrap_or_default(),
+                title: row.get("title"),
+                description: row.get("description"),
+                data_type: row.get("data_type"),
+                data_range: row
+                    .get::<_, Option<[f64; 2]>>("data_range")
+                    .map(|[min, max]| (min, max)),
+                unit: row.get("unit"),
+            })
+            .collect();
+
+        let entities = if subgroups.is_empty() {
+            itertools::Either::Left(
+                db_transaction
+                    .query(
+                        "
+                        SELECT
+                            id,
+                            name
+                        FROM entities
+                        WHERE
+                            file_name = $1
+                        ORDER BY name ASC
+                        OFFSET $2
+                        LIMIT $3
+                        ",
+                        &[
+                            &query_file_name,
+                            &i64::from(options.offset),
+                            &i64::from(options.limit),
+                        ],
+                    )
+                    .await?
+                    .into_iter()
+                    .map(|row| NetCdfEntity {
+                        name: row.get("name"),
+                        id: row.get::<_, i64>("id") as usize,
+                    }),
+            )
+        } else {
+            itertools::Either::Right(std::iter::empty())
+        };
+
         Ok(create_layer_collection_from_parts(
             NETCDF_CF_PROVIDER_ID,
             collection.clone(),
             groups,
             overview_metadata,
             group_metadata,
-            vec![],             // TODO
-            vec![].into_iter(), // TODO
+            subgroups,
+            entities,
         ))
     } else {
         // listing from file directly
@@ -1354,16 +1438,16 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                 .await
                 .boxed_context(error::DatabaseTransaction)?;
 
-            Ok(listing_from_netcdf_file(
+            listing_from_netcdf_file(
                 &transaction,
                 collection,
                 path,
-                &groups,
+                groups,
                 data,
                 overviews,
                 &options,
             )
-            .await?)
+            .await
         }
 
         let id = NetCdfLayerCollectionId::from_str(&collection.0)?;
@@ -1420,34 +1504,175 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
         Ok(NetCdfLayerCollectionId::Path { path: ".".into() }.try_into()?)
     }
 
+    #[allow(clippy::too_many_lines)] // TODO: refactor method
     async fn load_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
         let netcdf_id = NetCdfLayerCollectionId::from_str(&id.0)?;
 
-        match netcdf_id {
-            NetCdfLayerCollectionId::Entity {
-                path,
-                groups,
-                entity,
-            } => {
-                let rp = path.clone();
+        let NetCdfLayerCollectionId::Entity {
+            path,
+            groups,
+            entity,
+        } = netcdf_id
+        else {
+            return Err(Error::InvalidLayerId);
+        };
 
-                let provider_path = self.data.clone();
-                let overviews_path = self.overviews.clone();
+        let dataset_path = path.clone();
 
-                let tree = tokio::task::spawn_blocking(move || {
-                    NetCdfCfDataProvider::build_netcdf_tree(
-                        &provider_path,
-                        Some(&overviews_path),
-                        &rp,
-                        &Default::default(),
-                    )
-                    .map_err(|_| Error::InvalidLayerCollectionId)
-                })
-                .await??;
+        let provider_path = self.data.clone();
+        let overviews_path = self.overviews.clone();
 
-                layer_from_netcdf_overview(NETCDF_CF_PROVIDER_ID, id, tree, &groups, entity)
-            }
-            _ => return Err(Error::InvalidLayerId),
+        let mut db_connection = self
+            .metadata_db
+            .get()
+            .await
+            .boxed_context(error::DatabaseConnection)?;
+
+        let db_transaction = db_connection
+            .build_transaction()
+            .read_only(true)
+            .deferrable(true) // get snapshot isolation
+            .start()
+            .await
+            .boxed_context(error::DatabaseTransaction)?;
+
+        let query_file_name = dataset_path.to_string_lossy();
+        if let Some(row) = db_transaction
+            .query_opt(
+                r#"
+                    SELECT
+                        file_name,
+                        title,
+                        summary,
+                        spatial_reference :: "SpatialReference",
+                        colorizer :: "Colorizer",
+                        creator_name,
+                        creator_email,
+                        creator_institution
+                    FROM overviews
+                    WHERE file_name = $1
+                    "#,
+                &[&query_file_name],
+            )
+            .await?
+        {
+            // listing from database
+
+            let overview_metadata = NetCdfOverviewMetadata {
+                file_name: row.get("file_name"),
+                title: row.get("title"),
+                summary: row.get("summary"),
+                spatial_reference: row.get("spatial_reference"),
+                colorizer: row.get("colorizer"),
+                creator_name: row.get("creator_name"),
+                creator_email: row.get("creator_email"),
+                creator_institution: row.get("creator_institution"),
+            };
+
+            let netcdf_entity = db_transaction
+                .query_opt(
+                    "
+                    SELECT
+                        id,
+                        name
+                    FROM entities
+                    WHERE file_name = $1 AND
+                          id = $2
+                    ",
+                    &[&query_file_name, &(entity as i64)],
+                )
+                .await?
+                .map_or(
+                    NetCdfEntity {
+                        // defensive default
+                        name: String::new(),
+                        id: entity,
+                    },
+                    |row| NetCdfEntity {
+                        name: row.get("name"),
+                        id: row.get::<_, i64>("id") as usize,
+                    },
+                );
+
+            let data_range: Option<(f64, f64)> = db_transaction
+                .query_opt(
+                    "
+                    SELECT
+                        data_range
+                    FROM groups
+                    WHERE
+                        file_name = $1 AND
+                        name = $2
+                    ",
+                    &[&query_file_name, &groups],
+                )
+                .await?
+                .and_then(|row| {
+                    row.get::<_, Option<[f64; 2]>>("data_range")
+                        .map(|[min, max]| (min, max))
+                });
+
+            // TODO: de-duplicate
+            let (data_range, colorizer) = if let Some(data_range) = data_range {
+                (
+                    data_range,
+                    overview_metadata
+                        .colorizer
+                        .rescale(data_range.0, data_range.1)?,
+                )
+            } else {
+                let colorizer = overview_metadata.colorizer;
+                ((colorizer.min_value(), colorizer.max_value()), colorizer)
+            };
+
+            let time_steps: Vec<TimeInstance> = db_transaction
+                .query(
+                    r#"
+                SELECT
+                    "time"
+                FROM timestamps
+                WHERE
+                    file_name = $1
+                ORDER BY "time" ASC
+                "#,
+                    &[&query_file_name],
+                )
+                .await?
+                .into_iter()
+                .map(|row| row.get("time"))
+                .collect();
+
+            Ok(create_layer(
+                NETCDF_CF_PROVIDER_ID,
+                id,
+                &NetCdfCf4DDatasetId {
+                    file_name: overview_metadata.file_name,
+                    group_names: groups.to_owned(),
+                    entity,
+                },
+                netcdf_entity,
+                colorizer,
+                overview_metadata.creator_name,
+                overview_metadata.creator_email,
+                overview_metadata.creator_institution,
+                &time_steps,
+                data_range,
+            )?)
+        } else {
+            // listing from file directly
+
+            let tree = tokio::task::spawn_blocking(move || {
+                NetCdfCfDataProvider::build_netcdf_tree(
+                    &provider_path,
+                    Some(&overviews_path),
+                    &dataset_path,
+                    &Default::default(),
+                )
+                .map_err(|_| Error::InvalidLayerCollectionId)
+            })
+            .await??;
+
+            layer_from_netcdf_overview(NETCDF_CF_PROVIDER_ID, id, tree, &groups, entity)
         }
     }
 }
@@ -1559,6 +1784,7 @@ mod tests {
     use crate::contexts::{PostgresContext, SessionContext, SimpleApplicationContext};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::ge_context;
+    use crate::layers::layer::LayerListing;
     use crate::layers::storage::LayerProviderDb;
     use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
     use geoengine_datatypes::dataset::ExternalDataId;
@@ -2013,7 +2239,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_loading_info_from_index() {
-        crate::util::tests::initialize_debugging_in_test(); // TODO: remove
+        // crate::util::tests::initialize_debugging_in_test(); // TODO: remove
 
         hide_gdal_errors();
 
@@ -2118,8 +2344,6 @@ mod tests {
 
     #[ge_context::test]
     async fn test_listing_from_netcdf_sm_from_index(app_ctx: PostgresContext<NoTls>) {
-        crate::util::tests::initialize_debugging_in_test(); // TODO: remove
-
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -2136,6 +2360,14 @@ mod tests {
         .initialize(app_ctx.default_session_context().await.unwrap().db())
         .await
         .unwrap();
+
+        provider
+            .as_any()
+            .downcast_ref::<NetCdfCfDataProvider>()
+            .unwrap()
+            .create_overviews(Path::new("dataset_sm.nc"), None, NopTaskContext)
+            .await
+            .unwrap();
 
         let id = LayerCollectionId("dataset_sm.nc".to_string());
 
@@ -2327,5 +2559,162 @@ mod tests {
             vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.34280000000002},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.54399999999997}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
             metadata: PlotMetaData::None,
         });
+    }
+
+    #[ge_context::test]
+    async fn it_lists_with_and_without_overviews(app_ctx: PostgresContext<NoTls>) {
+        async fn get_all_collections(
+            provider: &dyn DataProvider,
+            root_id: LayerCollectionId,
+        ) -> (Vec<LayerCollection>, Vec<LayerListing>) {
+            let mut layer_collection_ids = vec![root_id];
+            let mut all_collections = Vec::new();
+            let mut all_layers = Vec::new();
+
+            while let Some(id) = layer_collection_ids.pop() {
+                let collection = provider
+                    .load_layer_collection(
+                        &id,
+                        LayerCollectionListOptions {
+                            offset: 0,
+                            limit: 20,
+                        },
+                    )
+                    .await
+                    .unwrap();
+
+                for item in &collection.items {
+                    match item {
+                        CollectionItem::Collection(listing) => {
+                            layer_collection_ids.push(listing.id.collection_id.clone());
+                        }
+                        CollectionItem::Layer(layer) => {
+                            all_layers.push(layer.clone());
+                        }
+                    }
+                }
+
+                all_collections.push(collection);
+            }
+
+            (all_collections, all_layers)
+        }
+
+        hide_gdal_errors();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let provider = Box::new(NetCdfCfDataProviderDefinition {
+            name: "NetCdfCfDataProvider".to_string(),
+            description: "NetCdfCfProviderDefinition".to_string(),
+            priority: None,
+            data: test_data!("netcdf4d").into(),
+            overviews: overview_folder.path().to_path_buf(),
+            metadata_db_config: test_db_config(),
+            cache_ttl: Default::default(),
+        })
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .await
+        .unwrap();
+
+        let file_names = vec![
+            "dataset_irr_ts.nc",
+            "dataset_m.nc",
+            "dataset_sm.nc",
+            "Biodiversity/dataset_monthly.nc",
+            // "Biodiversity/dataset_daily.nc", // TODO: get fewer entities/timestamps
+        ];
+
+        for file_name in file_names {
+            let root_id = LayerCollectionId(file_name.to_string());
+
+            let (collections_before_overviews, layers_before_overviews) =
+                get_all_collections(&*provider, root_id.clone()).await;
+
+            provider
+                .as_any()
+                .downcast_ref::<NetCdfCfDataProvider>()
+                .unwrap()
+                .create_overviews(Path::new(file_name), None, NopTaskContext)
+                .await
+                .unwrap();
+
+            let (collections_after_overviews, layers_after_overviews) =
+                get_all_collections(&*provider, root_id).await;
+
+            pretty_assertions::assert_eq!(
+                collections_before_overviews,
+                collections_after_overviews
+            );
+
+            pretty_assertions::assert_eq!(layers_before_overviews, layers_after_overviews);
+        }
+    }
+
+    #[ge_context::test]
+    async fn it_loads_with_and_without_overviews(app_ctx: PostgresContext<NoTls>) {
+        hide_gdal_errors();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let provider = Box::new(NetCdfCfDataProviderDefinition {
+            name: "NetCdfCfDataProvider".to_string(),
+            description: "NetCdfCfProviderDefinition".to_string(),
+            priority: None,
+            data: test_data!("netcdf4d").into(),
+            overviews: overview_folder.path().to_path_buf(),
+            metadata_db_config: test_db_config(),
+            cache_ttl: Default::default(),
+        })
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .await
+        .unwrap();
+
+        let file_name = "Biodiversity/dataset_monthly.nc";
+
+        let layer_id =
+            netcdf_entity_to_layer_id(Path::new(file_name), &["metric_2".to_string()], 2);
+
+        let layer_before_overviews = provider.load_layer(&layer_id).await.unwrap();
+
+        provider
+            .as_any()
+            .downcast_ref::<NetCdfCfDataProvider>()
+            .unwrap()
+            .create_overviews(Path::new(file_name), None, NopTaskContext)
+            .await
+            .unwrap();
+
+        let layer_after_overviews = provider.load_layer(&layer_id).await.unwrap();
+
+        // equal layers without `colorizer` and `dataRange` (which are calculated only in the overviews)
+        pretty_assertions::assert_eq!(layer_before_overviews.id, layer_after_overviews.id);
+        pretty_assertions::assert_eq!(layer_before_overviews.name, layer_after_overviews.name);
+        pretty_assertions::assert_eq!(
+            layer_before_overviews.description,
+            layer_after_overviews.description
+        );
+        pretty_assertions::assert_eq!(
+            layer_before_overviews.workflow,
+            layer_after_overviews.workflow
+        );
+        pretty_assertions::assert_eq!(
+            layer_before_overviews.properties,
+            layer_after_overviews.properties
+        );
+        pretty_assertions::assert_eq!(
+            layer_before_overviews.metadata["timeSteps"],
+            layer_after_overviews.metadata["timeSteps"]
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_provides_metadata_with_and_without_overviews(app_ctx: PostgresContext<NoTls>) {
+        todo!("implement")
+    }
+
+    #[ge_context::test]
+    async fn it_refreshes_metadata_only(app_ctx: PostgresContext<NoTls>) {
+        todo!("implement")
     }
 }

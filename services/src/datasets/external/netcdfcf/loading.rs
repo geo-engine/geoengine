@@ -28,7 +28,7 @@ use geoengine_operators::{
     },
 };
 use snafu::ResultExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub fn create_layer_collection_from_parts(
     provider_id: DataProviderId,
@@ -61,8 +61,8 @@ pub fn create_layer_collection_from_parts(
                     id: ProviderLayerId {
                         provider_id,
                         layer_id: netcdf_entity_to_layer_id(
-                            overview.file_name.clone().into(),
-                            group_path.to_owned(),
+                            Path::new(overview.file_name.as_str()),
+                            group_path,
                             entity.id,
                         ),
                     },
@@ -83,8 +83,8 @@ pub fn create_layer_collection_from_parts(
                     id: ProviderLayerCollectionId {
                         provider_id,
                         collection_id: netcdf_group_to_layer_collection_id(
-                            overview.file_name.clone().into(),
-                            out_groups,
+                            Path::new(overview.file_name.as_str()),
+                            &out_groups,
                         ),
                     },
                     name: group.title.clone(),
@@ -95,42 +95,6 @@ pub fn create_layer_collection_from_parts(
             .collect::<Vec<CollectionItem>>()
     };
 
-    create_layer_collection(
-        provider_id,
-        collection_id,
-        name,
-        description,
-        items,
-        creator_name,
-        creator_email,
-        creator_institution,
-    )
-}
-
-pub fn create_layer_collection(
-    provider_id: DataProviderId,
-    collection_id: LayerCollectionId,
-    name: String,
-    description: String,
-    items: Vec<CollectionItem>,
-    creator_name: Option<String>,
-    creator_email: Option<String>,
-    creator_institution: Option<String>,
-) -> LayerCollection {
-    let mut properties = Vec::new();
-
-    if let Some(creator_name) = creator_name {
-        let property = Property::from((
-            "author".to_string(),
-            format!(
-                "{creator_name}, {}, {}",
-                creator_email.unwrap_or_else(|| "unknown".to_string()),
-                creator_institution.unwrap_or_else(|| "unknown".to_string())
-            ),
-        ));
-        properties.push(property);
-    }
-
     LayerCollection {
         id: ProviderLayerCollectionId {
             provider_id,
@@ -140,8 +104,33 @@ pub fn create_layer_collection(
         description,
         items,
         entry_label: None,
-        properties,
+        properties: create_properties_for_layer_collection(
+            creator_name,
+            creator_email,
+            creator_institution,
+        ),
     }
+}
+
+fn create_properties_for_layer_collection(
+    creator_name: Option<String>,
+    creator_email: Option<String>,
+    creator_institution: Option<String>,
+) -> Vec<Property> {
+    let Some(creator_name) = creator_name else {
+        return Vec::new();
+    };
+
+    let property = Property::from((
+        "author".to_string(),
+        format!(
+            "{creator_name}, {}, {}",
+            creator_email.unwrap_or_else(|| "unknown".to_string()),
+            creator_institution.unwrap_or_else(|| "unknown".to_string())
+        ),
+    ));
+
+    vec![property]
 }
 
 pub fn create_layer(
