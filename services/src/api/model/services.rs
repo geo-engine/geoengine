@@ -131,9 +131,7 @@ pub enum DataPath {
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 pub struct UpdateDataset {
-    pub name: Option<DatasetName>,
+    pub name: DatasetName,
     pub display_name: String,
     pub description: String,
-    // pub provenance: Option<Vec<Provenance>>,
-    // pub tags: Option<Vec<String>>,
 }

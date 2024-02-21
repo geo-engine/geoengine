@@ -659,14 +659,8 @@ where
             error::PermissionDenied
         );
 
-        let stmt = tx
-            .prepare(
-                "UPDATE datasets SET name = $2, display_name = $3, description = $4 WHERE id = $1;",
-            )
-            .await?;
-
         tx.execute(
-            &stmt,
+            "UPDATE datasets SET name = $2, display_name = $3, description = $4 WHERE id = $1;",
             &[
                 &dataset,
                 &update.name,

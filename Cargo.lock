@@ -2816,6 +2816,7 @@ dependencies = [
  "geoengine-operators",
  "geojson",
  "httptest",
+ "itertools 0.12.1",
  "log",
  "mime",
  "nix",

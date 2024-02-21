@@ -553,14 +553,8 @@ where
     async fn update_dataset(&self, dataset: DatasetId, update: UpdateDataset) -> Result<()> {
         let conn = self.conn_pool.get().await?;
 
-        let stmt = conn
-            .prepare(
-                "UPDATE datasets SET name = $2, display_name = $3, description = $4 WHERE id = $1;",
-            )
-            .await?;
-
         conn.execute(
-            &stmt,
+            "UPDATE datasets SET name = $2, display_name = $3, description = $4 WHERE id = $1;",
             &[
                 &dataset,
                 &update.name,

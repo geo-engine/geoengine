@@ -2639,4 +2639,37 @@ mod tests {
 
         Ok(())
     }
+
+    #[ge_context::test()]
+    async fn it_updates_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let session_id = app_ctx.default_session_id().await;
+
+        let ctx = app_ctx.default_session_context().await?;
+
+        let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
+
+        let update: UpdateDataset = UpdateDataset {
+            name: DatasetName::new(None, "new_name"),
+            display_name: "new display name".to_string(),
+            description: "new description".to_string(),
+        };
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(update.clone());
+        let res = send_test_request(req, app_ctx).await;
+
+        let res_status = res.status();
+        assert_eq!(res_status, 200);
+
+        let dataset = ctx.db().load_dataset(&dataset_id).await?;
+
+        assert_eq!(dataset.name, update.name);
+        assert_eq!(dataset.display_name, update.display_name);
+        assert_eq!(dataset.description, update.description);
+
+        Ok(())
+    }
 }
