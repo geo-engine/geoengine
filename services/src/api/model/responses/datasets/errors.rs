@@ -55,7 +55,9 @@ impl ResponseError for GetDatasetError {
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum UpdateDatasetError {
+    #[snafu(display("Cannot load dataset for update"))]
     CannotLoadDatasetForUpdate { source: error::Error },
+    #[snafu(display("Cannot update dataset"))]
     CannotUpdateDataset { source: error::Error },
 }
 
