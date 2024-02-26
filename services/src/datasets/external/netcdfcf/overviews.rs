@@ -1,11 +1,8 @@
 use super::{error, NetCdfCf4DProviderError, TimeCoverage};
 use crate::{
-    datasets::{
-        external::netcdfcf::{
-            loading::{create_loading_info, ParamModification},
-            NetCdfCfDataProvider,
-        },
-        storage::MetaDataDefinition,
+    datasets::external::netcdfcf::{
+        loading::{create_loading_info, ParamModification},
+        NetCdfCfDataProvider,
     },
     tasks::{TaskContext, TaskStatusInfo},
     util::{config::get_config_element, path_with_base_path},
@@ -25,9 +22,12 @@ use geoengine_datatypes::{
 use geoengine_datatypes::{
     primitives::CacheTtlSeconds, spatial_reference::SpatialReference, util::canonicalize_subpath,
 };
-use geoengine_operators::util::gdal::{
-    gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
-    raster_descriptor_from_dataset_and_sref,
+use geoengine_operators::{
+    source::GdalMetaDataList,
+    util::gdal::{
+        gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
+        raster_descriptor_from_dataset_and_sref,
+    },
 };
 use log::debug;
 use snafu::ResultExt;
@@ -309,17 +309,6 @@ pub async fn create_overviews<C: TaskContext + 'static>(
         Err(e) => return Err(e),
     };
 
-    match store_metadata(
-        provider_path,
-        dataset_path,
-        &out_folder_path,
-        &stats_for_group,
-    ) {
-        Ok(OverviewGeneration::Created) => (),
-        Ok(OverviewGeneration::Skipped) => return Ok(OverviewGeneration::Skipped),
-        Err(e) => return Err(e),
-    };
-
     in_progress_flag.remove()?;
 
     Ok(OverviewGeneration::Created)
@@ -390,14 +379,19 @@ impl InProgressFlag {
         Ok(())
     }
 
-    pub fn is_in_progress(folder: &Path) -> bool {
-        if !folder.is_dir() {
-            return false;
-        }
+    pub async fn is_in_progress(folder: &Path) -> Result<bool> {
+        let folder = folder.to_owned();
+        crate::util::spawn_blocking(move || {
+            if !folder.is_dir() {
+                return false;
+            }
 
-        let path = folder.join(Self::IN_PROGRESS_FLAG_NAME);
+            let path = folder.join(Self::IN_PROGRESS_FLAG_NAME);
 
-        path.exists()
+            path.exists()
+        })
+        .await
+        .boxed_context(error::UnexpectedExecution)
     }
 }
 
@@ -591,45 +585,6 @@ async fn store_db_metadata(
             .await
             .boxed_context(error::UnexpectedExecution)?;
     }
-
-    Ok(OverviewGeneration::Created)
-}
-
-fn store_metadata(
-    provider_path: &Path,
-    dataset_path: &Path,
-    out_folder_path: &Path,
-    stats_for_group: &HashMap<String, (f64, f64)>,
-) -> Result<OverviewGeneration> {
-    let out_file_path = out_folder_path.join(METADATA_FILE_NAME);
-
-    if out_file_path.exists() {
-        debug!("Skipping metadata generation: {}", dataset_path.display());
-        return Ok(OverviewGeneration::Skipped);
-    }
-
-    debug!("Creating metadata: {}", dataset_path.display());
-
-    let metadata = NetCdfCfDataProvider::build_netcdf_tree(
-        provider_path,
-        None,
-        dataset_path,
-        stats_for_group,
-    )?;
-
-    fs::create_dir_all(out_folder_path).boxed_context(error::CannotCreateOverviews)?;
-
-    let file = File::create(out_file_path).boxed_context(error::CannotWriteMetadataFile)?;
-
-    let mut writer = BufWriter::new(file);
-
-    writer
-        .write_all(
-            serde_json::to_string(&metadata)
-                .boxed_context(error::CannotWriteMetadataFile)?
-                .as_bytes(),
-        )
-        .boxed_context(error::CannotWriteMetadataFile)?;
 
     Ok(OverviewGeneration::Created)
 }
@@ -930,7 +885,7 @@ fn generate_loading_info(
     overview_dataset_path: &Path,
     time_coverage: &TimeCoverage,
     sref_string: Option<String>,
-) -> Result<MetaDataDefinition> {
+) -> Result<GdalMetaDataList> {
     const TIFF_BAND_INDEX: usize = 1;
 
     let result_descriptor = if let Some(sref) = sref_string {
@@ -967,23 +922,41 @@ fn generate_loading_info(
                 time_instance: *time_instance,
             }),
         cache_ttl,
-    )
-    .into())
+    ))
 }
 
-pub fn remove_overviews(dataset_path: &Path, overview_path: &Path, force: bool) -> Result<()> {
+pub async fn remove_overviews(
+    dataset_path: &Path,
+    overview_path: &Path,
+    db_transaction: &Transaction<'_>,
+    force: bool,
+) -> Result<()> {
     let out_folder_path = path_with_base_path(overview_path, dataset_path)
         .boxed_context(error::DatasetIsNotInProviderPath)?;
 
-    if !out_folder_path.exists() {
+    let out_folder_exists = tokio::fs::try_exists(&out_folder_path)
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+    if !out_folder_exists {
         return Ok(());
     }
 
-    if !force && InProgressFlag::is_in_progress(&out_folder_path) {
+    if !force && InProgressFlag::is_in_progress(&out_folder_path).await? {
         return Err(NetCdfCf4DProviderError::CannotRemoveOverviewsWhileCreationIsInProgress);
     }
 
-    fs::remove_dir_all(&out_folder_path).boxed_context(error::CannotRemoveOverviews)?;
+    // entries from other tables will be deleted by the foreign key constraint `ON DELETE CASCADE`
+    db_transaction
+        .execute(
+            "DELETE FROM overviews WHERE file_name = $1",
+            &[&dataset_path.to_string_lossy()],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    tokio::fs::remove_dir_all(&out_folder_path)
+        .await
+        .boxed_context(error::CannotRemoveOverviews)?;
 
     Ok(())
 }
@@ -991,17 +964,8 @@ pub fn remove_overviews(dataset_path: &Path, overview_path: &Path, force: bool) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        datasets::{
-            external::netcdfcf::{
-                test_db_connection, NetCdfEntity, NetCdfGroup as FullNetCdfGroup, NetCdfOverview,
-            },
-            storage::MetaDataDefinition,
-        },
-        tasks::util::NopTaskContext,
-    };
+    use crate::{datasets::external::netcdfcf::test_db_connection, tasks::util::NopTaskContext};
     use geoengine_datatypes::{
-        operations::image::{Colorizer, RgbaColor},
         primitives::{DateTime, SpatialResolution, TimeInterval},
         raster::RasterDataType,
         spatial_reference::SpatialReference,
@@ -1015,7 +979,6 @@ mod tests {
             GdalLoadingInfoTemporalSlice, GdalMetaDataList,
         },
     };
-    use std::io::BufReader;
 
     #[test]
     fn test_generate_loading_info() {
@@ -1053,7 +1016,7 @@ mod tests {
 
         assert_eq!(
             loading_info,
-            MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
+            GdalMetaDataList {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1116,7 +1079,7 @@ mod tests {
                         cache_ttl: CacheTtlSeconds::default(),
                     },
                 ],
-            })
+            }
         );
     }
 
@@ -1168,8 +1131,8 @@ mod tests {
         let sample_loading_info =
             std::fs::read_to_string(tempdir_path.join("1/loading_info.json")).unwrap();
         assert_eq!(
-            serde_json::from_str::<MetaDataDefinition>(&sample_loading_info).unwrap(),
-            MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
+            serde_json::from_str::<GdalMetaDataList>(&sample_loading_info).unwrap(),
+            GdalMetaDataList {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1258,141 +1221,6 @@ mod tests {
                         cache_ttl: CacheTtlSeconds::default(),
                     },
                 ],
-            })
-        );
-    }
-
-    #[test]
-    #[allow(clippy::too_many_lines)]
-    fn test_store_metadata() {
-        hide_gdal_errors();
-
-        let out_folder = tempfile::tempdir().unwrap();
-
-        let metadata_file_path = out_folder.path().join(METADATA_FILE_NAME);
-
-        assert!(!metadata_file_path.exists());
-
-        store_metadata(
-            test_data!("netcdf4d"),
-            Path::new("dataset_m.nc"),
-            out_folder.path(),
-            &[
-                ("metric_1".to_string(), (1., 97.)),
-                ("metric_2".to_string(), (1., 98.)),
-            ]
-            .into_iter()
-            .collect(),
-        )
-        .unwrap();
-
-        assert!(metadata_file_path.exists());
-
-        let file = File::open(metadata_file_path).unwrap();
-        let mut reader = BufReader::new(file);
-
-        let metadata: NetCdfOverview = serde_json::from_reader(&mut reader).unwrap();
-
-        assert_eq!(
-            metadata,
-            NetCdfOverview {
-                file_name: "dataset_m.nc".into(),
-                title: "Test dataset metric".to_string(),
-                summary: "CFake description of test dataset with metric.".to_string(),
-                spatial_reference: SpatialReference::epsg_4326(),
-                groups: vec![
-                    FullNetCdfGroup {
-                        name: "metric_1".to_string(),
-                        title: "Random metric 1".to_string(),
-                        description: "Randomly created data".to_string(),
-                        data_type: Some(RasterDataType::I16),
-                        data_range: Some((1., 97.)),
-                        unit: String::new(),
-                        groups: vec![]
-                    },
-                    FullNetCdfGroup {
-                        name: "metric_2".to_string(),
-                        title: "Random metric 2".to_string(),
-                        description: "Randomly created data".to_string(),
-                        data_type: Some(RasterDataType::I16),
-                        data_range: Some((1., 98.)),
-                        unit: String::new(),
-                        groups: vec![]
-                    }
-                ],
-                entities: vec![
-                    NetCdfEntity {
-                        id: 0,
-                        name: "entity01".to_string(),
-                    },
-                    NetCdfEntity {
-                        id: 1,
-                        name: "entity02".to_string(),
-                    },
-                    NetCdfEntity {
-                        id: 2,
-                        name: "entity03".to_string(),
-                    }
-                ],
-                time_coverage: TimeCoverage {
-                    time_stamps: vec![
-                        DateTime::new_utc(2000, 1, 1, 0, 0, 0).into(),
-                        DateTime::new_utc(2001, 1, 1, 0, 0, 0).into(),
-                        DateTime::new_utc(2002, 1, 1, 0, 0, 0).into(),
-                    ],
-                },
-                colorizer: Colorizer::LinearGradient {
-                    breakpoints: vec![
-                        (
-                            0.0.try_into().expect("not nan"),
-                            RgbaColor::new(68, 1, 84, 255),
-                        )
-                            .into(),
-                        (
-                            36.428_571_428_571_42.try_into().expect("not nan"),
-                            RgbaColor::new(70, 50, 126, 255),
-                        )
-                            .into(),
-                        (
-                            72.857_142_857_142_85.try_into().expect("not nan"),
-                            RgbaColor::new(54, 92, 141, 255),
-                        )
-                            .into(),
-                        (
-                            109.285_714_285_714_28.try_into().expect("not nan"),
-                            RgbaColor::new(39, 127, 142, 255),
-                        )
-                            .into(),
-                        (
-                            109.285_714_285_714_28.try_into().expect("not nan"),
-                            RgbaColor::new(31, 161, 135, 255),
-                        )
-                            .into(),
-                        (
-                            182.142_857_142_857_1.try_into().expect("not nan"),
-                            RgbaColor::new(74, 193, 109, 255),
-                        )
-                            .into(),
-                        (
-                            218.571_428_571_428_53.try_into().expect("not nan"),
-                            RgbaColor::new(160, 218, 57, 255),
-                        )
-                            .into(),
-                        (
-                            255.0.try_into().expect("not nan"),
-                            RgbaColor::new(253, 231, 37, 255),
-                        )
-                            .into(),
-                    ],
-                    no_data_color: RgbaColor::new(0, 0, 0, 0),
-                    over_color: RgbaColor::new(255, 255, 255, 255),
-                    under_color: RgbaColor::new(0, 0, 0, 255)
-                },
-                creator_name: Some("Luise Quoß".to_string()),
-                creator_email: Some("luise.quoss@idiv.de".to_string()),
-                creator_institution: Some(
-                    "German Centre for Integrative Biodiversity Research (iDiv)".to_string()
-                ),
             }
         );
     }
@@ -1420,8 +1248,6 @@ mod tests {
         let dataset_folder = overview_folder.path().join("dataset_m.nc");
 
         assert!(dataset_folder.is_dir());
-
-        assert!(dataset_folder.join("metadata.json").exists());
 
         for metric in ["metric_1", "metric_2"] {
             for entity in 0..3 {
@@ -1467,8 +1293,6 @@ mod tests {
 
         assert!(dataset_folder.is_dir());
 
-        assert!(dataset_folder.join("metadata.json").exists());
-
         for metric in ["metric_1", "metric_2"] {
             for entity in 0..3 {
                 assert!(dataset_folder
@@ -1490,8 +1314,8 @@ mod tests {
         let sample_loading_info =
             std::fs::read_to_string(dataset_folder.join("metric_2/0/loading_info.json")).unwrap();
         assert_eq!(
-            serde_json::from_str::<MetaDataDefinition>(&sample_loading_info).unwrap(),
-            MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
+            serde_json::from_str::<GdalMetaDataList>(&sample_loading_info).unwrap(),
+            GdalMetaDataList {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1583,7 +1407,7 @@ mod tests {
                         cache_ttl: CacheTtlSeconds::default(),
                     }
                 ],
-            })
+            }
         );
     }
 
@@ -1615,7 +1439,9 @@ mod tests {
 
         assert!(!is_empty(overview_folder.path()));
 
-        remove_overviews(dataset_path, overview_folder.path(), false).unwrap();
+        remove_overviews(dataset_path, overview_folder.path(), &transaction, false)
+            .await
+            .unwrap();
 
         assert!(is_empty(overview_folder.path()));
     }

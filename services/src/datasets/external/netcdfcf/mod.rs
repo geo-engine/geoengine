@@ -2,15 +2,13 @@ pub use self::ebvportal_provider::{EbvPortalDataProvider, EBV_PROVIDER_ID};
 pub use self::error::NetCdfCf4DProviderError;
 use self::loading::{create_layer, create_layer_collection_from_parts};
 use self::metadata::{all_migrations, NetCdfGroupMetadata, NetCdfOverviewMetadata};
+use self::overviews::create_overviews;
 use self::overviews::remove_overviews;
-use self::overviews::InProgressFlag;
 pub use self::overviews::OverviewGeneration;
-use self::overviews::{create_overviews, METADATA_FILE_NAME};
 use crate::contexts::{migrate_database, GeoEngineDb};
 use crate::datasets::external::netcdfcf::loading::{create_loading_info, ParamModification};
 use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
 use crate::datasets::listing::ProvenanceOutput;
-use crate::datasets::storage::MetaDataDefinition;
 use crate::error::Error;
 use crate::layers::external::DataProvider;
 use crate::layers::external::DataProviderDefinition;
@@ -43,7 +41,7 @@ use geoengine_datatypes::util::gdal::ResamplingMethod;
 use geoengine_operators::engine::RasterBandDescriptor;
 use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::source::{
-    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataList,
 };
 use geoengine_operators::util::gdal::gdal_open_dataset_ex;
 use geoengine_operators::{
@@ -308,34 +306,12 @@ pub(crate) struct NetCdfCf4DDatasetId {
 }
 
 impl NetCdfCfDataProvider {
-    fn netcdf_tree_from_overviews(
-        overview_path: &Path,
-        dataset_path: &Path,
-    ) -> Option<NetCdfOverview> {
-        let overview_dataset_path = overview_path.join(dataset_path);
-
-        if InProgressFlag::is_in_progress(&overview_dataset_path) {
-            return None;
-        }
-
-        let tree_file_path = overview_dataset_path.join(METADATA_FILE_NAME);
-        let file = std::fs::File::open(tree_file_path).ok()?;
-        let buf_reader = BufReader::new(file);
-        serde_json::from_reader::<_, NetCdfOverview>(buf_reader).ok()
-    }
-
     pub fn build_netcdf_tree(
         provider_path: &Path,
         overview_path: Option<&Path>,
         dataset_path: &Path,
         stats_for_group: &HashMap<String, (f64, f64)>,
     ) -> Result<NetCdfOverview> {
-        if let Some(netcdf_tree) = overview_path.and_then(|overview_path| {
-            NetCdfCfDataProvider::netcdf_tree_from_overviews(overview_path, dataset_path)
-        }) {
-            return Ok(netcdf_tree);
-        }
-
         let path = provider_path.join(dataset_path);
 
         let ds = gdal_open_dataset_ex(
@@ -452,20 +428,11 @@ impl NetCdfCfDataProvider {
             serde_json::from_str(&dataset.layer_id.0).context(error::CannotParseDatasetId)?;
 
         // try to load from overviews
-        if let Some(loading_info) = Self::meta_data_from_overviews(overviews, &dataset_id) {
-            return match loading_info {
-                MetaDataDefinition::GdalMetadataNetCdfCf(mut loading_info) => {
-                    loading_info.cache_ttl = cache_ttl;
-                    Ok(Box::new(loading_info))
-                }
-                MetaDataDefinition::GdalMetaDataList(mut loading_info) => {
-                    for params in &mut loading_info.params {
-                        params.cache_ttl = cache_ttl;
-                    }
-                    Ok(Box::new(loading_info))
-                }
-                _ => Err(NetCdfCf4DProviderError::UnsupportedMetaDataDefinition),
-            };
+        if let Some(mut loading_info) = Self::meta_data_from_overviews(overviews, &dataset_id) {
+            for params in &mut loading_info.params {
+                params.cache_ttl = cache_ttl;
+            }
+            return Ok(Box::new(loading_info));
         }
 
         let dataset_id: NetCdfCf4DDatasetId =
@@ -600,7 +567,7 @@ impl NetCdfCfDataProvider {
     fn meta_data_from_overviews(
         overview_path: &Path,
         dataset_id: &NetCdfCf4DDatasetId,
-    ) -> Option<MetaDataDefinition> {
+    ) -> Option<GdalMetaDataList> {
         let loading_info_path = overview_path
             .join(&dataset_id.file_name)
             .join(dataset_id.group_names.join("/"))
@@ -614,15 +581,10 @@ impl NetCdfCfDataProvider {
 
         debug!("Using overview for {dataset_id:?}. Overview path is {overview_path:?}.");
 
-        let loading_info: MetaDataDefinition =
+        let loading_info: GdalMetaDataList =
             serde_json::from_reader(BufReader::new(loading_info_file)).ok()?;
 
-        match loading_info {
-            MetaDataDefinition::GdalMetaDataList(loading_info) => {
-                Some(MetaDataDefinition::GdalMetaDataList(loading_info))
-            }
-            _ => None, // we only support some definitions here
-        }
+        Some(loading_info)
     }
 
     pub fn list_files(&self) -> Result<Vec<PathBuf>> {
@@ -701,8 +663,19 @@ impl NetCdfCfDataProvider {
         result
     }
 
-    pub fn remove_overviews(&self, dataset_path: &Path, force: bool) -> Result<()> {
-        remove_overviews(dataset_path, &self.overviews, force)
+    pub async fn remove_overviews(&self, dataset_path: &Path, force: bool) -> Result<()> {
+        let mut db_connection = self
+            .metadata_db
+            .get()
+            .await
+            .boxed_context(error::DatabaseConnection)?;
+
+        let transaction = db_connection
+            .transaction()
+            .await
+            .boxed_context(error::DatabaseTransaction)?;
+
+        remove_overviews(dataset_path, &self.overviews, &transaction, force).await
     }
 
     fn is_netcdf_file(&self, path: &Path) -> bool {
@@ -1928,7 +1901,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
+        pretty_assertions::assert_eq!(
             collection,
             LayerCollection {
                 id: ProviderLayerCollectionId {
@@ -1938,6 +1911,15 @@ mod tests {
                 name: "NetCdfCfDataProvider".to_string(),
                 description: "NetCdfCfProviderDefinition".to_string(),
                 items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: NETCDF_CF_PROVIDER_ID,
+                            collection_id: LayerCollectionId("Biodiversity".to_string())
+                        },
+                        name: "Biodiversity".to_string(),
+                        description: String::new(),
+                        properties: Default::default(),
+                    }),
                     CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
                             provider_id: NETCDF_CF_PROVIDER_ID,
@@ -2227,6 +2209,8 @@ mod tests {
         };
 
         let expected_files: Vec<PathBuf> = vec![
+            "Biodiversity/dataset_daily.nc".into(),
+            "Biodiversity/dataset_monthly.nc".into(),
             "dataset_irr_ts.nc".into(),
             "dataset_m.nc".into(),
             "dataset_sm.nc".into(),
@@ -2706,11 +2690,6 @@ mod tests {
             layer_before_overviews.metadata["timeSteps"],
             layer_after_overviews.metadata["timeSteps"]
         );
-    }
-
-    #[ge_context::test]
-    async fn it_provides_metadata_with_and_without_overviews(app_ctx: PostgresContext<NoTls>) {
-        todo!("implement")
     }
 
     #[ge_context::test]
