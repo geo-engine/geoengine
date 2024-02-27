@@ -321,12 +321,12 @@ where
                             );
 
                         debug_assert!(
-                                time_slice.contains(&tile.time),
-                                "RasterStacker got tile with unexpected time: tile time [{}, {}) not contained in time slice [{}, {}) for source {}",
-                                tile.time.start().as_datetime_string(),
-                                tile.time.end().as_datetime_string(),
+                                tile.time.contains(time_slice),
+                                "RasterStacker got tile with unexpected time: time slice [{}, {}) not contained in tile time [{}, {}) for source {}",
                                 time_slice.start().as_datetime_string(),
                                 time_slice.end().as_datetime_string(),
+                                tile.time.start().as_datetime_string(),
+                                tile.time.end().as_datetime_string(),
                                 current_stream
                             );
 
