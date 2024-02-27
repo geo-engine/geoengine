@@ -1,6 +1,6 @@
 use super::{
     ebvportal_api::{EbvPortalApi, NetCdfCfDataProviderPaths},
-    layer_from_netcdf_overview, NetCdfCfDataProvider,
+    layer_from_netcdf_overview, NetCdfCfDataProvider, NetCdfCfDataProviderDefinition,
 };
 use crate::{
     contexts::GeoEngineDb,
@@ -19,7 +19,6 @@ use crate::{
     util::postgres::DatabaseConnectionConfig,
 };
 use async_trait::async_trait;
-use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
 use geoengine_datatypes::{
     dataset::{DataId, DataProviderId, LayerId},
     primitives::{CacheTtlSeconds, RasterQueryRectangle, VectorQueryRectangle},
@@ -33,7 +32,6 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::{path::PathBuf, str::FromStr};
-use tokio_postgres::NoTls;
 
 /// Singleton Provider with id `77d0bf11-986e-43f5-b11d-898321f1854c`
 pub const EBV_PROVIDER_ID: DataProviderId =
@@ -71,19 +69,17 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefiniti
             name: self.name.clone(),
             description: self.description.clone(),
             ebv_api: EbvPortalApi::new(self.base_url),
-            netcdf_cf_provider: NetCdfCfDataProvider {
+            netcdf_cf_provider: Box::new(NetCdfCfDataProviderDefinition {
                 name: self.name,
                 description: self.description,
                 data: self.data,
                 overviews: self.overviews,
-                metadata_db: Pool::builder()
-                    .build(PostgresConnectionManager::new(
-                        self.metadata_db_config.pg_config(),
-                        NoTls,
-                    ))
-                    .await?,
+                metadata_db_config: self.metadata_db_config,
                 cache_ttl: self.cache_ttl,
-            },
+                priority: self.priority,
+            })
+            ._initialize()
+            .await?,
         }))
     }
 
@@ -643,6 +639,7 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
                     )
                     .await?;
 
+                // TODO: call other method
                 layer_from_netcdf_overview(EBV_PROVIDER_ID, id, ebv_hierarchy.tree, groups, *entity)
             }
             _ => return Err(Error::InvalidLayerId),

@@ -7,7 +7,7 @@ use self::overviews::remove_overviews;
 pub use self::overviews::OverviewGeneration;
 use crate::contexts::{migrate_database, GeoEngineDb};
 use crate::datasets::external::netcdfcf::loading::{create_loading_info, ParamModification};
-use crate::datasets::external::netcdfcf::overviews::LOADING_INFO_FILE_NAME;
+use crate::datasets::external::netcdfcf::overviews::meta_data_from_overviews;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error;
 use crate::layers::external::DataProvider;
@@ -41,7 +41,7 @@ use geoengine_datatypes::util::gdal::ResamplingMethod;
 use geoengine_operators::engine::RasterBandDescriptor;
 use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::source::{
-    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataList,
+    FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
 };
 use geoengine_operators::util::gdal::gdal_open_dataset_ex;
 use geoengine_operators::{
@@ -53,7 +53,6 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::collections::HashMap;
-use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tokio_postgres::{NoTls, Transaction};
@@ -101,29 +100,9 @@ pub struct NetCdfCfDataProvider {
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for NetCdfCfDataProviderDefinition {
     async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
-        let mut pg_pool_builder = Pool::builder();
-        if self.metadata_db_config.schema == "pg_temp" {
-            // having more than one connection with `pg_temp` leads to different temp schemata being used
-            pg_pool_builder = pg_pool_builder.max_size(1);
-        }
-
-        let metadata_db = pg_pool_builder
-            .build(PostgresConnectionManager::new(
-                self.metadata_db_config.pg_config(),
-                NoTls,
-            ))
-            .await?;
-
-        migrate_database(&mut metadata_db.get().await?, &all_migrations()).await?;
-
-        Ok(Box::new(NetCdfCfDataProvider {
-            name: self.name,
-            description: self.description,
-            data: self.data,
-            overviews: self.overviews,
-            metadata_db,
-            cache_ttl: self.cache_ttl,
-        }))
+        Self::_initialize(self)
+            .await
+            .map(|p| Box::new(p) as Box<dyn DataProvider>)
     }
 
     fn type_name(&self) -> &'static str {
@@ -140,6 +119,34 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for NetCdfCfDataProviderDefinitio
 
     fn priority(&self) -> i16 {
         self.priority.unwrap_or(0)
+    }
+}
+
+impl NetCdfCfDataProviderDefinition {
+    async fn _initialize(self: Box<Self>) -> crate::error::Result<NetCdfCfDataProvider> {
+        let mut pg_pool_builder = Pool::builder();
+        if self.metadata_db_config.schema == "pg_temp" {
+            // having more than one connection with `pg_temp` leads to different temp schemata being used
+            pg_pool_builder = pg_pool_builder.max_size(1);
+        }
+
+        let metadata_db = pg_pool_builder
+            .build(PostgresConnectionManager::new(
+                self.metadata_db_config.pg_config(),
+                NoTls,
+            ))
+            .await?;
+
+        migrate_database(&mut metadata_db.get().await?, &all_migrations()).await?;
+
+        Ok(NetCdfCfDataProvider {
+            name: self.name,
+            description: self.description,
+            data: self.data,
+            overviews: self.overviews,
+            metadata_db,
+            cache_ttl: self.cache_ttl,
+        })
     }
 }
 
@@ -308,7 +315,6 @@ pub(crate) struct NetCdfCf4DDatasetId {
 impl NetCdfCfDataProvider {
     pub fn build_netcdf_tree(
         provider_path: &Path,
-        overview_path: Option<&Path>,
         dataset_path: &Path,
         stats_for_group: &HashMap<String, (f64, f64)>,
     ) -> Result<NetCdfOverview> {
@@ -407,9 +413,9 @@ impl NetCdfCfDataProvider {
     }
 
     #[allow(clippy::too_many_lines)] // TODO: refactor method
-    fn meta_data(
+    async fn meta_data(
+        db_transaction: &Transaction<'_>,
         path: &Path,
-        overviews: &Path,
         id: &DataId,
         cache_ttl: CacheTtlSeconds,
     ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
@@ -428,7 +434,14 @@ impl NetCdfCfDataProvider {
             serde_json::from_str(&dataset.layer_id.0).context(error::CannotParseDatasetId)?;
 
         // try to load from overviews
-        if let Some(mut loading_info) = Self::meta_data_from_overviews(overviews, &dataset_id) {
+        if let Some(mut loading_info) = meta_data_from_overviews(
+            db_transaction,
+            &dataset_id.file_name,
+            dataset_id.group_names,
+            dataset_id.entity,
+        )
+        .await?
+        {
             for params in &mut loading_info.params {
                 params.cache_ttl = cache_ttl;
             }
@@ -564,29 +577,6 @@ impl NetCdfCfDataProvider {
         )))
     }
 
-    fn meta_data_from_overviews(
-        overview_path: &Path,
-        dataset_id: &NetCdfCf4DDatasetId,
-    ) -> Option<GdalMetaDataList> {
-        let loading_info_path = overview_path
-            .join(&dataset_id.file_name)
-            .join(dataset_id.group_names.join("/"))
-            .join(dataset_id.entity.to_string())
-            .join(LOADING_INFO_FILE_NAME);
-
-        let Ok(loading_info_file) = std::fs::File::open(loading_info_path) else {
-            debug!("No overview for {dataset_id:?}");
-            return None;
-        };
-
-        debug!("Using overview for {dataset_id:?}. Overview path is {overview_path:?}.");
-
-        let loading_info: GdalMetaDataList =
-            serde_json::from_reader(BufReader::new(loading_info_file)).ok()?;
-
-        Some(loading_info)
-    }
-
     pub fn list_files(&self) -> Result<Vec<PathBuf>> {
         let is_overview_dir = |e: &DirEntry| -> bool { e.path() == self.overviews };
 
@@ -632,16 +622,7 @@ impl NetCdfCfDataProvider {
             .await
             .boxed_context(error::DatabaseConnection)?;
 
-        let transaction = db_connection
-            .transaction()
-            .await
-            .boxed_context(error::DatabaseTransaction)?;
-
-        // check constraints at the end to speed up insertions
-        transaction
-            .batch_execute("SET CONSTRAINTS ALL DEFERRED")
-            .await
-            .boxed_context(error::UnexpectedExecution)?;
+        let transaction = deferred_write_transaction(&mut db_connection).await?;
 
         let result = create_overviews(
             &self.data,
@@ -651,16 +632,14 @@ impl NetCdfCfDataProvider {
             task_context,
             &transaction,
         )
-        .await;
+        .await?;
 
-        if result.is_ok() {
-            transaction
-                .commit()
-                .await
-                .boxed_context(error::DatabaseTransactionCommit)?;
-        }
+        transaction
+            .commit()
+            .await
+            .boxed_context(error::DatabaseTransactionCommit)?;
 
-        result
+        Ok(result)
     }
 
     pub async fn remove_overviews(&self, dataset_path: &Path, force: bool) -> Result<()> {
@@ -670,12 +649,16 @@ impl NetCdfCfDataProvider {
             .await
             .boxed_context(error::DatabaseConnection)?;
 
-        let transaction = db_connection
-            .transaction()
-            .await
-            .boxed_context(error::DatabaseTransaction)?;
+        let transaction = deferred_write_transaction(&mut db_connection).await?;
 
-        remove_overviews(dataset_path, &self.overviews, &transaction, force).await
+        remove_overviews(dataset_path, &self.overviews, &transaction, force).await?;
+
+        transaction
+            .commit()
+            .await
+            .boxed_context(error::DatabaseTransactionCommit)?;
+
+        Ok(())
     }
 
     fn is_netcdf_file(&self, path: &Path) -> bool {
@@ -1017,7 +1000,7 @@ async fn listing_from_dir(
                 .to_owned();
             let b = base.to_owned();
             let tree = tokio::task::spawn_blocking(move || {
-                NetCdfCfDataProvider::build_netcdf_tree(&b, None, &fp, &Default::default())
+                NetCdfCfDataProvider::build_netcdf_tree(&b, &fp, &Default::default())
                     .map_err(|_| Error::InvalidLayerCollectionId)
             })
             .await??;
@@ -1143,7 +1126,6 @@ async fn listing_from_netcdf_file(
     relative_file_path: PathBuf,
     groups: &[String],
     provider_path: PathBuf,
-    overview_path: PathBuf,
     options: &LayerCollectionListOptions,
 ) -> crate::error::Result<LayerCollection> {
     let query_file_name = relative_file_path.to_string_lossy();
@@ -1309,7 +1291,6 @@ async fn listing_from_netcdf_file(
         let tree = tokio::task::spawn_blocking(move || {
             NetCdfCfDataProvider::build_netcdf_tree(
                 &provider_path,
-                Some(&overview_path),
                 &relative_file_path,
                 &Default::default(),
             )
@@ -1396,31 +1377,15 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
             path: PathBuf,
             groups: &[String],
             data: PathBuf,
-            overviews: PathBuf,
         ) -> crate::error::Result<LayerCollection> {
             let mut db_connection = metadata_db
                 .get()
                 .await
                 .boxed_context(error::DatabaseConnection)?;
 
-            let transaction = db_connection
-                .build_transaction()
-                .read_only(true)
-                .deferrable(true) // get snapshot isolation
-                .start()
-                .await
-                .boxed_context(error::DatabaseTransaction)?;
+            let transaction = readonly_transaction(&mut db_connection).await?;
 
-            listing_from_netcdf_file(
-                &transaction,
-                collection,
-                path,
-                groups,
-                data,
-                overviews,
-                &options,
-            )
-            .await
+            listing_from_netcdf_file(&transaction, collection, path, groups, data, &options).await
         }
 
         let id = NetCdfLayerCollectionId::from_str(&collection.0)?;
@@ -1450,7 +1415,6 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     path,
                     &[],
                     self.data.clone(),
-                    self.overviews.clone(),
                 )
                 .await?
             }
@@ -1465,7 +1429,6 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     path,
                     &groups,
                     self.data.clone(),
-                    self.overviews.clone(),
                 )
                 .await?
             }
@@ -1493,7 +1456,6 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
         let dataset_path = path.clone();
 
         let provider_path = self.data.clone();
-        let overviews_path = self.overviews.clone();
 
         let mut db_connection = self
             .metadata_db
@@ -1620,7 +1582,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                 id,
                 &NetCdfCf4DDatasetId {
                     file_name: overview_metadata.file_name,
-                    group_names: groups.to_owned(),
+                    group_names: groups.clone(),
                     entity,
                 },
                 netcdf_entity,
@@ -1637,7 +1599,6 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
             let tree = tokio::task::spawn_blocking(move || {
                 NetCdfCfDataProvider::build_netcdf_tree(
                     &provider_path,
-                    Some(&overviews_path),
                     &dataset_path,
                     &Default::default(),
                 )
@@ -1661,18 +1622,40 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let dataset = id.clone();
-        let path = self.data.clone();
-        let overviews = self.overviews.clone();
-        let cache_ttl = self.cache_ttl;
-        crate::util::spawn_blocking(move || {
-            Self::meta_data(&path, &overviews, &dataset, cache_ttl).map_err(|error| {
-                geoengine_operators::error::Error::LoadingInfo {
-                    source: Box::new(error),
-                }
-            })
+        async fn meta_data_transaction(
+            provider: &NetCdfCfDataProvider,
+            id: &geoengine_datatypes::dataset::DataId,
+        ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
+        {
+            let mut db_connection = provider
+                .metadata_db
+                .get()
+                .await
+                .boxed_context(error::DatabaseConnection)?;
+
+            let transaction = readonly_transaction(&mut db_connection).await?;
+
+            let result = NetCdfCfDataProvider::meta_data(
+                &transaction,
+                &provider.data,
+                id,
+                provider.cache_ttl,
+            )
+            .await?;
+
+            transaction
+                .commit()
+                .await
+                .boxed_context(error::DatabaseTransactionCommit)?;
+
+            Ok(result)
+        }
+
+        meta_data_transaction(self, id).await.map_err(|error| {
+            geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(error),
+            }
         })
-        .await?
     }
 }
 
@@ -1749,6 +1732,43 @@ async fn test_db() -> Pool<PostgresConnectionManager<NoTls>> {
 async fn test_db_connection(
 ) -> bb8_postgres::bb8::PooledConnection<'static, PostgresConnectionManager<NoTls>> {
     test_db().await.get_owned().await.unwrap()
+}
+
+/// Creates a write transaction that defers constraints
+async fn deferred_write_transaction<'db, 't>(
+    db_connection: &'t mut bb8_postgres::bb8::PooledConnection<
+        'db,
+        PostgresConnectionManager<NoTls>,
+    >,
+) -> Result<tokio_postgres::Transaction<'t>> {
+    let transaction = db_connection
+        .transaction()
+        .await
+        .boxed_context(error::DatabaseTransaction)?;
+
+    // check constraints at the end to speed up insertions
+    transaction
+        .batch_execute("SET CONSTRAINTS ALL DEFERRED")
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    Ok(transaction)
+}
+
+/// Creates a read-only transaction that uses snapshot isolation
+async fn readonly_transaction<'db, 't>(
+    db_connection: &'t mut bb8_postgres::bb8::PooledConnection<
+        'db,
+        PostgresConnectionManager<NoTls>,
+    >,
+) -> Result<tokio_postgres::Transaction<'t>> {
+    db_connection
+        .build_transaction()
+        .read_only(true)
+        .deferrable(true) // get snapshot isolation
+        .start()
+        .await
+        .boxed_context(error::DatabaseTransaction)
 }
 
 #[cfg(test)]
@@ -2258,7 +2278,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
+        pretty_assertions::assert_eq!(
             metadata.result_descriptor().await.unwrap(),
             RasterResultDescriptor {
                 data_type: RasterDataType::I16,
@@ -2637,6 +2657,8 @@ mod tests {
 
     #[ge_context::test]
     async fn it_loads_with_and_without_overviews(app_ctx: PostgresContext<NoTls>) {
+        // crate::util::tests::initialize_debugging_in_test(); // TODO: remove
+
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();

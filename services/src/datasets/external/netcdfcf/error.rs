@@ -167,9 +167,16 @@ pub enum NetCdfCf4DProviderError {
     CannotOpenNetCdfSubdataset {
         source: Box<dyn ErrorSource>,
     },
+
     CannotGenerateLoadingInfo {
         source: Box<dyn ErrorSource>,
     },
+
+    #[snafu(display("Cannot store loading info in database: {source}"))]
+    CannotStoreLoadingInfo {
+        source: Box<dyn ErrorSource>,
+    },
+
     InvalidCollectionId {
         id: String,
     },
@@ -205,10 +212,12 @@ pub enum NetCdfCf4DProviderError {
         path: String,
     },
     CannotRemoveOverviewsWhileCreationIsInProgress,
+
+    #[snafu(display("NetCdfCf provider cannot remove overviews: {source}"))]
     CannotRemoveOverviews {
         source: Box<dyn ErrorSource>,
     },
-    #[snafu(display("NetCdfCf provider cannot create overviews"))]
+    #[snafu(display("NetCdfCf provider cannot create overviews for `{dataset}`: {source}", dataset = dataset.display()))]
     CannotCreateOverview {
         dataset: PathBuf,
         source: Box<dyn ErrorSource>,

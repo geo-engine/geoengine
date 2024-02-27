@@ -202,7 +202,6 @@ impl EbvPortalApi {
             crate::util::spawn_blocking(move || {
                 NetCdfCfDataProvider::build_netcdf_tree(
                     &provider_paths.provider_path,
-                    Some(&provider_paths.overview_path),
                     &dataset_path,
                     &Default::default(),
                 )

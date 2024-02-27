@@ -33,17 +33,15 @@ use log::debug;
 use snafu::ResultExt;
 use std::{
     collections::{HashMap, HashSet},
-    fs::{self, File},
-    io::{BufWriter, Write},
     path::{Path, PathBuf},
     str::FromStr,
+    sync::Arc,
 };
+use tokio::fs;
 use tokio_postgres::Transaction;
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
-pub const METADATA_FILE_NAME: &str = "metadata.json";
-pub const LOADING_INFO_FILE_NAME: &str = "loading_info.json";
 const OVERVIEW_GENERATION_OF_TOTAL_PCT: f64 = 0.9; // just say the last 10% are metadata
 
 #[derive(Debug, Clone)]
@@ -65,6 +63,9 @@ struct ConversionMetadata {
     pub dataset_out_base: PathBuf,
     pub array_path: String,
     pub number_of_entities: usize,
+    // for database only
+    pub file_path: PathBuf,
+    pub data_path: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -106,6 +107,7 @@ impl NetCdfGroup {
 
     fn conversion_metadata(
         &self,
+        dataset_path: &Path,
         file_path: &Path,
         out_root_path: &Path,
     ) -> Vec<ConversionMetadata> {
@@ -123,6 +125,12 @@ impl NetCdfGroup {
                 dataset_out_base,
                 array_path,
                 number_of_entities: array.number_of_entities,
+                file_path: dataset_path.to_owned(),
+                data_path: {
+                    // remove `ebv_cube` suffix
+                    data_path.pop();
+                    data_path
+                },
             });
         }
 
@@ -220,24 +228,17 @@ pub async fn create_overviews<C: TaskContext + 'static>(
     let out_folder_path = path_with_base_path(overview_path, dataset_path)
         .boxed_context(error::DatasetIsNotInProviderPath)?;
 
-    if !out_folder_path.exists() {
-        let out_folder_path = out_folder_path.clone();
-        crate::util::spawn_blocking(move || {
-            fs::create_dir_all(out_folder_path).boxed_context(error::InvalidDirectory)
-        })
-        .await
-        .boxed_context(error::UnexpectedExecution)??;
+    if !exists(&out_folder_path).await? {
+        fs::create_dir_all(&out_folder_path)
+            .await
+            .boxed_context(error::InvalidDirectory)?;
     }
 
     // must have this flag before any write operations
-    let in_progress_flag = InProgressFlag::create(&out_folder_path)?;
+    let in_progress_flag = InProgressFlag::create(&out_folder_path).await?;
 
-    let (task_context, creation_status, stats_for_group): (
-        C,
-        OverviewGeneration,
-        HashMap<String, (f64, f64)>,
-    ) = {
-        let out_folder_path = out_folder_path.clone();
+    let (time_coverage, conversion_metadata) = {
+        let dataset_path = dataset_path.to_owned();
 
         crate::util::spawn_blocking(move || {
             let dataset = gdal_open_dataset_ex(
@@ -254,51 +255,49 @@ pub async fn create_overviews<C: TaskContext + 'static>(
 
             let root_group = dataset.root_group().context(error::GdalMd)?;
             let group_tree = root_group.group_tree()?;
-            let time_coverage = TimeCoverage::from_dimension(&root_group)?;
+            let time_coverage = Arc::new(TimeCoverage::from_dimension(&root_group)?);
+            let conversion_metadata =
+                group_tree.conversion_metadata(&dataset_path, &file_path, &out_folder_path);
 
-            let conversion_metadata = group_tree.conversion_metadata(&file_path, &out_folder_path);
-            let number_of_conversions = conversion_metadata.len();
-
-            let mut stats_for_group = HashMap::<String, (f64, f64)>::new();
-
-            for (i, conversion) in conversion_metadata.into_iter().enumerate() {
-                match index_subdataset(
-                    &conversion,
-                    &time_coverage,
-                    resampling_method,
-                    &task_context,
-                    &mut stats_for_group,
-                    i,
-                    number_of_conversions,
-                ) {
-                    Ok(OverviewGeneration::Created) => (),
-                    Ok(OverviewGeneration::Skipped) => {
-                        return Ok((task_context, OverviewGeneration::Skipped, stats_for_group))
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
-
-            Ok((task_context, OverviewGeneration::Created, stats_for_group))
+            Ok((time_coverage, conversion_metadata))
         })
-    }
-    .await
-    .boxed_context(error::UnexpectedExecution)??;
+        .await
+        .boxed_context(error::UnexpectedExecution)??
+    };
 
-    if let OverviewGeneration::Skipped = creation_status {
-        return Ok(OverviewGeneration::Skipped);
+    let number_of_conversions = conversion_metadata.len();
+    let mut stats_for_group = HashMap::<String, (f64, f64)>::new();
+
+    for (i, conversion) in conversion_metadata.into_iter().enumerate() {
+        match index_subdataset(
+            Arc::new(conversion),
+            time_coverage.clone(),
+            resampling_method,
+            &task_context,
+            &mut stats_for_group,
+            (i, number_of_conversions),
+            db_transaction,
+        )
+        .await
+        {
+            Ok(OverviewGeneration::Created) => (),
+            Ok(OverviewGeneration::Skipped) => {
+                return Ok(OverviewGeneration::Skipped);
+            }
+            Err(e) => return Err(e),
+        }
     }
 
     emit_status(
         &task_context,
         OVERVIEW_GENERATION_OF_TOTAL_PCT,
         "Collecting metadata".to_string(),
-    );
+    )
+    .await;
 
     match store_db_metadata(
         provider_path,
         dataset_path,
-        &out_folder_path,
         &stats_for_group,
         db_transaction,
     )
@@ -309,21 +308,16 @@ pub async fn create_overviews<C: TaskContext + 'static>(
         Err(e) => return Err(e),
     };
 
-    in_progress_flag.remove()?;
+    in_progress_flag.remove().await?;
 
     Ok(OverviewGeneration::Created)
 }
 
-fn emit_status<C: TaskContext>(task_context: &C, pct: f64, status: String) {
-    // TODO: more elegant way to do this?
-    tokio::task::block_in_place(move || {
-        tokio::runtime::Handle::current().block_on(async move {
-            task_context.set_completion(pct, status.boxed()).await;
-        });
-    });
+async fn emit_status<C: TaskContext>(task_context: &C, pct: f64, status: String) {
+    task_context.set_completion(pct, status.boxed()).await;
 }
 
-fn emit_subtask_status<C: TaskContext>(
+async fn emit_subtask_status<C: TaskContext>(
     conversion_index: usize,
     number_of_conversions: usize,
     entity: u32,
@@ -339,7 +333,7 @@ fn emit_subtask_status<C: TaskContext>(
         task_context,
         pct * OVERVIEW_GENERATION_OF_TOTAL_PCT,
         format!("Processing {} of {number_of_conversions} subdatasets; Entity {entity} of {number_of_other_entities}", conversion_index + 1),
-    );
+    ).await;
 }
 
 /// A flag that indicates on-going process of an overview folder.
@@ -352,30 +346,37 @@ pub struct InProgressFlag {
 impl InProgressFlag {
     const IN_PROGRESS_FLAG_NAME: &'static str = ".in_progress";
 
-    fn create(folder: &Path) -> Result<Self> {
-        if !folder.is_dir() {
-            return Err(NetCdfCf4DProviderError::InvalidDirectory {
-                source: Box::new(std::io::Error::new(
-                    std::io::ErrorKind::NotFound, // TODO: use `NotADirectory` if stable
-                    folder.to_string_lossy().to_string(),
-                )),
-            });
-        }
-        let this = Self {
-            path: folder.join(Self::IN_PROGRESS_FLAG_NAME),
-        };
+    async fn create(folder: &Path) -> Result<Self> {
+        let folder = folder.to_owned();
+        crate::util::spawn_blocking(move || {
+            if !folder.is_dir() {
+                return Err(NetCdfCf4DProviderError::InvalidDirectory {
+                    source: Box::new(std::io::Error::new(
+                        std::io::ErrorKind::NotFound, // TODO: use `NotADirectory` if stable
+                        folder.to_string_lossy().to_string(),
+                    )),
+                });
+            }
+            let this = Self {
+                path: folder.join(Self::IN_PROGRESS_FLAG_NAME),
+            };
 
-        std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&this.path)
-            .boxed_context(error::CannotCreateInProgressFlag)?;
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&this.path)
+                .boxed_context(error::CannotCreateInProgressFlag)?;
 
-        Ok(this)
+            Ok(this)
+        })
+        .await
+        .boxed_context(error::UnexpectedExecution)?
     }
 
-    fn remove(self) -> Result<()> {
-        fs::remove_file(self.path.as_path()).boxed_context(error::CannotRemoveInProgressFlag)?;
+    async fn remove(self) -> Result<()> {
+        fs::remove_file(self.path.as_path())
+            .await
+            .boxed_context(error::CannotRemoveInProgressFlag)?;
         Ok(())
     }
 
@@ -401,7 +402,8 @@ impl Drop for InProgressFlag {
             return;
         }
 
-        if let Err(e) = fs::remove_file(&self.path).boxed_context(error::CannotRemoveInProgressFlag)
+        if let Err(e) =
+            std::fs::remove_file(&self.path).boxed_context(error::CannotRemoveInProgressFlag)
         {
             log::error!("Cannot remove in progress flag: {}", e);
         }
@@ -412,16 +414,11 @@ impl Drop for InProgressFlag {
 async fn store_db_metadata(
     provider_path: &Path,
     dataset_path: &Path,
-    out_folder_path: &Path,
     stats_for_group: &HashMap<String, (f64, f64)>,
     db_transaction: &Transaction<'_>,
 ) -> Result<OverviewGeneration> {
-    let metadata = NetCdfCfDataProvider::build_netcdf_tree(
-        provider_path,
-        None,
-        dataset_path,
-        stats_for_group,
-    )?;
+    let metadata =
+        NetCdfCfDataProvider::build_netcdf_tree(provider_path, dataset_path, stats_for_group)?;
 
     // TODO: think about pipelining the requests
     // https://docs.rs/tokio-postgres/latest/tokio_postgres/#pipelining
@@ -589,16 +586,17 @@ async fn store_db_metadata(
     Ok(OverviewGeneration::Created)
 }
 
-fn index_subdataset<C: TaskContext>(
-    conversion: &ConversionMetadata,
-    time_coverage: &TimeCoverage,
+#[allow(clippy::too_many_lines)] // TODO: refactor
+async fn index_subdataset<C: TaskContext>(
+    conversion: Arc<ConversionMetadata>,
+    time_coverage: Arc<TimeCoverage>,
     resampling_method: Option<ResamplingMethod>,
     task_context: &C,
     stats_for_group: &mut HashMap<String, (f64, f64)>,
-    conversion_index: usize,
-    number_of_conversions: usize,
+    (conversion_index, number_of_conversions): (usize, usize),
+    db_transaction: &Transaction<'_>,
 ) -> Result<OverviewGeneration> {
-    if conversion.dataset_out_base.exists() {
+    if exists(&conversion.dataset_out_base).await? {
         debug!(
             "Skipping conversion: {}",
             conversion.dataset_out_base.display()
@@ -611,7 +609,7 @@ fn index_subdataset<C: TaskContext>(
         conversion.dataset_out_base.display()
     );
 
-    let subdataset = gdal_open_dataset_ex(
+    let mut subdataset = gdal_open_dataset_ex(
         Path::new(&conversion.dataset_in),
         DatasetOptions {
             open_flags: GdalOpenFlags::GDAL_OF_READONLY | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
@@ -622,15 +620,12 @@ fn index_subdataset<C: TaskContext>(
     )
     .boxed_context(error::CannotOpenNetCdfSubdataset)?;
 
-    let raster_creation_options = CogRasterCreationOptions::new(resampling_method)?;
-    let raster_creation_options = raster_creation_options.options();
+    let raster_creation_options = Arc::new(CogRasterCreationOptions::new(resampling_method)?);
 
     debug!(
         "Overview creation GDAL options: {:?}",
         &raster_creation_options
     );
-
-    let time_steps = time_coverage.time_steps();
 
     let (mut value_min, mut value_max) = (f64::INFINITY, -f64::INFINITY);
 
@@ -641,43 +636,78 @@ fn index_subdataset<C: TaskContext>(
             entity as u32,
             conversion.number_of_entities as u32,
             task_context,
-        );
+        )
+        .await;
 
         let entity_directory = conversion.dataset_out_base.join(entity.to_string());
 
-        fs::create_dir_all(entity_directory).boxed_context(error::CannotCreateOverviews)?;
+        fs::create_dir_all(entity_directory)
+            .await
+            .boxed_context(error::CannotCreateOverviews)?;
 
-        let mut first_overview_dataset = None;
+        let (first_overview_dataset, subdataset_sref_string) = {
+            let raster_creation_options = raster_creation_options.clone();
+            let conversion = conversion.clone();
+            let time_coverage = time_coverage.clone();
 
-        let mut subdataset_sref_string = None;
+            let (
+                returned_subdataset,
+                first_overview_dataset,
+                subdataset_sref_string,
+                value_min_candidate,
+                value_max_candidate,
+            ) = crate::util::spawn_blocking(move || {
+                let (mut value_min, mut value_max) = (f64::INFINITY, -f64::INFINITY);
+                let mut first_overview_dataset = None;
 
-        for (time_idx, time_step) in time_steps.iter().enumerate() {
-            let CreateSubdatasetTiffResult {
-                overview_dataset,
-                overview_destination,
-                min_max,
-                sref_string,
-            } = create_subdataset_tiff(
-                *time_step,
-                conversion,
-                entity,
-                &raster_creation_options,
-                &subdataset,
-                time_idx,
-            )?;
+                let mut subdataset_sref_string = None;
 
-            if let Some((min, max)) = min_max {
-                value_min = value_min.min(min);
-                value_max = value_max.max(max);
-            }
-            if time_idx == 0 {
-                first_overview_dataset = Some((overview_dataset, overview_destination));
-            }
+                for (time_idx, time_step) in time_coverage.time_steps().iter().enumerate() {
+                    let CreateSubdatasetTiffResult {
+                        overview_dataset,
+                        overview_destination,
+                        min_max,
+                        sref_string,
+                    } = create_subdataset_tiff(
+                        *time_step,
+                        &conversion,
+                        entity,
+                        &raster_creation_options.options(),
+                        &subdataset,
+                        time_idx,
+                    )?;
 
-            if let Some(sref) = sref_string {
-                subdataset_sref_string = Some(sref);
-            }
-        }
+                    if let Some((min, max)) = min_max {
+                        value_min = value_min.min(min);
+                        value_max = value_max.max(max);
+                    }
+                    if time_idx == 0 {
+                        first_overview_dataset = Some((overview_dataset, overview_destination));
+                    }
+
+                    if let Some(sref) = sref_string {
+                        subdataset_sref_string = Some(sref);
+                    }
+                }
+
+                Ok((
+                    subdataset,
+                    first_overview_dataset,
+                    subdataset_sref_string,
+                    value_min,
+                    value_max,
+                ))
+            })
+            .await
+            .boxed_context(error::UnexpectedExecution)??;
+
+            subdataset = returned_subdataset;
+
+            value_min = value_min.min(value_min_candidate);
+            value_max = value_max.max(value_max_candidate);
+
+            (first_overview_dataset, subdataset_sref_string)
+        };
 
         let Some((overview_dataset, overview_destination)) = first_overview_dataset else {
             return Err(NetCdfCf4DProviderError::NoOverviewsGeneratedForSource {
@@ -685,26 +715,44 @@ fn index_subdataset<C: TaskContext>(
             });
         };
 
-        let loading_info = generate_loading_info(
-            &overview_dataset,
-            &overview_destination,
-            time_coverage,
-            subdataset_sref_string.clone(),
-        )?;
+        let loading_info = {
+            let time_coverage = time_coverage.clone();
 
-        let loading_info_file =
-            File::create(overview_destination.with_file_name(LOADING_INFO_FILE_NAME))
-                .boxed_context(error::CannotWriteMetadataFile)?;
+            crate::util::spawn_blocking(move || {
+                generate_loading_info(
+                    &overview_dataset,
+                    &overview_destination,
+                    &time_coverage,
+                    subdataset_sref_string.clone(),
+                )
+            })
+            .await
+            .boxed_context(error::UnexpectedExecution)??
+        };
 
-        let mut writer = BufWriter::new(loading_info_file);
-
-        writer
-            .write_all(
-                serde_json::to_string(&loading_info)
-                    .boxed_context(error::CannotWriteMetadataFile)?
-                    .as_bytes(),
+        db_transaction
+            .execute(
+                r#"
+                INSERT INTO loading_infos (
+                    file_name,
+                    group_names,
+                    entity_id,
+                    meta_data
+                ) VALUES (
+                    $1,
+                    $2 :: TEXT[],
+                    $3,
+                    $4 :: "GdalMetaDataList"
+                );"#,
+                &[
+                    &conversion.file_path.to_string_lossy(),
+                    &conversion.data_path,
+                    &(entity as i64),
+                    &loading_info,
+                ],
             )
-            .boxed_context(error::CannotWriteMetadataFile)?;
+            .await
+            .boxed_context(error::CannotStoreLoadingInfo)?;
 
         // remove array from path and insert to `stats_for_group`
         if let Some((array_path_stripped, _)) = conversion.array_path.rsplit_once('/') {
@@ -809,6 +857,7 @@ fn create_subdataset_tiff(
     })
 }
 
+#[derive(Debug, Clone)]
 struct CogRasterCreationOptions {
     compression_format: String,
     compression_level: String,
@@ -934,10 +983,7 @@ pub async fn remove_overviews(
     let out_folder_path = path_with_base_path(overview_path, dataset_path)
         .boxed_context(error::DatasetIsNotInProviderPath)?;
 
-    let out_folder_exists = tokio::fs::try_exists(&out_folder_path)
-        .await
-        .boxed_context(error::UnexpectedExecution)?;
-    if !out_folder_exists {
+    if !exists(&out_folder_path).await? {
         return Ok(());
     }
 
@@ -961,10 +1007,48 @@ pub async fn remove_overviews(
     Ok(())
 }
 
+pub async fn meta_data_from_overviews(
+    db_transaction: &Transaction<'_>,
+    dataset_path: &str,
+    groups: Vec<String>,
+    entity: usize,
+) -> Result<Option<GdalMetaDataList>> {
+    let row = db_transaction
+        .query_opt(
+            r#"
+            SELECT meta_data :: "GdalMetaDataList"
+            FROM loading_infos
+            WHERE
+                file_name = $1 AND
+                group_names = $2 :: TEXT[] AND
+                entity_id = $3
+            "#,
+            &[&dataset_path, &groups, &(entity as i64)],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    if let Some(row) = row {
+        let meta_data: GdalMetaDataList = row.get(0);
+        Ok(Some(meta_data))
+    } else {
+        Ok(None)
+    }
+}
+
+async fn exists(path: &Path) -> Result<bool, NetCdfCf4DProviderError> {
+    tokio::fs::try_exists(path)
+        .await
+        .boxed_context(error::UnexpectedExecution)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{datasets::external::netcdfcf::test_db_connection, tasks::util::NopTaskContext};
+    use crate::{
+        datasets::external::netcdfcf::{deferred_write_transaction, test_db_connection},
+        tasks::util::NopTaskContext,
+    };
     use geoengine_datatypes::{
         primitives::{DateTime, SpatialResolution, TimeInterval},
         raster::RasterDataType,
@@ -1096,26 +1180,32 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let tempdir_path = tempdir.path().join("metric_1");
 
+        let mut db = test_db_connection().await;
+        let transaction = deferred_write_transaction(&mut db).await.unwrap();
+
         index_subdataset(
-            &ConversionMetadata {
+            Arc::new(ConversionMetadata {
                 dataset_in,
                 dataset_out_base: tempdir_path.clone(),
                 array_path: "/metric_1/ebv_cube".to_string(),
                 number_of_entities: 3,
-            },
-            &TimeCoverage {
+                file_path: PathBuf::from("dataset_m.nc"),
+                data_path: vec!["metric_1".to_string()],
+            }),
+            Arc::new(TimeCoverage {
                 time_stamps: vec![
                     DateTime::new_utc(2000, 1, 1, 0, 0, 0).into(),
                     DateTime::new_utc(2001, 1, 1, 0, 0, 0).into(),
                     DateTime::new_utc(2002, 1, 1, 0, 0, 0).into(),
                 ],
-            },
+            }),
             None,
             &NopTaskContext,
             &mut Default::default(),
-            0,
-            1,
+            (0, 1),
+            &transaction,
         )
+        .await
         .unwrap();
 
         for entity in 0..3 {
@@ -1123,15 +1213,19 @@ mod tests {
                 let path = tempdir_path.join(format!("{entity}/{year}-01-01T00:00:00.000Z.tiff"));
                 assert!(path.exists(), "Path {} does not exist", path.display());
             }
-
-            let path = tempdir_path.join(format!("{entity}/loading_info.json"));
-            assert!(path.exists(), "Path {} does not exist", path.display());
         }
 
-        let sample_loading_info =
-            std::fs::read_to_string(tempdir_path.join("1/loading_info.json")).unwrap();
-        assert_eq!(
-            serde_json::from_str::<GdalMetaDataList>(&sample_loading_info).unwrap(),
+        let sample_loading_info: GdalMetaDataList = meta_data_from_overviews(
+            &transaction,
+            "dataset_m.nc",
+            vec!["metric_1".to_string()],
+            1,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        pretty_assertions::assert_eq!(
+            sample_loading_info,
             GdalMetaDataList {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
@@ -1232,7 +1326,7 @@ mod tests {
         let overview_folder = tempfile::tempdir().unwrap();
 
         let mut db = test_db_connection().await;
-        let transaction = db.transaction().await.unwrap();
+        let transaction = deferred_write_transaction(&mut db).await.unwrap();
 
         create_overviews(
             test_data!("netcdf4d"),
@@ -1260,10 +1354,6 @@ mod tests {
                 assert!(dataset_folder
                     .join(format!("{metric}/{entity}/2002-01-01T00:00:00.000Z.tiff"))
                     .exists());
-
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/loading_info.json"))
-                    .exists());
             }
         }
     }
@@ -1271,12 +1361,14 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn test_create_overviews_irregular() {
+        // crate::util::tests::initialize_debugging_in_test(); // TODO: remove
+
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
 
         let mut db = test_db_connection().await;
-        let transaction = db.transaction().await.unwrap();
+        let transaction = deferred_write_transaction(&mut db).await.unwrap();
 
         create_overviews(
             test_data!("netcdf4d"),
@@ -1304,17 +1396,20 @@ mod tests {
                 assert!(dataset_folder
                     .join(format!("{metric}/{entity}/2055-01-01T00:00:00.000Z.tiff"))
                     .exists());
-
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/loading_info.json"))
-                    .exists());
             }
         }
 
-        let sample_loading_info =
-            std::fs::read_to_string(dataset_folder.join("metric_2/0/loading_info.json")).unwrap();
-        assert_eq!(
-            serde_json::from_str::<GdalMetaDataList>(&sample_loading_info).unwrap(),
+        let sample_loading_info: GdalMetaDataList = meta_data_from_overviews(
+            &transaction,
+            "dataset_irr_ts.nc",
+            vec!["metric_2".to_string()],
+            0,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        pretty_assertions::assert_eq!(
+            sample_loading_info,
             GdalMetaDataList {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
@@ -1424,7 +1519,7 @@ mod tests {
         let dataset_path = Path::new("dataset_m.nc");
 
         let mut db = test_db_connection().await;
-        let transaction = db.transaction().await.unwrap();
+        let transaction = deferred_write_transaction(&mut db).await.unwrap();
 
         create_overviews(
             test_data!("netcdf4d"),
