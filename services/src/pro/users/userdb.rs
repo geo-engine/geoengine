@@ -155,6 +155,9 @@ pub trait RoleDb {
     /// Add a new role
     async fn add_role(&self, role_name: &str) -> Result<RoleId>;
 
+    /// Load a role by name
+    async fn load_role_by_name(&self, role_name: &str) -> Result<RoleId>;
+
     /// Remove an existing role
     async fn remove_role(&self, role_id: &RoleId) -> Result<()>;
 

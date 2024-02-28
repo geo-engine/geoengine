@@ -50,6 +50,10 @@ where
         .service(web::resource("/oidcInit").route(web::post().to(oidc_init::<C>)))
         .service(web::resource("/oidcLogin").route(web::post().to(oidc_login::<C>)))
         .service(web::resource("/roles").route(web::put().to(add_role_handler::<C>)))
+        .service(
+            web::resource("/roles/byName/{name}")
+                .route(web::get().to(get_role_by_name_handler::<C>)),
+        )
         .service(web::resource("/roles/{role}").route(web::delete().to(remove_role_handler::<C>)))
         .service(
             web::resource("/users/{user}/roles/{role}")
@@ -551,6 +555,40 @@ where
         .await?;
 
     Ok(web::Json(IdResponse::from(id)))
+}
+
+/// Get role by name
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/roles/byName/{name}",
+    responses(
+        (status = 200, response = IdResponse<RoleId>)
+    ),
+    params(
+        ("name" = String, description = "Role Name")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn get_role_by_name_handler<C: ProApplicationContext>(
+    app_ctx: web::Data<C>,
+    session: C::Session,
+    role_name: web::Path<String>,
+) -> Result<web::Json<IdResponse<RoleId>>>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let role_name = role_name.into_inner();
+
+    let role_id = app_ctx
+        .session_context(session)
+        .db()
+        .load_role_by_name(&role_name)
+        .await?;
+
+    Ok(web::Json(IdResponse::from(role_id)))
 }
 
 /// Remove a role. Requires admin privilige.

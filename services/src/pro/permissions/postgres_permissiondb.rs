@@ -236,6 +236,11 @@ where
             error::PermissionDenied
         );
 
+        ensure!(
+            role != RoleId::from(self.session.user.id),
+            error::CannotRevokeOwnPermission,
+        );
+
         let stmt = tx
             .prepare(&format!(
                 "

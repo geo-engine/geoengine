@@ -662,6 +662,18 @@ where
         Ok(id)
     }
 
+    async fn load_role_by_name(&self, role_name: &str) -> Result<RoleId> {
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare("SELECT id FROM roles WHERE name = $1;")
+            .await?;
+
+        let row = conn.query_one(&stmt, &[&role_name]).await?;
+
+        Ok(RoleId(row.get(0)))
+    }
+
     async fn remove_role(&self, role_id: &RoleId) -> Result<()> {
         ensure!(self.session.is_admin(), error::PermissionDenied);
 
