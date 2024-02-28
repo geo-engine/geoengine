@@ -1,5 +1,6 @@
 use super::listing::{OrderBy, Provenance};
 use super::{AddDataset, DatasetIdAndName, DatasetName};
+use crate::api::model::services::UpdateDataset;
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
@@ -547,6 +548,23 @@ where
         .await?;
 
         Ok(DatasetIdAndName { id, name })
+    }
+
+    async fn update_dataset(&self, dataset: DatasetId, update: UpdateDataset) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+
+        conn.execute(
+            "UPDATE datasets SET name = $2, display_name = $3, description = $4 WHERE id = $1;",
+            &[
+                &dataset,
+                &update.name,
+                &update.display_name,
+                &update.description,
+            ],
+        )
+        .await?;
+
+        Ok(())
     }
 
     async fn update_dataset_symbology(

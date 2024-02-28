@@ -34,6 +34,7 @@ use crate::api::model::responses::{
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
+    UpdateDataset,
 };
 use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
 use crate::contexts::{SessionId, SimpleSession};
@@ -109,6 +110,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
         handlers::datasets::get_dataset_handler,
+        handlers::datasets::update_dataset_handler,
         handlers::datasets::create_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
@@ -276,6 +278,7 @@ use utoipa::{Modify, OpenApi};
             UploadFilesResponse,
             UploadFileLayersResponse,
             CreateDataset,
+            UpdateDataset,
             AutoCreateDataset,
             OrderBy,
             DatasetListing,
