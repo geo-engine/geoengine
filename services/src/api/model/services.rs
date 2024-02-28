@@ -128,3 +128,10 @@ pub enum DataPath {
     Volume(VolumeName),
     Upload(UploadId),
 }
+
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+pub struct UpdateDataset {
+    pub name: DatasetName,
+    pub display_name: String,
+    pub description: String,
+}
