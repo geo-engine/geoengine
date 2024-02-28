@@ -1,4 +1,4 @@
-use super::{error, NetCdfCf4DProviderError, TimeCoverage};
+use super::{error, metadata::DataRange, NetCdfCf4DProviderError, TimeCoverage};
 use crate::{
     datasets::external::netcdfcf::{
         loading::{create_loading_info, ParamModification},
@@ -266,7 +266,7 @@ pub async fn create_overviews<C: TaskContext + 'static>(
     };
 
     let number_of_conversions = conversion_metadata.len();
-    let mut stats_for_group = HashMap::<String, (f64, f64)>::new();
+    let mut stats_for_group = HashMap::<String, DataRange>::new();
 
     for (i, conversion) in conversion_metadata.into_iter().enumerate() {
         match index_subdataset(
@@ -414,7 +414,7 @@ impl Drop for InProgressFlag {
 async fn store_db_metadata(
     provider_path: &Path,
     dataset_path: &Path,
-    stats_for_group: &HashMap<String, (f64, f64)>,
+    stats_for_group: &HashMap<String, DataRange>,
     db_transaction: &Transaction<'_>,
 ) -> Result<OverviewGeneration> {
     let metadata =
@@ -520,7 +520,7 @@ async fn store_db_metadata(
                     &group_path,
                     &group.title,
                     &group.description,
-                    &group.data_range.map(|(min, max)| [min, max]),
+                    &group.data_range,
                     &group.unit,
                     &group.data_type,
                 ],
@@ -592,7 +592,7 @@ async fn index_subdataset<C: TaskContext>(
     time_coverage: Arc<TimeCoverage>,
     resampling_method: Option<ResamplingMethod>,
     task_context: &C,
-    stats_for_group: &mut HashMap<String, (f64, f64)>,
+    stats_for_group: &mut HashMap<String, DataRange>,
     (conversion_index, number_of_conversions): (usize, usize),
     db_transaction: &Transaction<'_>,
 ) -> Result<OverviewGeneration> {
@@ -627,7 +627,7 @@ async fn index_subdataset<C: TaskContext>(
         &raster_creation_options
     );
 
-    let (mut value_min, mut value_max) = (f64::INFINITY, -f64::INFINITY);
+    let mut data_range = DataRange::uninitialized();
 
     for entity in 0..conversion.number_of_entities {
         emit_subtask_status(
@@ -654,10 +654,9 @@ async fn index_subdataset<C: TaskContext>(
                 returned_subdataset,
                 first_overview_dataset,
                 subdataset_sref_string,
-                value_min_candidate,
-                value_max_candidate,
+                data_range_candidate,
             ) = crate::util::spawn_blocking(move || {
-                let (mut value_min, mut value_max) = (f64::INFINITY, -f64::INFINITY);
+                let mut data_range = DataRange::uninitialized();
                 let mut first_overview_dataset = None;
 
                 let mut subdataset_sref_string = None;
@@ -678,8 +677,8 @@ async fn index_subdataset<C: TaskContext>(
                     )?;
 
                     if let Some((min, max)) = min_max {
-                        value_min = value_min.min(min);
-                        value_max = value_max.max(max);
+                        data_range.update_min(min);
+                        data_range.update_max(max);
                     }
                     if time_idx == 0 {
                         first_overview_dataset = Some((overview_dataset, overview_destination));
@@ -694,8 +693,7 @@ async fn index_subdataset<C: TaskContext>(
                     subdataset,
                     first_overview_dataset,
                     subdataset_sref_string,
-                    value_min,
-                    value_max,
+                    data_range,
                 ))
             })
             .await
@@ -703,8 +701,7 @@ async fn index_subdataset<C: TaskContext>(
 
             subdataset = returned_subdataset;
 
-            value_min = value_min.min(value_min_candidate);
-            value_max = value_max.max(value_max_candidate);
+            data_range.update(data_range_candidate);
 
             (first_overview_dataset, subdataset_sref_string)
         };
@@ -756,7 +753,7 @@ async fn index_subdataset<C: TaskContext>(
 
         // remove array from path and insert to `stats_for_group`
         if let Some((array_path_stripped, _)) = conversion.array_path.rsplit_once('/') {
-            stats_for_group.insert(array_path_stripped.to_string(), (value_min, value_max));
+            stats_for_group.insert(array_path_stripped.to_string(), data_range);
         }
     }
 

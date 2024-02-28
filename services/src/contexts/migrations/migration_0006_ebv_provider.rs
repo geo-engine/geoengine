@@ -26,61 +26,81 @@ impl Migration for Migration0006EbvProvider {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::contexts::migrations::all_migrations;
+    use crate::{contexts::migrate_database, util::config::get_config_element};
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
-    use geoengine_datatypes::test_data;
     use tokio_postgres::NoTls;
 
-    use crate::contexts::migrations::all_migrations;
-    use crate::{
-        contexts::{migrate_database, migrations::migration_0000_initial::Migration0000Initial},
-        util::config::get_config_element,
-    };
-
-    use super::*;
-
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_adds_the_field_and_sets_the_default_value() -> Result<()> {
-        todo!("implement test");
+    async fn it_adds_a_database_config() {
+        let postgres_config = get_config_element::<crate::util::config::Postgres>().unwrap();
+        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into().unwrap(), NoTls);
 
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let pool = Pool::builder().max_size(1).build(pg_mgr).await.unwrap();
 
-        let pool = Pool::builder().max_size(1).build(pg_mgr).await?;
-
-        let mut conn = pool.get().await?;
+        let mut conn = pool.get().await.unwrap();
 
         // initial schema
-        migrate_database(&mut conn, &[Box::new(Migration0000Initial)]).await?;
+        migrate_database(&mut conn, &all_migrations()[..6])
+            .await
+            .unwrap();
 
-        // insert test data on initial schema
-        let test_data_sql = std::fs::read_to_string(test_data!("migrations/test_data.sql"))?;
-        conn.batch_execute(&test_data_sql).await?;
+        conn.batch_execute(
+            r#"
+            INSERT INTO layer_providers (
+                id,
+                type_name,
+                name,
+                definition,
+                priority
+            ) VALUES (
+                '1c01dbb9-e3ab-f9a2-06f5-228ba4b6bf7a',
+                'EBV',
+                'EBV Description',
+                (
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL,
+                    (
+                        'EBV',
+                        'EBV Description',
+                        'test_path',
+                        'test_base_url',
+                        0,
+                        'test_overviews',
+                        0
+                    )::"EbvPortalDataProviderDefinition",
+                    NULL,
+                    NULL,
+                    NULL,
+                    NULL
+                )::"DataProviderDefinition",
+                0
+            );
+            "#,
+        )
+        .await
+        .unwrap();
 
-        // perform all migrations
-        migrate_database(&mut conn, &all_migrations()[1..]).await?;
+        // perform this migration
+        migrate_database(&mut conn, &[Box::new(Migration0006EbvProvider)])
+            .await
+            .unwrap();
 
-        // verify that the default value for columns has been set correctly
-        let autocomplete_timeout = conn
-            .query_one(
+        // verify that providers were removed
+        assert!(conn
+            .query(
                 "
-                    SELECT (definition).gbif_data_provider_definition.columns
+                    SELECT (definition).ebv_portal_data_provider_definition.metadata_db_config
                     FROM layer_providers
-                    WHERE NOT ((definition).gbif_data_provider_definition IS NULL)
+                    WHERE NOT ((definition).ebv_portal_data_provider_definition IS NULL)
                 ",
                 &[],
             )
-            .await?
-            .get::<usize, Vec<String>>(0);
-
-        assert_eq!(
-            autocomplete_timeout,
-            vec![
-                "gbifid".to_string(),
-                "basisofrecord".to_string(),
-                "scientificname".to_string()
-            ]
-        );
-
-        Ok(())
+            .await
+            .unwrap()
+            .is_empty());
     }
 }

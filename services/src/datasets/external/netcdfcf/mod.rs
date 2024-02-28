@@ -1,7 +1,9 @@
 pub use self::ebvportal_provider::{EbvPortalDataProvider, EBV_PROVIDER_ID};
 pub use self::error::NetCdfCf4DProviderError;
 use self::loading::{create_layer, create_layer_collection_from_parts};
-use self::metadata::{all_migrations, NetCdfGroupMetadata, NetCdfOverviewMetadata};
+use self::metadata::{
+    all_migrations, Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata,
+};
 use self::overviews::create_overviews;
 use self::overviews::remove_overviews;
 pub use self::overviews::OverviewGeneration;
@@ -12,11 +14,11 @@ use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error;
 use crate::layers::external::DataProvider;
 use crate::layers::external::DataProviderDefinition;
-use crate::layers::layer::Layer;
 use crate::layers::layer::LayerCollectionListOptions;
 use crate::layers::layer::LayerCollectionListing;
 use crate::layers::layer::ProviderLayerCollectionId;
 use crate::layers::layer::{CollectionItem, LayerCollection};
+use crate::layers::layer::{Layer, ProviderLayerId};
 use crate::layers::listing::LayerCollectionProvider;
 use crate::layers::listing::{LayerCollectionId, ProviderCapabilities, SearchCapabilities};
 use crate::tasks::TaskContext;
@@ -27,7 +29,7 @@ use bb8_postgres::PostgresConnectionManager;
 pub use ebvportal_provider::EbvPortalDataProviderDefinition;
 use gdal::raster::{Dimension, GdalDataType, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
+use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
@@ -174,9 +176,11 @@ impl From<NetCdfOverview> for NetCdfOverviewMetadata {
             summary: value.summary,
             spatial_reference: value.spatial_reference,
             colorizer: value.colorizer,
-            creator_name: value.creator_name,
-            creator_email: value.creator_email,
-            creator_institution: value.creator_institution,
+            creator: Creator::new(
+                value.creator_name,
+                value.creator_email,
+                value.creator_institution,
+            ),
         }
     }
 }
@@ -189,7 +193,7 @@ pub struct NetCdfGroup {
     pub description: String,
     // TODO: would actually be nice if it were inside dataset/entity
     pub data_type: Option<RasterDataType>,
-    pub data_range: Option<(f64, f64)>,
+    pub data_range: Option<DataRange>,
     // TODO: would actually be nice if it were inside dataset/entity
     pub unit: String,
     pub groups: Vec<NetCdfGroup>,
@@ -222,7 +226,7 @@ trait ToNetCdfSubgroup {
     fn to_net_cdf_subgroup(
         &self,
         group_path: &Path,
-        stats_for_group: &HashMap<String, (f64, f64)>,
+        stats_for_group: &HashMap<String, DataRange>,
     ) -> Result<NetCdfGroup>;
 }
 
@@ -230,7 +234,7 @@ impl<'a> ToNetCdfSubgroup for Group<'a> {
     fn to_net_cdf_subgroup(
         &self,
         group_path: &Path,
-        stats_for_group: &HashMap<String, (f64, f64)>,
+        stats_for_group: &HashMap<String, DataRange>,
     ) -> Result<NetCdfGroup> {
         let name = self.name();
         debug!(
@@ -312,11 +316,22 @@ pub(crate) struct NetCdfCf4DDatasetId {
     pub group_names: Vec<String>,
 }
 
+impl NetCdfCf4DDatasetId {
+    pub fn as_named_data(&self, provider_id: &DataProviderId) -> serde_json::Result<NamedData> {
+        Ok(
+            geoengine_datatypes::dataset::NamedData::with_system_provider(
+                provider_id.to_string(),
+                serde_json::to_string(&self)?,
+            ),
+        )
+    }
+}
+
 impl NetCdfCfDataProvider {
     pub fn build_netcdf_tree(
         provider_path: &Path,
         dataset_path: &Path,
-        stats_for_group: &HashMap<String, (f64, f64)>,
+        stats_for_group: &HashMap<String, DataRange>,
     ) -> Result<NetCdfOverview> {
         let path = provider_path.join(dataset_path);
 
@@ -1094,26 +1109,37 @@ pub fn layer_from_netcdf_overview(
     let (data_range, colorizer) = if let Some(data_range) = group.data_range {
         (
             data_range,
-            overview.colorizer.rescale(data_range.0, data_range.1)?,
+            overview
+                .colorizer
+                .rescale(data_range.min(), data_range.max())?,
         )
     } else {
         let colorizer = overview.colorizer;
-        ((colorizer.min_value(), colorizer.max_value()), colorizer)
+        (
+            DataRange::new(colorizer.min_value(), colorizer.max_value()),
+            colorizer,
+        )
     };
 
     Ok(create_layer(
-        provider_id,
-        layer_id,
-        &NetCdfCf4DDatasetId {
+        ProviderLayerId {
+            provider_id,
+            layer_id: layer_id.clone(),
+        },
+        NetCdfCf4DDatasetId {
             file_name: overview.file_name,
             group_names: groups.to_owned(),
             entity,
-        },
+        }
+        .as_named_data(&provider_id)
+        .context(error::CannotSerializeLayer)?,
         netcdf_entity,
         colorizer,
-        overview.creator_name,
-        overview.creator_email,
-        overview.creator_institution,
+        &Creator::new(
+            overview.creator_name,
+            overview.creator_email,
+            overview.creator_institution,
+        ),
         &time_steps,
         data_range,
     )?)
@@ -1156,9 +1182,11 @@ async fn listing_from_netcdf_file(
             summary: row.get("summary"),
             spatial_reference: row.get("spatial_reference"),
             colorizer: row.get("colorizer"),
-            creator_name: row.get("creator_name"),
-            creator_email: row.get("creator_email"),
-            creator_institution: row.get("creator_institution"),
+            creator: Creator::new(
+                row.get("creator_name"),
+                row.get("creator_email"),
+                row.get("creator_institution"),
+            ),
         };
 
         // dbg!(&overview_metadata);
@@ -1197,9 +1225,7 @@ async fn listing_from_netcdf_file(
                 title: row.get("title"),
                 description: row.get("description"),
                 data_type: row.get("data_type"),
-                data_range: row
-                    .get::<_, Option<[f64; 2]>>("data_range")
-                    .map(|[min, max]| (min, max)),
+                data_range: row.get::<_, Option<DataRange>>("data_range"),
                 unit: row.get("unit"),
             });
 
@@ -1237,9 +1263,7 @@ async fn listing_from_netcdf_file(
                 title: row.get("title"),
                 description: row.get("description"),
                 data_type: row.get("data_type"),
-                data_range: row
-                    .get::<_, Option<[f64; 2]>>("data_range")
-                    .map(|[min, max]| (min, max)),
+                data_range: row.get::<_, Option<DataRange>>("data_range"),
                 unit: row.get("unit"),
             })
             .collect();
@@ -1323,9 +1347,11 @@ async fn listing_from_netcdf_file(
             summary: tree.summary,
             spatial_reference: tree.spatial_reference,
             colorizer: tree.colorizer,
-            creator_name: tree.creator_name,
-            creator_email: tree.creator_email,
-            creator_institution: tree.creator_institution,
+            creator: Creator::new(
+                tree.creator_name,
+                tree.creator_email,
+                tree.creator_institution,
+            ),
         };
 
         Ok(create_layer_collection_from_parts(
@@ -1499,9 +1525,11 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                 summary: row.get("summary"),
                 spatial_reference: row.get("spatial_reference"),
                 colorizer: row.get("colorizer"),
-                creator_name: row.get("creator_name"),
-                creator_email: row.get("creator_email"),
-                creator_institution: row.get("creator_institution"),
+                creator: Creator::new(
+                    row.get("creator_name"),
+                    row.get("creator_email"),
+                    row.get("creator_institution"),
+                ),
             };
 
             let netcdf_entity = db_transaction
@@ -1529,7 +1557,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     },
                 );
 
-            let data_range: Option<(f64, f64)> = db_transaction
+            let data_range: Option<DataRange> = db_transaction
                 .query_opt(
                     "
                     SELECT
@@ -1542,10 +1570,7 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     &[&query_file_name, &groups],
                 )
                 .await?
-                .and_then(|row| {
-                    row.get::<_, Option<[f64; 2]>>("data_range")
-                        .map(|[min, max]| (min, max))
-                });
+                .and_then(|row| row.get::<_, Option<DataRange>>("data_range"));
 
             // TODO: de-duplicate
             let (data_range, colorizer) = if let Some(data_range) = data_range {
@@ -1553,11 +1578,14 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                     data_range,
                     overview_metadata
                         .colorizer
-                        .rescale(data_range.0, data_range.1)?,
+                        .rescale(data_range.min(), data_range.max())?,
                 )
             } else {
                 let colorizer = overview_metadata.colorizer;
-                ((colorizer.min_value(), colorizer.max_value()), colorizer)
+                (
+                    DataRange::new(colorizer.min_value(), colorizer.max_value()),
+                    colorizer,
+                )
             };
 
             let time_steps: Vec<TimeInstance> = db_transaction
@@ -1578,18 +1606,20 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
                 .collect();
 
             Ok(create_layer(
-                NETCDF_CF_PROVIDER_ID,
-                id,
-                &NetCdfCf4DDatasetId {
+                ProviderLayerId {
+                    provider_id: NETCDF_CF_PROVIDER_ID,
+                    layer_id: id.clone(),
+                },
+                NetCdfCf4DDatasetId {
                     file_name: overview_metadata.file_name,
                     group_names: groups.clone(),
                     entity,
-                },
+                }
+                .as_named_data(&NETCDF_CF_PROVIDER_ID)
+                .context(error::CannotSerializeLayer)?,
                 netcdf_entity,
                 colorizer,
-                overview_metadata.creator_name,
-                overview_metadata.creator_email,
-                overview_metadata.creator_institution,
+                &overview_metadata.creator,
                 &time_steps,
                 data_range,
             )?)

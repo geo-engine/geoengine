@@ -1,8 +1,7 @@
 use super::{
     error,
-    metadata::{NetCdfGroupMetadata, NetCdfOverviewMetadata},
-    netcdf_entity_to_layer_id, netcdf_group_to_layer_collection_id, NetCdfCf4DDatasetId,
-    NetCdfEntity, Result,
+    metadata::{Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata},
+    netcdf_entity_to_layer_id, netcdf_group_to_layer_collection_id, NetCdfEntity, Result,
 };
 use crate::{
     layers::{
@@ -16,7 +15,7 @@ use crate::{
     workflows::workflow::Workflow,
 };
 use geoengine_datatypes::{
-    dataset::{DataProviderId, LayerId},
+    dataset::{DataProviderId, NamedData},
     operations::image::{Colorizer, RasterColorizer},
     primitives::{CacheTtlSeconds, TimeInstance},
 };
@@ -44,14 +43,10 @@ pub fn create_layer_collection_from_parts(
     } else {
         (overview.title, overview.summary)
     };
-    let (creator_name, creator_email, creator_institution) = if group_path.is_empty() {
-        (
-            overview.creator_name,
-            overview.creator_email,
-            overview.creator_institution,
-        )
+    let creator = if group_path.is_empty() {
+        overview.creator
     } else {
-        (None, None, None)
+        Creator::empty()
     };
 
     let items = if subgroups.is_empty() {
@@ -104,64 +99,37 @@ pub fn create_layer_collection_from_parts(
         description,
         items,
         entry_label: None,
-        properties: create_properties_for_layer_collection(
-            creator_name,
-            creator_email,
-            creator_institution,
-        ),
+        properties: create_properties_for_layer_collection(&creator),
     }
 }
 
-fn create_properties_for_layer_collection(
-    creator_name: Option<String>,
-    creator_email: Option<String>,
-    creator_institution: Option<String>,
-) -> Vec<Property> {
-    let Some(creator_name) = creator_name else {
-        return Vec::new();
-    };
+fn create_properties_for_layer_collection(creator: &Creator) -> Vec<Property> {
+    let mut properties = Vec::new();
 
-    let property = Property::from((
-        "author".to_string(),
-        format!(
-            "{creator_name}, {}, {}",
-            creator_email.unwrap_or_else(|| "unknown".to_string()),
-            creator_institution.unwrap_or_else(|| "unknown".to_string())
-        ),
-    ));
+    if let Some(property) = creator.as_property() {
+        properties.push(property);
+    }
 
-    vec![property]
+    properties
 }
 
 pub fn create_layer(
-    provider_id: DataProviderId,
-    layer_id: &LayerId,
-    dataset_id: &NetCdfCf4DDatasetId,
+    provider_layer_id: ProviderLayerId,
+    data_id: NamedData,
     netcdf_entity: NetCdfEntity,
     colorizer: Colorizer,
-    creator_name: Option<String>,
-    creator_email: Option<String>,
-    creator_institution: Option<String>,
+    creator: &Creator,
     time_steps: &[TimeInstance],
-    data_range: (f64, f64),
+    data_range: DataRange,
 ) -> Result<Layer> {
     Ok(Layer {
-        id: ProviderLayerId {
-            provider_id,
-            layer_id: layer_id.clone(),
-        },
+        id: provider_layer_id,
         name: netcdf_entity.name.clone(),
         description: netcdf_entity.name,
         workflow: Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters {
-                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
-                            provider_id.to_string(),
-                            serde_json::to_string(dataset_id)
-                                .context(error::CannotSerializeLayer)?,
-                        ),
-                    },
+                    params: GdalSourceParameters { data: data_id },
                 }
                 .boxed(),
             ),
@@ -173,18 +141,7 @@ pub fn create_layer(
                 band_colorizer: colorizer,
             },
         })),
-        properties: [(
-            "author".to_string(),
-            format!(
-                "{}, {}, {}",
-                creator_name.unwrap_or_else(|| "unknown".to_string()),
-                creator_email.unwrap_or_else(|| "unknown".to_string()),
-                creator_institution.unwrap_or_else(|| "unknown".to_string())
-            ),
-        )
-            .into()]
-        .into_iter()
-        .collect(),
+        properties: [creator.as_property()].into_iter().flatten().collect(),
         metadata: [
             (
                 "timeSteps".to_string(),
@@ -192,7 +149,7 @@ pub fn create_layer(
             ),
             (
                 "dataRange".to_string(),
-                serde_json::to_string(&data_range).context(error::CannotSerializeLayer)?,
+                data_range.as_json().context(error::CannotSerializeLayer)?,
             ),
         ]
         .into_iter()
