@@ -128,10 +128,14 @@ where
         Permission::Read,
     )
     .await
+    .map_err(Into::into)
+    .context(crate::error::PermissionDb)
     .context(DatabaseAccess)?;
 
     db.add_permission(Role::anonymous_role_id(), dataset.id, Permission::Read)
         .await
+        .map_err(Into::into)
+        .context(crate::error::PermissionDb)
         .context(DatabaseAccess)?;
 
     Ok(web::Json(dataset.name.into()))

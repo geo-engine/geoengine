@@ -25,7 +25,7 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use postgres_types::{FromSql, ToSql};
-use snafu::ensure;
+use snafu::ResultExt;
 
 impl<Tls> DatasetDb for ProPostgresDb<Tls>
 where
@@ -653,11 +653,10 @@ where
 
         let tx = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(dataset, Permission::Owner, &tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(dataset.into(), Permission::Owner, &tx)
+            .await
+            .map_err(Into::into)
+            .context(crate::error::PermissionDb)?;
 
         tx.execute(
             "UPDATE datasets SET name = $2, display_name = $3, description = $4 WHERE id = $1;",
@@ -684,11 +683,10 @@ where
 
         let tx = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(dataset, Permission::Owner, &tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(dataset.into(), Permission::Owner, &tx)
+            .await
+            .map_err(Into::into)
+            .context(crate::error::PermissionDb)?;
 
         tx.execute(
             "UPDATE datasets SET symbology = $2 WHERE id = $1;",
@@ -705,11 +703,10 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(dataset_id, Permission::Owner, &tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(dataset_id.into(), Permission::Owner, &tx)
+            .await
+            .map_err(Into::into)
+            .context(crate::error::PermissionDb)?;
 
         let stmt = tx
             .prepare(

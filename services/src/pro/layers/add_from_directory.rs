@@ -10,6 +10,7 @@ use crate::{
     pro::permissions::{Permission, PermissionDb, Role},
 };
 use log::{debug, error, info, warn};
+use snafu::ResultExt;
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -46,9 +47,13 @@ pub async fn add_layers_from_directory<L: LayerDb + PermissionDb>(db: &mut L, fi
             def.id.clone(),
             Permission::Read,
         )
-        .await?;
+        .await
+        .map_err(Into::into)
+        .context(crate::error::PermissionDb)?;
         db.add_permission(Role::anonymous_role_id(), def.id.clone(), Permission::Read)
-            .await?;
+            .await
+            .map_err(Into::into)
+            .context(crate::error::PermissionDb)?;
 
         Ok(())
     }
@@ -118,9 +123,13 @@ pub async fn add_layer_collections_from_directory<
             def.id.clone(),
             Permission::Read,
         )
-        .await?;
+        .await
+        .map_err(Into::into)
+        .context(crate::error::PermissionDb)?;
         db.add_permission(Role::anonymous_role_id(), def.id.clone(), Permission::Read)
-            .await?;
+            .await
+            .map_err(Into::into)
+            .context(crate::error::PermissionDb)?;
 
         for layer in &def.layers {
             db.add_layer_to_collection(layer, &def.id).await?;

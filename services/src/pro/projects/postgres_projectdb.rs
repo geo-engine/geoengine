@@ -141,7 +141,7 @@ where
             .await
             .context(PostgresProjectDbError)?;
 
-        self.ensure_permission_in_tx(update.id, Permission::Owner, &trans)
+        self.ensure_permission_in_tx(update.id.into(), Permission::Owner, &trans)
             .await
             .boxed_context(AccessFailedProjectDbError { project: update.id })?;
 
@@ -177,7 +177,7 @@ where
             .await
             .context(PostgresProjectDbError)?;
 
-        self.ensure_permission_in_tx(project, Permission::Owner, &trans)
+        self.ensure_permission_in_tx(project.into(), Permission::Owner, &trans)
             .await
             .boxed_context(AccessFailedProjectDbError { project })?;
 
@@ -214,7 +214,7 @@ where
             .await
             .context(PostgresProjectDbError)?;
 
-        self.ensure_permission_in_tx(project, Permission::Owner, &trans)
+        self.ensure_permission_in_tx(project.into(), Permission::Owner, &trans)
             .await
             .boxed_context(AccessFailedProjectDbError { project })?;
 
@@ -350,7 +350,7 @@ where
             .await
             .context(PostgresProjectDbError)?;
 
-        self.ensure_permission_in_tx(project, Permission::Read, &trans)
+        self.ensure_permission_in_tx(project.into(), Permission::Read, &trans)
             .await
             .boxed_context(AccessFailedProjectDbError { project })?;
 

@@ -105,6 +105,9 @@ pub enum Error {
     #[snafu(display("Failed to delete the project."))]
     ProjectDeleteFailed,
     PermissionFailed,
+    PermissionDb {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
     ProjectDbUnauthorized,
 
     InvalidNamespace,
@@ -186,8 +189,6 @@ pub enum Error {
     // TODO: move to pro folder, because permissions are pro only
     #[snafu(display("Permission denied"))]
     PermissionDenied,
-    #[snafu(display("Cannot revoke own permission"))]
-    CannotRevokeOwnPermission,
 
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
     InvalidStringLength {

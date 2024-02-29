@@ -9,6 +9,7 @@ use geoengine_datatypes::pro::MlModelId;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use snafu::Snafu;
 use std::str::FromStr;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -150,19 +151,50 @@ pub struct PermissionListing {
     pub permission: Permission,
 }
 
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)), context(suffix(PermissionDbError)))]
+pub enum PermissionDbError {
+    #[snafu(display("Permission {permission:?} for resource {resource_id:?} denied."))]
+    PermissionDenied {
+        resource_id: ResourceId,
+        permission: Permission,
+    },
+    #[snafu(display(
+        "Permission {permission:?} for resource {resource_id:?} and roles {} not found.", role_ids.iter().map(std::string::ToString::to_string).collect::<Vec<String>>().join(", ")
+    ))]
+    PermissionNotFound {
+        resource_id: ResourceId,
+        permission: Permission,
+        role_ids: Vec<RoleId>,
+    },
+    #[snafu(display("Cannot revoke own permission"))]
+    CannotRevokeOwnPermission,
+    #[snafu(display("Resource Id {resource_id} is not a valid Uuid."))]
+    ResourceIdIsNotAValidUuid { resource_id: String },
+    #[snafu(display("An unexpected database error occurred."))]
+    Postgres { source: tokio_postgres::Error },
+    #[snafu(display("An unexpected database error occurred."))]
+    Bb8 {
+        source: bb8_postgres::bb8::RunError<tokio_postgres::Error>,
+    },
+}
+
 /// Management and checking of permissions.
 // TODO: accept references of things that are Into<ResourceId> as well
 #[async_trait]
 pub trait PermissionDb {
     /// Create a new resource. Gives the current user the owner permission.
-    async fn create_resource<R: Into<ResourceId> + Send + Sync>(&self, resource: R) -> Result<()>;
+    async fn create_resource<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+    ) -> Result<(), PermissionDbError>;
 
     /// Check `permission` for `resource`.
     async fn has_permission<R: Into<ResourceId> + Send + Sync>(
         &self,
         resource: R,
         permission: Permission,
-    ) -> Result<bool>;
+    ) -> Result<bool, PermissionDbError>;
 
     /// Ensure `permission` for `resource` exists. Throws error if not allowed.
     #[must_use]
@@ -170,7 +202,7 @@ pub trait PermissionDb {
         &self,
         resource: R,
         permission: Permission,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
 
     /// Give `permission` to `role` for `resource`.
     /// Requires `Owner` permission for `resource`.
@@ -179,7 +211,7 @@ pub trait PermissionDb {
         role: RoleId,
         resource: R,
         permission: Permission,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
 
     /// Remove `permission` from `role` for `resource`.
     /// Requires `Owner` permission for `resource`.
@@ -188,14 +220,14 @@ pub trait PermissionDb {
         role: RoleId,
         resource: R,
         permission: Permission,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
 
     /// Remove all `permission` for `resource`.
     /// Requires `Owner` permission for `resource`.
     async fn remove_permissions<R: Into<ResourceId> + Send + Sync>(
         &self,
         resource: R,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
 
     /// list all `permission` for `resource`.
     /// Requires `Owner` permission for `resource`.
@@ -204,5 +236,5 @@ pub trait PermissionDb {
         resource: R,
         offset: u32,
         limit: u32,
-    ) -> Result<Vec<PermissionListing>>;
+    ) -> Result<Vec<PermissionListing>, PermissionDbError>;
 }

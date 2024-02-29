@@ -8,6 +8,7 @@ use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
 use crate::projects::ProjectId;
 use actix_web::{web, FromRequest, HttpResponse};
 use serde::Deserialize;
+use snafu::ResultExt;
 use utoipa::{IntoParams, ToSchema};
 
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
@@ -100,7 +101,9 @@ where
     let db = app_ctx.session_context(session).db();
     let permissions = db
         .list_permissions(resource_id, options.offset, options.limit)
-        .await?;
+        .await
+        .map_err(Into::into)
+        .context(crate::error::PermissionDb)?;
 
     Ok(web::Json(permissions))
 }
@@ -143,7 +146,9 @@ where
         permission.resource.into(),
         permission.permission,
     )
-    .await?;
+    .await
+    .map_err(Into::into)
+    .context(crate::error::PermissionDb)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -186,7 +191,9 @@ where
         permission.resource.into(),
         permission.permission,
     )
-    .await?;
+    .await
+    .map_err(Into::into)
+    .context(crate::error::PermissionDb)?;
 
     Ok(HttpResponse::Ok().finish())
 }
