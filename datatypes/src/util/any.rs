@@ -16,7 +16,7 @@ where
     }
 
     fn into_box_any(self: Box<Self>) -> Box<dyn Any> {
-        Box::new(self)
+        Box::new(*self)
     }
 }
 

@@ -10,7 +10,6 @@ use crate::datasets::external::netcdfcf::{
     NETCDF_CF_PROVIDER_ID,
 };
 use crate::error::Result;
-use crate::layers::external::DataProvider;
 use crate::layers::storage::LayerProviderDb;
 use crate::tasks::{Task, TaskContext, TaskId, TaskManager, TaskStatus, TaskStatusInfo};
 use crate::util::apidoc::{OpenApiServerInfo, TransformSchemasWithTag};
@@ -129,24 +128,23 @@ async fn retrieve_netcdf_cf_provider<C: SessionContext>(
 ) -> Result<Box<NetCdfCfDataProvider>, NetCdfCf4DProviderError> {
     let db = ctx.db();
 
-    let ebv_provider: Result<Box<dyn DataProvider>> = db.load_layer_provider(EBV_PROVIDER_ID).await;
-    let netcdf_provider: Result<Box<dyn DataProvider>> =
-        db.load_layer_provider(NETCDF_CF_PROVIDER_ID).await;
-
-    match (ebv_provider, netcdf_provider) {
-        (Ok(ebv_provider), _) => Ok(Box::new(
-            ebv_provider
-                .into_box_any()
-                .downcast::<EbvPortalDataProvider>()
-                .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?
-                .netcdf_cf_provider,
-        )),
-        (Err(_), Ok(netcdf_provider)) => Ok(netcdf_provider
-            .into_box_any()
-            .downcast::<NetCdfCfDataProvider>()
-            .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?),
-        _ => Err(NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable),
+    if let Ok(data_provider) = db.load_layer_provider(EBV_PROVIDER_ID).await {
+        let data_provider = data_provider.into_box_any();
+        let ebv_provider: Box<EbvPortalDataProvider> = data_provider
+            .downcast::<EbvPortalDataProvider>()
+            .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?;
+        return Ok(Box::new(ebv_provider.netcdf_cf_provider));
     }
+
+    if let Ok(data_provider) = db.load_layer_provider(NETCDF_CF_PROVIDER_ID).await {
+        let data_provider = data_provider.into_box_any();
+        let netcdf_cf_provider: Box<NetCdfCfDataProvider> = data_provider
+            .downcast::<NetCdfCfDataProvider>()
+            .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?;
+        return Ok(netcdf_cf_provider);
+    }
+
+    Err(NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

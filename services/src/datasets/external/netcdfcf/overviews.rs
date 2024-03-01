@@ -1,4 +1,4 @@
-use super::{error, metadata::DataRange, NetCdfCf4DProviderError, TimeCoverage};
+use super::{error, gdal_netcdf_open, metadata::DataRange, NetCdfCf4DProviderError, TimeCoverage};
 use crate::{
     datasets::external::netcdfcf::{
         loading::{create_loading_info, ParamModification},
@@ -13,7 +13,7 @@ use gdal::{
         multi_dim_translate, MultiDimTranslateDestination, MultiDimTranslateOptions,
     },
     raster::{Group, RasterBand, RasterCreationOption},
-    Dataset, DatasetOptions, GdalOpenFlags,
+    Dataset,
 };
 use gdal_sys::GDALGetRasterStatistics;
 use geoengine_datatypes::{
@@ -25,7 +25,7 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     source::GdalMetaDataList,
     util::gdal::{
-        gdal_open_dataset_ex, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
+        gdal_parameters_from_dataset, raster_descriptor_from_dataset,
         raster_descriptor_from_dataset_and_sref,
     },
 };
@@ -241,17 +241,8 @@ pub async fn create_overviews<C: TaskContext + 'static>(
         let dataset_path = dataset_path.to_owned();
 
         crate::util::spawn_blocking(move || {
-            let dataset = gdal_open_dataset_ex(
-                &file_path,
-                DatasetOptions {
-                    open_flags: GdalOpenFlags::GDAL_OF_READONLY
-                        | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
-                    allowed_drivers: Some(&["netCDF"]),
-                    open_options: None,
-                    sibling_files: None,
-                },
-            )
-            .boxed_context(error::CannotOpenNetCdfDataset)?;
+            let dataset =
+                gdal_netcdf_open(None, &file_path).boxed_context(error::CannotOpenNetCdfDataset)?;
 
             let root_group = dataset.root_group().context(error::GdalMd)?;
             let group_tree = root_group.group_tree()?;
@@ -410,7 +401,6 @@ impl Drop for InProgressFlag {
     }
 }
 
-#[allow(clippy::too_many_lines)] // TODO: refactor
 async fn store_db_metadata(
     provider_path: &Path,
     dataset_path: &Path,
@@ -419,9 +409,6 @@ async fn store_db_metadata(
 ) -> Result<OverviewGeneration> {
     let metadata =
         NetCdfCfDataProvider::build_netcdf_tree(provider_path, dataset_path, stats_for_group)?;
-
-    // TODO: think about pipelining the requests
-    // https://docs.rs/tokio-postgres/latest/tokio_postgres/#pipelining
 
     // TODO: should we have an error here instead?
     db_transaction
@@ -467,67 +454,7 @@ async fn store_db_metadata(
         .await
         .boxed_context(error::UnexpectedExecution)?;
 
-    let group_statement = db_transaction
-        .prepare_typed(
-            "INSERT INTO groups (
-            file_name,
-            name,
-            title,
-            description,
-            data_range,
-            unit,
-            data_type
-        ) VALUES (
-            $1,
-            $2,
-            $3,
-            $4,
-            $5,
-            $6,
-            $7
-        );",
-            &[
-                tokio_postgres::types::Type::TEXT,
-                tokio_postgres::types::Type::TEXT_ARRAY,
-                tokio_postgres::types::Type::TEXT,
-                tokio_postgres::types::Type::TEXT,
-                tokio_postgres::types::Type::FLOAT8_ARRAY,
-                tokio_postgres::types::Type::TEXT,
-                // we omit `data_type`
-            ],
-        )
-        .await
-        .boxed_context(error::UnexpectedExecution)?;
-
-    let mut group_stack = metadata
-        .groups
-        .iter()
-        .map(|group| (vec![group.name.as_str()], group))
-        .collect::<Vec<_>>();
-
-    while let Some((group_path, group)) = group_stack.pop() {
-        for subgroup in &group.groups {
-            let mut subgroup_path = group_path.clone();
-            subgroup_path.push(subgroup.name.as_str());
-            group_stack.push((subgroup_path, subgroup));
-        }
-
-        db_transaction
-            .execute(
-                &group_statement,
-                &[
-                    &metadata.file_name,
-                    &group_path,
-                    &group.title,
-                    &group.description,
-                    &group.data_range,
-                    &group.unit,
-                    &group.data_type,
-                ],
-            )
-            .await
-            .boxed_context(error::UnexpectedExecution)?;
-    }
+    store_db_metadata_groups(&metadata.groups, &metadata.file_name, db_transaction).await?;
 
     let entity_statement = db_transaction
         .prepare_typed(
@@ -586,7 +513,86 @@ async fn store_db_metadata(
     Ok(OverviewGeneration::Created)
 }
 
-#[allow(clippy::too_many_lines)] // TODO: refactor
+async fn store_db_metadata_groups(
+    groups: &[crate::datasets::external::netcdfcf::NetCdfGroup],
+    file_name: &str,
+    db_transaction: &Transaction<'_>,
+) -> Result<()> {
+    let group_statement = db_transaction
+        .prepare_typed(
+            "INSERT INTO groups (
+        file_name,
+        name,
+        title,
+        description,
+        data_range,
+        unit,
+        data_type
+    ) VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7
+    );",
+            &[
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT_ARRAY,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::FLOAT8_ARRAY,
+                tokio_postgres::types::Type::TEXT,
+                // we omit `data_type`
+            ],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    let mut group_stack = groups
+        .iter()
+        .map(|group| (vec![group.name.as_str()], group))
+        .collect::<Vec<_>>();
+
+    while let Some((group_path, group)) = group_stack.pop() {
+        for subgroup in &group.groups {
+            let mut subgroup_path = group_path.clone();
+            subgroup_path.push(subgroup.name.as_str());
+            group_stack.push((subgroup_path, subgroup));
+        }
+
+        db_transaction
+            .execute(
+                &group_statement,
+                &[
+                    &file_name,
+                    &group_path,
+                    &group.title,
+                    &group.description,
+                    &group.data_range,
+                    &group.unit,
+                    &group.data_type,
+                ],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+    }
+
+    Ok(())
+}
+
+async fn overview_exists(dataset_path: &Path, db_transaction: &Transaction<'_>) -> Result<bool> {
+    db_transaction
+        .query_opt(
+            "SELECT 1 FROM overviews WHERE file_name = $1",
+            &[&dataset_path.to_string_lossy()],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)
+        .map(|row| row.is_some())
+}
+
 async fn index_subdataset<C: TaskContext>(
     conversion: Arc<ConversionMetadata>,
     time_coverage: Arc<TimeCoverage>,
@@ -596,7 +602,7 @@ async fn index_subdataset<C: TaskContext>(
     (conversion_index, number_of_conversions): (usize, usize),
     db_transaction: &Transaction<'_>,
 ) -> Result<OverviewGeneration> {
-    if exists(&conversion.dataset_out_base).await? {
+    if overview_exists(&conversion.file_path, db_transaction).await? {
         debug!(
             "Skipping conversion: {}",
             conversion.dataset_out_base.display()
@@ -609,16 +615,8 @@ async fn index_subdataset<C: TaskContext>(
         conversion.dataset_out_base.display()
     );
 
-    let mut subdataset = gdal_open_dataset_ex(
-        Path::new(&conversion.dataset_in),
-        DatasetOptions {
-            open_flags: GdalOpenFlags::GDAL_OF_READONLY | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
-            allowed_drivers: Some(&["netCDF"]),
-            open_options: None,
-            sibling_files: None,
-        },
-    )
-    .boxed_context(error::CannotOpenNetCdfSubdataset)?;
+    let mut subdataset = gdal_netcdf_open(None, Path::new(&conversion.dataset_in))
+        .boxed_context(error::CannotOpenNetCdfSubdataset)?;
 
     let raster_creation_options = Arc::new(CogRasterCreationOptions::new(resampling_method)?);
 
@@ -626,8 +624,6 @@ async fn index_subdataset<C: TaskContext>(
         "Overview creation GDAL options: {:?}",
         &raster_creation_options
     );
-
-    let mut data_range = DataRange::uninitialized();
 
     for entity in 0..conversion.number_of_entities {
         emit_subtask_status(
@@ -639,125 +635,165 @@ async fn index_subdataset<C: TaskContext>(
         )
         .await;
 
-        let entity_directory = conversion.dataset_out_base.join(entity.to_string());
-
-        fs::create_dir_all(entity_directory)
-            .await
-            .boxed_context(error::CannotCreateOverviews)?;
-
-        let (first_overview_dataset, subdataset_sref_string) = {
-            let raster_creation_options = raster_creation_options.clone();
-            let conversion = conversion.clone();
-            let time_coverage = time_coverage.clone();
-
-            let (
-                returned_subdataset,
-                first_overview_dataset,
-                subdataset_sref_string,
-                data_range_candidate,
-            ) = crate::util::spawn_blocking(move || {
-                let mut data_range = DataRange::uninitialized();
-                let mut first_overview_dataset = None;
-
-                let mut subdataset_sref_string = None;
-
-                for (time_idx, time_step) in time_coverage.time_steps().iter().enumerate() {
-                    let CreateSubdatasetTiffResult {
-                        overview_dataset,
-                        overview_destination,
-                        min_max,
-                        sref_string,
-                    } = create_subdataset_tiff(
-                        *time_step,
-                        &conversion,
-                        entity,
-                        &raster_creation_options.options(),
-                        &subdataset,
-                        time_idx,
-                    )?;
-
-                    if let Some((min, max)) = min_max {
-                        data_range.update_min(min);
-                        data_range.update_max(max);
-                    }
-                    if time_idx == 0 {
-                        first_overview_dataset = Some((overview_dataset, overview_destination));
-                    }
-
-                    if let Some(sref) = sref_string {
-                        subdataset_sref_string = Some(sref);
-                    }
-                }
-
-                Ok((
-                    subdataset,
-                    first_overview_dataset,
-                    subdataset_sref_string,
-                    data_range,
-                ))
-            })
-            .await
-            .boxed_context(error::UnexpectedExecution)??;
-
-            subdataset = returned_subdataset;
-
-            data_range.update(data_range_candidate);
-
-            (first_overview_dataset, subdataset_sref_string)
-        };
-
-        let Some((overview_dataset, overview_destination)) = first_overview_dataset else {
-            return Err(NetCdfCf4DProviderError::NoOverviewsGeneratedForSource {
-                path: conversion.dataset_out_base.to_string_lossy().to_string(),
-            });
-        };
-
-        let loading_info = {
-            let time_coverage = time_coverage.clone();
-
-            crate::util::spawn_blocking(move || {
-                generate_loading_info(
-                    &overview_dataset,
-                    &overview_destination,
-                    &time_coverage,
-                    subdataset_sref_string.clone(),
-                )
-            })
-            .await
-            .boxed_context(error::UnexpectedExecution)??
-        };
-
-        db_transaction
-            .execute(
+        let loading_info_stmt = db_transaction
+            .prepare_typed(
                 r#"
-                INSERT INTO loading_infos (
-                    file_name,
-                    group_names,
-                    entity_id,
-                    meta_data
-                ) VALUES (
-                    $1,
-                    $2 :: TEXT[],
-                    $3,
-                    $4 :: "GdalMetaDataList"
-                );"#,
+            INSERT INTO loading_infos (
+                file_name,
+                group_names,
+                entity_id,
+                meta_data
+            ) VALUES (
+                $1,
+                $2 :: TEXT[],
+                $3,
+                $4 :: "GdalMetaDataList"
+            );"#,
                 &[
-                    &conversion.file_path.to_string_lossy(),
-                    &conversion.data_path,
-                    &(entity as i64),
-                    &loading_info,
+                    tokio_postgres::types::Type::TEXT,
+                    tokio_postgres::types::Type::TEXT_ARRAY,
+                    tokio_postgres::types::Type::INT8,
+                    // we omit `GdalMetaDataList`
                 ],
             )
             .await
             .boxed_context(error::CannotStoreLoadingInfo)?;
 
-        // remove array from path and insert to `stats_for_group`
-        if let Some((array_path_stripped, _)) = conversion.array_path.rsplit_once('/') {
-            stats_for_group.insert(array_path_stripped.to_string(), data_range);
-        }
+        subdataset = index_subdataset_entity(
+            conversion.clone(),
+            time_coverage.clone(),
+            stats_for_group,
+            (db_transaction, &loading_info_stmt),
+            entity,
+            raster_creation_options.clone(),
+            subdataset,
+        )
+        .await?;
     }
 
     Ok(OverviewGeneration::Created)
+}
+
+async fn index_subdataset_entity(
+    conversion: Arc<ConversionMetadata>,
+    time_coverage: Arc<TimeCoverage>,
+    stats_for_group: &mut HashMap<String, DataRange>,
+    (db_transaction, loading_info_stmt): (&Transaction<'_>, &tokio_postgres::Statement),
+    entity: usize,
+    raster_creation_options: Arc<CogRasterCreationOptions>,
+    mut subdataset: gdal::Dataset,
+) -> Result<gdal::Dataset> {
+    let entity_directory = conversion.dataset_out_base.join(entity.to_string());
+    fs::create_dir_all(entity_directory)
+        .await
+        .boxed_context(error::CannotCreateOverviews)?;
+
+    let (first_overview_dataset, subdataset_sref_string, data_range_candidate) = {
+        let raster_creation_options = raster_creation_options.clone();
+        let conversion = conversion.clone();
+        let time_coverage = time_coverage.clone();
+
+        let (
+            returned_subdataset,
+            first_overview_dataset,
+            subdataset_sref_string,
+            data_range_candidate,
+        ) = crate::util::spawn_blocking(move || {
+            let mut data_range = DataRange::uninitialized();
+            let mut first_overview_dataset = None;
+
+            let mut subdataset_sref_string = None;
+
+            for (time_idx, time_step) in time_coverage.time_steps().iter().enumerate() {
+                let CreateSubdatasetTiffResult {
+                    overview_dataset,
+                    overview_destination,
+                    min_max,
+                    sref_string,
+                } = create_subdataset_tiff(
+                    *time_step,
+                    &conversion,
+                    entity,
+                    &raster_creation_options.options(),
+                    &subdataset,
+                    time_idx,
+                )?;
+
+                if let Some((min, max)) = min_max {
+                    data_range.update_min(min);
+                    data_range.update_max(max);
+                }
+                if time_idx == 0 {
+                    first_overview_dataset = Some((overview_dataset, overview_destination));
+                }
+
+                if let Some(sref) = sref_string {
+                    subdataset_sref_string = Some(sref);
+                }
+            }
+
+            Ok((
+                subdataset,
+                first_overview_dataset,
+                subdataset_sref_string,
+                data_range,
+            ))
+        })
+        .await
+        .boxed_context(error::UnexpectedExecution)??;
+
+        subdataset = returned_subdataset;
+
+        (
+            first_overview_dataset,
+            subdataset_sref_string,
+            data_range_candidate,
+        )
+    };
+
+    let Some((overview_dataset, overview_destination)) = first_overview_dataset else {
+        return Err(NetCdfCf4DProviderError::NoOverviewsGeneratedForSource {
+            path: conversion.dataset_out_base.to_string_lossy().to_string(),
+        });
+    };
+
+    let loading_info = {
+        let time_coverage = time_coverage.clone();
+
+        crate::util::spawn_blocking(move || {
+            generate_loading_info(
+                &overview_dataset,
+                &overview_destination,
+                &time_coverage,
+                subdataset_sref_string.clone(),
+            )
+        })
+        .await
+        .boxed_context(error::UnexpectedExecution)??
+    };
+
+    db_transaction
+        .execute(
+            loading_info_stmt,
+            &[
+                &conversion.file_path.to_string_lossy(),
+                &conversion.data_path,
+                &(entity as i64),
+                &loading_info,
+            ],
+        )
+        .await
+        .boxed_context(error::CannotStoreLoadingInfo)?;
+
+    // remove array from path and insert to `stats_for_group`
+    if let Some((array_path_stripped, _)) = conversion.array_path.rsplit_once('/') {
+        stats_for_group
+            .entry(array_path_stripped.to_string())
+            .or_insert(data_range_candidate)
+            .update(data_range_candidate);
+    }
+
+    Ok(subdataset)
 }
 
 struct CreateSubdatasetTiffResult {
@@ -1046,6 +1082,7 @@ mod tests {
         datasets::external::netcdfcf::{deferred_write_transaction, test_db_connection},
         tasks::util::NopTaskContext,
     };
+    use gdal::{DatasetOptions, GdalOpenFlags};
     use geoengine_datatypes::{
         primitives::{DateTime, SpatialResolution, TimeInterval},
         raster::RasterDataType,
@@ -1059,6 +1096,7 @@ mod tests {
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalLoadingInfoTemporalSlice, GdalMetaDataList,
         },
+        util::gdal::gdal_open_dataset_ex,
     };
 
     #[test]

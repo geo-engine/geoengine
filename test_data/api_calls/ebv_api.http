@@ -1,0 +1,31 @@
+# @name session
+POST http://localhost:3030/api/login
+Content-Type: application/json
+
+{
+  "email": "admin@localhost",
+  "password": "adminadmin"
+}
+
+###
+
+# @name lastTask
+PUT http://localhost:3030/api/ebv/overviews/dataset_sm.nc
+Authorization: Bearer {{session.response.body.$.id}}
+Content-Type: application/json
+Accept: application/json
+
+###
+
+GET http://localhost:3030/api/tasks/{{lastTask.response.body.$.taskId}}/status
+Authorization: Bearer {{session.response.body.$.id}}
+
+###
+
+# @name lastTask
+DELETE http://localhost:3030/api/ebv/overviews/dataset_sm.nc
+Authorization: Bearer {{session.response.body.$.id}}
+Content-Type: application/json
+Accept: application/json
+
+###

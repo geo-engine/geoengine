@@ -3,7 +3,15 @@
   "name": "terranova",
   "description": "terranova",
   "priority": -1000,
-  "path": "test_data/netcdf4d/",
+  "cacheTtl": 0,
+  "data": "test_data/netcdf4d/",
   "overviews": "test_data/netcdf4d/overviews/",
-  "cacheTtl": 0
+  "metadataDbConfig": {
+    "user": "geoengine",
+    "password": "geoengine",
+    "host": "localhost",
+    "port": 5432,
+    "database": "geoengine",
+    "schema": "ebv"
+  }
 }
