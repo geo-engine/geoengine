@@ -5,8 +5,8 @@ use crate::{
 };
 use crate::{error::Result, pro::permissions::PermissionDb};
 use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::error::BoxedResultExt;
 use log::warn;
-use snafu::ResultExt;
 use std::{
     fs::{self, DirEntry, File},
     io::BufReader,
@@ -35,13 +35,11 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
             Permission::Read,
         )
         .await
-        .map_err(Into::into)
-        .context(crate::error::PermissionDb)?;
+        .boxed_context(crate::error::PermissionDb)?;
 
         db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
             .await
-            .map_err(Into::into)
-            .context(crate::error::PermissionDb)?;
+            .boxed_context(crate::error::PermissionDb)?;
 
         Ok(())
     }

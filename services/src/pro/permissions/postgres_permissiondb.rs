@@ -5,7 +5,8 @@ use super::{
 use crate::error::Result;
 use crate::pro::contexts::ProPostgresDb;
 use crate::pro::permissions::{
-    CannotRevokeOwnPermissionPermissionDbError, PermissionDeniedPermissionDbError, Role,
+    CannotRevokeOwnPermissionPermissionDbError, MustBeAdminPermissionDbError,
+    PermissionDeniedPermissionDbError, Role,
 };
 use async_trait::async_trait;
 use snafu::{ensure, ResultExt};
@@ -80,6 +81,12 @@ pub trait TxPermissionDb {
         &self,
         resource: ResourceId,
         permission: Permission,
+        tx: &tokio_postgres::Transaction<'_>,
+    ) -> Result<(), PermissionDbError>;
+
+    /// Ensure user is admin
+    async fn ensure_admin_in_tx(
+        &self,
         tx: &tokio_postgres::Transaction<'_>,
     ) -> Result<(), PermissionDbError>;
 
@@ -214,6 +221,15 @@ where
                 resource_id: resource,
             }
         );
+
+        Ok(())
+    }
+
+    async fn ensure_admin_in_tx(
+        &self,
+        _tx: &tokio_postgres::Transaction<'_>,
+    ) -> Result<(), PermissionDbError> {
+        ensure!(self.session.is_admin(), MustBeAdminPermissionDbError);
 
         Ok(())
     }
@@ -419,6 +435,23 @@ where
 
         self.ensure_permission_in_tx(resource.into(), permission, &tx)
             .await?;
+
+        tx.commit().await.context(PostgresPermissionDbError)?;
+
+        Ok(())
+    }
+
+    async fn ensure_admin<R: Into<ResourceId> + Send + Sync>(
+        &self,
+    ) -> Result<(), PermissionDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8PermissionDbError)?;
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresPermissionDbError)?;
+
+        self.ensure_admin_in_tx(&tx).await?;
 
         tx.commit().await.context(PostgresPermissionDbError)?;
 

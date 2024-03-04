@@ -19,6 +19,7 @@ use crate::util::config;
 use crate::util::extractors::ValidatedJson;
 use actix_web::FromRequest;
 use actix_web::{web, HttpResponse, Responder};
+use geoengine_datatypes::error::BoxedResultExt;
 use serde::Deserialize;
 use serde::Serialize;
 use snafu::ensure;
@@ -552,7 +553,8 @@ where
         .session_context(session)
         .db()
         .add_role(&add_role.name)
-        .await?;
+        .await
+        .boxed_context(crate::error::RoleDb)?;
 
     Ok(web::Json(IdResponse::from(id)))
 }
@@ -586,7 +588,8 @@ where
         .session_context(session)
         .db()
         .load_role_by_name(&role_name)
-        .await?;
+        .await
+        .boxed_context(crate::error::RoleDb)?;
 
     Ok(web::Json(IdResponse::from(role_id)))
 }
@@ -620,7 +623,8 @@ where
         .session_context(session)
         .db()
         .remove_role(&role)
-        .await?;
+        .await
+        .boxed_context(crate::error::RoleDb)?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -655,7 +659,8 @@ where
         .session_context(session)
         .db()
         .assign_role(&role, &user)
-        .await?;
+        .await
+        .boxed_context(crate::error::RoleDb)?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -690,7 +695,8 @@ where
         .session_context(session)
         .db()
         .revoke_role(&role, &user)
-        .await?;
+        .await
+        .boxed_context(crate::error::RoleDb)?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -738,7 +744,8 @@ where
         .session_context(session)
         .db()
         .get_role_descriptions(&user)
-        .await?;
+        .await
+        .boxed_context(crate::error::RoleDb)?;
 
     Ok(web::Json(res))
 }

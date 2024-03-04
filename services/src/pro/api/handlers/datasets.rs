@@ -24,6 +24,7 @@ use crate::{
     util::config::{get_config_element, Data},
 };
 use actix_web::{web, FromRequest};
+use geoengine_datatypes::error::BoxedResultExt;
 use snafu::ResultExt;
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
@@ -128,14 +129,12 @@ where
         Permission::Read,
     )
     .await
-    .map_err(Into::into)
-    .context(crate::error::PermissionDb)
+    .boxed_context(crate::error::PermissionDb)
     .context(DatabaseAccess)?;
 
     db.add_permission(Role::anonymous_role_id(), dataset.id, Permission::Read)
         .await
-        .map_err(Into::into)
-        .context(crate::error::PermissionDb)
+        .boxed_context(crate::error::PermissionDb)
         .context(DatabaseAccess)?;
 
     Ok(web::Json(dataset.name.into()))

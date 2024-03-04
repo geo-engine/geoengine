@@ -8,6 +8,7 @@ use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId}
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use geoengine_datatypes::dataset::LayerId;
+use geoengine_datatypes::error::ErrorSource;
 use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::path::PathBuf;
@@ -106,7 +107,10 @@ pub enum Error {
     ProjectDeleteFailed,
     PermissionFailed,
     PermissionDb {
-        source: Box<dyn std::error::Error + Send + Sync>,
+        source: Box<dyn ErrorSource>,
+    },
+    RoleDb {
+        source: Box<dyn ErrorSource>,
     },
     ProjectDbUnauthorized,
 

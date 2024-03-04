@@ -159,6 +159,8 @@ pub enum PermissionDbError {
         resource_id: ResourceId,
         permission: Permission,
     },
+    #[snafu(display("Must be admin to perform this action."))]
+    MustBeAdmin,
     #[snafu(display(
         "Permission {permission:?} for resource {resource_id:?} and roles {} not found.", role_ids.iter().map(std::string::ToString::to_string).collect::<Vec<String>>().join(", ")
     ))]
@@ -202,6 +204,12 @@ pub trait PermissionDb {
         &self,
         resource: R,
         permission: Permission,
+    ) -> Result<(), PermissionDbError>;
+
+    /// Ensure user is admin
+    #[must_use]
+    async fn ensure_admin<R: Into<ResourceId> + Send + Sync>(
+        &self,
     ) -> Result<(), PermissionDbError>;
 
     /// Give `permission` to `role` for `resource`.

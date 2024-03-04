@@ -7,8 +7,8 @@ use crate::pro::permissions::{Permission, PermissionListing};
 use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
 use crate::projects::ProjectId;
 use actix_web::{web, FromRequest, HttpResponse};
+use geoengine_datatypes::error::BoxedResultExt;
 use serde::Deserialize;
-use snafu::ResultExt;
 use utoipa::{IntoParams, ToSchema};
 
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
@@ -102,8 +102,7 @@ where
     let permissions = db
         .list_permissions(resource_id, options.offset, options.limit)
         .await
-        .map_err(Into::into)
-        .context(crate::error::PermissionDb)?;
+        .boxed_context(crate::error::PermissionDb)?;
 
     Ok(web::Json(permissions))
 }
@@ -147,8 +146,7 @@ where
         permission.permission,
     )
     .await
-    .map_err(Into::into)
-    .context(crate::error::PermissionDb)?;
+    .boxed_context(crate::error::PermissionDb)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -192,8 +190,7 @@ where
         permission.permission,
     )
     .await
-    .map_err(Into::into)
-    .context(crate::error::PermissionDb)?;
+    .boxed_context(crate::error::PermissionDb)?;
 
     Ok(HttpResponse::Ok().finish())
 }
