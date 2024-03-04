@@ -3,8 +3,16 @@
   "name": "EBV Portal",
   "description": "Access to EBV Portal data",
   "priority": -20,
+  "cacheTtl": 0,
   "path": "test_data/netcdf4d/",
   "baseUrl": "https://portal.geobon.org/api/v1",
   "overviews": "test_data/netcdf4d/overviews/",
-  "cacheTtl": 0
+  "metadataDbConfig": {
+    "user": "geoengine",
+    "password": "geoengine",
+    "host": "localhost",
+    "port": 5432,
+    "database": "geoengine",
+    "schema": "ebv"
+  }
 }
