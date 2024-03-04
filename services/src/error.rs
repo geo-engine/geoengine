@@ -106,9 +106,11 @@ pub enum Error {
     #[snafu(display("Failed to delete the project."))]
     ProjectDeleteFailed,
     PermissionFailed,
+    #[snafu(display("A permission error occured: {source}."))]
     PermissionDb {
         source: Box<dyn ErrorSource>,
     },
+    #[snafu(display("A role error occured: {source}."))]
     RoleDb {
         source: Box<dyn ErrorSource>,
     },
