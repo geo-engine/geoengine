@@ -4,8 +4,8 @@
   "description": "Access to EBV Portal data",
   "priority": -20,
   "cacheTtl": 0,
-  "path": "test_data/netcdf4d/",
   "baseUrl": "https://portal.geobon.org/api/v1",
+  "data": "test_data/netcdf4d/",
   "overviews": "test_data/netcdf4d/overviews/",
   "metadataDbConfig": {
     "user": "geoengine",
