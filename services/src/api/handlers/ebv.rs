@@ -117,7 +117,8 @@ where
                 .service(
                     web::scope("/{path}")
                         .route("", web::put().to(create_overview::<C>))
-                        .route("", web::delete().to(remove_overview::<C>)),
+                        .route("", web::delete().to(remove_overview::<C>))
+                        .route("/refresh", web::put().to(refresh_overview::<C>)),
                 ),
         );
     })
@@ -388,13 +389,53 @@ async fn create_overview<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<EbvPath>,
     params: Option<web::Json<CreateOverviewParams>>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<TaskResponse>> {
     let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
     let task = EbvOverviewTask::<C::SessionContext> {
         ctx: ctx.clone(),
         file: path.into_inner().0,
         params: params.map(web::Json::into_inner).unwrap_or_default(),
+    }
+    .boxed();
+
+    let task_id = ctx.tasks().schedule_task(task, None).await?;
+
+    Ok(web::Json(TaskResponse::new(task_id)))
+}
+
+/// Refreshes an overview for a single NetCDF file.
+/// Does not generate new raster files but re-creates the overview metadata.
+#[utoipa::path(
+    tag = "Overviews",
+    put,
+    path = "/ebv/overviews/{path}/refresh",
+    request_body = Option<CreateOverviewParams>,
+    responses(
+        (
+            status = 200,
+            description = "The id of the task that creates the overview.", 
+            body = TaskResponse,
+            example = json!({"taskId": "ca0c86e0-04b2-47b6-9190-122c6f06c45c"})
+        )
+    ),
+    params(
+        ("path" = String, description = "The local path to the NetCDF file.")
+    ),
+    security(
+        ("admin_token" = [])
+    )
+)]
+async fn refresh_overview<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    path: web::Path<EbvPath>,
+) -> Result<web::Json<TaskResponse>> {
+    let ctx = Arc::new(app_ctx.into_inner().session_context(session));
+
+    let task = EbvOverviewRefreshTask::<C::SessionContext> {
+        ctx: ctx.clone(),
+        file: path.into_inner().0,
     }
     .boxed();
 
@@ -464,6 +505,63 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewTask<C> {
             .boxed_context(error::CannotRemoveOverviews);
 
         response.map_err(ErrorSource::boxed)
+    }
+
+    fn task_type(&self) -> &'static str {
+        EBV_OVERVIEW_TASK_TYPE
+    }
+
+    fn task_unique_id(&self) -> Option<String> {
+        Some(self.file.to_string_lossy().to_string())
+    }
+
+    fn task_description(&self) -> String {
+        self.file.to_string_lossy().to_string()
+    }
+}
+
+struct EbvOverviewRefreshTask<C: SessionContext> {
+    ctx: Arc<C>,
+    file: PathBuf,
+}
+
+#[async_trait::async_trait]
+impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewRefreshTask<C> {
+    async fn run(
+        &self,
+        ctx: C::TaskContext,
+    ) -> Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
+        let provider = retrieve_netcdf_cf_provider(self.ctx.clone())
+            .await
+            .map_err(ErrorSource::boxed)?;
+
+        let response = match provider.refresh_overview_metadata(&self.file, ctx).await {
+            Ok(OverviewGeneration::Created) => Ok(NetCdfCfOverviewResponse {
+                success: vec![self.file.clone()],
+                skip: vec![],
+                error: vec![],
+            }),
+            Ok(OverviewGeneration::Skipped) => Ok(NetCdfCfOverviewResponse {
+                success: vec![],
+                skip: vec![self.file.clone()],
+                error: vec![],
+            }),
+            Err(e) => {
+                debug!("Error during overview creation: {:?}", &e);
+                Err(NetCdfCf4DProviderError::CannotCreateOverview {
+                    dataset: self.file.clone(),
+                    source: Box::new(e),
+                })
+            }
+        };
+
+        response
+            .map(TaskStatusInfo::boxed)
+            .map_err(ErrorSource::boxed)
+    }
+
+    async fn cleanup_on_error(&self, _ctx: C::TaskContext) -> Result<(), Box<dyn ErrorSource>> {
+        Ok(()) // nothing to do
     }
 
     fn task_type(&self) -> &'static str {
@@ -826,5 +924,71 @@ mod tests {
         assert_eq!(clean_up, r#"{"status":"completed","info":null}"#);
 
         assert!(is_empty(overview_folder.path()));
+    }
+
+    #[ge_context::test]
+    async fn test_refresh_overview(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = app_ctx.default_session_id().await;
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        ctx.db()
+            .add_layer_provider(
+                NetCdfCfDataProviderDefinition {
+                    name: "test".to_string(),
+                    description: "test".to_string(),
+                    priority: None,
+                    data: test_data!("netcdf4d").to_path_buf(),
+                    overviews: overview_folder.path().to_path_buf(),
+                    metadata_db_config: test_db_config(),
+                    cache_ttl: Default::default(),
+                }
+                .into(),
+            )
+            .await
+            .unwrap();
+
+        let overview_request = actix_web::test::TestRequest::put()
+            .uri("/ebv/overviews/dataset_m.nc")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let overview_response_status = {
+            let response = send_test_request(overview_request, app_ctx.clone()).await;
+
+            assert_eq!(response.status(), 200, "{:?}", response.response());
+
+            let task_response =
+                serde_json::from_str::<TaskResponse>(&read_body_string(response).await).unwrap();
+
+            let tasks = Arc::new(ctx.tasks());
+
+            wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
+
+            tasks.get_task_status(task_response.task_id).await.unwrap()
+        };
+
+        assert!(overview_response_status.is_completed());
+
+        let refresh_request = actix_web::test::TestRequest::put()
+            .uri("/ebv/overviews/dataset_m.nc/refresh")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let refresh_response_status = {
+            let response = send_test_request(refresh_request, app_ctx.clone()).await;
+
+            assert_eq!(response.status(), 200, "{:?}", response.response());
+
+            let task_response =
+                serde_json::from_str::<TaskResponse>(&read_body_string(response).await).unwrap();
+
+            let tasks = Arc::new(ctx.tasks());
+
+            wait_for_task_to_finish(tasks.clone(), task_response.task_id).await;
+
+            tasks.get_task_status(task_response.task_id).await.unwrap()
+        };
+
+        assert!(refresh_response_status.is_completed());
     }
 }
