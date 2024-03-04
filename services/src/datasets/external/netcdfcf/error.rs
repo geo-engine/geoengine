@@ -155,6 +155,23 @@ pub enum NetCdfCf4DProviderError {
     CannotCreateOverviews {
         source: Box<dyn ErrorSource>,
     },
+
+    #[snafu(display("For a refresh, all overview files for `{dataset}` must be there, but {missing} is missing.", dataset = dataset.display(), missing = missing.display()))]
+    OverviewMissingForRefresh {
+        dataset: PathBuf,
+        missing: PathBuf,
+    },
+
+    #[snafu(display("Cannot find overviews for `{dataset}`", dataset = dataset.display()))]
+    MissingOverviews {
+        dataset: PathBuf,
+    },
+
+    #[snafu(display("New metadata for `{dataset}` do not match group and entity structure. Please recreate the overviews.", dataset = dataset.display()))]
+    RefreshedMetadataDoNotMatch {
+        dataset: PathBuf,
+    },
+
     CannotWriteMetadataFile {
         source: Box<dyn ErrorSource>,
     },

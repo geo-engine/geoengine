@@ -4,9 +4,9 @@ use self::loading::{create_layer, create_layer_collection_from_parts};
 use self::metadata::{
     all_migrations, Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata,
 };
-use self::overviews::create_overviews;
-use self::overviews::remove_overviews;
 pub use self::overviews::OverviewGeneration;
+use self::overviews::{create_overviews, overview_exists};
+use self::overviews::{remove_overviews, OverviewCreationOptions};
 use crate::contexts::{migrate_database, GeoEngineDb};
 use crate::datasets::external::netcdfcf::loading::{create_loading_info, ParamModification};
 use crate::datasets::external::netcdfcf::overviews::meta_data_from_overviews;
@@ -628,13 +628,21 @@ impl NetCdfCfDataProvider {
 
         let transaction = deferred_write_transaction(&mut db_connection).await?;
 
-        let result = create_overviews(
-            &self.data,
-            dataset_path,
-            &self.overviews,
-            resampling_method,
+        if overview_exists(&transaction, dataset_path).await? {
+            return Ok(OverviewGeneration::Skipped);
+        }
+
+        // TODO: return overview tree
+        create_overviews(
             task_context,
             &transaction,
+            OverviewCreationOptions {
+                provider_path: &self.data,
+                overview_path: &self.overviews,
+                dataset_path,
+                resampling_method,
+                check_file_only: false,
+            },
         )
         .await?;
 
@@ -643,7 +651,51 @@ impl NetCdfCfDataProvider {
             .await
             .boxed_context(error::DatabaseTransactionCommit)?;
 
-        Ok(result)
+        Ok(OverviewGeneration::Created)
+    }
+
+    pub async fn refresh_overview_metadata<C: TaskContext + 'static>(
+        &self,
+        dataset_path: &Path,
+        task_context: C,
+    ) -> Result<OverviewGeneration> {
+        let mut db_connection = self
+            .metadata_db
+            .get()
+            .await
+            .boxed_context(error::DatabaseConnection)?;
+
+        let transaction = deferred_write_transaction(&mut db_connection).await?;
+
+        // let result = refresh_metadata(
+        //     &self.data,
+        //     dataset_path,
+        //     &self.overviews,
+        //     task_context,
+        //     &transaction,
+        // )
+        // .await?;
+
+        // TODO: return overview tree
+        create_overviews(
+            task_context,
+            &transaction,
+            OverviewCreationOptions {
+                provider_path: &self.data,
+                overview_path: &self.overviews,
+                dataset_path,
+                resampling_method: None,
+                check_file_only: true,
+            },
+        )
+        .await?;
+
+        transaction
+            .commit()
+            .await
+            .boxed_context(error::DatabaseTransactionCommit)?;
+
+        Ok(OverviewGeneration::Created)
     }
 
     pub async fn remove_overviews(&self, dataset_path: &Path, force: bool) -> Result<()> {
@@ -2799,5 +2851,138 @@ mod tests {
             layer_before_overviews.metadata["timeSteps"],
             layer_after_overviews.metadata["timeSteps"]
         );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_refreshes_metadata_only(app_ctx: PostgresContext<NoTls>) {
+        async fn query_collection_name(
+            provider: &NetCdfCfDataProvider,
+            id: &LayerCollectionId,
+        ) -> String {
+            let collection = provider
+                .load_layer_collection(
+                    id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    },
+                )
+                .await
+                .unwrap();
+            collection.name
+        }
+
+        hide_gdal_errors();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let provider = Box::new(NetCdfCfDataProviderDefinition {
+            name: "NetCdfCfDataProvider".to_string(),
+            description: "NetCdfCfProviderDefinition".to_string(),
+            priority: None,
+            data: test_data!("netcdf4d").into(),
+            overviews: overview_folder.path().to_path_buf(),
+            metadata_db_config: test_db_config(),
+            cache_ttl: Default::default(),
+        })
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .await
+        .unwrap();
+
+        let file_name = "dataset_sm.nc";
+        let id = LayerCollectionId(file_name.to_string());
+
+        let provider = provider
+            .as_any()
+            .downcast_ref::<NetCdfCfDataProvider>()
+            .unwrap();
+
+        provider
+            .create_overviews(Path::new(file_name), None, NopTaskContext)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            query_collection_name(provider, &id).await,
+            "Test dataset metric and scenario"
+        );
+
+        let layer_id = netcdf_entity_to_layer_id(
+            Path::new(file_name),
+            &["scenario_2".to_string(), "metric_2".to_string()],
+            2,
+        );
+
+        assert_eq!(
+            provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
+            "[1.0,98.0]"
+        );
+
+        // manipulate a field in the metadata
+
+        provider
+            .metadata_db
+            .get()
+            .await
+            .unwrap()
+            .execute(
+                "UPDATE overviews SET title = 'MANIPULATED' WHERE file_name = $1",
+                &[&file_name],
+            )
+            .await
+            .unwrap();
+
+        provider
+            .metadata_db
+            .get()
+            .await
+            .unwrap()
+            .execute(
+                "UPDATE groups SET data_range = ARRAY[5, 23] WHERE file_name = $1",
+                &[&file_name],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(query_collection_name(provider, &id).await, "MANIPULATED");
+
+        assert_eq!(
+            provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
+            "[5.0,23.0]"
+        );
+
+        provider
+            .refresh_overview_metadata(Path::new(file_name), NopTaskContext)
+            .await
+            .unwrap();
+
+        // after refresh, the metadata should be correct
+
+        assert_eq!(
+            query_collection_name(provider, &id).await,
+            "Test dataset metric and scenario"
+        );
+
+        assert_eq!(
+            provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
+            "[1.0,98.0]"
+        );
+
+        // forcefully remove file to test error handling
+
+        tokio::fs::remove_file(
+            overview_folder
+                .path()
+                .join(file_name)
+                .join("scenario_2/metric_2/1/2010-01-01T00:00:00.000Z.tiff"),
+        )
+        .await
+        .unwrap();
+
+        provider
+            .refresh_overview_metadata(Path::new(file_name), NopTaskContext)
+            .await
+            .unwrap_err();
     }
 }
