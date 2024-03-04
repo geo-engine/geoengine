@@ -223,6 +223,11 @@ pub async fn create_overviews<C: TaskContext + 'static>(
     task_context: C,
     db_transaction: &Transaction<'_>,
 ) -> Result<OverviewGeneration> {
+    if overview_exists(&dataset_path, db_transaction).await? {
+        debug!("Skipping conversion: {}", dataset_path.display());
+        return Ok(OverviewGeneration::Skipped);
+    }
+
     let file_path = canonicalize_subpath(provider_path, dataset_path)
         .boxed_context(error::DatasetIsNotInProviderPath)?;
     let out_folder_path = path_with_base_path(overview_path, dataset_path)

@@ -2800,9 +2800,4 @@ mod tests {
             layer_after_overviews.metadata["timeSteps"]
         );
     }
-
-    #[ge_context::test]
-    async fn it_refreshes_metadata_only(app_ctx: PostgresContext<NoTls>) {
-        todo!("implement")
-    }
 }
