@@ -1245,7 +1245,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(datasets.items.len(), 3);
+        assert_eq!(datasets.items.len(), 4);
     }
 
     #[ge_context::test]

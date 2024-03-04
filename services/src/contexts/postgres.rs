@@ -982,7 +982,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(datasets.items.len(), 3, "{:?}", datasets.items);
+        assert_eq!(datasets.items.len(), 4, "{:?}", datasets.items);
     }
 
     #[allow(clippy::too_many_lines)]
