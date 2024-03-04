@@ -223,7 +223,7 @@ pub async fn create_overviews<C: TaskContext + 'static>(
     task_context: C,
     db_transaction: &Transaction<'_>,
 ) -> Result<OverviewGeneration> {
-    if overview_exists(&dataset_path, db_transaction).await? {
+    if overview_exists(dataset_path, db_transaction).await? {
         debug!("Skipping conversion: {}", dataset_path.display());
         return Ok(OverviewGeneration::Skipped);
     }
