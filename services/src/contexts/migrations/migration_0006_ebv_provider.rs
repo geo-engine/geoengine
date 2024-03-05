@@ -42,7 +42,7 @@ mod tests {
         let mut conn = pool.get().await.unwrap();
 
         // initial schema
-        migrate_database(&mut conn, &all_migrations()[..6])
+        migrate_database(&mut conn, &all_migrations()[..6], None)
             .await
             .unwrap();
 
@@ -85,7 +85,7 @@ mod tests {
         .unwrap();
 
         // perform this migration
-        migrate_database(&mut conn, &[Box::new(Migration0006EbvProvider)])
+        migrate_database(&mut conn, &[Box::new(Migration0006EbvProvider)], None)
             .await
             .unwrap();
 

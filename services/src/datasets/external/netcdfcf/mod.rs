@@ -144,7 +144,12 @@ impl NetCdfCfDataProviderDefinition {
             ))
             .await?;
 
-        migrate_database(&mut metadata_db.get().await?, &all_migrations()).await?;
+        migrate_database(
+            &mut metadata_db.get().await?,
+            &all_migrations(),
+            Some(self.name.as_str()),
+        )
+        .await?;
 
         Ok(NetCdfCfDataProvider {
             id,
@@ -1939,9 +1944,13 @@ async fn test_db() -> Pool<PostgresConnectionManager<NoTls>> {
         .await
         .unwrap();
 
-    migrate_database(&mut db.get().await.unwrap(), &all_migrations())
-        .await
-        .unwrap();
+    migrate_database(
+        &mut db.get().await.unwrap(),
+        &all_migrations(),
+        Some("EBV Provider"),
+    )
+    .await
+    .unwrap();
 
     db
 }

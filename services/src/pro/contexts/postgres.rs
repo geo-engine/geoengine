@@ -215,7 +215,7 @@ where
     ) -> Result<bool> {
         PostgresContext::maybe_clear_database(&conn).await?;
 
-        let migration = migrate_database(&mut conn, &pro_migrations()).await?;
+        let migration = migrate_database(&mut conn, &pro_migrations(), None).await?;
 
         Ok(migration == MigrationResult::CreatedDatabase)
     }
