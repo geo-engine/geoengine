@@ -1,6 +1,7 @@
 use super::listing::Provenance;
 use super::postgres::DatasetMetaData;
 use super::{DatasetIdAndName, DatasetName};
+use crate::api::model::services::UpdateDataset;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
@@ -283,6 +284,8 @@ pub trait DatasetStore {
         dataset: AddDataset,
         meta_data: MetaDataDefinition,
     ) -> Result<DatasetIdAndName>;
+
+    async fn update_dataset(&self, dataset: DatasetId, update: UpdateDataset) -> Result<()>;
 
     async fn update_dataset_symbology(
         &self,
