@@ -344,7 +344,10 @@ impl NetCdfCfDataProvider {
         dataset_path: &Path,
         stats_for_group: &HashMap<String, DataRange>,
     ) -> Result<NetCdfOverview> {
-        let path = canonicalize_subpath(provider_path, dataset_path).map_err(|_| {
+        let provider_path = provider_path
+            .canonicalize()
+            .boxed_context(error::InvalidDirectory)?;
+        let path = canonicalize_subpath(&provider_path, dataset_path).map_err(|_| {
             NetCdfCf4DProviderError::FileIsNotInProviderPath {
                 file: dataset_path.to_string_lossy().into(),
             }

@@ -29,3 +29,11 @@ Content-Type: application/json
 Accept: application/json
 
 ###
+
+# @name lastTask
+PUT http://localhost:3030/api/ebv/overviews/dataset_sm.nc/refresh
+Authorization: Bearer {{session.response.body.$.id}}
+Content-Type: application/json
+Accept: application/json
+
+###
