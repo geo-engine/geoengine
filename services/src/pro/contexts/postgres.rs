@@ -215,7 +215,7 @@ where
     ) -> Result<bool> {
         PostgresContext::maybe_clear_database(&conn).await?;
 
-        let migration = migrate_database(&mut conn, &pro_migrations()).await?;
+        let migration = migrate_database(&mut conn, &pro_migrations(), None).await?;
 
         Ok(migration == MigrationResult::CreatedDatabase)
     }
@@ -1205,8 +1205,9 @@ mod tests {
             name: "netcdfcf".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
             priority: Some(33),
-            path: test_data!("netcdf4d/").into(),
+            data: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
+            metadata_db_config: crate::datasets::external::netcdfcf::test_db_config(),
             cache_ttl: CacheTtlSeconds::new(0),
         };
 
@@ -1244,7 +1245,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(datasets.items.len(), 3);
+        assert_eq!(datasets.items.len(), 4);
     }
 
     #[ge_context::test]

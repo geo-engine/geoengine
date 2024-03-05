@@ -1,11 +1,12 @@
 use self::migration_0000_initial::Migration0000Initial;
-use crate::contexts::migrations::{
+pub use crate::contexts::migrations::{
     migration_0001_raster_stacks::Migration0001RasterStacks,
     migration_0002_dataset_listing_provider::Migration0002DatasetListingProvider,
     migration_0003_gbif_config::Migration0003GbifConfig,
     migration_0004_dataset_listing_provider_prio::Migration0004DatasetListingProviderPrio,
     migration_0005_gbif_column_selection::Migration0005GbifColumnSelection,
-    migration_0006_owner_role::Migration0006OwnerRole,
+    migration_0006_ebv_provider::Migration0006EbvProvider,
+    migration_0007_owner_role::Migration0007OwnerRole,
 };
 pub use database_migration::{migrate_database, DatabaseVersion, Migration, MigrationResult};
 
@@ -16,7 +17,8 @@ pub mod migration_0002_dataset_listing_provider;
 pub mod migration_0003_gbif_config;
 pub mod migration_0004_dataset_listing_provider_prio;
 pub mod migration_0005_gbif_column_selection;
-pub mod migration_0006_owner_role;
+mod migration_0006_ebv_provider;
+pub mod migration_0007_owner_role;
 
 /// All migrations that are available. The migrations are applied in the order they are defined here, starting from the current version of the database.
 ///
@@ -30,6 +32,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0003GbifConfig),
         Box::new(Migration0004DatasetListingProviderPrio),
         Box::new(Migration0005GbifColumnSelection),
-        Box::new(Migration0006OwnerRole),
+        Box::new(Migration0006EbvProvider),
+        Box::new(Migration0007OwnerRole),
     ]
 }

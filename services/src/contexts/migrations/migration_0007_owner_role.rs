@@ -6,16 +6,16 @@ use crate::error::Result;
 use super::database_migration::{DatabaseVersion, Migration};
 
 /// This migration adds a check that there is only one owner per resource
-pub struct Migration0006OwnerRole;
+pub struct Migration0007OwnerRole;
 
 #[async_trait]
-impl Migration for Migration0006OwnerRole {
+impl Migration for Migration0007OwnerRole {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some("0005_gbif_column_selection".into())
+        Some("0006_ebv_provider".into())
     }
 
     fn version(&self) -> DatabaseVersion {
-        "0006_owner_role".into()
+        "0007_owner_role".into()
     }
 
     async fn migrate(&self, _tx: &Transaction<'_>) -> Result<()> {

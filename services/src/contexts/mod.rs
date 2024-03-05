@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 mod db_types;
-mod migrations;
+pub(crate) mod migrations;
 mod postgres;
 mod session;
 mod simple_context;
@@ -38,7 +38,7 @@ pub use migrations::{
     migration_0003_gbif_config::Migration0003GbifConfig,
     migration_0004_dataset_listing_provider_prio::Migration0004DatasetListingProviderPrio,
     migration_0005_gbif_column_selection::Migration0005GbifColumnSelection,
-    migration_0006_owner_role::Migration0006OwnerRole, DatabaseVersion, Migration, MigrationResult,
+    migration_0007_owner_role::Migration0007OwnerRole, DatabaseVersion, Migration, MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
