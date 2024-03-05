@@ -59,6 +59,15 @@ pub enum Permission {
     Owner,
 }
 
+impl std::fmt::Display for Permission {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Permission::Read => write!(f, "Read"),
+            Permission::Owner => write!(f, "Owner"),
+        }
+    }
+}
+
 impl Permission {
     /// Return true if this permission includes the given permission.
     pub fn allows(&self, permission: &Permission) -> bool {
@@ -91,6 +100,20 @@ pub enum ResourceId {
     Project(ProjectId),
     DatasetId(DatasetId),
     ModelId(MlModelId),
+}
+
+impl std::fmt::Display for ResourceId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResourceId::Layer(layer_id) => write!(f, "layer:{}", layer_id.0),
+            ResourceId::LayerCollection(layer_collection_id) => {
+                write!(f, "layer_collection:{}", layer_collection_id.0)
+            }
+            ResourceId::Project(project_id) => write!(f, "project:{}", project_id.0),
+            ResourceId::DatasetId(dataset_id) => write!(f, "dataset:{}", dataset_id.0),
+            ResourceId::ModelId(model_id) => write!(f, "model:{}", model_id.0),
+        }
+    }
 }
 
 impl From<LayerId> for ResourceId {
@@ -154,7 +177,7 @@ pub struct PermissionListing {
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)), context(suffix(PermissionDbError)))]
 pub enum PermissionDbError {
-    #[snafu(display("Permission {permission:?} for resource {resource_id:?} denied."))]
+    #[snafu(display("Permission {permission} for resource {resource_id} denied."))]
     PermissionDenied {
         resource_id: ResourceId,
         permission: Permission,
@@ -162,7 +185,7 @@ pub enum PermissionDbError {
     #[snafu(display("Must be admin to perform this action."))]
     MustBeAdmin,
     #[snafu(display(
-        "Permission {permission:?} for resource {resource_id:?} and roles {} not found.", role_ids.iter().map(std::string::ToString::to_string).collect::<Vec<String>>().join(", ")
+        "Permission {permission} for resource {resource_id} and roles {} not found.", role_ids.iter().map(std::string::ToString::to_string).collect::<Vec<String>>().join(", ")
     ))]
     PermissionNotFound {
         resource_id: ResourceId,
@@ -171,6 +194,8 @@ pub enum PermissionDbError {
     },
     #[snafu(display("Cannot revoke own permission"))]
     CannotRevokeOwnPermission,
+    #[snafu(display("Cannot grant Owner permission, because there can only be one owner."))]
+    CannotGrantOwnerPermission,
     #[snafu(display("Resource Id {resource_id} is not a valid Uuid."))]
     ResourceIdIsNotAValidUuid { resource_id: String },
     #[snafu(display("An unexpected database error occurred."))]
