@@ -357,7 +357,7 @@ pub async fn create_overviews<C: TaskContext + 'static>(
     )
     .await;
 
-    let metadata = store_db_metadata(
+    let metadata = store_metadata_in_db(
         options.provider_path,
         options.dataset_path,
         &stats_for_group,
@@ -488,7 +488,7 @@ impl Drop for InProgressFlag {
     }
 }
 
-async fn store_db_metadata(
+async fn store_metadata_in_db(
     provider_path: &Path,
     dataset_path: &Path,
     stats_for_group: &HashMap<String, DataRange>,
@@ -497,14 +497,20 @@ async fn store_db_metadata(
     let metadata =
         NetCdfCfDataProvider::build_netcdf_tree(provider_path, dataset_path, stats_for_group)?;
 
-    // TODO: should we have an error here instead?
-    db_transaction
+    let removed_rows = db_transaction
         .execute(
             "DELETE FROM overviews WHERE file_name = $1",
             &[&metadata.file_name],
         )
         .await
         .boxed_context(error::UnexpectedExecution)?;
+
+    if removed_rows > 0 {
+        log::debug!(
+            "Removed {dataset_path} from the database before re-inserting the metadata",
+            dataset_path = dataset_path.display()
+        );
+    }
 
     db_transaction
         .execute(
@@ -545,15 +551,7 @@ async fn store_db_metadata(
 
     let entity_statement = db_transaction
         .prepare_typed(
-            "INSERT INTO entities (
-            file_name,
-            id,
-            name
-        ) VALUES (
-            $1,
-            $2,
-            $3
-        );",
+            "INSERT INTO entities (file_name, id, name) VALUES ($1, $2, $3);",
             &[
                 tokio_postgres::types::Type::TEXT,
                 tokio_postgres::types::Type::INT8,
@@ -575,13 +573,7 @@ async fn store_db_metadata(
 
     let timestamp_statement = db_transaction
         .prepare_typed(
-            r#"INSERT INTO timestamps (
-            file_name,
-            "time"
-        ) VALUES (
-            $1,
-            $2
-        );"#,
+            r#"INSERT INTO timestamps (file_name, "time") VALUES ($1, $2);"#,
             &[
                 tokio_postgres::types::Type::TEXT,
                 tokio_postgres::types::Type::INT8,
