@@ -1,4 +1,7 @@
-use super::{error, gdal_netcdf_open, metadata::DataRange, NetCdfCf4DProviderError, TimeCoverage};
+use super::{
+    error, gdal_netcdf_open, metadata::DataRange, NetCdfCf4DProviderError, NetCdfOverview,
+    TimeCoverage,
+};
 use crate::{
     datasets::external::netcdfcf::{
         loading::{create_loading_info, ParamModification},
@@ -29,6 +32,7 @@ use geoengine_operators::{
     },
 };
 use log::debug;
+use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::{
     collections::{HashMap, HashSet},
@@ -95,9 +99,10 @@ impl ConversionMetadataEntityPart {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case", tag = "status")]
 pub enum OverviewGeneration {
-    Created,
+    Created { details: NetCdfOverview },
     Skipped,
 }
 
@@ -255,7 +260,7 @@ pub async fn create_overviews<C: TaskContext + 'static>(
     task_context: C,
     db_transaction: &Transaction<'_>,
     options: OverviewCreationOptions<'_>,
-) -> Result<()> {
+) -> Result<NetCdfOverview> {
     let file_path = canonicalize_subpath(options.provider_path, options.dataset_path)
         .boxed_context(error::DatasetIsNotInProviderPath)?;
     let out_folder_path = path_with_base_path(options.overview_path, options.dataset_path)
@@ -352,7 +357,7 @@ pub async fn create_overviews<C: TaskContext + 'static>(
     )
     .await;
 
-    store_db_metadata(
+    let metadata = store_db_metadata(
         options.provider_path,
         options.dataset_path,
         &stats_for_group,
@@ -362,7 +367,7 @@ pub async fn create_overviews<C: TaskContext + 'static>(
 
     in_progress_flag.remove().await?;
 
-    Ok(())
+    Ok(metadata)
 }
 
 async fn create_time_coverage_and_conversion_metadata(
@@ -488,7 +493,7 @@ async fn store_db_metadata(
     dataset_path: &Path,
     stats_for_group: &HashMap<String, DataRange>,
     db_transaction: &Transaction<'_>,
-) -> Result<OverviewGeneration> {
+) -> Result<NetCdfOverview> {
     let metadata =
         NetCdfCfDataProvider::build_netcdf_tree(provider_path, dataset_path, stats_for_group)?;
 
@@ -592,7 +597,7 @@ async fn store_db_metadata(
             .boxed_context(error::UnexpectedExecution)?;
     }
 
-    Ok(OverviewGeneration::Created)
+    Ok(metadata)
 }
 
 async fn store_db_metadata_groups(

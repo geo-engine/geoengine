@@ -468,16 +468,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewTask<C> {
             .create_overviews(&self.file, resampling_method, ctx)
             .await
         {
-            Ok(OverviewGeneration::Created) => Ok(NetCdfCfOverviewResponse {
-                success: vec![self.file.clone()],
-                skip: vec![],
-                error: vec![],
-            }),
-            Ok(OverviewGeneration::Skipped) => Ok(NetCdfCfOverviewResponse {
-                success: vec![],
-                skip: vec![self.file.clone()],
-                error: vec![],
-            }),
+            Ok(details) => Ok(details),
             Err(e) => {
                 debug!("Error during overview creation: {:?}", &e);
                 Err(NetCdfCf4DProviderError::CannotCreateOverview {
@@ -536,16 +527,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewRefreshTask<C> {
             .map_err(ErrorSource::boxed)?;
 
         let response = match provider.refresh_overview_metadata(&self.file, ctx).await {
-            Ok(OverviewGeneration::Created) => Ok(NetCdfCfOverviewResponse {
-                success: vec![self.file.clone()],
-                skip: vec![],
-                error: vec![],
-            }),
-            Ok(OverviewGeneration::Skipped) => Ok(NetCdfCfOverviewResponse {
-                success: vec![],
-                skip: vec![self.file.clone()],
-                error: vec![],
-            }),
+            Ok(details) => Ok(details),
             Err(e) => {
                 debug!("Error during overview creation: {:?}", &e);
                 Err(NetCdfCf4DProviderError::CannotCreateOverview {
@@ -578,6 +560,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewRefreshTask<C> {
 }
 
 impl TaskStatusInfo for NetCdfCfOverviewResponse {}
+impl TaskStatusInfo for OverviewGeneration {}
 
 #[derive(Debug, Deserialize, Default, ToSchema, IntoParams)]
 #[schema(example = json!({
@@ -766,9 +749,9 @@ mod tests {
 
         let status = tasks.get_task_status(task_response.task_id).await.unwrap();
 
-        let mut response = if let TaskStatus::Completed { info, .. } = status {
+        let response = if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()
-                .downcast::<NetCdfCfOverviewResponse>()
+                .downcast::<OverviewGeneration>()
                 .unwrap()
                 .as_ref()
                 .clone()
@@ -776,15 +759,7 @@ mod tests {
             panic!("Task must be completed");
         };
 
-        response.success.sort();
-        assert_eq!(
-            response,
-            NetCdfCfOverviewResponse {
-                success: vec!["dataset_m.nc".into()],
-                skip: vec![],
-                error: vec![],
-            }
-        );
+        assert!(matches!(response, OverviewGeneration::Created { .. }));
 
         // Now, delete the overviews
 

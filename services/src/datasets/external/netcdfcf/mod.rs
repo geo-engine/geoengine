@@ -632,8 +632,7 @@ impl NetCdfCfDataProvider {
             return Ok(OverviewGeneration::Skipped);
         }
 
-        // TODO: return overview tree
-        create_overviews(
+        let details = create_overviews(
             task_context,
             &transaction,
             OverviewCreationOptions {
@@ -651,7 +650,7 @@ impl NetCdfCfDataProvider {
             .await
             .boxed_context(error::DatabaseTransactionCommit)?;
 
-        Ok(OverviewGeneration::Created)
+        Ok(OverviewGeneration::Created { details })
     }
 
     pub async fn refresh_overview_metadata<C: TaskContext + 'static>(
@@ -667,17 +666,7 @@ impl NetCdfCfDataProvider {
 
         let transaction = deferred_write_transaction(&mut db_connection).await?;
 
-        // let result = refresh_metadata(
-        //     &self.data,
-        //     dataset_path,
-        //     &self.overviews,
-        //     task_context,
-        //     &transaction,
-        // )
-        // .await?;
-
-        // TODO: return overview tree
-        create_overviews(
+        let details = create_overviews(
             task_context,
             &transaction,
             OverviewCreationOptions {
@@ -695,7 +684,7 @@ impl NetCdfCfDataProvider {
             .await
             .boxed_context(error::DatabaseTransactionCommit)?;
 
-        Ok(OverviewGeneration::Created)
+        Ok(OverviewGeneration::Created { details })
     }
 
     pub async fn remove_overviews(&self, dataset_path: &Path, force: bool) -> Result<()> {
