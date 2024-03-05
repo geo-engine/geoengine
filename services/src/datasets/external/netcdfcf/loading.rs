@@ -1,7 +1,7 @@
 use super::{
     error,
     metadata::{Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata},
-    netcdf_entity_to_layer_id, netcdf_group_to_layer_collection_id, NetCdfEntity, Result,
+    NetCdfEntity, Result,
 };
 use crate::{
     layers::{
@@ -15,7 +15,7 @@ use crate::{
     workflows::workflow::Workflow,
 };
 use geoengine_datatypes::{
-    dataset::{DataProviderId, NamedData},
+    dataset::{DataProviderId, LayerId, NamedData},
     operations::image::{Colorizer, RasterColorizer},
     primitives::{CacheTtlSeconds, TimeInstance},
 };
@@ -29,14 +29,28 @@ use geoengine_operators::{
 use snafu::ResultExt;
 use std::path::{Path, PathBuf};
 
+pub struct LayerCollectionParts<'a, E: Iterator<Item = NetCdfEntity>> {
+    pub provider_id: DataProviderId,
+    pub collection_id: LayerCollectionId,
+    pub group_path: &'a [String],
+    pub overview: NetCdfOverviewMetadata,
+    pub group: Option<NetCdfGroupMetadata>,
+    pub subgroups: Vec<NetCdfGroupMetadata>,
+    pub entities: E,
+}
+
 pub fn create_layer_collection_from_parts(
-    provider_id: DataProviderId,
-    collection_id: LayerCollectionId,
-    group_path: &[String],
-    overview: NetCdfOverviewMetadata,
-    group: Option<NetCdfGroupMetadata>,
-    subgroups: Vec<NetCdfGroupMetadata>,
-    entities: impl Iterator<Item = NetCdfEntity>,
+    LayerCollectionParts {
+        provider_id,
+        collection_id,
+        group_path,
+        overview,
+        group,
+        entities,
+        subgroups,
+    }: LayerCollectionParts<impl Iterator<Item = NetCdfEntity>>,
+    layer_collection_id_fn: impl Fn(&Path, &[String]) -> LayerCollectionId,
+    layer_id_fn: impl Fn(&Path, &[String], usize) -> LayerId,
 ) -> LayerCollection {
     let (name, description) = if let Some(group) = group {
         (group.title, group.description)
@@ -55,7 +69,7 @@ pub fn create_layer_collection_from_parts(
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider_id,
-                        layer_id: netcdf_entity_to_layer_id(
+                        layer_id: layer_id_fn(
                             Path::new(overview.file_name.as_str()),
                             group_path,
                             entity.id,
@@ -77,7 +91,7 @@ pub fn create_layer_collection_from_parts(
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id,
-                        collection_id: netcdf_group_to_layer_collection_id(
+                        collection_id: layer_collection_id_fn(
                             Path::new(overview.file_name.as_str()),
                             &out_groups,
                         ),

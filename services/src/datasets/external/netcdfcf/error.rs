@@ -1,5 +1,8 @@
 use gdal::errors::GdalError;
-use geoengine_datatypes::{dataset::DataProviderId, error::ErrorSource};
+use geoengine_datatypes::{
+    dataset::{DataId, DataProviderId},
+    error::ErrorSource,
+};
 use snafu::Snafu;
 use std::path::PathBuf;
 
@@ -84,7 +87,7 @@ pub enum NetCdfCf4DProviderError {
         source: geoengine_datatypes::error::Error,
     },
     InvalidExternalDataId {
-        provider: DataProviderId,
+        data_id: DataId,
     },
     InvalidDataIdLength {
         length: usize,

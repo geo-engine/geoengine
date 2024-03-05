@@ -1256,8 +1256,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn test_create_overviews_irregular() {
-        // crate::util::tests::initialize_debugging_in_test(); // TODO: remove
-
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
