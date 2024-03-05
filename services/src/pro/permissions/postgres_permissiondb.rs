@@ -5,8 +5,8 @@ use super::{
 use crate::error::Result;
 use crate::pro::contexts::ProPostgresDb;
 use crate::pro::permissions::{
-    CannotRevokeOwnPermissionPermissionDbError, MustBeAdminPermissionDbError,
-    PermissionDeniedPermissionDbError, Role,
+    CannotGrantOwnerPermissionPermissionDbError, CannotRevokeOwnPermissionPermissionDbError,
+    MustBeAdminPermissionDbError, PermissionDeniedPermissionDbError, Role,
 };
 use async_trait::async_trait;
 use snafu::{ensure, ResultExt};
@@ -464,6 +464,11 @@ where
         resource: R,
         permission: Permission,
     ) -> Result<(), PermissionDbError> {
+        ensure!(
+            permission != Permission::Owner,
+            CannotGrantOwnerPermissionPermissionDbError
+        );
+
         let mut conn = self.conn_pool.get().await.context(Bb8PermissionDbError)?;
         let tx = conn
             .build_transaction()
