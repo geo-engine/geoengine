@@ -205,7 +205,7 @@ where
     ) -> Result<bool> {
         Self::maybe_clear_database(&conn).await?;
 
-        let migration = migrate_database(&mut conn, &all_migrations()).await?;
+        let migration = migrate_database(&mut conn, &all_migrations(), None).await?;
 
         Ok(migration == MigrationResult::CreatedDatabase)
     }
@@ -942,8 +942,9 @@ mod tests {
             name: "netcdfcf".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
             priority: Some(21),
-            path: test_data!("netcdf4d/").into(),
+            data: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
+            metadata_db_config: crate::datasets::external::netcdfcf::test_db_config(),
             cache_ttl: CacheTtlSeconds::new(0),
         };
 
@@ -981,7 +982,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(datasets.items.len(), 3, "{:?}", datasets.items);
+        assert_eq!(datasets.items.len(), 4, "{:?}", datasets.items);
     }
 
     #[allow(clippy::too_many_lines)]
@@ -4624,9 +4625,17 @@ mod tests {
                 name: "ebv".to_string(),
                 description: "EBV".to_string(),
                 priority: None,
-                path: "a_path".into(),
+                data: "a_path".into(),
                 base_url: "http://base".try_into().unwrap(),
                 overviews: "another_path".into(),
+                metadata_db_config: DatabaseConnectionConfig {
+                    host: "testhost".to_string(),
+                    port: 1234,
+                    database: "testdb".to_string(),
+                    schema: "testschema".to_string(),
+                    user: "testuser".to_string(),
+                    password: "testpass".to_string(),
+                },
                 cache_ttl: CacheTtlSeconds::new(0),
             }],
         )
@@ -4639,8 +4648,16 @@ mod tests {
                 name: "netcdfcf".to_string(),
                 description: "netcdfcf".to_string(),
                 priority: Some(33),
-                path: "a_path".into(),
+                data: "a_path".into(),
                 overviews: "another_path".into(),
+                metadata_db_config: DatabaseConnectionConfig {
+                    host: "testhost".to_string(),
+                    port: 1234,
+                    database: "testdb".to_string(),
+                    schema: "testschema".to_string(),
+                    user: "testuser".to_string(),
+                    password: "testpass".to_string(),
+                },
                 cache_ttl: CacheTtlSeconds::new(0),
             }],
         )
@@ -4735,9 +4752,17 @@ mod tests {
                         name: "ebv".to_string(),
                         description: "ebv".to_string(),
                         priority: Some(33),
-                        path: "a_path".into(),
+                        data: "a_path".into(),
                         base_url: "http://base".try_into().unwrap(),
                         overviews: "another_path".into(),
+                        metadata_db_config: DatabaseConnectionConfig {
+                            host: "testhost".to_string(),
+                            port: 1234,
+                            database: "testdb".to_string(),
+                            schema: "testschema".to_string(),
+                            user: "testuser".to_string(),
+                            password: "testpass".to_string(),
+                        },
                         cache_ttl: CacheTtlSeconds::new(0),
                     },
                 ),
@@ -4746,8 +4771,16 @@ mod tests {
                         name: "netcdfcf".to_string(),
                         description: "netcdfcf".to_string(),
                         priority: Some(33),
-                        path: "a_path".into(),
+                        data: "a_path".into(),
                         overviews: "another_path".into(),
+                        metadata_db_config: DatabaseConnectionConfig {
+                            host: "testhost".to_string(),
+                            port: 1234,
+                            database: "testdb".to_string(),
+                            schema: "testschema".to_string(),
+                            user: "testuser".to_string(),
+                            password: "testpass".to_string(),
+                        },
                         cache_ttl: CacheTtlSeconds::new(0),
                     },
                 ),

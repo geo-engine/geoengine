@@ -2827,6 +2827,7 @@ dependencies = [
  "opentelemetry-jaeger",
  "ordered-float 4.2.0",
  "postgres-types",
+ "pretty_assertions",
  "proj",
  "proj-sys",
  "prost",

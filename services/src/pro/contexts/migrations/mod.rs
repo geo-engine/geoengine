@@ -1,3 +1,4 @@
+use crate::contexts::migrations::Migration0006EbvProvider;
 use crate::contexts::{
     Migration0000Initial, Migration0001RasterStacks, Migration0002DatasetListingProvider,
     Migration0003GbifConfig, Migration0004DatasetListingProviderPrio,
@@ -25,5 +26,6 @@ where
             Migration0004DatasetListingProviderPrio,
         )),
         Box::new(NoProMigrationImpl::from(Migration0005GbifColumnSelection)),
+        Box::new(NoProMigrationImpl::from(Migration0006EbvProvider)),
     ]
 }

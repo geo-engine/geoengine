@@ -131,7 +131,7 @@ mod tests {
 
         let mut conn = pool.get().await?;
 
-        migrate_database(&mut conn, &pro_migrations()).await?;
+        migrate_database(&mut conn, &pro_migrations(), None).await?;
 
         Ok(())
     }
@@ -153,6 +153,7 @@ mod tests {
         migrate_database(
             &mut conn,
             &[Box::new(ProMigrationImpl::from(Migration0000Initial))],
+            None,
         )
         .await?;
 
@@ -164,7 +165,7 @@ mod tests {
         conn.batch_execute(&test_data_sql).await?;
 
         // migrate to latest schema
-        migrate_database(&mut conn, &pro_migrations()).await?;
+        migrate_database(&mut conn, &pro_migrations(), None).await?;
 
         // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
         drop(conn);
