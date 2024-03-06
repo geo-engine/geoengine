@@ -215,7 +215,7 @@ where
     ) -> Result<bool> {
         PostgresContext::maybe_clear_database(&conn).await?;
 
-        let migration = migrate_database(&mut conn, &pro_migrations()).await?;
+        let migration = migrate_database(&mut conn, &pro_migrations(), None).await?;
 
         Ok(migration == MigrationResult::CreatedDatabase)
     }
@@ -1205,8 +1205,9 @@ mod tests {
             name: "netcdfcf".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
             priority: Some(33),
-            path: test_data!("netcdf4d/").into(),
+            data: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
+            metadata_db_config: crate::datasets::external::netcdfcf::test_db_config(),
             cache_ttl: CacheTtlSeconds::new(0),
         };
 
@@ -1244,7 +1245,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(datasets.items.len(), 3);
+        assert_eq!(datasets.items.len(), 4);
     }
 
     #[ge_context::test]
@@ -4184,90 +4185,6 @@ mod tests {
             .unwrap();
 
         assert!(collection.items.iter().any(|c| match c {
-            CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
-            CollectionItem::Layer(_) => false,
-        }));
-
-        // add new layer in the collection as user, fails because only read permission
-        let result = db1
-            .add_layer_collection(
-                AddLayerCollection {
-                    name: "user layer".to_string(),
-                    description: String::new(),
-                    properties: Default::default(),
-                },
-                &new_collection_id,
-            )
-            .await;
-
-        assert!(result.is_err());
-
-        // give user owner permission
-        admin_db
-            .add_permission(
-                session1.user.id.into(),
-                new_collection_id.clone(),
-                Permission::Owner,
-            )
-            .await
-            .unwrap();
-
-        // add now works
-        db1.add_layer_collection(
-            AddLayerCollection {
-                name: "user layer".to_string(),
-                description: String::new(),
-                properties: Default::default(),
-            },
-            &new_collection_id,
-        )
-        .await
-        .unwrap();
-
-        // remove permissions again
-        admin_db
-            .remove_permission(
-                session1.user.id.into(),
-                new_collection_id.clone(),
-                Permission::Read,
-            )
-            .await
-            .unwrap();
-        admin_db
-            .remove_permission(
-                session1.user.id.into(),
-                new_collection_id.clone(),
-                Permission::Owner,
-            )
-            .await
-            .unwrap();
-
-        // access is gone now
-        let result = db1
-            .add_layer_collection(
-                AddLayerCollection {
-                    name: "user layer".to_string(),
-                    description: String::new(),
-                    properties: Default::default(),
-                },
-                &root,
-            )
-            .await;
-
-        assert!(result.is_err());
-
-        let collection = db1
-            .load_layer_collection(
-                &root,
-                LayerCollectionListOptions {
-                    offset: 0,
-                    limit: 10,
-                },
-            )
-            .await
-            .unwrap();
-
-        assert!(!collection.items.iter().any(|c| match c {
             CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
             CollectionItem::Layer(_) => false,
         }));

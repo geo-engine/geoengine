@@ -6,6 +6,7 @@ use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use crate::projects::{ProjectId, STRectangle};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::Duration;
+use snafu::Snafu;
 
 #[async_trait]
 pub trait UserAuth {
@@ -150,20 +151,49 @@ pub trait UserDb: Send + Sync {
     ) -> Result<()>;
 }
 
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)), context(suffix(RoleDbError)))]
+pub enum RoleDbError {
+    #[snafu(display("Permission error: {source}"))]
+    PermissionDb {
+        source: crate::pro::permissions::PermissionDbError,
+    },
+    #[snafu(display("Role with id {role_id} does not exist."))]
+    RoleIdDoesNotExist { role_id: RoleId },
+    #[snafu(display("Role with name {role_name} does not exist."))]
+    RoleNameDoesNotExist { role_name: String },
+    #[snafu(display("Role with name {role_name} already exists."))]
+    RoleAlreadyExists { role_name: String },
+    #[snafu(display("Cannot revoke role {role_id} because it is not assigned."))]
+    CannotRevokeRoleThatIsNotAssigned { role_id: RoleId },
+    #[snafu(display("An unexpected database error occurred."))]
+    Postgres { source: tokio_postgres::Error },
+    #[snafu(display("An unexpected database error occurred."))]
+    Bb8 {
+        source: bb8_postgres::bb8::RunError<tokio_postgres::Error>,
+    },
+}
+
 #[async_trait]
 pub trait RoleDb {
     /// Add a new role
-    async fn add_role(&self, role_name: &str) -> Result<RoleId>;
+    async fn add_role(&self, role_name: &str) -> Result<RoleId, RoleDbError>;
+
+    /// Load a role by name
+    async fn load_role_by_name(&self, role_name: &str) -> Result<RoleId, RoleDbError>;
 
     /// Remove an existing role
-    async fn remove_role(&self, role_id: &RoleId) -> Result<()>;
+    async fn remove_role(&self, role_id: &RoleId) -> Result<(), RoleDbError>;
 
     /// Remove an existing role
-    async fn assign_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()>;
+    async fn assign_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<(), RoleDbError>;
 
     /// Remove an existing role
-    async fn revoke_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()>;
+    async fn revoke_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<(), RoleDbError>;
 
     /// Get role descriptions for user
-    async fn get_role_descriptions(&self, user_id: &UserId) -> Result<Vec<RoleDescription>>;
+    async fn get_role_descriptions(
+        &self,
+        user_id: &UserId,
+    ) -> Result<Vec<RoleDescription>, RoleDbError>;
 }

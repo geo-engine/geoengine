@@ -65,7 +65,7 @@ mod tests {
         let mut conn = pool.get().await?;
 
         // initial schema
-        migrate_database(&mut conn, &[Box::new(Migration0000Initial)]).await?;
+        migrate_database(&mut conn, &[Box::new(Migration0000Initial)], None).await?;
 
         // insert test data on initial schema
         let test_data_sql = std::fs::read_to_string(test_data!("migrations/test_data.sql"))?;
@@ -78,11 +78,12 @@ mod tests {
                 Box::new(Migration0001RasterStacks),
                 Box::new(Migration0002DatasetListingProvider),
             ],
+            None,
         )
         .await?;
 
         // perform the current migrations
-        migrate_database(&mut conn, &[Box::new(Migration0003GbifConfig)]).await?;
+        migrate_database(&mut conn, &[Box::new(Migration0003GbifConfig)], None).await?;
 
         // verify that the default value for autocomplete_timeout has been set correctly
         let autocomplete_timeout = conn

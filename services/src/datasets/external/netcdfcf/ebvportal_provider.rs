@@ -1,21 +1,22 @@
 use super::{
-    ebvportal_api::{EbvPortalApi, NetCdfCfDataProviderPaths},
-    layer_from_netcdf_overview, NetCdfCfDataProvider,
+    ebvportal_api::EbvPortalApi, netcdf_entity_to_layer_id, netcdf_group_to_layer_collection_id,
+    NetCdfCfDataProvider, NetCdfCfDataProviderDefinition, NetCdfLayerCollectionId,
 };
 use crate::{
     contexts::GeoEngineDb,
-    datasets::external::netcdfcf::find_group,
+    datasets::external::netcdfcf::path_to_string,
     error::{Error, Result},
     layers::{
         external::{DataProvider, DataProviderDefinition},
         layer::{
             CollectionItem, Layer, LayerCollection, LayerCollectionListOptions,
-            LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
+            LayerCollectionListing, ProviderLayerCollectionId,
         },
         listing::{
             LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
         },
     },
+    util::postgres::DatabaseConnectionConfig,
 };
 use async_trait::async_trait;
 use geoengine_datatypes::{
@@ -29,8 +30,10 @@ use geoengine_operators::{
 };
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
-use std::{path::PathBuf, str::FromStr};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 /// Singleton Provider with id `77d0bf11-986e-43f5-b11d-898321f1854c`
 pub const EBV_PROVIDER_ID: DataProviderId =
@@ -42,8 +45,12 @@ pub struct EbvPortalDataProviderDefinition {
     pub name: String,
     pub description: String,
     pub priority: Option<i16>,
-    pub path: PathBuf,
     pub base_url: Url,
+    /// Path were the NetCDF data can be found
+    pub data: PathBuf,
+    /// Database configuration for storing metadata of overviews
+    pub metadata_db_config: DatabaseConnectionConfig,
+    /// Path were overview files are stored
     pub overviews: PathBuf,
     #[serde(default)]
     pub cache_ttl: CacheTtlSeconds,
@@ -60,17 +67,22 @@ pub struct EbvPortalDataProvider {
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefinition {
     async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
+        let id = DataProviderDefinition::<D>::id(&*self);
         Ok(Box::new(EbvPortalDataProvider {
             name: self.name.clone(),
             description: self.description.clone(),
             ebv_api: EbvPortalApi::new(self.base_url),
-            netcdf_cf_provider: NetCdfCfDataProvider {
+            netcdf_cf_provider: Box::new(NetCdfCfDataProviderDefinition {
                 name: self.name,
                 description: self.description,
-                path: self.path,
+                data: self.data,
                 overviews: self.overviews,
+                metadata_db_config: self.metadata_db_config,
                 cache_ttl: self.cache_ttl,
-            },
+                priority: self.priority,
+            })
+            ._initialize(id)
+            .await?,
         }))
     }
 
@@ -370,13 +382,12 @@ impl EbvPortalDataProvider {
         })
     }
 
-    async fn get_dataset_collection(
+    async fn dataset_collection_of_items(
         &self,
         collection: &LayerCollectionId,
-        class: &str,
         ebv: &str,
         dataset_id: &str,
-        options: &LayerCollectionListOptions,
+        items: Vec<CollectionItem>,
     ) -> Result<LayerCollection> {
         let dataset = self
             .ebv_api
@@ -387,40 +398,6 @@ impl EbvPortalDataProvider {
             .ok_or(Error::UnknownLayerCollectionId {
                 id: collection.clone(),
             })?;
-
-        let items = self
-            .ebv_api
-            .get_ebv_subdatasets(
-                NetCdfCfDataProviderPaths {
-                    provider_path: self.netcdf_cf_provider.path.clone(),
-                    overview_path: self.netcdf_cf_provider.overviews.clone(),
-                },
-                dataset_id,
-            )
-            .await?
-            .tree
-            .groups
-            .into_iter()
-            .skip(options.offset as usize)
-            .take(options.limit as usize)
-            .map(|g| {
-                Ok(CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: EBV_PROVIDER_ID,
-                        collection_id: EbvCollectionId::Group {
-                            class: class.to_string(),
-                            ebv: ebv.to_string(),
-                            dataset: dataset_id.to_string(),
-                            groups: vec![g.name.clone()],
-                        }
-                        .try_into()?,
-                    },
-                    name: g.title,
-                    description: g.description,
-                    properties: Default::default(),
-                }))
-            })
-            .collect::<Result<Vec<CollectionItem>>>()?;
 
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {
@@ -444,106 +421,6 @@ impl EbvPortalDataProvider {
             ]
             .into_iter()
             .collect(),
-        })
-    }
-
-    async fn get_group_collection(
-        &self,
-        collection: &LayerCollectionId,
-        class: &str,
-        ebv: &str,
-        dataset: &str,
-        groups: &[String],
-        options: &LayerCollectionListOptions,
-    ) -> Result<LayerCollection> {
-        ensure!(!groups.is_empty(), crate::error::InvalidLayerCollectionId);
-
-        let tree = self
-            .ebv_api
-            .get_ebv_subdatasets(
-                NetCdfCfDataProviderPaths {
-                    provider_path: self.netcdf_cf_provider.path.clone(),
-                    overview_path: self.netcdf_cf_provider.overviews.clone(),
-                },
-                dataset,
-            )
-            .await?
-            .tree;
-
-        let group =
-            find_group(tree.groups.clone(), groups)?.ok_or(Error::UnknownLayerCollectionId {
-                id: collection.clone(),
-            })?;
-
-        let sub_groups = &group.groups;
-
-        let items = if sub_groups.is_empty() {
-            tree.entities
-                .into_iter()
-                .skip(options.offset as usize)
-                .take(options.limit as usize)
-                .map(|entity| {
-                    Ok(CollectionItem::Layer(LayerListing {
-                        id: ProviderLayerId {
-                            provider_id: EBV_PROVIDER_ID,
-                            layer_id: EbvCollectionId::Entity {
-                                class: class.to_string(),
-                                ebv: ebv.to_string(),
-                                dataset: dataset.to_string(),
-                                groups: groups.to_owned(),
-                                entity: entity.id,
-                            }
-                            .try_into()?,
-                        },
-                        name: entity.name,
-                        description: String::new(),
-                        properties: vec![],
-                    }))
-                })
-                .collect::<Result<Vec<CollectionItem>>>()?
-        } else {
-            let out_groups = groups.to_owned();
-
-            sub_groups
-                .iter()
-                .skip(options.offset as usize)
-                .take(options.limit as usize)
-                .map(|group| {
-                    let mut out_groups = out_groups.clone();
-                    out_groups.push(group.name.clone());
-                    Ok(CollectionItem::Collection(LayerCollectionListing {
-                        id: ProviderLayerCollectionId {
-                            provider_id: EBV_PROVIDER_ID,
-                            collection_id: EbvCollectionId::Group {
-                                class: class.to_string(),
-                                ebv: ebv.to_string(),
-                                dataset: dataset.to_string(),
-                                groups: out_groups,
-                            }
-                            .try_into()?,
-                        },
-                        name: group.title.clone(),
-                        description: group.description.clone(),
-                        properties: Default::default(),
-                    }))
-                })
-                .collect::<Result<Vec<CollectionItem>>>()?
-        };
-
-        Ok(LayerCollection {
-            id: ProviderLayerCollectionId {
-                provider_id: EBV_PROVIDER_ID,
-                collection_id: collection.clone(),
-            },
-            name: group.title,
-            description: group.description,
-            items,
-            entry_label: group
-                .groups
-                .is_empty()
-                .then_some("Entity".to_string())
-                .or_else(|| Some("Metric".to_string())),
-            properties: vec![],
         })
     }
 }
@@ -588,7 +465,25 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
                 ebv,
                 dataset,
             } => {
-                self.get_dataset_collection(collection, &class, &ebv, &dataset, &options)
+                let dataset_path = self
+                    .ebv_api
+                    .get_dataset_metadata(&dataset)
+                    .await
+                    .map(|dataset| PathBuf::from(dataset.dataset_path.trim_start_matches('/')))?;
+
+                let layer_collection_id = LayerCollectionId(path_to_string(&dataset_path));
+
+                let layer_collection = self
+                    .netcdf_cf_provider
+                    ._load_layer_collection(
+                        &layer_collection_id,
+                        options,
+                        layer_collection_fn(class.clone(), ebv.clone(), dataset.clone()),
+                        layer_fn(class.clone(), ebv.clone(), dataset.clone()),
+                    )
+                    .await?;
+
+                self.dataset_collection_of_items(collection, &ebv, &dataset, layer_collection.items)
                     .await?
             }
             EbvCollectionId::Group {
@@ -597,8 +492,37 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
                 dataset,
                 groups,
             } => {
-                self.get_group_collection(collection, &class, &ebv, &dataset, &groups, &options)
-                    .await?
+                let dataset_path = self
+                    .ebv_api
+                    .get_dataset_metadata(&dataset)
+                    .await
+                    .map(|dataset| PathBuf::from(dataset.dataset_path.trim_start_matches('/')))?;
+
+                let layer_collection_id =
+                    netcdf_group_to_layer_collection_id(&dataset_path, &groups);
+
+                let mut layer_collection = self
+                    .netcdf_cf_provider
+                    ._load_layer_collection(
+                        &layer_collection_id,
+                        options,
+                        layer_collection_fn(class.clone(), ebv.clone(), dataset.clone()),
+                        layer_fn(class.clone(), ebv.clone(), dataset.clone()),
+                    )
+                    .await?;
+
+                layer_collection.id = ProviderLayerCollectionId {
+                    provider_id: EBV_PROVIDER_ID,
+                    collection_id: collection.clone(),
+                };
+                layer_collection.entry_label = layer_collection
+                    .items
+                    .first()
+                    .map_or(true, |item| matches!(item, CollectionItem::Layer(_)))
+                    .then_some("Entity".to_string())
+                    .or_else(|| Some("Metric".to_string()));
+
+                layer_collection
             }
             EbvCollectionId::Entity { .. } => return Err(Error::InvalidLayerCollectionId),
         })
@@ -611,29 +535,107 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
     async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
         let ebv_id: EbvCollectionId = EbvCollectionId::from_str(&id.0)?;
 
-        match &ebv_id {
-            EbvCollectionId::Entity {
-                class: _,
-                ebv: _,
-                dataset,
-                groups,
-                entity,
-            } => {
-                let ebv_hierarchy = self
-                    .ebv_api
-                    .get_ebv_subdatasets(
-                        NetCdfCfDataProviderPaths {
-                            provider_path: self.netcdf_cf_provider.path.clone(),
-                            overview_path: self.netcdf_cf_provider.overviews.clone(),
-                        },
-                        dataset,
-                    )
-                    .await?;
+        let EbvCollectionId::Entity {
+            class: _,
+            ebv: _,
+            dataset,
+            groups,
+            entity,
+        } = ebv_id
+        else {
+            return Err(Error::InvalidLayerId);
+        };
 
-                layer_from_netcdf_overview(EBV_PROVIDER_ID, id, ebv_hierarchy.tree, groups, *entity)
+        let dataset_path = self
+            .ebv_api
+            .get_dataset_metadata(&dataset)
+            .await
+            .map(|dataset| PathBuf::from(dataset.dataset_path.trim_start_matches('/')))?;
+
+        let layer_id = netcdf_entity_to_layer_id(&dataset_path, &groups, entity);
+
+        let layer = self.netcdf_cf_provider.load_layer(&layer_id).await?;
+
+        Ok(layer)
+    }
+}
+
+fn layer_collection_fn(
+    class: String,
+    ebv: String,
+    dataset: String,
+) -> impl Fn(&Path, &[String]) -> LayerCollectionId {
+    move |_path, groups| {
+        if groups.is_empty() {
+            EbvCollectionId::Dataset {
+                class: class.clone(),
+                ebv: ebv.clone(),
+                dataset: dataset.clone(),
             }
-            _ => return Err(Error::InvalidLayerId),
+        } else {
+            EbvCollectionId::Group {
+                class: class.clone(),
+                ebv: ebv.clone(),
+                dataset: dataset.clone(),
+                groups: groups.to_vec(),
+            }
         }
+        .try_into()
+        .unwrap_or_else(
+            |_| LayerCollectionId(String::new()), // must not happen, but cover this defensively
+        )
+    }
+}
+
+fn layer_fn(
+    class: String,
+    ebv: String,
+    dataset: String,
+) -> impl Fn(&Path, &[String], usize) -> LayerId {
+    move |_path, groups, entity| {
+        EbvCollectionId::Entity {
+            class: class.clone(),
+            ebv: ebv.clone(),
+            dataset: dataset.clone(),
+            groups: groups.to_vec(),
+            entity,
+        }
+        .try_into()
+        .unwrap_or_else(
+            |_| LayerId(String::new()), // must not happen, but cover this defensively
+        )
+    }
+}
+
+fn _net_cdf_layer_collection_id_to_ebv_collection_id(
+    id: NetCdfLayerCollectionId,
+    class: String,
+    ebv: String,
+    dataset: String,
+) -> EbvCollectionId {
+    match id {
+        NetCdfLayerCollectionId::Path { path: _ } => EbvCollectionId::Dataset {
+            class,
+            ebv,
+            dataset,
+        },
+        NetCdfLayerCollectionId::Group { path: _, groups } => EbvCollectionId::Group {
+            class,
+            ebv,
+            dataset,
+            groups,
+        },
+        NetCdfLayerCollectionId::Entity {
+            path: _,
+            groups,
+            entity,
+        } => EbvCollectionId::Entity {
+            class,
+            ebv,
+            dataset,
+            groups,
+            entity,
+        },
     }
 }
 
@@ -699,7 +701,9 @@ mod tests {
 
     use crate::{
         contexts::{PostgresContext, SessionContext, SimpleApplicationContext},
+        datasets::external::netcdfcf::test_db_config,
         ge_context,
+        layers::layer::{LayerListing, ProviderLayerId},
     };
 
     use super::*;
@@ -852,9 +856,10 @@ mod tests {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
             priority: None,
-            path: test_data!("netcdf4d").into(),
+            data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -992,9 +997,10 @@ mod tests {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
             priority: None,
-            path: test_data!("netcdf4d").into(),
+            data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1160,9 +1166,10 @@ mod tests {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
             priority: None,
-            path: test_data!("netcdf4d").into(),
+            data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1399,9 +1406,10 @@ mod tests {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
             priority: None,
-            path: test_data!("netcdf4d").into(),
+            data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1421,7 +1429,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
+        pretty_assertions::assert_eq!(
             collection, LayerCollection {
                 id: ProviderLayerCollectionId {
                     provider_id: EBV_PROVIDER_ID,
@@ -1461,6 +1469,8 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn test_get_groups(app_ctx: PostgresContext<NoTls>) {
+        // crate::util::tests::initialize_debugging_in_test(); // TODO: remove
+
         let mock_server = httptest::Server::run();
 
         mock_server.expect(
@@ -1560,9 +1570,10 @@ mod tests {
             name: "EBV Portal".to_string(),
             description: "EbvPortalProviderDefinition".to_string(),
             priority: None,
-            path: test_data!("netcdf4d").into(),
+            data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
+            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1584,7 +1595,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
+        pretty_assertions::assert_eq!(
             collection,
             LayerCollection {
                 id: ProviderLayerCollectionId {

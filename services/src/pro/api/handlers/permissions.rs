@@ -1,7 +1,5 @@
-use crate::api::model::datatypes::LayerId;
+use crate::api::model::datatypes::{DatasetId, LayerId};
 use crate::contexts::{ApplicationContext, SessionContext};
-use crate::datasets::storage::DatasetDb;
-use crate::datasets::DatasetName;
 use crate::error::Result;
 use crate::layers::listing::LayerCollectionId;
 use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
@@ -9,6 +7,7 @@ use crate::pro::permissions::{Permission, PermissionListing};
 use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
 use crate::projects::ProjectId;
 use actix_web::{web, FromRequest, HttpResponse};
+use geoengine_datatypes::error::BoxedResultExt;
 use serde::Deserialize;
 use utoipa::{IntoParams, ToSchema};
 
@@ -48,25 +47,19 @@ pub enum Resource {
     Layer(LayerId),
     LayerCollection(LayerCollectionId),
     Project(ProjectId),
-    Dataset(DatasetName),
+    Dataset(DatasetId),
 }
 
-impl Resource {
-    pub async fn into_resource_id<D: DatasetDb>(self, db: &D) -> Result<ResourceId> {
-        Ok(match self {
+impl From<Resource> for ResourceId {
+    fn from(resource: Resource) -> Self {
+        match resource {
             Resource::Layer(layer_id) => ResourceId::Layer(layer_id.into()),
             Resource::LayerCollection(layer_collection_id) => {
                 ResourceId::LayerCollection(layer_collection_id)
             }
             Resource::Project(project_id) => ResourceId::Project(project_id),
-            Resource::Dataset(dataset_name) => {
-                ResourceId::DatasetId(db.resolve_dataset_name_to_id(&dataset_name).await?.ok_or(
-                    crate::error::Error::UnknownDatasetName {
-                        dataset_name: dataset_name.to_string(),
-                    },
-                )?)
-            }
-        })
+            Resource::Dataset(dataset_id) => ResourceId::DatasetId(dataset_id.into()),
+        }
     }
 }
 
@@ -108,7 +101,8 @@ where
     let db = app_ctx.session_context(session).db();
     let permissions = db
         .list_permissions(resource_id, options.offset, options.limit)
-        .await?;
+        .await
+        .boxed_context(crate::error::PermissionDb)?;
 
     Ok(web::Json(permissions))
 }
@@ -146,12 +140,13 @@ where
     let permission = permission.into_inner();
 
     let db = app_ctx.session_context(session).db();
-    db.add_permission(
+    db.add_permission::<ResourceId>(
         permission.role_id,
-        permission.resource.into_resource_id(&db).await?,
+        permission.resource.into(),
         permission.permission,
     )
-    .await?;
+    .await
+    .boxed_context(crate::error::PermissionDb)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -189,12 +184,13 @@ where
     let permission = permission.into_inner();
 
     let db = app_ctx.session_context(session).db();
-    db.remove_permission(
+    db.remove_permission::<ResourceId>(
         permission.role_id,
-        permission.resource.into_resource_id(&db).await?,
+        permission.resource.into(),
         permission.permission,
     )
-    .await?;
+    .await
+    .boxed_context(crate::error::PermissionDb)?;
 
     Ok(HttpResponse::Ok().finish())
 }

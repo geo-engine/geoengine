@@ -15,8 +15,8 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    BandSelection, ColumnSelection, Duration, Geometry, RasterQueryRectangle, TimeGranularity,
-    TimeInstance, TimeInterval,
+    ColumnSelection, Duration, Geometry, RasterQueryRectangle, TimeGranularity, TimeInstance,
+    TimeInterval,
 };
 use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
@@ -481,7 +481,7 @@ where
             spatial_bounds: query.spatial_bounds,
             time_interval,
             spatial_resolution: query.spatial_resolution,
-            attributes: BandSelection::first(),
+            attributes: query.attributes,
         };
         let stream = self.processor.raster_query(query, ctx).await?;
 
@@ -521,8 +521,8 @@ mod tests {
         collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection},
         dataset::NamedData,
         primitives::{
-            BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialPartition2D, SpatialResolution,
-            TimeGranularity,
+            BandSelection, BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialPartition2D,
+            SpatialResolution, TimeGranularity,
         },
         raster::{EmptyGrid2D, GridOrEmpty, RasterDataType, TileInformation, TilingSpecification},
         spatial_reference::SpatialReference,

@@ -447,9 +447,10 @@ pub struct EbvPortalDataProviderDefinitionDbType {
     pub name: String,
     pub description: String,
     pub priority: Option<i16>,
-    pub path: String,
+    pub data: String,
     pub base_url: String,
     pub overviews: String,
+    pub metadata_db_config: DatabaseConnectionConfig,
     pub cache_ttl: CacheTtlSeconds,
 }
 
@@ -459,9 +460,10 @@ impl From<&EbvPortalDataProviderDefinition> for EbvPortalDataProviderDefinitionD
             name: other.name.clone(),
             description: other.description.clone(),
             priority: other.priority,
-            path: other.path.to_string_lossy().to_string(),
+            data: other.data.to_string_lossy().to_string(),
             base_url: other.base_url.clone().into(),
             overviews: other.overviews.to_string_lossy().to_string(),
+            metadata_db_config: other.metadata_db_config.clone(),
             cache_ttl: other.cache_ttl,
         }
     }
@@ -475,9 +477,10 @@ impl TryFrom<EbvPortalDataProviderDefinitionDbType> for EbvPortalDataProviderDef
             name: other.name,
             description: other.description,
             priority: other.priority,
-            path: other.path.into(),
+            data: other.data.into(),
             base_url: other.base_url.as_str().try_into()?,
             overviews: other.overviews.into(),
+            metadata_db_config: other.metadata_db_config,
             cache_ttl: other.cache_ttl,
         })
     }
@@ -489,8 +492,9 @@ pub struct NetCdfCfDataProviderDefinitionDbType {
     pub name: String,
     pub description: String,
     pub priority: Option<i16>,
-    pub path: String,
+    pub data: String,
     pub overviews: String,
+    pub metadata_db_config: DatabaseConnectionConfig,
     pub cache_ttl: CacheTtlSeconds,
 }
 
@@ -500,8 +504,9 @@ impl From<&NetCdfCfDataProviderDefinition> for NetCdfCfDataProviderDefinitionDbT
             name: other.name.clone(),
             description: other.description.clone(),
             priority: other.priority,
-            path: other.path.to_string_lossy().to_string(),
+            data: other.data.to_string_lossy().to_string(),
             overviews: other.overviews.to_string_lossy().to_string(),
+            metadata_db_config: other.metadata_db_config.clone(),
             cache_ttl: other.cache_ttl,
         }
     }
@@ -515,8 +520,9 @@ impl TryFrom<NetCdfCfDataProviderDefinitionDbType> for NetCdfCfDataProviderDefin
             name: other.name,
             description: other.description,
             priority: other.priority,
-            path: other.path.into(),
+            data: other.data.into(),
             overviews: other.overviews.into(),
+            metadata_db_config: other.metadata_db_config,
             cache_ttl: other.cache_ttl,
         })
     }
