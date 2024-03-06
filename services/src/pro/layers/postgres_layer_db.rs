@@ -35,6 +35,7 @@ use bb8_postgres::tokio_postgres::{
     Socket,
 };
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
+use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::util::HashMapTextTextDbType;
 use snafu::{ensure, ResultExt};
 use std::str::FromStr;
@@ -66,11 +67,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let trans = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(collection.clone(), Permission::Owner, &trans)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection.clone().into(), Permission::Owner, &trans)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         let layer_id = insert_layer(&trans, id, layer, collection).await?;
 
@@ -109,11 +108,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(collection.clone(), Permission::Owner, &tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection.clone().into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         let layer_id =
             Uuid::from_str(&layer.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -163,11 +160,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let trans = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(parent.clone(), Permission::Owner, &trans)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(parent.clone().into(), Permission::Owner, &trans)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         let collection_id = insert_layer_collection_with_id(&trans, id, collection, parent).await?;
 
@@ -208,11 +203,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let transaction = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(collection.clone(), Permission::Owner, &transaction)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection.clone().into(), Permission::Owner, &transaction)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         delete_layer_collection(&transaction, collection).await?;
 
@@ -227,11 +220,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let transaction = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(layer.clone(), Permission::Owner, &transaction)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection.clone().into(), Permission::Owner, &transaction)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         delete_layer_from_collection(&transaction, layer, collection).await?;
 
@@ -246,11 +237,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let transaction = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(collection.clone(), Permission::Owner, &transaction)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection.clone().into(), Permission::Owner, &transaction)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         delete_layer_collection_from_parent(&transaction, collection, parent).await?;
 
@@ -339,11 +328,10 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(collection_id.clone(), Permission::Read, &tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection_id.clone().into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
         let collection = Uuid::from_str(&collection_id.0).map_err(|_| {
             crate::error::Error::IdStringMustBeUuid {
                 found: collection_id.0.clone(),
@@ -467,11 +455,10 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(collection_id.clone(), Permission::Read, &tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection_id.clone().into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
         let collection = Uuid::from_str(&collection_id.0).map_err(|_| {
             crate::error::Error::IdStringMustBeUuid {
                 found: collection_id.0.clone(),
@@ -573,11 +560,10 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(collection_id.clone(), Permission::Read, &tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection_id.clone().into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
         let collection = Uuid::from_str(&collection_id.0).map_err(|_| {
             crate::error::Error::IdStringMustBeUuid {
                 found: collection_id.0.clone(),
@@ -628,11 +614,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(id.clone(), Permission::Read, &tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(id.clone().into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         let layer_id =
             Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
