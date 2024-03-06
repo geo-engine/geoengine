@@ -120,23 +120,10 @@ where
     .map_err(Into::into)
 }
 
-#[allow(clippy::print_stderr)]
-fn print_pro_info_message() {
-    eprintln!("|===========================================================================|");
-    eprintln!("| Welcome to Geo Engine Pro Version: Please refer to our license agreement. |");
-    eprintln!("| If you have any question: Visit https://www.geoengine.io.                 |");
-    eprintln!("|===========================================================================|");
-}
-
-/// Starts the webserver for the Geo Engine API.
 ///
-/// # Panics
-///  * may panic if the `Postgres` backend is chosen without compiling the `postgres` feature
-///
+///  Starts the webserver for the Geo Engine API.
 ///
 pub async fn start_pro_server(static_files_dir: Option<PathBuf>) -> Result<()> {
-    print_pro_info_message();
-
     log_server_info()?;
 
     let user_config: crate::pro::util::config::User = get_config_element()?;
