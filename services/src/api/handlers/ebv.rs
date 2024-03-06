@@ -91,7 +91,7 @@ impl Modify for ApiDocInfo {
 
         openapi.info.license = Some(
             utoipa::openapi::LicenseBuilder::new()
-                .name("Apache 2.0 (pro features excluded)")
+                .name("Apache-2.0")
                 .url(Some(
                     "https://github.com/geo-engine/geoengine/blob/main/LICENSE",
                 ))
