@@ -14,7 +14,7 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::{primitives::Measurement, raster::RasterDataType};
+use geoengine_datatypes::raster::RasterDataType;
 use geoengine_expression::{
     DataType, ExpressionAst, ExpressionParser, LinkedExpression, Parameter,
 };
@@ -32,7 +32,7 @@ use snafu::ensure;
 pub struct ExpressionParams {
     pub expression: String,
     pub output_type: RasterDataType,
-    pub output_measurement: Option<Measurement>,
+    pub output_band: Option<RasterBandDescriptor>,
     pub map_no_data: bool,
 }
 /// The `Expression` operator calculates an expression for all pixels of the input rasters bands and
@@ -87,7 +87,10 @@ impl RasterOperator for Expression {
         let expression = ExpressionParser::new(&parameters, DataType::Number)
             .map_err(RasterExpressionError::from)?
             .parse(
-                "expression", // TODO: generate and store a unique name
+                self.params
+                    .output_band
+                    .as_ref()
+                    .map_or("expression", |b| &b.name),
                 &self.params.expression,
             )
             .map_err(RasterExpressionError::from)?;
@@ -98,13 +101,10 @@ impl RasterOperator for Expression {
             time: in_descriptor.time,
             bbox: in_descriptor.bbox,
             resolution: in_descriptor.resolution,
-            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                "expression".into(), // TODO: how to name the band?
-                self.params
-                    .output_measurement
-                    .as_ref()
-                    .map_or(Measurement::Unitless, Measurement::clone),
-            )])?,
+            bands: RasterBandDescriptors::new(vec![self
+                .params
+                .output_band
+                .unwrap_or(RasterBandDescriptor::new_unitless("expression".into()))])?,
         };
 
         let initialized_operator = InitializedExpression {
@@ -210,7 +210,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::primitives::{
-        Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
         Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, TileInformation,
@@ -229,7 +229,7 @@ mod tests {
             ExpressionParams {
                 expression: "1*A".to_owned(),
                 output_type: RasterDataType::F64,
-                output_measurement: None,
+                output_band: None,
                 map_no_data: false,
             }
         );
@@ -245,7 +245,7 @@ mod tests {
             serde_json::to_string(&ExpressionParams {
                 expression: "1*A".to_owned(),
                 output_type: RasterDataType::F64,
-                output_measurement: None,
+                output_band: None,
                 map_no_data: false,
             })
             .unwrap()
@@ -262,7 +262,7 @@ mod tests {
             serde_json::to_string(&ExpressionParams {
                 expression: "1*A".to_owned(),
                 output_type: RasterDataType::F64,
-                output_measurement: None,
+                output_band: None,
                 map_no_data: false,
             })
             .unwrap()
@@ -285,7 +285,7 @@ mod tests {
             params: ExpressionParams {
                 expression: "2 * A".to_string(),
                 output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
+                output_band: None,
                 map_no_data: false,
             },
             sources: SingleRasterSource { raster: raster_a },
@@ -346,7 +346,7 @@ mod tests {
             params: ExpressionParams {
                 expression: "2 * A".to_string(),
                 output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
+                output_band: None,
                 map_no_data: true,
             },
             sources: SingleRasterSource { raster: raster_a },
@@ -408,7 +408,7 @@ mod tests {
             params: ExpressionParams {
                 expression: "A+B".to_string(),
                 output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
+                output_band: None,
                 map_no_data: false,
             },
             sources: SingleRasterSource {
@@ -481,7 +481,7 @@ mod tests {
                    }"
                 .to_string(),
                 output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
+                output_band: None,
                 map_no_data: true,
             },
             sources: SingleRasterSource {
@@ -555,7 +555,7 @@ mod tests {
             params: ExpressionParams {
                 expression: "A+B+C".to_string(),
                 output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
+                output_band: None,
                 map_no_data: false,
             },
             sources: SingleRasterSource {
@@ -639,7 +639,7 @@ mod tests {
             params: ExpressionParams {
                 expression: "A+B+C+D+E+F+G+H".to_string(),
                 output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
+                output_band: None,
                 map_no_data: false,
             },
             sources: SingleRasterSource {
@@ -708,7 +708,7 @@ mod tests {
             params: ExpressionParams {
                 expression: "min(A * pi(), 10)".to_string(),
                 output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
+                output_band: None,
                 map_no_data: false,
             },
             sources: SingleRasterSource {
@@ -821,7 +821,7 @@ mod tests {
             params: ExpressionParams {
                 expression: "min(A * pi(), 10)".to_string(),
                 output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
+                output_band: None,
                 map_no_data: false,
             },
             sources: SingleRasterSource {
@@ -890,7 +890,7 @@ mod tests {
             params: ExpressionParams {
                 expression: "A + B".to_string(),
                 output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
+                output_band: None,
                 map_no_data: false,
             },
             sources: SingleRasterSource {
@@ -961,7 +961,7 @@ mod tests {
             params: ExpressionParams {
                 expression: "A + B".to_string(),
                 output_type: RasterDataType::I8,
-                output_measurement: Some(Measurement::Unitless),
+                output_band: None,
                 map_no_data: false,
             },
             sources: SingleRasterSource {

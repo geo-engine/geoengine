@@ -11,9 +11,7 @@ use std::time::{Duration, Instant};
 use futures::TryStreamExt;
 use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-use geoengine_datatypes::primitives::{
-    Measurement, QueryRectangle, RasterQueryRectangle, SpatialPartitioned,
-};
+use geoengine_datatypes::primitives::{QueryRectangle, RasterQueryRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{Grid2D, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -408,7 +406,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
             params: ExpressionParams {
                 expression: "A+B".to_string(),
                 output_type: RasterDataType::U8,
-                output_measurement: Some(Measurement::Unitless),
+                output_band: None,
                 map_no_data: false,
             },
             sources: SingleRasterSource {
@@ -725,7 +723,7 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
         params: ExpressionParams {
             expression: "A+B".to_string(),
             output_type: RasterDataType::U8,
-            output_measurement: Some(Measurement::Unitless),
+            output_band: None,
             map_no_data: false,
         },
         sources: SingleRasterSource {

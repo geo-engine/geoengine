@@ -260,7 +260,7 @@ impl ToSql for RasterBandDescriptors {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSql, FromSql)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, ToSql, FromSql)]
 pub struct RasterBandDescriptor {
     pub name: String,
     pub measurement: Measurement,

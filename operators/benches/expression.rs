@@ -3,8 +3,7 @@
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
     primitives::{
-        BandSelection, Measurement, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-        TimeInterval,
+        BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     },
     raster::{RasterDataType, RasterTile2D},
     util::test::TestDefault,
@@ -34,7 +33,7 @@ fn expression_on_sources(
         params: ExpressionParams {
             expression: "(A - B) / (A + B)".to_string(),
             output_type: RasterDataType::F64,
-            output_measurement: Some(Measurement::Unitless),
+            output_band: None,
             map_no_data: false,
         },
         sources: SingleRasterSource {

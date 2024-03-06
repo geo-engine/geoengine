@@ -420,9 +420,7 @@ where
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
+        primitives::{BandSelection, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{RasterDataType, TilesEqualIgnoringCacheHint},
         util::test::TestDefault,
     };
@@ -538,7 +536,7 @@ mod tests {
                         params: ExpressionParams {
                             expression: "2 * A".to_string(),
                             output_type: RasterDataType::U8,
-                            output_measurement: Some(Measurement::Unitless),
+                            output_band: None,
                             map_no_data: false,
                         },
                         sources: SingleRasterSource {

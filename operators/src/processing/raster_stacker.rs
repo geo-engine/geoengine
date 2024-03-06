@@ -980,7 +980,7 @@ mod tests {
             params: ExpressionParams {
                 expression: "if A > 100 { A } else { 0 }".into(),
                 output_type: RasterDataType::U8,
-                output_measurement: None,
+                output_band: None,
                 map_no_data: false,
             },
             sources: SingleRasterSource {

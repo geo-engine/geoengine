@@ -2703,7 +2703,7 @@ mod tests {
                 params: ExpressionParams {
                     expression: "A".to_string(),
                     output_type: RasterDataType::F64,
-                    output_measurement: None,
+                    output_band: None,
                     map_no_data: false,
                 },
                 sources: SingleRasterSource {
