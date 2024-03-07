@@ -3,7 +3,7 @@ use super::{
     metadata::{Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata},
     NetCdfEntity, NetCdfGroup, NetCdfOverview, Result,
 };
-use crate::{contexts::PostgresDb, pro::contexts::ProPostgresDb};
+use crate::contexts::PostgresDb;
 use async_trait::async_trait;
 use bb8_postgres::{bb8::PooledConnection, PostgresConnectionManager};
 use geoengine_datatypes::{
@@ -90,8 +90,9 @@ where
 }
 
 // TODO: move
+#[cfg(feature = "pro")]
 #[async_trait]
-impl<Tls> NetCdfCfProviderDb for ProPostgresDb<Tls>
+impl<Tls> NetCdfCfProviderDb for crate::pro::contexts::ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

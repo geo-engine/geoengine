@@ -111,10 +111,9 @@ pub(crate) fn init_ebv_routes<C>() -> Box<dyn FnOnce(&mut ServiceConfig)>
 where
     C: ApplicationContext,
     C::Session: FromRequest,
-<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-<<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future:
-Send,
+    <<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     Box::new(move |cfg: &mut web::ServiceConfig| {
         cfg.service(

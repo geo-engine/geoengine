@@ -1,6 +1,8 @@
 use crate::api::apidoc::ApiDoc;
 use crate::api::handlers;
+use crate::contexts::SessionContext;
 use crate::contexts::{PostgresContext, SimpleApplicationContext};
+use crate::datasets::external::netcdfcf::NetCdfCfProviderDb;
 use crate::error::{Error, Result};
 use crate::util::config;
 use crate::util::config::get_config_element;
@@ -14,6 +16,10 @@ use geoengine_operators::util::gdal::register_gdal_drivers_from_list;
 use log::info;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use tokio_postgres::{
+    tls::{MakeTlsConnect, TlsConnect},
+    Socket,
+};
 use tracing_actix_web::TracingLogger;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -77,6 +83,9 @@ async fn start<C>(
 ) -> Result<(), Error>
 where
     C: SimpleApplicationContext,
+    <<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     let wrapped_ctx = web::Data::new(app_ctx);
 
