@@ -206,7 +206,7 @@ mod tests {
         MockExecutionContext, MockQueryContext, MultipleRasterSources, QueryProcessor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use crate::processing::{RasterStacker, RasterStackerParams};
+    use crate::processing::{RasterStacker, RasterStackerParams, RenameBands};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::primitives::{
@@ -413,7 +413,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a, raster_b],
                     },
@@ -486,7 +488,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a, raster_b],
                     },
@@ -560,7 +564,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a, raster_b, raster_c],
                     },
@@ -644,7 +650,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![
                             raster_a, raster_b, raster_c, raster_d, raster_e, raster_f, raster_g,
@@ -713,7 +721,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a],
                     },
@@ -826,7 +836,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a],
                     },
@@ -895,7 +907,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a, raster_b],
                     },
@@ -966,7 +980,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a, raster_b, raster_c],
                     },

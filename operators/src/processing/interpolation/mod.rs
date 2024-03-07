@@ -472,7 +472,7 @@ mod tests {
             RasterOperator, RasterResultDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
-        processing::{RasterStacker, RasterStackerParams},
+        processing::{RasterStacker, RasterStackerParams, RenameBands},
     };
 
     #[tokio::test]
@@ -678,6 +678,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_interpolates_multiple_bands() -> Result<()> {
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
             (0., 0.).into(),
@@ -691,7 +692,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![
                             make_raster(CacheHint::max_duration()),

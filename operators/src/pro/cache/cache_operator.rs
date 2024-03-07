@@ -430,7 +430,9 @@ mod tests {
             ChunkByteSize, MockExecutionContext, MockQueryContext, MultipleRasterSources,
             QueryContextExtensions, RasterOperator, SingleRasterSource, WorkflowOperatorPath,
         },
-        processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
+        processing::{
+            Expression, ExpressionParams, RasterStacker, RasterStackerParams, RenameBands,
+        },
         source::{GdalSource, GdalSourceParameters},
         util::gdal::add_ndvi_dataset,
     };
@@ -523,7 +525,9 @@ mod tests {
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
 
         let operator = RasterStacker {
-            params: RasterStackerParams {},
+            params: RasterStackerParams {
+                rename_bands: RenameBands::DefaultSuffix,
+            },
             sources: MultipleRasterSources {
                 rasters: vec![
                     GdalSource {

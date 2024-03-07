@@ -15,7 +15,7 @@ use geoengine_operators::{
         SingleRasterSource, WorkflowOperatorPath,
     },
     processing::{
-        Aggregation, RasterStacker, RasterStackerParams, TemporalRasterAggregation,
+        Aggregation, RasterStacker, RasterStackerParams, RenameBands, TemporalRasterAggregation,
         TemporalRasterAggregationParameters,
     },
     source::{GdalSource, GdalSourceParameters},
@@ -120,7 +120,9 @@ async fn all_bands_at_once(runs: usize, bands: u32, resolution: SpatialResolutio
     let query_context = MockQueryContext::test_default();
 
     let stacker = RasterStacker {
-        params: RasterStackerParams {},
+        params: RasterStackerParams {
+            rename_bands: RenameBands::DefaultSuffix,
+        },
         sources: MultipleRasterSources {
             rasters: (0..bands)
                 .map(|_| ndvi_source(&mut execution_context))

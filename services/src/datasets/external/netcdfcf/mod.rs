@@ -2026,6 +2026,7 @@ mod tests {
     };
     use geoengine_operators::processing::{
         RasterStacker, RasterStackerParams, RasterTypeConversion, RasterTypeConversionParams,
+        RenameBands,
     };
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::{
@@ -2708,7 +2709,9 @@ mod tests {
                 },
                 sources: SingleRasterSource {
                     raster: RasterStacker {
-                        params: RasterStackerParams {},
+                        params: RasterStackerParams {
+rename_bands: RenameBands::DefaultSuffix,
+},
                         sources: MultipleRasterSources {
                             rasters: vec![
                                 GdalSource {

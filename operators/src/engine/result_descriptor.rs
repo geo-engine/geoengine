@@ -161,41 +161,6 @@ impl RasterBandDescriptors {
         bands.extend(other.0.clone());
         Self::new(bands)
     }
-
-    // Merge the bands of two descriptors into a new one, adds a suffix to the band names of the second descriptor if there are duplicate names
-    #[must_use]
-    pub fn merge_with_suffix(&self, other: &Self, suffix: &str) -> Self {
-        let mut bands = self.0.clone();
-        let band_names = bands.iter().map(|b| b.name.clone()).collect::<HashSet<_>>();
-
-        for other_band in other.iter() {
-            let name = if band_names.contains(&other_band.name) {
-                format!("{} {suffix}", other_band.name)
-            } else {
-                other_band.name.clone()
-            };
-
-            bands.push(RasterBandDescriptor::new(
-                name,
-                other_band.measurement.clone(),
-            ));
-        }
-
-        Self(bands)
-    }
-
-    // Merge the bands of multiple descriptors into a new one, adds a suffix to the band names if there are duplicate names
-    pub fn merge_all_with_suffix<'a, B>(mut bands: B, suffix: &str) -> Result<Self>
-    where
-        B: Iterator<Item = &'a RasterBandDescriptors>,
-    {
-        let accu = bands
-            .next()
-            .ok_or(Error::AtLeastOneRasterBandDescriptorRequired)?
-            .clone();
-
-        Ok(bands.fold(accu, |acc, other| acc.merge_with_suffix(other, suffix)))
-    }
 }
 
 impl TryFrom<Vec<RasterBandDescriptor>> for RasterBandDescriptors {
@@ -773,69 +738,6 @@ mod tests {
                 RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
                 RasterBandDescriptor::new("baz".into(), Measurement::Unitless),
                 RasterBandDescriptor::new("bla".into(), Measurement::Unitless),
-            ])
-            .unwrap()
-        );
-    }
-
-    #[test]
-    fn it_merges_band_descriptors_and_suffixes_duplicates() {
-        assert_eq!(
-            RasterBandDescriptors::new(vec![
-                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
-                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
-            ])
-            .unwrap()
-            .merge_with_suffix(
-                &RasterBandDescriptors::new(vec![
-                    RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
-                    RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
-                ])
-                .unwrap(),
-                "(dup)"
-            ),
-            RasterBandDescriptors::new(vec![
-                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
-                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
-                RasterBandDescriptor::new("foo (dup)".into(), Measurement::Unitless),
-                RasterBandDescriptor::new("bar (dup)".into(), Measurement::Unitless),
-            ])
-            .unwrap()
-        );
-    }
-
-    #[test]
-    fn it_merges_all_band_descriptors_and_suffixes_duplicates() {
-        assert_eq!(
-            RasterBandDescriptors::merge_all_with_suffix(
-                [
-                    RasterBandDescriptors::new(vec![
-                        RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
-                        RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
-                    ])
-                    .unwrap(),
-                    RasterBandDescriptors::new(vec![
-                        RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
-                        RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
-                    ])
-                    .unwrap(),
-                    RasterBandDescriptors::new(vec![
-                        RasterBandDescriptor::new("bla".into(), Measurement::Unitless),
-                        RasterBandDescriptor::new("blub".into(), Measurement::Unitless),
-                    ])
-                    .unwrap()
-                ]
-                .iter(),
-                "(dup)"
-            )
-            .unwrap(),
-            RasterBandDescriptors::new(vec![
-                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
-                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
-                RasterBandDescriptor::new("foo (dup)".into(), Measurement::Unitless),
-                RasterBandDescriptor::new("bar (dup)".into(), Measurement::Unitless),
-                RasterBandDescriptor::new("bla".into(), Measurement::Unitless),
-                RasterBandDescriptor::new("blub".into(), Measurement::Unitless),
             ])
             .unwrap()
         );

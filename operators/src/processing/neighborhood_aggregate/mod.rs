@@ -293,7 +293,7 @@ mod tests {
             RasterOperator, RasterResultDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
-        processing::{RasterStacker, RasterStackerParams},
+        processing::{RasterStacker, RasterStackerParams, RenameBands},
         source::{GdalSource, GdalSourceParameters},
         util::{gdal::add_ndvi_dataset, raster_stream_to_png::raster_stream_to_png_bytes},
     };
@@ -817,7 +817,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![make_raster(), make_raster(), make_raster()],
                     },

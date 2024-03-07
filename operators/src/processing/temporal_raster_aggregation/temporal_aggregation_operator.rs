@@ -462,7 +462,7 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{
             raster_stacker::{RasterStacker, RasterStackerParams},
-            Expression, ExpressionParams,
+            Expression, ExpressionParams, RenameBands,
         },
     };
 
@@ -2736,7 +2736,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![
                             MockRasterSource {

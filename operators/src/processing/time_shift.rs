@@ -512,7 +512,9 @@ mod tests {
             SingleRasterSource,
         },
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
-        processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
+        processing::{
+            Expression, ExpressionParams, RasterStacker, RasterStackerParams, RenameBands,
+        },
         source::{GdalSource, GdalSourceParameters},
         util::{gdal::add_ndvi_dataset, input::RasterOrVectorOperator},
     };
@@ -1189,7 +1191,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![ndvi_source, shifted_ndvi_source],
                     },

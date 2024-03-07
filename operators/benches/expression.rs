@@ -13,7 +13,7 @@ use geoengine_operators::{
         MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterOperator,
         SingleRasterSource, WorkflowOperatorPath,
     },
-    processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
+    processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams, RenameBands},
     source::{GdalSource, GdalSourceParameters},
     util::{gdal::add_ndvi_dataset, number_statistics::NumberStatistics, Result},
 };
@@ -38,7 +38,9 @@ fn expression_on_sources(
         },
         sources: SingleRasterSource {
             raster: RasterStacker {
-                params: RasterStackerParams {},
+                params: RasterStackerParams {
+                    rename_bands: RenameBands::DefaultSuffix,
+                },
                 sources: MultipleRasterSources {
                     rasters: vec![a, b],
                 },

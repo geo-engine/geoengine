@@ -27,7 +27,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
 use geoengine_operators::processing::{
-    Expression, ExpressionParams, RasterStacker, RasterStackerParams, Reprojection,
+    Expression, ExpressionParams, RasterStacker, RasterStackerParams, RenameBands, Reprojection,
     ReprojectionParams,
 };
 use geoengine_operators::source::GdalSource;
@@ -411,7 +411,9 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::DefaultSuffix,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![
                             mock_raster_operator.clone().boxed(),
@@ -728,7 +730,9 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
         },
         sources: SingleRasterSource {
             raster: RasterStacker {
-                params: RasterStackerParams {},
+                params: RasterStackerParams {
+                    rename_bands: RenameBands::DefaultSuffix,
+                },
                 sources: MultipleRasterSources {
                     rasters: vec![gdal_operator.clone().boxed(), gdal_operator.boxed()],
                 },

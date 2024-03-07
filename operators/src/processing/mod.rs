@@ -38,7 +38,7 @@ pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
     PointInPolygonTester,
 };
-pub use raster_stacker::{RasterStacker, RasterStackerParams};
+pub use raster_stacker::{RasterStacker, RasterStackerParams, RenameBands};
 pub use raster_type_conversion::{
     RasterTypeConversion, RasterTypeConversionParams, RasterTypeConversionQueryProcessor,
 };

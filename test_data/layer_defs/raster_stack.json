@@ -6,7 +6,12 @@
     "type": "Raster",
     "operator": {
       "type": "RasterStacker",
-      "params": {},
+      "params": {
+        "renameBands": {
+          "type": "rename",
+          "values": ["ndvi", "ndvi_masked"]
+        }
+      },
       "sources": {
         "rasters": [
           {

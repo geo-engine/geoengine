@@ -1,12 +1,14 @@
 use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptors,
+    MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptor,
     RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
     WorkflowOperatorPath,
 };
 use crate::error::{
-    InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
+    DuplicateNameNotAllowed, DuplicateSuffixesNotAllowed, EmptyNameNotAllowed,
+    EmptySuffixesNotAllowed, InvalidNumberOfNewNames, InvalidNumberOfRasterStackerInputs,
+    InvalidNumberOfSuffixes, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -19,7 +21,103 @@ use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RasterStackerParams {}
+#[serde(rename_all = "camelCase")]
+pub struct RasterStackerParams {
+    pub rename_bands: RenameBands,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "type", content = "values")]
+pub enum RenameBands {
+    DefaultSuffix,       // keep appending "(duplicate)" on conflict
+    Suffix(Vec<String>), // A suffix for each but the first input, to be appended to the band names on conflict
+    Rename(Vec<String>), // A new name for each band, to be used instead of the original band names
+}
+
+impl RenameBands {
+    fn validate(&self, num_inputs: usize, names_per_input: &[usize]) -> Result<()> {
+        match self {
+            Self::DefaultSuffix => {}
+            RenameBands::Suffix(suffixes) => {
+                ensure!(
+                    suffixes.iter().all(|s| !s.is_empty()),
+                    EmptySuffixesNotAllowed
+                );
+
+                let unique_suffixes: std::collections::HashSet<_> = suffixes.iter().collect();
+                ensure!(
+                    unique_suffixes.len() == suffixes.len(),
+                    DuplicateSuffixesNotAllowed
+                );
+
+                ensure!(
+                    suffixes.len() == num_inputs - 1,
+                    InvalidNumberOfSuffixes {
+                        expected: num_inputs,
+                        found: suffixes.len()
+                    }
+                );
+            }
+            RenameBands::Rename(names) => {
+                ensure!(names.iter().all(|s| !s.is_empty()), EmptyNameNotAllowed);
+
+                let unique_names: std::collections::HashSet<_> = names.iter().collect();
+                ensure!(unique_names.len() == names.len(), DuplicateNameNotAllowed);
+
+                ensure!(
+                    names.len() == names_per_input.iter().sum::<usize>(),
+                    InvalidNumberOfNewNames {
+                        expected: num_inputs,
+                        found: names.len()
+                    }
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    fn apply(&self, mut inputs: Vec<Vec<String>>) -> Result<Vec<String>> {
+        self.validate(
+            inputs.len(),
+            &inputs.iter().map(Vec::len).collect::<Vec<_>>(),
+        )?;
+
+        let mut new_names = inputs.remove(0);
+
+        match self {
+            Self::DefaultSuffix => {
+                for input in inputs {
+                    for name in input {
+                        let mut new_name = name;
+
+                        while new_names.contains(&new_name) {
+                            new_name = format!("{} {}", new_name, "(duplicate)");
+                        }
+
+                        new_names.push(new_name);
+                    }
+                }
+            }
+            RenameBands::Suffix(suffixes) => {
+                for (i, input) in inputs.into_iter().enumerate() {
+                    for name in input {
+                        if new_names.contains(&name) {
+                            new_names.push(format!("{}{}", name, suffixes[i]));
+                        } else {
+                            new_names.push(name);
+                        }
+                    }
+                }
+            }
+            RenameBands::Rename(names) => {
+                new_names = names.clone();
+            }
+        }
+
+        Ok(new_names)
+    }
+}
 
 /// This `QueryProcessor` stacks all of it's inputs into a single raster time-series.
 /// It does so by querying all of it's inputs outputting them by band, space and then time.
@@ -88,19 +186,32 @@ impl RasterOperator for RasterStacker {
             })
             .flatten();
 
+        let data_type = in_descriptors[0].data_type;
+        let spatial_reference = in_descriptors[0].spatial_reference;
+
         let bands_per_source = in_descriptors
             .iter()
             .map(|d| d.bands.count())
             .collect::<Vec<_>>();
 
-        let output_band_descriptors = RasterBandDescriptors::merge_all_with_suffix(
-            in_descriptors.iter().map(|d| &d.bands),
-            "(duplicate)",
-        )?; // TODO: make renaming of duplicate bands configurable
+        let band_names = self.params.rename_bands.apply(
+            in_descriptors
+                .iter()
+                .map(|d| d.bands.iter().map(|b| b.name.clone()).collect())
+                .collect(),
+        )?;
+
+        let output_band_descriptors = in_descriptors
+            .into_iter()
+            .flat_map(|d| d.bands.clone().into_vec().into_iter())
+            .zip(band_names)
+            .map(|(descriptor, name)| RasterBandDescriptor { name, ..descriptor })
+            .collect::<Vec<_>>()
+            .try_into()?;
 
         let result_descriptor = RasterResultDescriptor {
-            data_type: in_descriptors[0].data_type,
-            spatial_reference: in_descriptors[0].spatial_reference,
+            data_type,
+            spatial_reference,
             time,
             bbox,
             resolution,
@@ -493,7 +604,9 @@ mod tests {
         .boxed();
 
         let stacker = RasterStacker {
-            params: RasterStackerParams {},
+            params: RasterStackerParams {
+                rename_bands: RenameBands::DefaultSuffix,
+            },
             sources: MultipleRasterSources {
                 rasters: vec![mrs1, mrs2],
             },
@@ -753,7 +866,9 @@ mod tests {
         .boxed();
 
         let stacker = RasterStacker {
-            params: RasterStackerParams {},
+            params: RasterStackerParams {
+                rename_bands: RenameBands::DefaultSuffix,
+            },
             sources: MultipleRasterSources {
                 rasters: vec![mrs1, mrs2],
             },
@@ -930,7 +1045,9 @@ mod tests {
         .boxed();
 
         let stacker = RasterStacker {
-            params: RasterStackerParams {},
+            params: RasterStackerParams {
+                rename_bands: RenameBands::DefaultSuffix,
+            },
             sources: MultipleRasterSources {
                 rasters: vec![mrs1, mrs2],
             },
@@ -995,7 +1112,9 @@ mod tests {
         .boxed();
 
         let operator = RasterStacker {
-            params: RasterStackerParams {},
+            params: RasterStackerParams {
+                rename_bands: RenameBands::DefaultSuffix,
+            },
             sources: MultipleRasterSources {
                 rasters: vec![
                     GdalSource {
@@ -1093,5 +1212,61 @@ mod tests {
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
         assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn it_renames() {
+        let names = vec![
+            vec!["foo".to_string(), "bar".to_string()],
+            vec!["foo".to_string(), "bla".to_string()],
+            vec!["foo".to_string(), "baz".to_string()],
+        ];
+
+        assert_eq!(
+            RenameBands::DefaultSuffix.apply(names.clone()).unwrap(),
+            vec![
+                "foo".to_string(),
+                "bar".to_string(),
+                "foo (duplicate)".to_string(),
+                "bla".to_string(),
+                "foo (duplicate) (duplicate)".to_string(),
+                "baz".to_string()
+            ]
+        );
+
+        assert_eq!(
+            RenameBands::Suffix(vec![" second".to_string(), " third".to_string()])
+                .apply(names.clone())
+                .unwrap(),
+            vec![
+                "foo".to_string(),
+                "bar".to_string(),
+                "foo second".to_string(),
+                "bla".to_string(),
+                "foo third".to_string(),
+                "baz".to_string()
+            ]
+        );
+
+        assert_eq!(
+            RenameBands::Rename(vec![
+                "A".to_string(),
+                "B".to_string(),
+                "C".to_string(),
+                "D".to_string(),
+                "E".to_string(),
+                "F".to_string()
+            ])
+            .apply(names.clone())
+            .unwrap(),
+            vec![
+                "A".to_string(),
+                "B".to_string(),
+                "C".to_string(),
+                "D".to_string(),
+                "E".to_string(),
+                "F".to_string()
+            ]
+        );
     }
 }
