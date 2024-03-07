@@ -35,7 +35,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct PostgresContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -57,7 +57,7 @@ enum DatabaseStatus {
 
 impl<Tls> PostgresContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -238,7 +238,7 @@ where
 #[async_trait]
 impl<Tls> SimpleApplicationContext for PostgresContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -285,7 +285,7 @@ where
 #[async_trait]
 impl<Tls> ApplicationContext for PostgresContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -328,7 +328,7 @@ where
 #[derive(Clone)]
 pub struct PostgresSessionContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -340,7 +340,7 @@ where
 #[async_trait]
 impl<Tls> SessionContext for PostgresSessionContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -385,9 +385,10 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct PostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -397,7 +398,7 @@ where
 
 impl<Tls> PostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -419,7 +420,7 @@ where
 
 impl<Tls> GeoEngineDb for PostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -944,7 +945,6 @@ mod tests {
             priority: Some(21),
             data: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
-            metadata_db_config: crate::datasets::external::netcdfcf::test_db_config(),
             cache_ttl: CacheTtlSeconds::new(0),
         };
 
@@ -4628,14 +4628,6 @@ mod tests {
                 data: "a_path".into(),
                 base_url: "http://base".try_into().unwrap(),
                 overviews: "another_path".into(),
-                metadata_db_config: DatabaseConnectionConfig {
-                    host: "testhost".to_string(),
-                    port: 1234,
-                    database: "testdb".to_string(),
-                    schema: "testschema".to_string(),
-                    user: "testuser".to_string(),
-                    password: "testpass".to_string(),
-                },
                 cache_ttl: CacheTtlSeconds::new(0),
             }],
         )
@@ -4650,14 +4642,6 @@ mod tests {
                 priority: Some(33),
                 data: "a_path".into(),
                 overviews: "another_path".into(),
-                metadata_db_config: DatabaseConnectionConfig {
-                    host: "testhost".to_string(),
-                    port: 1234,
-                    database: "testdb".to_string(),
-                    schema: "testschema".to_string(),
-                    user: "testuser".to_string(),
-                    password: "testpass".to_string(),
-                },
                 cache_ttl: CacheTtlSeconds::new(0),
             }],
         )
@@ -4755,14 +4739,6 @@ mod tests {
                         data: "a_path".into(),
                         base_url: "http://base".try_into().unwrap(),
                         overviews: "another_path".into(),
-                        metadata_db_config: DatabaseConnectionConfig {
-                            host: "testhost".to_string(),
-                            port: 1234,
-                            database: "testdb".to_string(),
-                            schema: "testschema".to_string(),
-                            user: "testuser".to_string(),
-                            password: "testpass".to_string(),
-                        },
                         cache_ttl: CacheTtlSeconds::new(0),
                     },
                 ),
@@ -4773,14 +4749,6 @@ mod tests {
                         priority: Some(33),
                         data: "a_path".into(),
                         overviews: "another_path".into(),
-                        metadata_db_config: DatabaseConnectionConfig {
-                            host: "testhost".to_string(),
-                            port: 1234,
-                            database: "testdb".to_string(),
-                            schema: "testschema".to_string(),
-                            user: "testuser".to_string(),
-                            password: "testpass".to_string(),
-                        },
                         cache_ttl: CacheTtlSeconds::new(0),
                     },
                 ),

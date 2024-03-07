@@ -1,3 +1,4 @@
+use crate::datasets::external::netcdfcf::NetCdfCfProviderDb;
 use crate::datasets::upload::Volume;
 use crate::error::Result;
 use crate::layers::listing::LayerCollectionProvider;
@@ -91,7 +92,14 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
 
 /// The trait for accessing all resources
 pub trait GeoEngineDb:
-    DatasetDb + LayerDb + LayerProviderDb + LayerCollectionProvider + ProjectDb + WorkflowRegistry
+    DatasetDb
+    + LayerDb
+    + LayerProviderDb
+    + LayerCollectionProvider
+    + ProjectDb
+    + WorkflowRegistry
+    + NetCdfCfProviderDb
+    + std::fmt::Debug
 {
 }
 

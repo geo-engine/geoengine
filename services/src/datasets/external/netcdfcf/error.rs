@@ -274,3 +274,40 @@ pub enum NetCdfCf4DProviderError {
         source: Box<dyn ErrorSource>,
     },
 }
+
+mod send_sync_ensurance {
+
+    use super::*;
+
+    trait SendSyncEnsurance: Send + Sync {}
+
+    impl SendSyncEnsurance for NetCdfCf4DProviderError {}
+
+    impl<'a> SendSyncEnsurance for tokio_postgres::Transaction<'a> {}
+
+    impl<Tls> SendSyncEnsurance
+        for bb8_postgres::bb8::PooledConnection<
+            'static,
+            bb8_postgres::PostgresConnectionManager<Tls>,
+        >
+    where
+        Tls: tokio_postgres::tls::MakeTlsConnect<tokio_postgres::Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+        <Tls as tokio_postgres::tls::MakeTlsConnect<tokio_postgres::Socket>>::Stream: Send + Sync,
+        <Tls as tokio_postgres::tls::MakeTlsConnect<tokio_postgres::Socket>>::TlsConnect: Send,
+        <<Tls as tokio_postgres::tls::MakeTlsConnect<tokio_postgres::Socket>>::TlsConnect as tokio_postgres::tls::TlsConnect<tokio_postgres::Socket>>::Future: Send,
+    {
+    }
+
+    impl<Tls> SendSyncEnsurance
+        for ouroboros::macro_help::AliasableBox< bb8_postgres::bb8::PooledConnection<
+            'static,
+            bb8_postgres::PostgresConnectionManager<Tls>,
+        >>
+    where
+        Tls: tokio_postgres::tls::MakeTlsConnect<tokio_postgres::Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+        <Tls as tokio_postgres::tls::MakeTlsConnect<tokio_postgres::Socket>>::Stream: Send + Sync,
+        <Tls as tokio_postgres::tls::MakeTlsConnect<tokio_postgres::Socket>>::TlsConnect: Send,
+        <<Tls as tokio_postgres::tls::MakeTlsConnect<tokio_postgres::Socket>>::TlsConnect as tokio_postgres::tls::TlsConnect<tokio_postgres::Socket>>::Future: Send,
+    {
+    }
+}
