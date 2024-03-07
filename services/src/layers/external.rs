@@ -22,6 +22,9 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use serde::{Deserialize, Serialize};
+use tokio_postgres::tls::MakeTlsConnect;
+use tokio_postgres::tls::TlsConnect;
+use tokio_postgres::Socket;
 
 #[async_trait]
 pub trait DataProviderDefinition<D: GeoEngineDb>: Send + Sync + std::fmt::Debug {
@@ -132,7 +135,12 @@ impl From<DatasetLayerListingProviderDefinition> for TypedDataProviderDefinition
     }
 }
 
-impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderDefinition<D>> {
+impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderDefinition<D>>
+where
+    <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     fn from(typed: TypedDataProviderDefinition) -> Self {
         match typed {
             TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => Box::new(def),
@@ -152,7 +160,12 @@ impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderD
     }
 }
 
-impl<D: GeoEngineDb> AsRef<dyn DataProviderDefinition<D>> for TypedDataProviderDefinition {
+impl<D: GeoEngineDb> AsRef<dyn DataProviderDefinition<D>> for TypedDataProviderDefinition
+where
+    <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     fn as_ref(&self) -> &(dyn DataProviderDefinition<D> + 'static) {
         match self {
             TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => def,
@@ -169,7 +182,12 @@ impl<D: GeoEngineDb> AsRef<dyn DataProviderDefinition<D>> for TypedDataProviderD
 }
 
 #[async_trait]
-impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition
+where
+    <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn initialize(self: Box<Self>, db: D) -> Result<Box<dyn DataProvider>> {
         match *self {
             TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {

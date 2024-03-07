@@ -2826,6 +2826,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-jaeger",
  "ordered-float 4.2.0",
+ "ouroboros",
  "postgres-types",
  "pretty_assertions",
  "proj",

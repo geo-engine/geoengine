@@ -1,15 +1,10 @@
-pub use self::ebvportal_provider::{EbvPortalDataProvider, EBV_PROVIDER_ID};
-pub use self::error::NetCdfCf4DProviderError;
+use self::database::NetCdfCfReadAccess;
 use self::loading::{create_layer, create_layer_collection_from_parts, LayerCollectionParts};
-use self::metadata::{
-    all_migrations, Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata,
-};
-pub use self::overviews::OverviewGeneration;
-use self::overviews::{create_overviews, overview_exists};
+use self::metadata::{Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata};
+use self::overviews::create_overviews;
 use self::overviews::{remove_overviews, OverviewCreationOptions};
-use crate::contexts::{migrate_database, GeoEngineDb};
+use crate::contexts::GeoEngineDb;
 use crate::datasets::external::netcdfcf::loading::{create_loading_info, ParamModification};
-use crate::datasets::external::netcdfcf::overviews::meta_data_from_overviews;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error;
 use crate::layers::external::DataProvider;
@@ -22,11 +17,7 @@ use crate::layers::layer::{Layer, ProviderLayerId};
 use crate::layers::listing::LayerCollectionProvider;
 use crate::layers::listing::{LayerCollectionId, ProviderCapabilities, SearchCapabilities};
 use crate::tasks::TaskContext;
-use crate::util::postgres::DatabaseConnectionConfig;
 use async_trait::async_trait;
-use bb8_postgres::bb8::Pool;
-use bb8_postgres::PostgresConnectionManager;
-pub use ebvportal_provider::EbvPortalDataProviderDefinition;
 use gdal::raster::{Dimension, GdalDataType, Group};
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
@@ -57,9 +48,18 @@ use snafu::ResultExt;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use tokio_postgres::{NoTls, Transaction};
+use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
+use tokio_postgres::Socket;
 use walkdir::{DirEntry, WalkDir};
 
+pub use self::database::NetCdfCfProviderDb;
+pub use self::ebvportal_provider::{
+    EbvPortalDataProvider, EbvPortalDataProviderDefinition, EBV_PROVIDER_ID,
+};
+pub use self::error::NetCdfCf4DProviderError;
+pub use self::overviews::OverviewGeneration;
+
+mod database;
 mod ebvportal_api;
 mod ebvportal_provider;
 pub mod error;
@@ -81,8 +81,6 @@ pub struct NetCdfCfDataProviderDefinition {
     pub priority: Option<i16>,
     /// Path were the NetCDF data can be found
     pub data: PathBuf,
-    /// Database configuration for storing metadata of overviews
-    pub metadata_db_config: DatabaseConnectionConfig,
     /// Path were overview files are stored
     pub overviews: PathBuf,
     #[serde(default)]
@@ -90,23 +88,26 @@ pub struct NetCdfCfDataProviderDefinition {
 }
 
 #[derive(Debug)]
-pub struct NetCdfCfDataProvider {
+pub struct NetCdfCfDataProvider<D: GeoEngineDb> {
     pub id: DataProviderId,
     pub name: String,
     pub description: String,
     pub data: PathBuf,
     pub overviews: PathBuf,
-    pub metadata_db: Pool<PostgresConnectionManager<NoTls>>,
     pub cache_ttl: CacheTtlSeconds,
+    pub db: D,
 }
 
 #[async_trait]
-impl<D: GeoEngineDb> DataProviderDefinition<D> for NetCdfCfDataProviderDefinition {
-    async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for NetCdfCfDataProviderDefinition
+where
+    <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn initialize(self: Box<Self>, db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         let id = DataProviderDefinition::<D>::id(&*self);
-        Self::_initialize(self, id)
-            .await
-            .map(|p| Box::new(p) as Box<dyn DataProvider>)
+        Ok(Box::new(Self::_initialize(*self, id, db)) as Box<dyn DataProvider>)
     }
 
     fn type_name(&self) -> &'static str {
@@ -127,39 +128,16 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for NetCdfCfDataProviderDefinitio
 }
 
 impl NetCdfCfDataProviderDefinition {
-    async fn _initialize(
-        self: Box<Self>,
-        id: DataProviderId,
-    ) -> crate::error::Result<NetCdfCfDataProvider> {
-        let mut pg_pool_builder = Pool::builder();
-        if self.metadata_db_config.schema == "pg_temp" {
-            // having more than one connection with `pg_temp` leads to different temp schemata being used
-            pg_pool_builder = pg_pool_builder.max_size(1);
-        }
-
-        let metadata_db = pg_pool_builder
-            .build(PostgresConnectionManager::new(
-                self.metadata_db_config.pg_config(),
-                NoTls,
-            ))
-            .await?;
-
-        migrate_database(
-            &mut metadata_db.get().await?,
-            &all_migrations(),
-            Some(self.name.as_str()),
-        )
-        .await?;
-
-        Ok(NetCdfCfDataProvider {
+    fn _initialize<D: GeoEngineDb>(self, id: DataProviderId, db: D) -> NetCdfCfDataProvider<D> {
+        NetCdfCfDataProvider {
             id,
             name: self.name,
             description: self.description,
             data: self.data,
             overviews: self.overviews,
-            metadata_db,
             cache_ttl: self.cache_ttl,
-        })
+            db,
+        }
     }
 }
 
@@ -338,106 +316,112 @@ impl NetCdfCf4DDatasetId {
     }
 }
 
-impl NetCdfCfDataProvider {
-    pub fn build_netcdf_tree(
-        provider_path: &Path,
-        dataset_path: &Path,
-        stats_for_group: &HashMap<String, DataRange>,
-    ) -> Result<NetCdfOverview> {
-        let provider_path = provider_path
-            .canonicalize()
-            .boxed_context(error::InvalidDirectory)?;
-        let path = canonicalize_subpath(&provider_path, dataset_path).map_err(|_| {
-            NetCdfCf4DProviderError::FileIsNotInProviderPath {
-                file: dataset_path.to_string_lossy().into(),
-            }
-        })?;
+#[allow(clippy::implicit_hasher)] // we don't use different hashers here
+pub fn build_netcdf_tree(
+    provider_path: &Path,
+    dataset_path: &Path,
+    stats_for_group: &HashMap<String, DataRange>,
+) -> Result<NetCdfOverview> {
+    let provider_path = provider_path
+        .canonicalize()
+        .boxed_context(error::InvalidDirectory)?;
+    let path = canonicalize_subpath(&provider_path, dataset_path).map_err(|_| {
+        NetCdfCf4DProviderError::FileIsNotInProviderPath {
+            file: dataset_path.to_string_lossy().into(),
+        }
+    })?;
 
-        let ds = gdal_netcdf_open(None, &path)?;
+    let ds = gdal_netcdf_open(None, &path)?;
 
-        let root_group = ds.root_group().context(error::GdalMd)?;
+    let root_group = ds.root_group().context(error::GdalMd)?;
 
-        let title = root_group
-            .attribute("title")
-            .context(error::MissingTitle)?
-            .read_as_string();
+    let title = root_group
+        .attribute("title")
+        .context(error::MissingTitle)?
+        .read_as_string();
 
-        let summary = root_group
-            .attribute("summary")
-            .context(error::MissingSummary)?
-            .read_as_string();
+    let summary = root_group
+        .attribute("summary")
+        .context(error::MissingSummary)?
+        .read_as_string();
 
-        let spatial_reference = root_group
-            .attribute("geospatial_bounds_crs")
-            .context(error::MissingCrs)?
-            .read_as_string();
-        let spatial_reference: SpatialReference =
-            SpatialReference::from_str(&spatial_reference).context(error::CannotParseCrs)?;
+    let spatial_reference = root_group
+        .attribute("geospatial_bounds_crs")
+        .context(error::MissingCrs)?
+        .read_as_string();
+    let spatial_reference: SpatialReference =
+        SpatialReference::from_str(&spatial_reference).context(error::CannotParseCrs)?;
 
-        let entities = root_group
-            .open_md_array("entity", Default::default())
-            .context(error::MissingEntities)?
-            .read_as_string_array()
-            .context(error::GdalMd)?
-            .into_iter()
-            .enumerate()
-            .map(|(id, name)| NetCdfEntity { id, name })
-            .collect::<Vec<_>>();
+    let entities = root_group
+        .open_md_array("entity", Default::default())
+        .context(error::MissingEntities)?
+        .read_as_string_array()
+        .context(error::GdalMd)?
+        .into_iter()
+        .enumerate()
+        .map(|(id, name)| NetCdfEntity { id, name })
+        .collect::<Vec<_>>();
 
-        let groups = root_group
-            .group_names(Default::default())
-            .iter()
-            .map(|name| {
-                root_group
-                    .open_group(name, Default::default())
-                    .context(error::GdalMd)?
-                    .to_net_cdf_subgroup(Path::new(name), stats_for_group)
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        let time_coverage = TimeCoverage::from_dimension(&root_group)?;
-
-        let colorizer = load_colorizer(&path).or_else(|error| {
-            debug!("Use fallback colorizer: {:?}", error);
-            fallback_colorizer()
-        })?;
-
-        let creator_name = root_group
-            .attribute("creator_name")
-            .map(|a| a.read_as_string())
-            .ok();
-
-        let creator_email = root_group
-            .attribute("creator_email")
-            .map(|a| a.read_as_string())
-            .ok();
-
-        let creator_institution = root_group
-            .attribute("creator_institution")
-            .map(|a| a.read_as_string())
-            .ok();
-
-        Ok(NetCdfOverview {
-            file_name: path
-                .strip_prefix(provider_path)
-                .boxed_context(error::DatasetIsNotInProviderPath)?
-                .to_string_lossy()
-                .to_string(),
-            title,
-            summary,
-            spatial_reference,
-            groups,
-            entities,
-            time_coverage,
-            colorizer,
-            creator_name,
-            creator_email,
-            creator_institution,
+    let groups = root_group
+        .group_names(Default::default())
+        .iter()
+        .map(|name| {
+            root_group
+                .open_group(name, Default::default())
+                .context(error::GdalMd)?
+                .to_net_cdf_subgroup(Path::new(name), stats_for_group)
         })
-    }
+        .collect::<Result<Vec<_>>>()?;
 
+    let time_coverage = TimeCoverage::from_dimension(&root_group)?;
+
+    let colorizer = load_colorizer(&path).or_else(|error| {
+        debug!("Use fallback colorizer: {:?}", error);
+        fallback_colorizer()
+    })?;
+
+    let creator_name = root_group
+        .attribute("creator_name")
+        .map(|a| a.read_as_string())
+        .ok();
+
+    let creator_email = root_group
+        .attribute("creator_email")
+        .map(|a| a.read_as_string())
+        .ok();
+
+    let creator_institution = root_group
+        .attribute("creator_institution")
+        .map(|a| a.read_as_string())
+        .ok();
+
+    Ok(NetCdfOverview {
+        file_name: path
+            .strip_prefix(provider_path)
+            .boxed_context(error::DatasetIsNotInProviderPath)?
+            .to_string_lossy()
+            .to_string(),
+        title,
+        summary,
+        spatial_reference,
+        groups,
+        entities,
+        time_coverage,
+        colorizer,
+        creator_name,
+        creator_email,
+        creator_institution,
+    })
+}
+
+impl<D: GeoEngineDb> NetCdfCfDataProvider<D>
+where
+    <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn meta_data(
-        db_transaction: &Transaction<'_>,
+        db_transaction: &NetCdfCfReadAccess<D::Tls>,
         path: &Path,
         id: &DataId,
         cache_ttl: CacheTtlSeconds,
@@ -455,13 +439,13 @@ impl NetCdfCfDataProvider {
         // try to load from overviews
         if let Some(mut loading_info) = {
             let dataset_id = dataset_id.clone();
-            meta_data_from_overviews(
-                db_transaction,
-                &dataset_id.file_name,
-                dataset_id.group_names,
-                dataset_id.entity,
-            )
-            .await?
+            db_transaction
+                .loading_info(
+                    &dataset_id.file_name,
+                    &dataset_id.group_names,
+                    dataset_id.entity,
+                )
+                .await?
         } {
             for params in &mut loading_info.params {
                 params.cache_ttl = cache_ttl;
@@ -634,15 +618,12 @@ impl NetCdfCfDataProvider {
         resampling_method: Option<ResamplingMethod>,
         task_context: C,
     ) -> Result<OverviewGeneration> {
-        let mut db_connection = self
-            .metadata_db
-            .get()
-            .await
-            .boxed_context(error::DatabaseConnection)?;
+        let transaction = self.db.write_access(self.id).await?;
 
-        let transaction = deferred_write_transaction(&mut db_connection).await?;
-
-        if overview_exists(&transaction, dataset_path).await? {
+        if transaction
+            .overview_exists(&dataset_path.to_string_lossy())
+            .await?
+        {
             return Ok(OverviewGeneration::Skipped);
         }
 
@@ -672,13 +653,7 @@ impl NetCdfCfDataProvider {
         dataset_path: &Path,
         task_context: C,
     ) -> Result<OverviewGeneration> {
-        let mut db_connection = self
-            .metadata_db
-            .get()
-            .await
-            .boxed_context(error::DatabaseConnection)?;
-
-        let transaction = deferred_write_transaction(&mut db_connection).await?;
+        let transaction = self.db.write_access(self.id).await?;
 
         let details = create_overviews(
             task_context,
@@ -702,13 +677,7 @@ impl NetCdfCfDataProvider {
     }
 
     pub async fn remove_overviews(&self, dataset_path: &Path, force: bool) -> Result<()> {
-        let mut db_connection = self
-            .metadata_db
-            .get()
-            .await
-            .boxed_context(error::DatabaseConnection)?;
-
-        let transaction = deferred_write_transaction(&mut db_connection).await?;
+        let transaction = self.db.write_access(self.id).await?;
 
         remove_overviews(dataset_path, &self.overviews, &transaction, force).await?;
 
@@ -731,19 +700,24 @@ impl NetCdfCfDataProvider {
         options: LayerCollectionListOptions,
         layer_collection_fn: impl Fn(&Path, &[String]) -> LayerCollectionId,
         layer_id_fn: impl Fn(&Path, &[String], usize) -> LayerId,
-    ) -> crate::error::Result<LayerCollection> {
-        async fn generate_listing_from_netcdf(
-            metadata_db: &Pool<PostgresConnectionManager<NoTls>>,
+    ) -> crate::error::Result<LayerCollection>
+    where
+        <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+        <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+        <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+    {
+        async fn generate_listing_from_netcdf<D: GeoEngineDb>(
+            db: &D,
             config: NetCdfListingConfig<'_>,
             layer_collection_fn: impl Fn(&Path, &[String]) -> LayerCollectionId,
             layer_id_fn: impl Fn(&Path, &[String], usize) -> LayerId,
-        ) -> crate::error::Result<LayerCollection> {
-            let mut db_connection = metadata_db
-                .get()
-                .await
-                .boxed_context(error::DatabaseConnection)?;
-
-            let transaction = readonly_transaction(&mut db_connection).await?;
+        ) -> crate::error::Result<LayerCollection>
+        where
+            <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+            <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+            <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+        {
+            let transaction = db.read_access(config.provider_id).await?;
 
             listing_from_netcdf(&transaction, config, layer_collection_fn, layer_id_fn).await
         }
@@ -770,7 +744,7 @@ impl NetCdfCfDataProvider {
                     && self.is_netcdf_file(&path) =>
             {
                 generate_listing_from_netcdf(
-                    &self.metadata_db,
+                    &self.db,
                     NetCdfListingConfig {
                         provider_id: self.id,
                         collection,
@@ -789,7 +763,7 @@ impl NetCdfCfDataProvider {
                     && self.is_netcdf_file(&path) =>
             {
                 generate_listing_from_netcdf(
-                    &self.metadata_db,
+                    &self.db,
                     NetCdfListingConfig {
                         provider_id: self.id,
                         collection,
@@ -957,7 +931,12 @@ impl TimeCoverage {
 }
 
 #[async_trait]
-impl DataProvider for NetCdfCfDataProvider {
+impl<D: GeoEngineDb> DataProvider for NetCdfCfDataProvider<D>
+where
+    <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn provenance(&self, id: &DataId) -> crate::error::Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             data: id.clone(),
@@ -1142,7 +1121,7 @@ async fn listing_from_dir(
                 .to_owned();
             let b = base.to_owned();
             let tree = tokio::task::spawn_blocking(move || {
-                NetCdfCfDataProvider::build_netcdf_tree(&b, &fp, &Default::default())
+                build_netcdf_tree(&b, &fp, &Default::default())
                     .map_err(|_| Error::InvalidLayerCollectionId)
             })
             .await??;
@@ -1286,8 +1265,8 @@ struct NetCdfListingConfig<'a> {
     options: &'a LayerCollectionListOptions,
 }
 
-async fn listing_from_netcdf(
-    db_transaction: &Transaction<'_>,
+async fn listing_from_netcdf<Tls>(
+    db_transaction: &NetCdfCfReadAccess<Tls>,
     NetCdfListingConfig {
         provider_id,
         collection,
@@ -1298,40 +1277,15 @@ async fn listing_from_netcdf(
     }: NetCdfListingConfig<'_>,
     layer_collection_fn: impl Fn(&Path, &[String]) -> LayerCollectionId,
     layer_id_fn: impl Fn(&Path, &[String], usize) -> LayerId,
-) -> crate::error::Result<LayerCollection> {
+) -> crate::error::Result<LayerCollection>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     let query_file_name = relative_file_path.to_string_lossy();
-    if let Some(row) = db_transaction
-        .query_opt(
-            r#"
-            SELECT
-                file_name,
-                title,
-                summary,
-                spatial_reference :: "SpatialReference",
-                colorizer :: "Colorizer",
-                creator_name,
-                creator_email,
-                creator_institution
-            FROM overviews
-            WHERE file_name = $1
-            "#,
-            &[&query_file_name],
-        )
-        .await?
-    {
-        let overview_metadata = NetCdfOverviewMetadata {
-            file_name: row.get("file_name"),
-            title: row.get("title"),
-            summary: row.get("summary"),
-            spatial_reference: row.get("spatial_reference"),
-            colorizer: row.get("colorizer"),
-            creator: Creator::new(
-                row.get("creator_name"),
-                row.get("creator_email"),
-                row.get("creator_institution"),
-            ),
-        };
-
+    if let Some(overview_metadata) = db_transaction.overview_metadata(&query_file_name).await? {
         listing_from_netcdf_with_database(
             db_transaction,
             NetCdfDatabaseListingConfig {
@@ -1372,8 +1326,8 @@ struct NetCdfDatabaseListingConfig<'a> {
     overview_metadata: NetCdfOverviewMetadata,
 }
 
-async fn listing_from_netcdf_with_database(
-    db_transaction: &Transaction<'_>,
+async fn listing_from_netcdf_with_database<Tls>(
+    db_transaction: &NetCdfCfReadAccess<Tls>,
     NetCdfDatabaseListingConfig {
         provider_id,
         collection,
@@ -1384,90 +1338,26 @@ async fn listing_from_netcdf_with_database(
     }: NetCdfDatabaseListingConfig<'_>,
     layer_collection_fn: impl Fn(&Path, &[String]) -> LayerCollectionId,
     layer_id_fn: impl Fn(&Path, &[String], usize) -> LayerId,
-) -> crate::error::Result<LayerCollection> {
+) -> crate::error::Result<LayerCollection>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     let group_metadata = db_transaction
-        .query_opt(
-            r#"
-            SELECT
-                name,
-                title,
-                description,
-                data_type :: "RasterDataType",
-                data_range,
-                unit
-            FROM groups
-            WHERE file_name = $1 AND name = $2
-            "#,
-            &[&query_file_name, &groups],
-        )
-        .await?
-        .map(|row| NetCdfGroupMetadata {
-            name: row.get::<_, Vec<String>>("name").pop().unwrap_or_default(),
-            title: row.get("title"),
-            description: row.get("description"),
-            data_type: row.get("data_type"),
-            data_range: row.get::<_, Option<DataRange>>("data_range"),
-            unit: row.get("unit"),
-        });
+        .group_metadata(query_file_name, groups)
+        .await?;
 
     let subgroups: Vec<NetCdfGroupMetadata> = db_transaction
-        .query(
-            r#"
-            SELECT
-                name,
-                title,
-                description,
-                data_type :: "RasterDataType",
-                data_range,
-                unit
-            FROM groups
-            WHERE
-                file_name = $1 AND
-                name[:$3] = $2 AND
-                array_length(name, 1) = ($3 + 1)
-            ORDER BY name ASC
-            OFFSET $4 LIMIT $5
-            "#,
-            &[
-                &query_file_name,
-                &groups,
-                &(groups.len() as i32),
-                &i64::from(options.offset),
-                &i64::from(options.limit),
-            ],
-        )
-        .await?
-        .into_iter()
-        .map(|row| NetCdfGroupMetadata {
-            name: row.get::<_, Vec<String>>("name").pop().unwrap_or_default(),
-            title: row.get("title"),
-            description: row.get("description"),
-            data_type: row.get("data_type"),
-            data_range: row.get::<_, Option<DataRange>>("data_range"),
-            unit: row.get("unit"),
-        })
-        .collect();
+        .subgroup_metadata(query_file_name, groups, options.offset, options.limit)
+        .await?;
 
     let entities = if subgroups.is_empty() {
         itertools::Either::Left(
             db_transaction
-                .query(
-                    "SELECT id, name FROM entities
-                                WHERE file_name = $1
-                                ORDER BY name ASC
-                                OFFSET $2 LIMIT $3",
-                    &[
-                        &query_file_name,
-                        &i64::from(options.offset),
-                        &i64::from(options.limit),
-                    ],
-                )
-                .await?
-                .into_iter()
-                .map(|row| NetCdfEntity {
-                    name: row.get("name"),
-                    id: row.get::<_, i64>("id") as usize,
-                }),
+                .entities(query_file_name, options.offset, options.limit)
+                .await?,
         )
     } else {
         itertools::Either::Right(std::iter::empty())
@@ -1510,12 +1400,8 @@ async fn listing_from_netcdf_with_file(
     layer_id_fn: impl Fn(&Path, &[String], usize) -> LayerId,
 ) -> crate::error::Result<LayerCollection> {
     let tree = tokio::task::spawn_blocking(move || {
-        NetCdfCfDataProvider::build_netcdf_tree(
-            &provider_path,
-            &relative_file_path,
-            &Default::default(),
-        )
-        .map_err(|_| Error::InvalidLayerCollectionId)
+        build_netcdf_tree(&provider_path, &relative_file_path, &Default::default())
+            .map_err(|_| Error::InvalidLayerCollectionId)
     })
     .await??;
 
@@ -1575,7 +1461,12 @@ async fn listing_from_netcdf_with_file(
 }
 
 #[async_trait]
-impl LayerCollectionProvider for NetCdfCfDataProvider {
+impl<D: GeoEngineDb> LayerCollectionProvider for NetCdfCfDataProvider<D>
+where
+    <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             listing: true,
@@ -1625,54 +1516,11 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
 
         let provider_path = self.data.clone();
 
-        let mut db_connection = self
-            .metadata_db
-            .get()
-            .await
-            .boxed_context(error::DatabaseConnection)?;
-
-        let db_transaction = db_connection
-            .build_transaction()
-            .read_only(true)
-            .deferrable(true) // get snapshot isolation
-            .start()
-            .await
-            .boxed_context(error::DatabaseTransaction)?;
+        let db_transaction = self.db.read_access(self.id).await?;
 
         let query_file_name = dataset_path.to_string_lossy();
-        if let Some(row) = db_transaction
-            .query_opt(
-                r#"
-                    SELECT
-                        file_name,
-                        title,
-                        summary,
-                        spatial_reference :: "SpatialReference",
-                        colorizer :: "Colorizer",
-                        creator_name,
-                        creator_email,
-                        creator_institution
-                    FROM overviews
-                    WHERE file_name = $1
-                    "#,
-                &[&query_file_name],
-            )
-            .await?
-        {
+        if let Some(overview_metadata) = db_transaction.overview_metadata(&query_file_name).await? {
             // listing from database
-
-            let overview_metadata = NetCdfOverviewMetadata {
-                file_name: row.get("file_name"),
-                title: row.get("title"),
-                summary: row.get("summary"),
-                spatial_reference: row.get("spatial_reference"),
-                colorizer: row.get("colorizer"),
-                creator: Creator::new(
-                    row.get("creator_name"),
-                    row.get("creator_email"),
-                    row.get("creator_institution"),
-                ),
-            };
 
             load_layer_from_database(
                 self.id,
@@ -1688,12 +1536,8 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
             // listing from file directly
 
             let tree = tokio::task::spawn_blocking(move || {
-                NetCdfCfDataProvider::build_netcdf_tree(
-                    &provider_path,
-                    &dataset_path,
-                    &Default::default(),
-                )
-                .map_err(|_| Error::InvalidLayerCollectionId)
+                build_netcdf_tree(&provider_path, &dataset_path, &Default::default())
+                    .map_err(|_| Error::InvalidLayerCollectionId)
             })
             .await??;
 
@@ -1702,27 +1546,23 @@ impl LayerCollectionProvider for NetCdfCfDataProvider {
     }
 }
 
-async fn load_layer_from_database(
+async fn load_layer_from_database<Tls>(
     provider_id: DataProviderId,
     id: &LayerId,
-    db_transaction: Transaction<'_>,
+    db_transaction: NetCdfCfReadAccess<Tls>,
     query_file_name: &str,
     entity: usize,
     groups: Vec<String>,
     overview_metadata: NetCdfOverviewMetadata,
-) -> crate::error::Result<Layer> {
+) -> crate::error::Result<Layer>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     let netcdf_entity = db_transaction
-        .query_opt(
-            "
-                    SELECT
-                        id,
-                        name
-                    FROM entities
-                    WHERE file_name = $1 AND
-                          id = $2
-                    ",
-            &[&query_file_name, &(entity as i64)],
-        )
+        .entity(query_file_name, entity)
         .await?
         .map_or(
             NetCdfEntity {
@@ -1730,46 +1570,15 @@ async fn load_layer_from_database(
                 name: String::new(),
                 id: entity,
             },
-            |row| NetCdfEntity {
-                name: row.get("name"),
-                id: row.get::<_, i64>("id") as usize,
-            },
+            |entity| entity,
         );
 
-    let data_range: Option<DataRange> = db_transaction
-        .query_opt(
-            "
-                    SELECT
-                        data_range
-                    FROM groups
-                    WHERE
-                        file_name = $1 AND
-                        name = $2
-                    ",
-            &[&query_file_name, &groups],
-        )
-        .await?
-        .and_then(|row| row.get::<_, Option<DataRange>>("data_range"));
+    let data_range: Option<DataRange> = db_transaction.data_range(query_file_name, &groups).await?;
 
     let (data_range, colorizer) =
         determine_data_range_and_colorizer(data_range, overview_metadata.colorizer)?;
 
-    let time_steps: Vec<TimeInstance> = db_transaction
-        .query(
-            r#"
-                SELECT
-                    "time"
-                FROM timestamps
-                WHERE
-                    file_name = $1
-                ORDER BY "time" ASC
-                "#,
-            &[&query_file_name],
-        )
-        .await?
-        .into_iter()
-        .map(|row| row.get("time"))
-        .collect();
+    let time_steps: Vec<TimeInstance> = db_transaction.timestamps(query_file_name).await?;
 
     Ok(create_layer(
         ProviderLayerId {
@@ -1792,8 +1601,12 @@ async fn load_layer_from_database(
 }
 
 #[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for NetCdfCfDataProvider
+impl<D: GeoEngineDb> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for NetCdfCfDataProvider<D>
+where
+    <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn meta_data(
         &self,
@@ -1802,31 +1615,24 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        async fn meta_data_transaction(
-            provider: &NetCdfCfDataProvider,
+        async fn meta_data_transaction<D: GeoEngineDb>(
+            provider: &NetCdfCfDataProvider<D>,
             id: &geoengine_datatypes::dataset::DataId,
         ) -> Result<Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>>
+        where
+            <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+            <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+            <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
         {
-            let mut db_connection = provider
-                .metadata_db
-                .get()
-                .await
-                .boxed_context(error::DatabaseConnection)?;
+            let transaction = provider.db.read_access(provider.id).await?;
 
-            let transaction = readonly_transaction(&mut db_connection).await?;
-
-            let result = NetCdfCfDataProvider::meta_data(
+            let result = NetCdfCfDataProvider::<D>::meta_data(
                 &transaction,
                 &provider.data,
                 id,
                 provider.cache_ttl,
             )
             .await?;
-
-            transaction
-                .commit()
-                .await
-                .boxed_context(error::DatabaseTransactionCommit)?;
 
             Ok(result)
         }
@@ -1840,9 +1646,9 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 }
 
 #[async_trait]
-impl
+impl<D: GeoEngineDb>
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for NetCdfCfDataProvider
+    for NetCdfCfDataProvider<D>
 {
     async fn meta_data(
         &self,
@@ -1862,8 +1668,9 @@ impl
 }
 
 #[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for NetCdfCfDataProvider
+impl<D: GeoEngineDb>
+    MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for NetCdfCfDataProvider<D>
 {
     async fn meta_data(
         &self,
@@ -1923,88 +1730,9 @@ fn gdal_netcdf_open(base_path: Option<&Path>, path: &Path) -> Result<gdal::Datas
 }
 
 #[cfg(test)]
-pub(crate) fn test_db_config() -> DatabaseConnectionConfig {
-    let db_config =
-        crate::util::config::get_config_element::<crate::util::config::Postgres>().unwrap();
-    DatabaseConnectionConfig {
-        host: db_config.host,
-        port: db_config.port,
-        database: db_config.database,
-        schema: db_config.schema,
-        user: db_config.user,
-        password: db_config.password,
-    }
-}
-
-#[cfg(test)]
-async fn test_db() -> Pool<PostgresConnectionManager<NoTls>> {
-    let db = Pool::builder()
-        .max_size(1) // unwised to have to separate connections point to `pg_temp`
-        .build(PostgresConnectionManager::new(
-            test_db_config().pg_config(),
-            NoTls,
-        ))
-        .await
-        .unwrap();
-
-    migrate_database(
-        &mut db.get().await.unwrap(),
-        &all_migrations(),
-        Some("EBV Provider"),
-    )
-    .await
-    .unwrap();
-
-    db
-}
-
-#[cfg(test)]
-async fn test_db_connection(
-) -> bb8_postgres::bb8::PooledConnection<'static, PostgresConnectionManager<NoTls>> {
-    test_db().await.get_owned().await.unwrap()
-}
-
-/// Creates a write transaction that defers constraints
-async fn deferred_write_transaction<'db, 't>(
-    db_connection: &'t mut bb8_postgres::bb8::PooledConnection<
-        'db,
-        PostgresConnectionManager<NoTls>,
-    >,
-) -> Result<tokio_postgres::Transaction<'t>> {
-    let transaction = db_connection
-        .transaction()
-        .await
-        .boxed_context(error::DatabaseTransaction)?;
-
-    // check constraints at the end to speed up insertions
-    transaction
-        .batch_execute("SET CONSTRAINTS ALL DEFERRED")
-        .await
-        .boxed_context(error::UnexpectedExecution)?;
-
-    Ok(transaction)
-}
-
-/// Creates a read-only transaction that uses snapshot isolation
-async fn readonly_transaction<'db, 't>(
-    db_connection: &'t mut bb8_postgres::bb8::PooledConnection<
-        'db,
-        PostgresConnectionManager<NoTls>,
-    >,
-) -> Result<tokio_postgres::Transaction<'t>> {
-    db_connection
-        .build_transaction()
-        .read_only(true)
-        .deferrable(true) // get snapshot isolation
-        .start()
-        .await
-        .boxed_context(error::DatabaseTransaction)
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, SessionContext, SimpleApplicationContext};
+    use crate::contexts::{PostgresContext, PostgresDb, SessionContext, SimpleApplicationContext};
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::ge_context;
     use crate::layers::layer::LayerListing;
@@ -2129,7 +1857,6 @@ mod tests {
             priority: Some(-2),
             data: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -2210,7 +1937,6 @@ mod tests {
             priority: Some(-3),
             data: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -2270,7 +1996,6 @@ mod tests {
             priority: Some(-4),
             data: test_data!("netcdf4d").into(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -2346,16 +2071,16 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_metadata_from_netcdf_sm() {
+    #[ge_context::test]
+    async fn test_metadata_from_netcdf_sm(app_ctx: PostgresContext<NoTls>) {
         let provider = NetCdfCfDataProvider {
             id: NETCDF_CF_PROVIDER_ID,
             name: "Test Provider".to_string(),
             description: "Test Provider".to_string(),
             data: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
-            metadata_db: test_db().await,
             cache_ttl: Default::default(),
+            db: app_ctx.default_session_context().await.unwrap().db(),
         };
 
         let metadata = provider
@@ -2446,16 +2171,16 @@ mod tests {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn list_files() {
+    #[ge_context::test]
+    async fn list_files(app_ctx: PostgresContext<NoTls>) {
         let provider = NetCdfCfDataProvider {
             id: NETCDF_CF_PROVIDER_ID,
             name: "Test Provider".to_string(),
             description: "Test Provider".to_string(),
             data: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
-            metadata_db: test_db().await,
             cache_ttl: Default::default(),
+            db: app_ctx.default_session_context().await.unwrap().db(),
         };
 
         let expected_files: Vec<PathBuf> = vec![
@@ -2471,8 +2196,8 @@ mod tests {
         assert_eq!(files, expected_files);
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_loading_info_from_index() {
+    #[ge_context::test]
+    async fn test_loading_info_from_index(app_ctx: PostgresContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -2483,8 +2208,8 @@ mod tests {
             description: "Test Provider".to_string(),
             data: test_data!("netcdf4d/").to_path_buf(),
             overviews: overview_folder.path().to_path_buf(),
-            metadata_db: test_db().await,
             cache_ttl: Default::default(),
+            db: app_ctx.default_session_context().await.unwrap().db(),
         };
 
         provider
@@ -2587,7 +2312,6 @@ mod tests {
             priority: Some(-5),
             data: test_data!("netcdf4d").into(),
             overviews: overview_folder.path().to_path_buf(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -2596,7 +2320,7 @@ mod tests {
 
         provider
             .as_any()
-            .downcast_ref::<NetCdfCfDataProvider>()
+            .downcast_ref::<NetCdfCfDataProvider<PostgresDb<NoTls>>>()
             .unwrap()
             .create_overviews(Path::new("dataset_sm.nc"), None, NopTaskContext)
             .await
@@ -2685,7 +2409,6 @@ mod tests {
             data: test_data!("netcdf4d/").into(),
             base_url: "https://portal.geobon.org/api/v1".try_into().unwrap(),
             overviews: test_data!("netcdf4d/overviews/").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         };
 
@@ -2841,7 +2564,6 @@ mod tests {
             priority: None,
             data: test_data!("netcdf4d").into(),
             overviews: overview_folder.path().to_path_buf(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -2864,7 +2586,7 @@ mod tests {
 
             provider
                 .as_any()
-                .downcast_ref::<NetCdfCfDataProvider>()
+                .downcast_ref::<NetCdfCfDataProvider<PostgresDb<NoTls>>>()
                 .unwrap()
                 .create_overviews(Path::new(file_name), None, NopTaskContext)
                 .await
@@ -2894,7 +2616,6 @@ mod tests {
             priority: None,
             data: test_data!("netcdf4d").into(),
             overviews: overview_folder.path().to_path_buf(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -2910,7 +2631,7 @@ mod tests {
 
         provider
             .as_any()
-            .downcast_ref::<NetCdfCfDataProvider>()
+            .downcast_ref::<NetCdfCfDataProvider<PostgresDb<NoTls>>>()
             .unwrap()
             .create_overviews(Path::new(file_name), None, NopTaskContext)
             .await
@@ -2943,7 +2664,7 @@ mod tests {
     #[ge_context::test]
     async fn it_refreshes_metadata_only(app_ctx: PostgresContext<NoTls>) {
         async fn query_collection_name(
-            provider: &NetCdfCfDataProvider,
+            provider: &NetCdfCfDataProvider<PostgresDb<NoTls>>,
             id: &LayerCollectionId,
         ) -> String {
             let collection = provider
@@ -2961,6 +2682,8 @@ mod tests {
 
         hide_gdal_errors();
 
+        let session_context = app_ctx.default_session_context().await.unwrap();
+
         let overview_folder = tempfile::tempdir().unwrap();
 
         let provider = Box::new(NetCdfCfDataProviderDefinition {
@@ -2969,10 +2692,9 @@ mod tests {
             priority: None,
             data: test_data!("netcdf4d").into(),
             overviews: overview_folder.path().to_path_buf(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(session_context.db())
         .await
         .unwrap();
 
@@ -2981,7 +2703,7 @@ mod tests {
 
         let provider = provider
             .as_any()
-            .downcast_ref::<NetCdfCfDataProvider>()
+            .downcast_ref::<NetCdfCfDataProvider<PostgresDb<NoTls>>>()
             .unwrap();
 
         provider
@@ -3007,29 +2729,31 @@ mod tests {
 
         // manipulate a field in the metadata
 
-        provider
-            .metadata_db
-            .get()
+        let db_transaction = session_context
+            .db()
+            .write_access(NETCDF_CF_PROVIDER_ID)
             .await
-            .unwrap()
+            .unwrap();
+
+        db_transaction
+            .test_db_transaction()
             .execute(
-                "UPDATE overviews SET title = 'MANIPULATED' WHERE file_name = $1",
+                "UPDATE ebv_provider_overviews SET title = 'MANIPULATED' WHERE file_name = $1",
                 &[&file_name],
             )
             .await
             .unwrap();
 
-        provider
-            .metadata_db
-            .get()
-            .await
-            .unwrap()
+        db_transaction
+            .test_db_transaction()
             .execute(
-                "UPDATE groups SET data_range = ARRAY[5, 23] WHERE file_name = $1",
+                "UPDATE ebv_provider_groups SET data_range = ARRAY[5, 23] WHERE file_name = $1",
                 &[&file_name],
             )
             .await
             .unwrap();
+
+        db_transaction.commit().await.unwrap();
 
         assert_eq!(query_collection_name(provider, &id).await, "MANIPULATED");
 

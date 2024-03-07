@@ -6,8 +6,8 @@ use super::tasks::TaskResponse;
 use crate::api::model::datatypes::ResamplingMethod;
 use crate::contexts::ApplicationContext;
 use crate::datasets::external::netcdfcf::{
-    error, EbvPortalDataProvider, NetCdfCf4DProviderError, OverviewGeneration, EBV_PROVIDER_ID,
-    NETCDF_CF_PROVIDER_ID,
+    error, EbvPortalDataProvider, NetCdfCf4DProviderError, NetCdfCfProviderDb, OverviewGeneration,
+    EBV_PROVIDER_ID, NETCDF_CF_PROVIDER_ID,
 };
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
@@ -25,6 +25,8 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
+use tokio_postgres::Socket;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{IntoParams, Modify, OpenApi, ToSchema};
 
@@ -109,6 +111,10 @@ pub(crate) fn init_ebv_routes<C>() -> Box<dyn FnOnce(&mut ServiceConfig)>
 where
     C: ApplicationContext,
     C::Session: FromRequest,
+<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+<<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future:
+Send,
 {
     Box::new(move |cfg: &mut web::ServiceConfig| {
         cfg.service(
@@ -126,21 +132,21 @@ where
 
 async fn retrieve_netcdf_cf_provider<C: SessionContext>(
     ctx: Arc<C>,
-) -> Result<Box<NetCdfCfDataProvider>, NetCdfCf4DProviderError> {
+) -> Result<Box<NetCdfCfDataProvider<C::GeoEngineDB>>, NetCdfCf4DProviderError> {
     let db = ctx.db();
 
     if let Ok(data_provider) = db.load_layer_provider(EBV_PROVIDER_ID).await {
         let data_provider = data_provider.into_box_any();
-        let ebv_provider: Box<EbvPortalDataProvider> = data_provider
-            .downcast::<EbvPortalDataProvider>()
+        let ebv_provider: Box<EbvPortalDataProvider<C::GeoEngineDB>> = data_provider
+            .downcast::<EbvPortalDataProvider<C::GeoEngineDB>>()
             .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?;
         return Ok(Box::new(ebv_provider.netcdf_cf_provider));
     }
 
     if let Ok(data_provider) = db.load_layer_provider(NETCDF_CF_PROVIDER_ID).await {
         let data_provider = data_provider.into_box_any();
-        let netcdf_cf_provider: Box<NetCdfCfDataProvider> = data_provider
-            .downcast::<NetCdfCfDataProvider>()
+        let netcdf_cf_provider: Box<NetCdfCfDataProvider<C::GeoEngineDB>> = data_provider
+            .downcast::<NetCdfCfDataProvider<C::GeoEngineDB>>()
             .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?;
         return Ok(netcdf_cf_provider);
     }
@@ -186,7 +192,11 @@ async fn create_overviews<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     params: Option<web::Json<CreateOverviewsParams>>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder> where
+<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+<<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future:
+Send,{
     let ctx = Arc::new(app_ctx.into_inner().session_context(session.clone()));
 
     let task = EbvMultiOverviewTask::new(
@@ -208,7 +218,13 @@ struct EbvMultiOverviewTask<C: SessionContext> {
     files: Vec<PathBuf>,
 }
 
-impl<C: SessionContext> EbvMultiOverviewTask<C> {
+impl<C: SessionContext> EbvMultiOverviewTask<C>
+where
+    <<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future:
+        Send,
+{
     async fn new(
         ctx: Arc<C>,
         resampling_method: Option<ResamplingMethod>,
@@ -241,7 +257,11 @@ impl<C: SessionContext> EbvMultiOverviewTask<C> {
 }
 
 #[async_trait::async_trait]
-impl<C: SessionContext> Task<C::TaskContext> for EbvMultiOverviewTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for EbvMultiOverviewTask<C> where
+<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+<<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future:
+    Send,{
     async fn run(
         &self,
         task_ctx: C::TaskContext,
@@ -389,7 +409,10 @@ async fn create_overview<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<EbvPath>,
     params: Option<web::Json<CreateOverviewParams>>,
-) -> Result<web::Json<TaskResponse>> {
+) -> Result<web::Json<TaskResponse>> where <<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+<<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future:
+Send,{
     let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
     let task = EbvOverviewTask::<C::SessionContext> {
@@ -430,7 +453,10 @@ async fn refresh_overview<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     path: web::Path<EbvPath>,
-) -> Result<web::Json<TaskResponse>> {
+) -> Result<web::Json<TaskResponse>> where <<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+<<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future:
+Send,{
     let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
     let task = EbvOverviewRefreshTask::<C::SessionContext> {
@@ -451,7 +477,11 @@ struct EbvOverviewTask<C: SessionContext> {
 }
 
 #[async_trait::async_trait]
-impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewTask<C> where
+<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+<<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future:
+    Send,{
     async fn run(
         &self,
         ctx: C::TaskContext,
@@ -517,7 +547,11 @@ struct EbvOverviewRefreshTask<C: SessionContext> {
 }
 
 #[async_trait::async_trait]
-impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewRefreshTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for EbvOverviewRefreshTask<C> where
+<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+<<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future:
+    Send, {
     async fn run(
         &self,
         ctx: C::TaskContext,
@@ -598,7 +632,10 @@ async fn remove_overview<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     path: web::Path<EbvPath>,
     params: web::Query<RemoveOverviewParams>,
-) -> Result<impl Responder> {
+) -> Result<impl Responder> where <<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+<<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future:
+Send,{
     let ctx = Arc::new(app_ctx.into_inner().session_context(session));
 
     let task = EbvRemoveOverviewTask::<C::SessionContext> {
@@ -620,7 +657,11 @@ struct EbvRemoveOverviewTask<C: SessionContext> {
 }
 
 #[async_trait::async_trait]
-impl<C: SessionContext> Task<C::TaskContext> for EbvRemoveOverviewTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for EbvRemoveOverviewTask<C> where
+<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+<<<C::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future:
+    Send, {
     async fn run(
         &self,
         _ctx: C::TaskContext,
@@ -664,7 +705,6 @@ mod tests {
 
     use super::*;
     use crate::contexts::PostgresContext;
-    use crate::datasets::external::netcdfcf::test_db_config;
     use crate::ge_context;
     use crate::{
         contexts::SimpleApplicationContext,
@@ -683,7 +723,10 @@ mod tests {
     async fn send_test_request<C: SimpleApplicationContext>(
         req: test::TestRequest,
         app_ctx: C,
-    ) -> ServiceResponse {
+    ) -> ServiceResponse where <<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<<<C::SessionContext as SessionContext>::GeoEngineDB as NetCdfCfProviderDb>::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future:
+    Send,{
         let app = test::init_service({
             let app = App::new()
                 .app_data(web::Data::new(app_ctx))
@@ -724,7 +767,6 @@ mod tests {
                     priority: None,
                     data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
-                    metadata_db_config: test_db_config(),
                     cache_ttl: Default::default(),
                 }
                 .into(),
@@ -802,7 +844,6 @@ mod tests {
                     priority: None,
                     data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
-                    metadata_db_config: test_db_config(),
                     cache_ttl: Default::default(),
                 }
                 .into(),
@@ -855,7 +896,6 @@ mod tests {
                     priority: None,
                     data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
-                    metadata_db_config: test_db_config(),
                     cache_ttl: Default::default(),
                 }
                 .into(),
@@ -916,7 +956,6 @@ mod tests {
                     priority: None,
                     data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
-                    metadata_db_config: test_db_config(),
                     cache_ttl: Default::default(),
                 }
                 .into(),

@@ -1,12 +1,9 @@
 use super::{
-    error, gdal_netcdf_open, metadata::DataRange, NetCdfCf4DProviderError, NetCdfOverview,
-    TimeCoverage,
+    build_netcdf_tree, database::NetCdfCfWriteAccess, error, gdal_netcdf_open, metadata::DataRange,
+    NetCdfCf4DProviderError, NetCdfOverview, TimeCoverage,
 };
 use crate::{
-    datasets::external::netcdfcf::{
-        loading::{create_loading_info, ParamModification},
-        NetCdfCfDataProvider,
-    },
+    datasets::external::netcdfcf::loading::{create_loading_info, ParamModification},
     tasks::{TaskContext, TaskStatusInfo},
     util::{config::get_config_element, path_with_base_path},
 };
@@ -41,7 +38,10 @@ use std::{
     sync::Arc,
 };
 use tokio::fs;
-use tokio_postgres::Transaction;
+use tokio_postgres::{
+    tls::{MakeTlsConnect, TlsConnect},
+    Socket,
+};
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
@@ -256,11 +256,17 @@ pub struct OverviewCreationOptions<'a> {
     pub check_file_only: bool,
 }
 
-pub async fn create_overviews<C: TaskContext + 'static>(
+pub async fn create_overviews<C: TaskContext + 'static, Tls>(
     task_context: C,
-    db_transaction: &Transaction<'_>,
+    db_transaction: &NetCdfCfWriteAccess<Tls>,
     options: OverviewCreationOptions<'_>,
-) -> Result<NetCdfOverview> {
+) -> Result<NetCdfOverview>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     let file_path = canonicalize_subpath(options.provider_path, options.dataset_path)
         .boxed_context(error::DatasetIsNotInProviderPath)?;
     let out_folder_path = path_with_base_path(options.overview_path, options.dataset_path)
@@ -309,33 +315,32 @@ pub async fn create_overviews<C: TaskContext + 'static>(
             )
             .await;
 
-            let loading_info_stmt = db_transaction
-                .prepare_typed(
-                    r#"
-                INSERT INTO loading_infos (
-                    file_name,
-                    group_names,
-                    entity_id,
-                    meta_data
-                ) VALUES (
-                    $1,
-                    $2 :: TEXT[],
-                    $3,
-                    $4 :: "GdalMetaDataList"
-                );"#,
-                    &[
-                        tokio_postgres::types::Type::TEXT,
-                        tokio_postgres::types::Type::TEXT_ARRAY,
-                        tokio_postgres::types::Type::INT8,
-                        // we omit `GdalMetaDataList`
-                    ],
-                )
-                .await
-                .boxed_context(error::CannotStoreLoadingInfo)?;
+            // let loading_info_stmt = db_transaction
+            //     .prepare_typed(
+            //         r#"
+            //     INSERT INTO loading_infos (
+            //         file_name,
+            //         group_names,
+            //         entity_id,
+            //         meta_data
+            //     ) VALUES (
+            //         $1,
+            //         $2 :: TEXT[],
+            //         $3,
+            //         $4 :: "GdalMetaDataList"
+            //     );"#,
+            //         &[
+            //             tokio_postgres::types::Type::TEXT,
+            //             tokio_postgres::types::Type::TEXT_ARRAY,
+            //             tokio_postgres::types::Type::INT8,
+            //             // we omit `GdalMetaDataList`
+            //         ],
+            //     )
+            //     .await
+            //     .boxed_context(error::CannotStoreLoadingInfo)?;
 
             subdataset = index_subdataset_entity(
                 db_transaction,
-                &loading_info_stmt,
                 subdataset,
                 ConversionMetadataEntity {
                     base: conversion.clone(),
@@ -488,146 +493,111 @@ impl Drop for InProgressFlag {
     }
 }
 
-async fn store_metadata_in_db(
+async fn store_metadata_in_db<Tls>(
     provider_path: &Path,
     dataset_path: &Path,
     stats_for_group: &HashMap<String, DataRange>,
-    db_transaction: &Transaction<'_>,
-) -> Result<NetCdfOverview> {
-    let metadata =
-        NetCdfCfDataProvider::build_netcdf_tree(provider_path, dataset_path, stats_for_group)?;
+    db_transaction: &NetCdfCfWriteAccess<Tls>,
+) -> Result<NetCdfOverview>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let metadata = build_netcdf_tree(provider_path, dataset_path, stats_for_group)?;
 
-    let removed_rows = db_transaction
-        .execute(
-            "DELETE FROM overviews WHERE file_name = $1",
-            &[&metadata.file_name],
-        )
-        .await
-        .boxed_context(error::UnexpectedExecution)?;
-
-    if removed_rows > 0 {
+    if db_transaction.remove_overview(&metadata.file_name).await? {
         log::debug!(
             "Removed {dataset_path} from the database before re-inserting the metadata",
             dataset_path = dataset_path.display()
         );
     }
 
-    db_transaction
-        .execute(
-            "INSERT INTO overviews (
-                            file_name,
-                            title,
-                            summary,
-                            spatial_reference,
-                            colorizer,
-                            creator_name,
-                            creator_email,
-                            creator_institution
-                        ) VALUES (
-                            $1,
-                            $2,
-                            $3,
-                            $4,
-                            $5,
-                            $6,
-                            $7,
-                            $8
-                        );",
-            &[
-                &metadata.file_name,
-                &metadata.title,
-                &metadata.summary,
-                &metadata.spatial_reference,
-                &metadata.colorizer,
-                &metadata.creator_name,
-                &metadata.creator_email,
-                &metadata.creator_institution,
-            ],
-        )
-        .await
-        .boxed_context(error::UnexpectedExecution)?;
+    db_transaction.insert_overview(&metadata).await?;
 
     store_db_metadata_groups(&metadata.groups, &metadata.file_name, db_transaction).await?;
 
-    let entity_statement = db_transaction
-        .prepare_typed(
-            "INSERT INTO entities (file_name, id, name) VALUES ($1, $2, $3);",
-            &[
-                tokio_postgres::types::Type::TEXT,
-                tokio_postgres::types::Type::INT8,
-                tokio_postgres::types::Type::TEXT,
-            ],
-        )
-        .await
-        .boxed_context(error::UnexpectedExecution)?;
+    // let entity_statement = db_transaction
+    //     .prepare_typed(
+    //         "INSERT INTO entities (file_name, id, name) VALUES ($1, $2, $3);",
+    //         &[
+    //             tokio_postgres::types::Type::TEXT,
+    //             tokio_postgres::types::Type::INT8,
+    //             tokio_postgres::types::Type::TEXT,
+    //         ],
+    //     )
+    //     .await
+    //     .boxed_context(error::UnexpectedExecution)?;
 
     for entity in &metadata.entities {
         db_transaction
-            .execute(
-                &entity_statement,
-                &[&metadata.file_name, &(entity.id as i64), &entity.name],
-            )
-            .await
-            .boxed_context(error::UnexpectedExecution)?;
+            .insert_entity(&metadata.file_name, entity)
+            .await?;
     }
 
-    let timestamp_statement = db_transaction
-        .prepare_typed(
-            r#"INSERT INTO timestamps (file_name, "time") VALUES ($1, $2);"#,
-            &[
-                tokio_postgres::types::Type::TEXT,
-                tokio_postgres::types::Type::INT8,
-            ],
-        )
-        .await
-        .boxed_context(error::UnexpectedExecution)?;
+    // let timestamp_statement = db_transaction
+    //     .prepare_typed(
+    //         r#"INSERT INTO timestamps (file_name, "time") VALUES ($1, $2);"#,
+    //         &[
+    //             tokio_postgres::types::Type::TEXT,
+    //             tokio_postgres::types::Type::INT8,
+    //         ],
+    //     )
+    //     .await
+    //     .boxed_context(error::UnexpectedExecution)?;
 
     for time_step in metadata.time_coverage.time_steps() {
         db_transaction
-            .execute(&timestamp_statement, &[&metadata.file_name, &time_step])
-            .await
-            .boxed_context(error::UnexpectedExecution)?;
+            .insert_timestamp(&metadata.file_name, time_step)
+            .await?;
     }
 
     Ok(metadata)
 }
 
-async fn store_db_metadata_groups(
+async fn store_db_metadata_groups<Tls>(
     groups: &[crate::datasets::external::netcdfcf::NetCdfGroup],
     file_name: &str,
-    db_transaction: &Transaction<'_>,
-) -> Result<()> {
-    let group_statement = db_transaction
-        .prepare_typed(
-            "INSERT INTO groups (
-        file_name,
-        name,
-        title,
-        description,
-        data_range,
-        unit,
-        data_type
-    ) VALUES (
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7
-    );",
-            &[
-                tokio_postgres::types::Type::TEXT,
-                tokio_postgres::types::Type::TEXT_ARRAY,
-                tokio_postgres::types::Type::TEXT,
-                tokio_postgres::types::Type::TEXT,
-                tokio_postgres::types::Type::FLOAT8_ARRAY,
-                tokio_postgres::types::Type::TEXT,
-                // we omit `data_type`
-            ],
-        )
-        .await
-        .boxed_context(error::UnexpectedExecution)?;
+    db_transaction: &NetCdfCfWriteAccess<Tls>,
+) -> Result<()>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    // let group_statement = db_transaction
+    //     .prepare_typed(
+    //         "INSERT INTO groups (
+    //     file_name,
+    //     name,
+    //     title,
+    //     description,
+    //     data_range,
+    //     unit,
+    //     data_type
+    // ) VALUES (
+    //     $1,
+    //     $2,
+    //     $3,
+    //     $4,
+    //     $5,
+    //     $6,
+    //     $7
+    // );",
+    //         &[
+    //             tokio_postgres::types::Type::TEXT,
+    //             tokio_postgres::types::Type::TEXT_ARRAY,
+    //             tokio_postgres::types::Type::TEXT,
+    //             tokio_postgres::types::Type::TEXT,
+    //             tokio_postgres::types::Type::FLOAT8_ARRAY,
+    //             tokio_postgres::types::Type::TEXT,
+    //             // we omit `data_type`
+    //         ],
+    //     )
+    //     .await
+    //     .boxed_context(error::UnexpectedExecution)?;
 
     let mut group_stack = groups
         .iter()
@@ -642,47 +612,26 @@ async fn store_db_metadata_groups(
         }
 
         db_transaction
-            .execute(
-                &group_statement,
-                &[
-                    &file_name,
-                    &group_path,
-                    &group.title,
-                    &group.description,
-                    &group.data_range,
-                    &group.unit,
-                    &group.data_type,
-                ],
-            )
-            .await
-            .boxed_context(error::UnexpectedExecution)?;
+            .insert_group(file_name, &group_path, group)
+            .await?;
     }
 
     Ok(())
 }
 
-pub async fn overview_exists(
-    db_transaction: &Transaction<'_>,
-    dataset_path: &Path,
-) -> Result<bool> {
-    db_transaction
-        .query_opt(
-            "SELECT 1 FROM overviews WHERE file_name = $1",
-            &[&dataset_path.to_string_lossy()],
-        )
-        .await
-        .boxed_context(error::UnexpectedExecution)
-        .map(|row| row.is_some())
-}
-
-async fn index_subdataset_entity(
-    db_transaction: &Transaction<'_>,
-    loading_info_stmt: &tokio_postgres::Statement,
+async fn index_subdataset_entity<Tls>(
+    db_transaction: &NetCdfCfWriteAccess<Tls>,
     mut subdataset: gdal::Dataset,
     conversion: ConversionMetadataEntity,
     stats_for_group: &mut HashMap<String, DataRange>,
     check_file_only: bool,
-) -> Result<gdal::Dataset> {
+) -> Result<gdal::Dataset>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     let entity_directory = conversion
         .base
         .dataset_out_base
@@ -759,17 +708,13 @@ async fn index_subdataset_entity(
     };
 
     db_transaction
-        .execute(
-            loading_info_stmt,
-            &[
-                &conversion.base.file_path.to_string_lossy(),
-                &conversion.base.data_path,
-                &(conversion.entity as i64),
-                &loading_info,
-            ],
+        .insert_loading_info(
+            &conversion.base.file_path.to_string_lossy(),
+            &conversion.base.data_path,
+            conversion.entity,
+            &loading_info,
         )
-        .await
-        .boxed_context(error::CannotStoreLoadingInfo)?;
+        .await?;
 
     stats_for_group
         .entry(conversion.base.data_path.join("/"))
@@ -1008,12 +953,18 @@ fn generate_loading_info(
     ))
 }
 
-pub async fn remove_overviews(
+pub async fn remove_overviews<Tls>(
     dataset_path: &Path,
     overview_path: &Path,
-    db_transaction: &Transaction<'_>,
+    db_transaction: &NetCdfCfWriteAccess<Tls>,
     force: bool,
-) -> Result<()> {
+) -> Result<()>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     let out_folder_path = path_with_base_path(overview_path, dataset_path)
         .boxed_context(error::DatasetIsNotInProviderPath)?;
 
@@ -1027,47 +978,14 @@ pub async fn remove_overviews(
 
     // entries from other tables will be deleted by the foreign key constraint `ON DELETE CASCADE`
     db_transaction
-        .execute(
-            "DELETE FROM overviews WHERE file_name = $1",
-            &[&dataset_path.to_string_lossy()],
-        )
-        .await
-        .boxed_context(error::UnexpectedExecution)?;
+        .remove_overview(&dataset_path.to_string_lossy())
+        .await?;
 
     tokio::fs::remove_dir_all(&out_folder_path)
         .await
         .boxed_context(error::CannotRemoveOverviews)?;
 
     Ok(())
-}
-
-pub async fn meta_data_from_overviews(
-    db_transaction: &Transaction<'_>,
-    dataset_path: &str,
-    groups: Vec<String>,
-    entity: usize,
-) -> Result<Option<GdalMetaDataList>> {
-    let row = db_transaction
-        .query_opt(
-            r#"
-            SELECT meta_data :: "GdalMetaDataList"
-            FROM loading_infos
-            WHERE
-                file_name = $1 AND
-                group_names = $2 :: TEXT[] AND
-                entity_id = $3
-            "#,
-            &[&dataset_path, &groups, &(entity as i64)],
-        )
-        .await
-        .boxed_context(error::UnexpectedExecution)?;
-
-    if let Some(row) = row {
-        let meta_data: GdalMetaDataList = row.get(0);
-        Ok(Some(meta_data))
-    } else {
-        Ok(None)
-    }
 }
 
 async fn exists(path: &Path) -> Result<bool, NetCdfCf4DProviderError> {
@@ -1079,8 +997,11 @@ async fn exists(path: &Path) -> Result<bool, NetCdfCf4DProviderError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
+    use crate::datasets::external::netcdfcf::NETCDF_CF_PROVIDER_ID;
     use crate::{
-        datasets::external::netcdfcf::{deferred_write_transaction, test_db_connection},
+        contexts::{PostgresContext, SessionContext, SimpleApplicationContext},
+        ge_context,
         tasks::util::NopTaskContext,
     };
     use gdal::{DatasetOptions, GdalOpenFlags};
@@ -1099,6 +1020,7 @@ mod tests {
         },
         util::gdal::gdal_open_dataset_ex,
     };
+    use tokio_postgres::NoTls;
 
     #[test]
     fn test_generate_loading_info() {
@@ -1203,14 +1125,20 @@ mod tests {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_create_overviews() {
+    #[ge_context::test]
+    async fn test_create_overviews(app_ctx: PostgresContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        let mut db = test_db_connection().await;
-        let transaction = deferred_write_transaction(&mut db).await.unwrap();
+        let transaction = app_ctx
+            .default_session_context()
+            .await
+            .unwrap()
+            .db()
+            .write_access(NETCDF_CF_PROVIDER_ID)
+            .await
+            .unwrap();
 
         create_overviews(
             NopTaskContext,
@@ -1245,15 +1173,19 @@ mod tests {
         }
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_create_overviews_irregular() {
+    async fn test_create_overviews_irregular(app_ctx: PostgresContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        let mut db = test_db_connection().await;
-        let transaction = deferred_write_transaction(&mut db).await.unwrap();
+        let session_context = app_ctx.default_session_context().await.unwrap();
+        let transaction = session_context
+            .db()
+            .write_access(NETCDF_CF_PROVIDER_ID)
+            .await
+            .unwrap();
 
         create_overviews(
             NopTaskContext,
@@ -1268,6 +1200,8 @@ mod tests {
         )
         .await
         .unwrap();
+
+        transaction.commit().await.unwrap();
 
         let dataset_folder = overview_folder.path().join("dataset_irr_ts.nc");
 
@@ -1287,15 +1221,15 @@ mod tests {
             }
         }
 
-        let sample_loading_info: GdalMetaDataList = meta_data_from_overviews(
-            &transaction,
-            "dataset_irr_ts.nc",
-            vec!["metric_2".to_string()],
-            0,
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let sample_loading_info: GdalMetaDataList = session_context
+            .db()
+            .read_access(NETCDF_CF_PROVIDER_ID)
+            .await
+            .unwrap()
+            .loading_info("dataset_irr_ts.nc", &["metric_2".to_string()], 0)
+            .await
+            .unwrap()
+            .unwrap();
         pretty_assertions::assert_eq!(
             sample_loading_info,
             GdalMetaDataList {
@@ -1394,8 +1328,8 @@ mod tests {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_remove_overviews() {
+    #[ge_context::test]
+    async fn test_remove_overviews(app_ctx: PostgresContext<NoTls>) {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
         }
@@ -1406,12 +1340,18 @@ mod tests {
 
         let dataset_path = Path::new("dataset_m.nc");
 
-        let mut db = test_db_connection().await;
-        let transaction = deferred_write_transaction(&mut db).await.unwrap();
+        let db_transaction = app_ctx
+            .default_session_context()
+            .await
+            .unwrap()
+            .db()
+            .write_access(NETCDF_CF_PROVIDER_ID)
+            .await
+            .unwrap();
 
         create_overviews(
             NopTaskContext,
-            &transaction,
+            &db_transaction,
             OverviewCreationOptions {
                 provider_path: test_data!("netcdf4d"),
                 overview_path: overview_folder.path(),
@@ -1425,7 +1365,7 @@ mod tests {
 
         assert!(!is_empty(overview_folder.path()));
 
-        remove_overviews(dataset_path, overview_folder.path(), &transaction, false)
+        remove_overviews(dataset_path, overview_folder.path(), &db_transaction, false)
             .await
             .unwrap();
 

@@ -781,7 +781,7 @@ mod tests {
             update: UpdateProject,
         ) -> Vec<ProjectLayer>
         where
-            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
             <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
             <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
             <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -938,7 +938,7 @@ mod tests {
             update: UpdateProject,
         ) -> Vec<Plot>
         where
-            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
             <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
             <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
             <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,

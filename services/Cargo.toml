@@ -62,6 +62,7 @@ opentelemetry = { version = "0.21", default-features = false, features = [
 ] }
 opentelemetry-jaeger = "0.20"
 ordered-float = { version = "4.2", features = ["serde"] }
+ouroboros = "0.18"
 num-traits = "0.2"
 postgres-types = { version = "0.2", features = ["derive", "array-impls"] }
 proj = "0.22" # needs to stay fixed to use fixed proj version

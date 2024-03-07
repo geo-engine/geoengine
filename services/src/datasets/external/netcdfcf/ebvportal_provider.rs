@@ -16,7 +16,6 @@ use crate::{
             LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
         },
     },
-    util::postgres::DatabaseConnectionConfig,
 };
 use async_trait::async_trait;
 use geoengine_datatypes::{
@@ -34,6 +33,10 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
+use tokio_postgres::{
+    tls::{MakeTlsConnect, TlsConnect},
+    Socket,
+};
 
 /// Singleton Provider with id `77d0bf11-986e-43f5-b11d-898321f1854c`
 pub const EBV_PROVIDER_ID: DataProviderId =
@@ -48,8 +51,6 @@ pub struct EbvPortalDataProviderDefinition {
     pub base_url: Url,
     /// Path were the NetCDF data can be found
     pub data: PathBuf,
-    /// Database configuration for storing metadata of overviews
-    pub metadata_db_config: DatabaseConnectionConfig,
     /// Path were overview files are stored
     pub overviews: PathBuf,
     #[serde(default)]
@@ -57,16 +58,21 @@ pub struct EbvPortalDataProviderDefinition {
 }
 
 #[derive(Debug)]
-pub struct EbvPortalDataProvider {
+pub struct EbvPortalDataProvider<D: GeoEngineDb> {
     pub name: String,
     pub description: String,
     pub ebv_api: EbvPortalApi,
-    pub netcdf_cf_provider: NetCdfCfDataProvider,
+    pub netcdf_cf_provider: NetCdfCfDataProvider<D>,
 }
 
 #[async_trait]
-impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefinition {
-    async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefinition
+where
+    <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn initialize(self: Box<Self>, db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         let id = DataProviderDefinition::<D>::id(&*self);
         Ok(Box::new(EbvPortalDataProvider {
             name: self.name.clone(),
@@ -77,12 +83,10 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefiniti
                 description: self.description,
                 data: self.data,
                 overviews: self.overviews,
-                metadata_db_config: self.metadata_db_config,
                 cache_ttl: self.cache_ttl,
                 priority: self.priority,
             })
-            ._initialize(id)
-            .await?,
+            ._initialize(id, db),
         }))
     }
 
@@ -104,7 +108,12 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefiniti
 }
 
 #[async_trait]
-impl DataProvider for EbvPortalDataProvider {
+impl<D: GeoEngineDb> DataProvider for EbvPortalDataProvider<D>
+where
+    <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     async fn provenance(
         &self,
         id: &DataId,
@@ -246,7 +255,7 @@ impl TryFrom<EbvCollectionId> for LayerId {
     }
 }
 
-impl EbvPortalDataProvider {
+impl<D: GeoEngineDb> EbvPortalDataProvider<D> {
     async fn get_classes_collection(
         &self,
         collection: &LayerCollectionId,
@@ -426,7 +435,12 @@ impl EbvPortalDataProvider {
 }
 
 #[async_trait]
-impl LayerCollectionProvider for EbvPortalDataProvider {
+impl<D: GeoEngineDb> LayerCollectionProvider for EbvPortalDataProvider<D>
+where
+    <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             listing: true,
@@ -640,8 +654,12 @@ fn _net_cdf_layer_collection_id_to_ebv_collection_id(
 }
 
 #[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for EbvPortalDataProvider
+impl<D: GeoEngineDb> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for EbvPortalDataProvider<D>
+where
+    <D::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <D::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<D::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn meta_data(
         &self,
@@ -655,9 +673,9 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 }
 
 #[async_trait]
-impl
+impl<D: GeoEngineDb>
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for EbvPortalDataProvider
+    for EbvPortalDataProvider<D>
 {
     async fn meta_data(
         &self,
@@ -677,8 +695,9 @@ impl
 }
 
 #[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for EbvPortalDataProvider
+impl<D: GeoEngineDb>
+    MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for EbvPortalDataProvider<D>
 {
     async fn meta_data(
         &self,
@@ -701,7 +720,6 @@ mod tests {
 
     use crate::{
         contexts::{PostgresContext, SessionContext, SimpleApplicationContext},
-        datasets::external::netcdfcf::test_db_config,
         ge_context,
         layers::layer::{LayerListing, ProviderLayerId},
     };
@@ -859,7 +877,6 @@ mod tests {
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1000,7 +1017,6 @@ mod tests {
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1169,7 +1185,6 @@ mod tests {
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1409,7 +1424,6 @@ mod tests {
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1573,7 +1587,6 @@ mod tests {
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
