@@ -25,6 +25,13 @@
             "params": {
               "expression": "if A > 100 { A } else { 0 }",
               "outputType": "U8",
+              "outputBand": {
+                "name": "ndvi_masked",
+                "measurement": {
+                  "type": "continuous",
+                  "measurement": "NDVI"
+                }
+              },
               "mapNoData": false
             },
             "sources": {

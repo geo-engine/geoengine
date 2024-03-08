@@ -38,7 +38,8 @@ pub use migrations::{
     migration_0003_gbif_config::Migration0003GbifConfig,
     migration_0004_dataset_listing_provider_prio::Migration0004DatasetListingProviderPrio,
     migration_0005_gbif_column_selection::Migration0005GbifColumnSelection,
-    migration_0007_owner_role::Migration0007OwnerRole, DatabaseVersion, Migration, MigrationResult,
+    migration_0007_owner_role::Migration0007OwnerRole,
+    migration_0008_band_names::Migration0008BandNames, DatabaseVersion, Migration, MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};

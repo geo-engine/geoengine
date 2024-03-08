@@ -237,8 +237,7 @@ mod tests {
 
     #[test]
     fn serialize_params() {
-        let s =
-            r#"{"expression":"1*A","outputType":"F64","outputMeasurement":null,"mapNoData":false}"#;
+        let s = r#"{"expression":"1*A","outputType":"F64","outputBand":null,"mapNoData":false}"#;
 
         assert_eq!(
             s,
@@ -254,8 +253,7 @@ mod tests {
 
     #[test]
     fn serialize_params_no_data() {
-        let s =
-            r#"{"expression":"1*A","outputType":"F64","outputMeasurement":null,"mapNoData":false}"#;
+        let s = r#"{"expression":"1*A","outputType":"F64","outputBand":null,"mapNoData":false}"#;
 
         assert_eq!(
             s,
