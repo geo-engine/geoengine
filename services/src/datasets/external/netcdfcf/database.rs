@@ -967,20 +967,6 @@ async fn remove_overviews(
     Ok(removed_rows > 0)
 }
 
-// #[async_trait]
-// trait NetCdfCfProviderDbParts {
-//     type Tls;
-
-//     async fn connection(
-//         &self,
-//     ) -> Result<PooledConnection<'_, bb8_postgres::PostgresConnectionManager<Self::Tls>>>
-//     where
-//         Self::Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-//         <Self::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-//         <Self::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-//         <<Self::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send;
-// }
-
 pub struct NetCdfDatabaseListingConfig<'a> {
     pub provider_id: DataProviderId,
     pub collection: &'a LayerCollectionId,
@@ -989,102 +975,279 @@ pub struct NetCdfDatabaseListingConfig<'a> {
     pub options: &'a LayerCollectionListOptions,
 }
 
-// #[async_trait]
-// impl<Tls> NetCdfCfProviderDbParts for PostgresDb<Tls>
-// where
-//     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-//     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-//     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-//     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-// {
-//     type Tls = Tls;
-
-//     async fn connection(
-//         &self,
-//     ) -> Result<PooledConnection<'_, bb8_postgres::PostgresConnectionManager<Tls>>>
-//     where
-//         Self::Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-//         <Self::Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-//         <Self::Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-//         <<Self::Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-//     {
-//         self.conn_pool
-//             .get()
-//             .await
-//             .boxed_context(error::DatabaseConnection)
-//     }
-// }
-
 // TODO: move
-// #[cfg(feature = "pro")]
-// #[async_trait]
-// impl<Tls> NetCdfCfProviderDb for crate::pro::contexts::ProPostgresDb<Tls>
-// where
-//     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-//     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-//     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-//     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-// {
-// }
+#[cfg(feature = "pro")]
+#[async_trait]
+impl<Tls> NetCdfCfProviderDb for crate::pro::contexts::ProPostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn overviews_exist(&self, provider_id: DataProviderId, file_name: &str) -> Result<bool> {
+        let mut connection = get_connection!(self.conn_pool);
+        let transaction = readonly_transaction!(connection);
 
-//// Creates a read-only transaction that should be used for single requests
-// async fn readonly_transaction<'db, 't, Tls>(
-//     db_connection: &'t mut bb8_postgres::bb8::PooledConnection<'db, PostgresConnectionManager<Tls>>,
-// ) -> Result<tokio_postgres::Transaction<'t>>
-// where
-//     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-//     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-//     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-//     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-// {
-//     db_connection
-//         .build_transaction()
-//         .read_only(true)
-//         .deferrable(true) // get snapshot isolation
-//         .start()
-//         .await
-//         .boxed_context(error::DatabaseTransaction)
-// }
+        let exists = transaction
+            .query_one(
+                "
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM ebv_provider_overviews
+                    WHERE
+                        provider_id = $1 AND
+                        file_name = $2
+                )
+            ",
+                &[&provider_id, &file_name],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?
+            .get::<_, bool>(0);
 
-// /// Creates a read-only transaction that uses snapshot isolation and should be used for multiple requests
-// async fn readonly_transaction_for_multiple_reads<'db, 't, Tls>(
-//     db_connection: &'t mut bb8_postgres::bb8::PooledConnection<'db, PostgresConnectionManager<Tls>>,
-// ) -> Result<tokio_postgres::Transaction<'t>>
-// where
-//     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-//     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-//     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-//     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-// {
-//     db_connection
-//         .build_transaction()
-//         .read_only(true)
-//         .deferrable(true) // get snapshot isolation
-//         .start()
-//         .await
-//         .boxed_context(error::DatabaseTransaction)
-// }
+        Ok(exists)
+    }
 
-// /// Creates a write transaction that defers constraints
-// async fn deferred_write_transaction<'db, 't, Tls>(
-//     db_connection: &'t mut bb8_postgres::bb8::PooledConnection<'db, PostgresConnectionManager<Tls>>,
-// ) -> Result<tokio_postgres::Transaction<'t>>
-// where
-//     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-//     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-//     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-//     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-// {
-//     let transaction = db_connection
-//         .transaction()
-//         .await
-//         .boxed_context(error::DatabaseTransaction)?;
+    async fn store_overview_metadata(
+        &self,
+        provider_id: DataProviderId,
+        metadata: &NetCdfOverview,
+        loading_infos: Vec<LoadingInfoMetadata>,
+    ) -> Result<()> {
+        let mut connection = get_connection!(self.conn_pool);
+        let transaction = deferred_write_transaction!(connection);
 
-//     // check constraints at the end to speed up insertions
-//     transaction
-//         .batch_execute("SET CONSTRAINTS ALL DEFERRED")
-//         .await
-//         .boxed_context(error::UnexpectedExecution)?;
+        if remove_overviews(&transaction, provider_id, &metadata.file_name).await? {
+            log::debug!(
+                "Removed {file_name} from the database before re-inserting the metadata",
+                file_name = metadata.file_name
+            );
+        }
 
-//     Ok(transaction)
-// }
+        insert_overview(&transaction, provider_id, metadata).await?;
+
+        insert_groups(
+            &transaction,
+            &provider_id,
+            &metadata.file_name,
+            &metadata.groups,
+        )
+        .await?;
+
+        insert_entities(
+            &transaction,
+            &provider_id,
+            &metadata.file_name,
+            &metadata.entities,
+        )
+        .await?;
+
+        insert_timestamps(
+            &transaction,
+            &provider_id,
+            &metadata.file_name,
+            metadata.time_coverage.time_steps(),
+        )
+        .await?;
+
+        insert_loading_infos(
+            &transaction,
+            &provider_id,
+            &metadata.file_name,
+            &loading_infos,
+        )
+        .await?;
+
+        transaction
+            .commit()
+            .await
+            .boxed_context(error::DatabaseTransactionCommit)
+    }
+
+    async fn remove_overviews(&self, provider_id: DataProviderId, file_name: &str) -> Result<bool> {
+        let mut connection = get_connection!(self.conn_pool);
+        let transaction = deferred_write_transaction!(connection);
+
+        remove_overviews(&transaction, provider_id, file_name).await
+    }
+
+    async fn layer_collection<ID: LayerCollectionIdFn>(
+        &self,
+        NetCdfDatabaseListingConfig {
+            provider_id,
+            collection,
+            file_name,
+            group_path,
+            options,
+        }: NetCdfDatabaseListingConfig<'_>,
+        id_fn: Arc<ID>,
+    ) -> Result<Option<LayerCollection>> {
+        let mut connection = get_connection!(self.conn_pool);
+        let transaction = readonly_transaction_for_multiple_reads!(connection);
+
+        let Some(overview_metadata) =
+            overview_metadata(&transaction, provider_id, file_name).await?
+        else {
+            return Ok(None);
+        };
+
+        let group_metadata =
+            group_metadata(&transaction, provider_id, file_name, group_path).await?;
+
+        let subgroups: Vec<NetCdfGroupMetadata> = subgroup_metadata(
+            &transaction,
+            provider_id,
+            file_name,
+            group_path,
+            options.offset,
+            options.limit,
+        )
+        .await?;
+
+        let entities = if subgroups.is_empty() {
+            itertools::Either::Left(
+                entities(
+                    &transaction,
+                    provider_id,
+                    file_name,
+                    options.offset,
+                    options.limit,
+                )
+                .await?,
+            )
+        } else {
+            itertools::Either::Right(std::iter::empty())
+        };
+
+        let layer_collection = create_layer_collection_from_parts(
+            LayerCollectionParts {
+                provider_id,
+                collection_id: collection.clone(),
+                group_path,
+                overview: overview_metadata,
+                group: group_metadata,
+                subgroups,
+                entities,
+            },
+            id_fn.as_ref(),
+        );
+
+        Ok(Some(layer_collection))
+    }
+
+    async fn layer(
+        &self,
+        provider_id: DataProviderId,
+        layer_id: &LayerId,
+        file_name: &str,
+        group_path: &[String],
+        entity_id: usize,
+    ) -> Result<Option<Layer>> {
+        let mut connection = get_connection!(self.conn_pool);
+        let transaction = readonly_transaction_for_multiple_reads!(connection);
+
+        let Some(overview_metadata) =
+            overview_metadata(&transaction, provider_id, file_name).await?
+        else {
+            return Ok(None);
+        };
+
+        let netcdf_entity = entity(&transaction, provider_id, file_name, entity_id)
+            .await?
+            .map_or(
+                NetCdfEntity {
+                    // defensive default
+                    name: String::new(),
+                    id: entity_id,
+                },
+                |entity| entity,
+            );
+
+        let data_range: Option<DataRange> =
+            data_range(&transaction, provider_id, file_name, group_path).await?;
+
+        let (data_range, colorizer) =
+            determine_data_range_and_colorizer(data_range, overview_metadata.colorizer)
+                .boxed_context(error::CannotCreateColorizer)?;
+
+        let time_steps: Vec<TimeInstance> =
+            timestamps(&transaction, provider_id, file_name).await?;
+
+        let layer = create_layer(
+            ProviderLayerId {
+                provider_id,
+                layer_id: layer_id.clone(),
+            },
+            NetCdfCf4DDatasetId {
+                file_name: overview_metadata.file_name,
+                group_names: group_path.to_vec(),
+                entity: entity_id,
+            }
+            .as_named_data(&provider_id)
+            .context(error::CannotSerializeLayer)?,
+            netcdf_entity,
+            colorizer,
+            &overview_metadata.creator,
+            &time_steps,
+            data_range,
+        )?;
+
+        Ok(Some(layer))
+    }
+
+    async fn loading_info(
+        &self,
+        provider_id: DataProviderId,
+        file_name: &str,
+        group_path: &[String],
+        entity: usize,
+    ) -> Result<Option<GdalMetaDataList>> {
+        let mut connection = get_connection!(self.conn_pool);
+        let transaction = readonly_transaction_for_multiple_reads!(connection);
+
+        let Some(row) = transaction
+            .query_opt(
+                r#"
+                SELECT meta_data :: "GdalMetaDataList"
+                FROM ebv_provider_loading_infos
+                WHERE
+                    provider_id = $1 AND
+                    file_name = $2 AND
+                    group_names = $3 :: TEXT[] AND
+                    entity_id = $4
+            "#,
+                &[&provider_id, &file_name, &group_path, &(entity as i64)],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?
+        else {
+            return Ok(None);
+        };
+
+        let meta_data: GdalMetaDataList = row.get(0);
+
+        Ok(Some(meta_data))
+    }
+
+    #[cfg(test)]
+    async fn test_execute_with_transaction<T>(
+        &self,
+        statement: &T,
+        params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
+    ) -> Result<(), tokio_postgres::Error>
+    where
+        T: ?Sized + tokio_postgres::ToStatement + Sync,
+    {
+        let mut connection = self
+            .conn_pool
+            .get()
+            .await
+            .expect("failed to get connection in test");
+        let transaction = connection.transaction().await?;
+
+        transaction.execute(statement, params).await?;
+
+        transaction.commit().await
+    }
+}
