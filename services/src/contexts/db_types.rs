@@ -450,7 +450,6 @@ pub struct EbvPortalDataProviderDefinitionDbType {
     pub data: String,
     pub base_url: String,
     pub overviews: String,
-    pub metadata_db_config: DatabaseConnectionConfig,
     pub cache_ttl: CacheTtlSeconds,
 }
 
@@ -463,7 +462,6 @@ impl From<&EbvPortalDataProviderDefinition> for EbvPortalDataProviderDefinitionD
             data: other.data.to_string_lossy().to_string(),
             base_url: other.base_url.clone().into(),
             overviews: other.overviews.to_string_lossy().to_string(),
-            metadata_db_config: other.metadata_db_config.clone(),
             cache_ttl: other.cache_ttl,
         }
     }
@@ -480,7 +478,6 @@ impl TryFrom<EbvPortalDataProviderDefinitionDbType> for EbvPortalDataProviderDef
             data: other.data.into(),
             base_url: other.base_url.as_str().try_into()?,
             overviews: other.overviews.into(),
-            metadata_db_config: other.metadata_db_config,
             cache_ttl: other.cache_ttl,
         })
     }
@@ -494,7 +491,6 @@ pub struct NetCdfCfDataProviderDefinitionDbType {
     pub priority: Option<i16>,
     pub data: String,
     pub overviews: String,
-    pub metadata_db_config: DatabaseConnectionConfig,
     pub cache_ttl: CacheTtlSeconds,
 }
 
@@ -506,7 +502,6 @@ impl From<&NetCdfCfDataProviderDefinition> for NetCdfCfDataProviderDefinitionDbT
             priority: other.priority,
             data: other.data.to_string_lossy().to_string(),
             overviews: other.overviews.to_string_lossy().to_string(),
-            metadata_db_config: other.metadata_db_config.clone(),
             cache_ttl: other.cache_ttl,
         }
     }
@@ -522,7 +517,6 @@ impl TryFrom<NetCdfCfDataProviderDefinitionDbType> for NetCdfCfDataProviderDefin
             priority: other.priority,
             data: other.data.into(),
             overviews: other.overviews.into(),
-            metadata_db_config: other.metadata_db_config,
             cache_ttl: other.cache_ttl,
         })
     }

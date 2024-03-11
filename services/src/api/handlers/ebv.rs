@@ -126,21 +126,21 @@ where
 
 async fn retrieve_netcdf_cf_provider<C: SessionContext>(
     ctx: Arc<C>,
-) -> Result<Box<NetCdfCfDataProvider>, NetCdfCf4DProviderError> {
+) -> Result<Box<NetCdfCfDataProvider<C::GeoEngineDB>>, NetCdfCf4DProviderError> {
     let db = ctx.db();
 
     if let Ok(data_provider) = db.load_layer_provider(EBV_PROVIDER_ID).await {
         let data_provider = data_provider.into_box_any();
-        let ebv_provider: Box<EbvPortalDataProvider> = data_provider
-            .downcast::<EbvPortalDataProvider>()
+        let ebv_provider: Box<EbvPortalDataProvider<_>> = data_provider
+            .downcast::<EbvPortalDataProvider<_>>()
             .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?;
         return Ok(Box::new(ebv_provider.netcdf_cf_provider));
     }
 
     if let Ok(data_provider) = db.load_layer_provider(NETCDF_CF_PROVIDER_ID).await {
         let data_provider = data_provider.into_box_any();
-        let netcdf_cf_provider: Box<NetCdfCfDataProvider> = data_provider
-            .downcast::<NetCdfCfDataProvider>()
+        let netcdf_cf_provider: Box<NetCdfCfDataProvider<_>> = data_provider
+            .downcast::<NetCdfCfDataProvider<_>>()
             .map_err(|_| NetCdfCf4DProviderError::NoNetCdfCfProviderAvailable)?;
         return Ok(netcdf_cf_provider);
     }
@@ -664,7 +664,6 @@ mod tests {
 
     use super::*;
     use crate::contexts::PostgresContext;
-    use crate::datasets::external::netcdfcf::test_db_config;
     use crate::ge_context;
     use crate::{
         contexts::SimpleApplicationContext,
@@ -724,7 +723,6 @@ mod tests {
                     priority: None,
                     data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
-                    metadata_db_config: test_db_config(),
                     cache_ttl: Default::default(),
                 }
                 .into(),
@@ -802,7 +800,6 @@ mod tests {
                     priority: None,
                     data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
-                    metadata_db_config: test_db_config(),
                     cache_ttl: Default::default(),
                 }
                 .into(),
@@ -855,7 +852,6 @@ mod tests {
                     priority: None,
                     data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
-                    metadata_db_config: test_db_config(),
                     cache_ttl: Default::default(),
                 }
                 .into(),
@@ -916,7 +912,6 @@ mod tests {
                     priority: None,
                     data: test_data!("netcdf4d").to_path_buf(),
                     overviews: overview_folder.path().to_path_buf(),
-                    metadata_db_config: test_db_config(),
                     cache_ttl: Default::default(),
                 }
                 .into(),

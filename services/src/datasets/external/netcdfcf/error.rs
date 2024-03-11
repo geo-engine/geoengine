@@ -137,6 +137,9 @@ pub enum NetCdfCf4DProviderError {
     CannotParseColorizer {
         source: serde_json::Error,
     },
+    CannotCreateColorizer {
+        source: Box<dyn ErrorSource>,
+    },
     CannotCreateFallbackColorizer {
         source: geoengine_datatypes::error::Error,
     },
