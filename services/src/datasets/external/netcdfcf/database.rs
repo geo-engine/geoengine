@@ -25,7 +25,6 @@ use geoengine_datatypes::{
 use geoengine_operators::source::GdalMetaDataList;
 use snafu::ResultExt;
 use std::sync::Arc;
-use tokio::runtime::Handle;
 use tokio_postgres::{
     tls::{MakeTlsConnect, TlsConnect},
     Socket, Transaction,
@@ -1105,13 +1104,15 @@ pub struct NetCdfDatabaseListingConfig<'a> {
 /// A flag that indicates on-going process of an overview.
 ///
 /// Cleans up the flag if dropped.
-pub struct InProgressFlag<D: NetCdfCfProviderDb> {
+#[derive(Debug)]
+pub struct InProgressFlag<D: NetCdfCfProviderDb + 'static + std::fmt::Debug> {
     db: Arc<D>,
     provider_id: DataProviderId,
     file_name: String,
+    clean_on_drop: bool,
 }
 
-impl<D: NetCdfCfProviderDb> InProgressFlag<D> {
+impl<D: NetCdfCfProviderDb + std::fmt::Debug> InProgressFlag<D> {
     pub async fn create(
         db: Arc<D>,
         provider_id: DataProviderId,
@@ -1127,26 +1128,42 @@ impl<D: NetCdfCfProviderDb> InProgressFlag<D> {
             db,
             provider_id,
             file_name,
+            clean_on_drop: true,
         })
     }
 
-    pub async fn remove(self) -> Result<()> {
+    pub async fn remove(mut self) -> Result<()> {
+        self.clean_on_drop = false;
+
         self.db
             .unlock_overview(self.provider_id, &self.file_name)
             .await?;
+
         Ok(())
     }
 }
 
-impl<D: NetCdfCfProviderDb> Drop for InProgressFlag<D> {
+impl<D: NetCdfCfProviderDb + 'static + std::fmt::Debug> Drop for InProgressFlag<D> {
     fn drop(&mut self) {
-        let result = tokio::task::block_in_place(move || {
-            Handle::current().block_on(self.db.unlock_overview(self.provider_id, &self.file_name))
-        });
-
-        if let Err(e) = result {
-            log::error!("Cannot remove in-progress flag: {}", e);
+        if !self.clean_on_drop {
+            return;
         }
+
+        let db = self.db.clone();
+        let provider_id = self.provider_id;
+        let file_name = std::mem::take(&mut self.file_name);
+
+        self.clean_on_drop = false;
+
+        // We don't wait for the future to complete, as we don't want to block the thread.
+        // Moreover, we cannot react to errors here, as we cannot propagate them.
+        tokio::spawn(async move {
+            let result = db.unlock_overview(provider_id, &file_name).await;
+
+            if let Err(e) = result {
+                log::error!("Cannot remove in-progress flag: {}", e);
+            }
+        });
     }
 }
 
@@ -1165,7 +1182,7 @@ mod tests {
         let db = Arc::new(app_ctx.default_session_context().await.unwrap().db());
 
         // lock the overview
-        let a = InProgressFlag::create(db.clone(), NETCDF_CF_PROVIDER_ID, "file_name".into())
+        let flag = InProgressFlag::create(db.clone(), NETCDF_CF_PROVIDER_ID, "file_name".into())
             .await
             .unwrap();
 
@@ -1182,15 +1199,7 @@ mod tests {
             .unwrap();
 
         // unlock the overview
-        a.remove().await.unwrap();
-
-        // lock the overview again
-        let a = InProgressFlag::create(db.clone(), NETCDF_CF_PROVIDER_ID, "file_name".into())
-            .await
-            .unwrap();
-
-        // test drop
-        drop(a);
+        flag.remove().await.unwrap();
 
         // lock the overview again
         InProgressFlag::create(db.clone(), NETCDF_CF_PROVIDER_ID, "file_name".into())

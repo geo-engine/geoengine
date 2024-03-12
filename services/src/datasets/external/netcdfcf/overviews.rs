@@ -254,7 +254,10 @@ pub struct OverviewCreationOptions<'a> {
     pub check_file_only: bool,
 }
 
-pub async fn create_overviews<C: TaskContext + 'static, D: NetCdfCfProviderDb>(
+pub async fn create_overviews<
+    C: TaskContext + 'static,
+    D: NetCdfCfProviderDb + 'static + std::fmt::Debug,
+>(
     task_context: C,
     db: Arc<D>,
     options: OverviewCreationOptions<'_>,
@@ -726,7 +729,7 @@ fn generate_loading_info(
     ))
 }
 
-pub async fn remove_overviews<D: NetCdfCfProviderDb>(
+pub async fn remove_overviews<D: NetCdfCfProviderDb + 'static + std::fmt::Debug>(
     provider_id: DataProviderId,
     dataset_path: &Path,
     overview_path: &Path,
