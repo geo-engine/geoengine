@@ -751,9 +751,14 @@ pub async fn remove_overviews<D: NetCdfCfProviderDb>(
     db.remove_overviews(provider_id, &dataset_path.to_string_lossy())
         .await?;
 
-    tokio::fs::remove_dir_all(&out_folder_path)
+    if tokio::fs::try_exists(&out_folder_path)
         .await
-        .boxed_context(error::CannotRemoveOverviews)?;
+        .unwrap_or(false)
+    {
+        tokio::fs::remove_dir_all(&out_folder_path)
+            .await
+            .boxed_context(error::CannotRemoveOverviews)?;
+    }
 
     if let Ok(in_progress_flag) = in_progress_flag {
         in_progress_flag.remove().await?;

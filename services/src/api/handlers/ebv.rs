@@ -675,6 +675,7 @@ mod tests {
     use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::gdal::hide_gdal_errors;
     use serde_json::json;
     use std::path::Path;
     use tokio_postgres::NoTls;
@@ -708,6 +709,8 @@ mod tests {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
         }
+
+        hide_gdal_errors();
 
         let ctx = app_ctx.default_session_context().await.unwrap();
 
@@ -839,6 +842,8 @@ mod tests {
             directory.read_dir().unwrap().next().is_none()
         }
 
+        hide_gdal_errors();
+
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
@@ -899,6 +904,8 @@ mod tests {
 
     #[ge_context::test]
     async fn test_refresh_overview(app_ctx: PostgresContext<NoTls>) {
+        hide_gdal_errors();
+
         let ctx = app_ctx.default_session_context().await.unwrap();
         let session_id = app_ctx.default_session_id().await;
 
