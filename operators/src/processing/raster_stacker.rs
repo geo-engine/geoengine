@@ -7,8 +7,8 @@ use crate::engine::{
 };
 use crate::error::{
     DuplicateNameNotAllowed, DuplicateSuffixesNotAllowed, EmptyNameNotAllowed,
-    EmptySuffixesNotAllowed, InvalidNumberOfNewNames, InvalidNumberOfRasterStackerInputs,
-    InvalidNumberOfSuffixes, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
+    InvalidNumberOfNewNames, InvalidNumberOfRasterStackerInputs, InvalidNumberOfSuffixes,
+    RasterInputsMustHaveSameSpatialReferenceAndDatatype,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -29,21 +29,16 @@ pub struct RasterStackerParams {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type", content = "values")]
 pub enum RenameBands {
-    DefaultSuffix,       // keep appending "(duplicate)" on conflict
-    Suffix(Vec<String>), // A suffix for each but the first input, to be appended to the band names on conflict
+    Default,             // append " (n)" to the band name for the `n`-th conflict,
+    Suffix(Vec<String>), // A suffix for every input, to be appended to the original band names
     Rename(Vec<String>), // A new name for each band, to be used instead of the original band names
 }
 
 impl RenameBands {
     fn validate(&self, num_inputs: usize, names_per_input: &[usize]) -> Result<()> {
         match self {
-            Self::DefaultSuffix => {}
+            Self::Default => {}
             RenameBands::Suffix(suffixes) => {
-                ensure!(
-                    suffixes.iter().all(|s| !s.is_empty()),
-                    EmptySuffixesNotAllowed
-                );
-
                 let unique_suffixes: std::collections::HashSet<_> = suffixes.iter().collect();
                 ensure!(
                     unique_suffixes.len() == suffixes.len(),
@@ -51,7 +46,7 @@ impl RenameBands {
                 );
 
                 ensure!(
-                    suffixes.len() == num_inputs - 1,
+                    suffixes.len() == num_inputs,
                     InvalidNumberOfSuffixes {
                         expected: num_inputs,
                         found: suffixes.len()
@@ -83,16 +78,20 @@ impl RenameBands {
             &inputs.iter().map(Vec::len).collect::<Vec<_>>(),
         )?;
 
-        let mut new_names = inputs.remove(0);
+        let mut new_names = vec![];
 
         match self {
-            Self::DefaultSuffix => {
+            Self::Default => {
+                new_names = inputs.remove(0);
                 for input in inputs {
                     for name in input {
-                        let mut new_name = name;
+                        let mut new_name = name.clone();
+
+                        let mut i = 1;
 
                         while new_names.contains(&new_name) {
-                            new_name = format!("{} {}", new_name, "(duplicate)");
+                            new_name = format!("{name} ({i})");
+                            i += 1;
                         }
 
                         new_names.push(new_name);
@@ -102,11 +101,9 @@ impl RenameBands {
             RenameBands::Suffix(suffixes) => {
                 for (i, input) in inputs.into_iter().enumerate() {
                     for name in input {
-                        if new_names.contains(&name) {
-                            new_names.push(format!("{}{}", name, suffixes[i]));
-                        } else {
-                            new_names.push(name);
-                        }
+                        let new_name = format!("{}{}", name, suffixes[i]);
+                        ensure!(!new_names.contains(&new_name), DuplicateNameNotAllowed);
+                        new_names.push(new_name);
                     }
                 }
             }
@@ -605,7 +602,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
-                rename_bands: RenameBands::DefaultSuffix,
+                rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
                 rasters: vec![mrs1, mrs2],
@@ -867,7 +864,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
-                rename_bands: RenameBands::DefaultSuffix,
+                rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
                 rasters: vec![mrs1, mrs2],
@@ -1046,7 +1043,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
-                rename_bands: RenameBands::DefaultSuffix,
+                rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
                 rasters: vec![mrs1, mrs2],
@@ -1113,7 +1110,7 @@ mod tests {
 
         let operator = RasterStacker {
             params: RasterStackerParams {
-                rename_bands: RenameBands::DefaultSuffix,
+                rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
                 rasters: vec![
@@ -1223,28 +1220,32 @@ mod tests {
         ];
 
         assert_eq!(
-            RenameBands::DefaultSuffix.apply(names.clone()).unwrap(),
+            RenameBands::Default.apply(names.clone()).unwrap(),
             vec![
                 "foo".to_string(),
                 "bar".to_string(),
-                "foo (duplicate)".to_string(),
+                "foo (1)".to_string(),
                 "bla".to_string(),
-                "foo (duplicate) (duplicate)".to_string(),
+                "foo (2)".to_string(),
                 "baz".to_string()
             ]
         );
 
         assert_eq!(
-            RenameBands::Suffix(vec![" second".to_string(), " third".to_string()])
-                .apply(names.clone())
-                .unwrap(),
+            RenameBands::Suffix(vec![
+                String::new(),
+                " second".to_string(),
+                " third".to_string()
+            ])
+            .apply(names.clone())
+            .unwrap(),
             vec![
                 "foo".to_string(),
                 "bar".to_string(),
                 "foo second".to_string(),
-                "bla".to_string(),
+                "bla second".to_string(),
                 "foo third".to_string(),
-                "baz".to_string()
+                "baz third".to_string()
             ]
         );
 

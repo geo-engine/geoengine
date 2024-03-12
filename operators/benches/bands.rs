@@ -121,7 +121,7 @@ async fn all_bands_at_once(runs: usize, bands: u32, resolution: SpatialResolutio
 
     let stacker = RasterStacker {
         params: RasterStackerParams {
-            rename_bands: RenameBands::DefaultSuffix,
+            rename_bands: RenameBands::Default,
         },
         sources: MultipleRasterSources {
             rasters: (0..bands)

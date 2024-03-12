@@ -80,7 +80,7 @@ fn migrate_raster_stacker(obj: &mut serde_json::Map<String, serde_json::Value>) 
     params.insert(
         "renameBands".to_string(),
         json!({
-            "type": "defaultSuffix",
+            "type": "default",
         }),
     );
 }
@@ -261,7 +261,7 @@ mod tests {
                   "type": "RasterStacker",
                   "params": {
                     "renameBands": {
-                      "type": "defaultSuffix",
+                      "type": "default",
                     }
                   },
                   "sources": {

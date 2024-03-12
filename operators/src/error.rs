@@ -118,8 +118,6 @@ pub enum Error {
     },
     #[snafu(display("Insufficient number of suffixes"))]
     InsufficientNumberOfSuffixes,
-    #[snafu(display("Empty suffixes are not allowed"))]
-    EmptySuffixesNotAllowed,
     #[snafu(display("Duplicate suffixes are not allowed"))]
     DuplicateSuffixesNotAllowed,
     #[snafu(display("Empty name is not allowed"))]

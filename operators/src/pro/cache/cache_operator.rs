@@ -526,7 +526,7 @@ mod tests {
 
         let operator = RasterStacker {
             params: RasterStackerParams {
-                rename_bands: RenameBands::DefaultSuffix,
+                rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
                 rasters: vec![

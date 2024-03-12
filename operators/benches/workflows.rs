@@ -412,7 +412,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
-                        rename_bands: RenameBands::DefaultSuffix,
+                        rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
                         rasters: vec![
@@ -731,7 +731,7 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
         sources: SingleRasterSource {
             raster: RasterStacker {
                 params: RasterStackerParams {
-                    rename_bands: RenameBands::DefaultSuffix,
+                    rename_bands: RenameBands::Default,
                 },
                 sources: MultipleRasterSources {
                     rasters: vec![gdal_operator.clone().boxed(), gdal_operator.boxed()],

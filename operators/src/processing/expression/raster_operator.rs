@@ -412,7 +412,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
-                        rename_bands: RenameBands::DefaultSuffix,
+                        rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a, raster_b],
@@ -487,7 +487,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
-                        rename_bands: RenameBands::DefaultSuffix,
+                        rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a, raster_b],
@@ -563,7 +563,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
-                        rename_bands: RenameBands::DefaultSuffix,
+                        rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a, raster_b, raster_c],
@@ -649,7 +649,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
-                        rename_bands: RenameBands::DefaultSuffix,
+                        rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
                         rasters: vec![
@@ -720,7 +720,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
-                        rename_bands: RenameBands::DefaultSuffix,
+                        rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a],
@@ -835,7 +835,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
-                        rename_bands: RenameBands::DefaultSuffix,
+                        rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a],
@@ -906,7 +906,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
-                        rename_bands: RenameBands::DefaultSuffix,
+                        rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a, raster_b],
@@ -979,7 +979,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
-                        rename_bands: RenameBands::DefaultSuffix,
+                        rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_a, raster_b, raster_c],

@@ -1192,7 +1192,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
-                        rename_bands: RenameBands::DefaultSuffix,
+                        rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {
                         rasters: vec![ndvi_source, shifted_ndvi_source],
