@@ -757,6 +757,10 @@ pub async fn remove_overviews<D: NetCdfCfProviderDb>(
 
     if let Ok(in_progress_flag) = in_progress_flag {
         in_progress_flag.remove().await?;
+    } else {
+        // we will remove the flag in force-mode
+        db.unlock_overview(provider_id, &dataset_path.to_string_lossy())
+            .await?;
     }
 
     Ok(())
