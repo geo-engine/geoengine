@@ -3,7 +3,7 @@ ALTER TYPE "NetCdfCfDataProviderDefinition" RENAME ATTRIBUTE "path" TO "data";
 
 -- EBV PROVIDER TABLE DEFINITIONS
 
-CREATE TABLE ebv_provider_locks (
+CREATE TABLE ebv_provider_dataset_locks (
     provider_id uuid NOT NULL,
     file_name text NOT NULL,
 

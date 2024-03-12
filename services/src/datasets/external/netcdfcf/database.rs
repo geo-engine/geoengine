@@ -143,7 +143,7 @@ where
         let updated_rows = connection
             .execute(
                 "
-                INSERT INTO ebv_provider_locks (
+                INSERT INTO ebv_provider_dataset_locks (
                     provider_id,
                     file_name
                 ) VALUES (
@@ -165,7 +165,7 @@ where
         connection
             .execute(
                 "
-                DELETE FROM ebv_provider_locks
+                DELETE FROM ebv_provider_dataset_locks
                 WHERE 
                     provider_id = $1 AND
                     file_name = $2
@@ -193,7 +193,7 @@ where
                         file_name = $2
                     EXCEPT
                     SELECT 1
-                    FROM ebv_provider_locks
+                    FROM ebv_provider_dataset_locks
                     WHERE
                         provider_id = $1 AND
                         file_name = $2
@@ -470,7 +470,7 @@ async fn overview_metadata(
                 o.creator_institution
             FROM
                 ebv_provider_overviews o
-                LEFT OUTER JOIN ebv_provider_locks l ON (
+                LEFT OUTER JOIN ebv_provider_dataset_locks l ON (
                     o.provider_id = l.provider_id AND
                     o.file_name = l.file_name
                 )
@@ -1032,7 +1032,7 @@ where
         let updated_rows = connection
             .execute(
                 "
-                INSERT INTO ebv_provider_locks (
+                INSERT INTO ebv_provider_dataset_locks (
                     provider_id,
                     file_name
                 ) VALUES (
@@ -1054,7 +1054,7 @@ where
         connection
             .execute(
                 "
-                DELETE FROM ebv_provider_locks
+                DELETE FROM ebv_provider_dataset_locks
                 WHERE 
                     provider_id = $1 AND
                     file_name = $2
@@ -1082,7 +1082,7 @@ where
                         file_name = $2
                     EXCEPT
                     SELECT 1
-                    FROM ebv_provider_locks
+                    FROM ebv_provider_dataset_locks
                     WHERE
                         provider_id = $1 AND
                         file_name = $2
