@@ -225,9 +225,7 @@ pub enum NetCdfCf4DProviderError {
     Internal {
         source: Box<dyn ErrorSource>,
     },
-    CannotCreateInProgressFlag {
-        source: Box<dyn ErrorSource>,
-    }, //
+    CannotCreateInProgressFlag,
     CannotRemoveInProgressFlag {
         source: Box<dyn ErrorSource>,
     },

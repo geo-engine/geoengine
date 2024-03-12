@@ -1,6 +1,6 @@
 use super::{
-    build_netcdf_tree, error, gdal_netcdf_open, metadata::DataRange, NetCdfCf4DProviderError,
-    NetCdfCfProviderDb, NetCdfOverview, TimeCoverage,
+    build_netcdf_tree, database::InProgressFlag, error, gdal_netcdf_open, metadata::DataRange,
+    NetCdfCf4DProviderError, NetCdfCfProviderDb, NetCdfOverview, TimeCoverage,
 };
 use crate::{
     datasets::external::netcdfcf::loading::{create_loading_info, ParamModification},
@@ -256,7 +256,7 @@ pub struct OverviewCreationOptions<'a> {
 
 pub async fn create_overviews<C: TaskContext + 'static, D: NetCdfCfProviderDb>(
     task_context: C,
-    db: &D,
+    db: Arc<D>,
     options: OverviewCreationOptions<'_>,
 ) -> Result<NetCdfOverview> {
     let file_path = canonicalize_subpath(options.provider_path, options.dataset_path)
@@ -269,7 +269,12 @@ pub async fn create_overviews<C: TaskContext + 'static, D: NetCdfCfProviderDb>(
         .boxed_context(error::InvalidDirectory)?;
 
     // must have this flag before any write operations
-    let in_progress_flag = InProgressFlag::create(&out_folder_path).await?;
+    let in_progress_flag = InProgressFlag::create(
+        db.clone(),
+        options.provider_id,
+        options.dataset_path.to_string_lossy().into(),
+    )
+    .await?;
 
     let (time_coverage, conversion_metadata) = create_time_coverage_and_conversion_metadata(
         file_path.clone(),
@@ -389,80 +394,6 @@ async fn emit_subtask_status<C: TaskContext>(
         pct * OVERVIEW_GENERATION_OF_TOTAL_PCT,
         format!("Processing {} of {number_of_conversions} subdatasets; Entity {entity} of {number_of_other_entities}", conversion_index + 1),
     ).await;
-}
-
-/// A flag that indicates on-going process of an overview folder.
-///
-/// Cleans up the folder if dropped.
-pub struct InProgressFlag {
-    path: PathBuf,
-}
-
-impl InProgressFlag {
-    const IN_PROGRESS_FLAG_NAME: &'static str = ".in_progress";
-
-    async fn create(folder: &Path) -> Result<Self> {
-        let folder = folder.to_owned();
-        crate::util::spawn_blocking(move || {
-            if !folder.is_dir() {
-                return Err(NetCdfCf4DProviderError::InvalidDirectory {
-                    source: Box::new(std::io::Error::new(
-                        std::io::ErrorKind::NotFound, // TODO: use `NotADirectory` if stable
-                        folder.to_string_lossy().to_string(),
-                    )),
-                });
-            }
-            let this = Self {
-                path: folder.join(Self::IN_PROGRESS_FLAG_NAME),
-            };
-
-            std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&this.path)
-                .boxed_context(error::CannotCreateInProgressFlag)?;
-
-            Ok(this)
-        })
-        .await
-        .boxed_context(error::UnexpectedExecution)?
-    }
-
-    async fn remove(self) -> Result<()> {
-        fs::remove_file(self.path.as_path())
-            .await
-            .boxed_context(error::CannotRemoveInProgressFlag)?;
-        Ok(())
-    }
-
-    pub async fn is_in_progress(folder: &Path) -> Result<bool> {
-        let folder = folder.to_owned();
-        crate::util::spawn_blocking(move || {
-            if !folder.is_dir() {
-                return false;
-            }
-
-            let path = folder.join(Self::IN_PROGRESS_FLAG_NAME);
-
-            path.exists()
-        })
-        .await
-        .boxed_context(error::UnexpectedExecution)
-    }
-}
-
-impl Drop for InProgressFlag {
-    fn drop(&mut self) {
-        if !self.path.exists() {
-            return;
-        }
-
-        if let Err(e) =
-            std::fs::remove_file(&self.path).boxed_context(error::CannotRemoveInProgressFlag)
-        {
-            log::error!("Cannot remove in progress flag: {}", e);
-        }
-    }
 }
 
 async fn index_subdataset_entity(
@@ -799,17 +730,20 @@ pub async fn remove_overviews<D: NetCdfCfProviderDb>(
     provider_id: DataProviderId,
     dataset_path: &Path,
     overview_path: &Path,
-    db: &D,
+    db: Arc<D>,
     force: bool,
 ) -> Result<()> {
     let out_folder_path = path_with_base_path(overview_path, dataset_path)
         .boxed_context(error::DatasetIsNotInProviderPath)?;
 
-    if !exists(&out_folder_path).await? {
-        return Ok(());
-    }
+    let in_progress_flag = InProgressFlag::create(
+        db.clone(),
+        provider_id,
+        dataset_path.to_string_lossy().into(),
+    )
+    .await;
 
-    if !force && InProgressFlag::is_in_progress(&out_folder_path).await? {
+    if !force && in_progress_flag.is_err() {
         return Err(NetCdfCf4DProviderError::CannotRemoveOverviewsWhileCreationIsInProgress);
     }
 
@@ -821,13 +755,11 @@ pub async fn remove_overviews<D: NetCdfCfProviderDb>(
         .await
         .boxed_context(error::CannotRemoveOverviews)?;
 
-    Ok(())
-}
+    if let Ok(in_progress_flag) = in_progress_flag {
+        in_progress_flag.remove().await?;
+    }
 
-async fn exists(path: &Path) -> Result<bool, NetCdfCf4DProviderError> {
-    tokio::fs::try_exists(path)
-        .await
-        .boxed_context(error::UnexpectedExecution)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -967,11 +899,11 @@ mod tests {
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        let db = app_ctx.default_session_context().await.unwrap().db();
+        let db = Arc::new(app_ctx.default_session_context().await.unwrap().db());
 
         create_overviews(
             NopTaskContext,
-            &db,
+            db,
             OverviewCreationOptions {
                 provider_id: NETCDF_CF_PROVIDER_ID,
                 provider_path: test_data!("netcdf4d"),
@@ -1011,11 +943,11 @@ mod tests {
         let overview_folder = tempfile::tempdir().unwrap();
 
         let session_context = app_ctx.default_session_context().await.unwrap();
-        let db: crate::contexts::PostgresDb<NoTls> = session_context.db();
+        let db: Arc<crate::contexts::PostgresDb<NoTls>> = Arc::new(session_context.db());
 
         create_overviews(
             NopTaskContext,
-            &db,
+            db.clone(),
             OverviewCreationOptions {
                 provider_id: NETCDF_CF_PROVIDER_ID,
                 provider_path: test_data!("netcdf4d"),
@@ -1166,11 +1098,11 @@ mod tests {
 
         let dataset_path = Path::new("dataset_m.nc");
 
-        let db = app_ctx.default_session_context().await.unwrap().db();
+        let db = Arc::new(app_ctx.default_session_context().await.unwrap().db());
 
         create_overviews(
             NopTaskContext,
-            &db,
+            db.clone(),
             OverviewCreationOptions {
                 provider_id: NETCDF_CF_PROVIDER_ID,
                 provider_path: test_data!("netcdf4d"),
@@ -1189,7 +1121,7 @@ mod tests {
             NETCDF_CF_PROVIDER_ID,
             dataset_path,
             overview_folder.path(),
-            &db,
+            db,
             false,
         )
         .await

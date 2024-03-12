@@ -96,7 +96,7 @@ pub struct NetCdfCfDataProvider<D: GeoEngineDb> {
     pub data: PathBuf,
     pub overviews: PathBuf,
     pub cache_ttl: CacheTtlSeconds,
-    pub db: D,
+    pub db: Arc<D>,
 }
 
 #[async_trait]
@@ -132,7 +132,7 @@ impl NetCdfCfDataProviderDefinition {
             data: self.data,
             overviews: self.overviews,
             cache_ttl: self.cache_ttl,
-            db,
+            db: Arc::new(db),
         }
     }
 }
@@ -620,7 +620,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
 
         let details = create_overviews(
             task_context,
-            &self.db,
+            self.db.clone(),
             OverviewCreationOptions {
                 provider_id: self.id,
                 provider_path: &self.data,
@@ -642,7 +642,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
     ) -> Result<OverviewGeneration> {
         let details = create_overviews(
             task_context,
-            &self.db,
+            self.db.clone(),
             OverviewCreationOptions {
                 provider_id: self.id,
                 provider_path: &self.data,
@@ -658,7 +658,14 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
     }
 
     pub async fn remove_overviews(&self, dataset_path: &Path, force: bool) -> Result<()> {
-        remove_overviews(self.id, dataset_path, &self.overviews, &self.db, force).await?;
+        remove_overviews(
+            self.id,
+            dataset_path,
+            &self.overviews,
+            self.db.clone(),
+            force,
+        )
+        .await?;
 
         Ok(())
     }
@@ -704,7 +711,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
                     && self.is_netcdf_file(&path) =>
             {
                 generate_listing_from_netcdf(
-                    &self.db,
+                    self.db.as_ref(),
                     NetCdfListingConfig {
                         provider_id: self.id,
                         collection,
@@ -722,7 +729,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
                     && self.is_netcdf_file(&path) =>
             {
                 generate_listing_from_netcdf(
-                    &self.db,
+                    self.db.as_ref(),
                     NetCdfListingConfig {
                         provider_id: self.id,
                         collection,
@@ -1896,7 +1903,7 @@ mod tests {
             data: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
             cache_ttl: Default::default(),
-            db: app_ctx.default_session_context().await.unwrap().db(),
+            db: Arc::new(app_ctx.default_session_context().await.unwrap().db()),
         };
 
         let metadata = provider
@@ -1996,7 +2003,7 @@ mod tests {
             data: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
             cache_ttl: Default::default(),
-            db: app_ctx.default_session_context().await.unwrap().db(),
+            db: Arc::new(app_ctx.default_session_context().await.unwrap().db()),
         };
 
         let expected_files: Vec<PathBuf> = vec![
@@ -2025,7 +2032,7 @@ mod tests {
             data: test_data!("netcdf4d/").to_path_buf(),
             overviews: overview_folder.path().to_path_buf(),
             cache_ttl: Default::default(),
-            db: app_ctx.default_session_context().await.unwrap().db(),
+            db: Arc::new(app_ctx.default_session_context().await.unwrap().db()),
         };
 
         provider

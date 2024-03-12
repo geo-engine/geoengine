@@ -5,7 +5,8 @@ use super::{
     },
     metadata::{Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata},
     overviews::LoadingInfoMetadata,
-    NetCdfCf4DDatasetId, NetCdfEntity, NetCdfGroup, NetCdfOverview, Result,
+    NetCdfCf4DDatasetId, NetCdfCf4DProviderError, NetCdfEntity, NetCdfGroup, NetCdfOverview,
+    Result,
 };
 use crate::{
     contexts::PostgresDb,
@@ -23,6 +24,7 @@ use geoengine_datatypes::{
 use geoengine_operators::source::GdalMetaDataList;
 use snafu::ResultExt;
 use std::sync::Arc;
+use tokio::runtime::Handle;
 use tokio_postgres::{
     tls::{MakeTlsConnect, TlsConnect},
     Socket, Transaction,
@@ -31,9 +33,9 @@ use tokio_postgres::{
 #[async_trait]
 /// Storage for the [`NetCdfCfDataProvider`] provider
 pub trait NetCdfCfProviderDb: Send + Sync {
-    // TODO: in-progress flag
+    async fn lock_overview(&self, provider_id: DataProviderId, file_name: &str) -> Result<bool>;
 
-    // TODO: remove in-progress flag
+    async fn unlock_overview(&self, provider_id: DataProviderId, file_name: &str) -> Result<()>;
 
     async fn overviews_exist(&self, provider_id: DataProviderId, file_name: &str) -> Result<bool>;
 
@@ -96,21 +98,8 @@ macro_rules! get_connection {
     };
 }
 
-/// Starts a read-only transaction for a single read
-macro_rules! readonly_transaction {
-    ($connection:expr) => {
-        $connection
-            .build_transaction()
-            .read_only(true)
-            .deferrable(true) // get snapshot isolation
-            .start()
-            .await
-            .boxed_context(error::DatabaseTransaction)?
-    };
-}
-
 /// Starts a read-only snapshot-isolated transaction for a multiple read
-macro_rules! readonly_transaction_for_multiple_reads {
+macro_rules! readonly_transaction {
     ($connection:expr) => {
         $connection
             .build_transaction()
@@ -148,16 +137,63 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn overviews_exist(&self, provider_id: DataProviderId, file_name: &str) -> Result<bool> {
-        let mut connection = get_connection!(self.conn_pool);
-        let transaction = readonly_transaction!(connection);
+    async fn lock_overview(&self, provider_id: DataProviderId, file_name: &str) -> Result<bool> {
+        let connection = get_connection!(self.conn_pool);
 
-        let exists = transaction
+        let updated_rows = connection
+            .execute(
+                "
+                INSERT INTO ebv_provider_locks (
+                    provider_id,
+                    file_name
+                ) VALUES (
+                    $1,
+                    $2
+                ) ON CONFLICT DO NOTHING;
+            ",
+                &[&provider_id, &file_name],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+
+        Ok(updated_rows > 0)
+    }
+
+    async fn unlock_overview(&self, provider_id: DataProviderId, file_name: &str) -> Result<()> {
+        let connection = get_connection!(self.conn_pool);
+
+        connection
+            .execute(
+                "
+                DELETE FROM ebv_provider_locks
+                WHERE 
+                    provider_id = $1 AND
+                    file_name = $2
+                ;
+            ",
+                &[&provider_id, &file_name],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+
+        Ok(())
+    }
+
+    async fn overviews_exist(&self, provider_id: DataProviderId, file_name: &str) -> Result<bool> {
+        let connection = get_connection!(self.conn_pool);
+
+        let exists = connection
             .query_one(
                 "
                 SELECT EXISTS (
                     SELECT 1
                     FROM ebv_provider_overviews
+                    WHERE
+                        provider_id = $1 AND
+                        file_name = $2
+                    EXCEPT
+                    SELECT 1
+                    FROM ebv_provider_locks
                     WHERE
                         provider_id = $1 AND
                         file_name = $2
@@ -247,7 +283,7 @@ where
         id_fn: Arc<ID>,
     ) -> Result<Option<LayerCollection>> {
         let mut connection = get_connection!(self.conn_pool);
-        let transaction = readonly_transaction_for_multiple_reads!(connection);
+        let transaction = readonly_transaction!(connection);
 
         let Some(overview_metadata) =
             overview_metadata(&transaction, provider_id, file_name).await?
@@ -308,7 +344,7 @@ where
         entity_id: usize,
     ) -> Result<Option<Layer>> {
         let mut connection = get_connection!(self.conn_pool);
-        let transaction = readonly_transaction_for_multiple_reads!(connection);
+        let transaction = readonly_transaction!(connection);
 
         let Some(overview_metadata) =
             overview_metadata(&transaction, provider_id, file_name).await?
@@ -367,7 +403,7 @@ where
         entity: usize,
     ) -> Result<Option<GdalMetaDataList>> {
         let mut connection = get_connection!(self.conn_pool);
-        let transaction = readonly_transaction_for_multiple_reads!(connection);
+        let transaction = readonly_transaction!(connection);
 
         let Some(row) = transaction
             .query_opt(
@@ -424,19 +460,24 @@ async fn overview_metadata(
         .query_opt(
             r#"
             SELECT
-                file_name,
-                title,
-                summary,
-                spatial_reference :: "SpatialReference",
-                colorizer :: "Colorizer",
-                creator_name,
-                creator_email,
-                creator_institution
+                o.file_name,
+                o.title,
+                o.summary,
+                o.spatial_reference :: "SpatialReference",
+                o.colorizer :: "Colorizer",
+                o.creator_name,
+                o.creator_email,
+                o.creator_institution
             FROM
-                ebv_provider_overviews
+                ebv_provider_overviews o
+                LEFT OUTER JOIN ebv_provider_locks l ON (
+                    o.provider_id = l.provider_id AND
+                    o.file_name = l.file_name
+                )
             WHERE
-                provider_id = $1 AND
-                file_name = $2
+                o.provider_id = $1 AND
+                o.file_name = $2 AND
+                l.file_name IS NULL
         "#,
             &[&provider_id, &file_name],
         )
@@ -985,16 +1026,63 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn overviews_exist(&self, provider_id: DataProviderId, file_name: &str) -> Result<bool> {
-        let mut connection = get_connection!(self.conn_pool);
-        let transaction = readonly_transaction!(connection);
+    async fn lock_overview(&self, provider_id: DataProviderId, file_name: &str) -> Result<bool> {
+        let connection = get_connection!(self.conn_pool);
 
-        let exists = transaction
+        let updated_rows = connection
+            .execute(
+                "
+                INSERT INTO ebv_provider_locks (
+                    provider_id,
+                    file_name
+                ) VALUES (
+                    $1,
+                    $2
+                ) ON CONFLICT DO NOTHING;
+            ",
+                &[&provider_id, &file_name],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+
+        Ok(updated_rows > 0)
+    }
+
+    async fn unlock_overview(&self, provider_id: DataProviderId, file_name: &str) -> Result<()> {
+        let connection = get_connection!(self.conn_pool);
+
+        connection
+            .execute(
+                "
+                DELETE FROM ebv_provider_locks
+                WHERE 
+                    provider_id = $1 AND
+                    file_name = $2
+                ;
+            ",
+                &[&provider_id, &file_name],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+
+        Ok(())
+    }
+
+    async fn overviews_exist(&self, provider_id: DataProviderId, file_name: &str) -> Result<bool> {
+        let connection = get_connection!(self.conn_pool);
+
+        let exists = connection
             .query_one(
                 "
                 SELECT EXISTS (
                     SELECT 1
                     FROM ebv_provider_overviews
+                    WHERE
+                        provider_id = $1 AND
+                        file_name = $2
+                    EXCEPT
+                    SELECT 1
+                    FROM ebv_provider_locks
                     WHERE
                         provider_id = $1 AND
                         file_name = $2
@@ -1084,7 +1172,7 @@ where
         id_fn: Arc<ID>,
     ) -> Result<Option<LayerCollection>> {
         let mut connection = get_connection!(self.conn_pool);
-        let transaction = readonly_transaction_for_multiple_reads!(connection);
+        let transaction = readonly_transaction!(connection);
 
         let Some(overview_metadata) =
             overview_metadata(&transaction, provider_id, file_name).await?
@@ -1145,7 +1233,7 @@ where
         entity_id: usize,
     ) -> Result<Option<Layer>> {
         let mut connection = get_connection!(self.conn_pool);
-        let transaction = readonly_transaction_for_multiple_reads!(connection);
+        let transaction = readonly_transaction!(connection);
 
         let Some(overview_metadata) =
             overview_metadata(&transaction, provider_id, file_name).await?
@@ -1204,7 +1292,7 @@ where
         entity: usize,
     ) -> Result<Option<GdalMetaDataList>> {
         let mut connection = get_connection!(self.conn_pool);
-        let transaction = readonly_transaction_for_multiple_reads!(connection);
+        let transaction = readonly_transaction!(connection);
 
         let Some(row) = transaction
             .query_opt(
@@ -1249,5 +1337,102 @@ where
         transaction.execute(statement, params).await?;
 
         transaction.commit().await
+    }
+}
+
+/// A flag that indicates on-going process of an overview.
+///
+/// Cleans up the flag if dropped.
+pub struct InProgressFlag<D: NetCdfCfProviderDb> {
+    db: Arc<D>,
+    provider_id: DataProviderId,
+    file_name: String,
+}
+
+impl<D: NetCdfCfProviderDb> InProgressFlag<D> {
+    pub async fn create(
+        db: Arc<D>,
+        provider_id: DataProviderId,
+        file_name: String,
+    ) -> Result<Self> {
+        let success = db.lock_overview(provider_id, &file_name).await?;
+
+        if !success {
+            return Err(NetCdfCf4DProviderError::CannotCreateInProgressFlag);
+        }
+
+        Ok(Self {
+            db,
+            provider_id,
+            file_name,
+        })
+    }
+
+    pub async fn remove(self) -> Result<()> {
+        self.db
+            .unlock_overview(self.provider_id, &self.file_name)
+            .await?;
+        Ok(())
+    }
+}
+
+impl<D: NetCdfCfProviderDb> Drop for InProgressFlag<D> {
+    fn drop(&mut self) {
+        let result = tokio::task::block_in_place(move || {
+            Handle::current().block_on(self.db.unlock_overview(self.provider_id, &self.file_name))
+        });
+
+        if let Err(e) = result {
+            log::error!("Cannot remove in-progress flag: {}", e);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        contexts::{PostgresContext, SessionContext, SimpleApplicationContext},
+        datasets::external::netcdfcf::{EBV_PROVIDER_ID, NETCDF_CF_PROVIDER_ID},
+        ge_context,
+    };
+    use tokio_postgres::NoTls;
+
+    #[ge_context::test]
+    async fn it_locks(app_ctx: PostgresContext<NoTls>) {
+        let db = Arc::new(app_ctx.default_session_context().await.unwrap().db());
+
+        // lock the overview
+        let a = InProgressFlag::create(db.clone(), NETCDF_CF_PROVIDER_ID, "file_name".into())
+            .await
+            .unwrap();
+
+        // try to lock the overview again
+        assert!(
+            InProgressFlag::create(db.clone(), NETCDF_CF_PROVIDER_ID, "file_name".into())
+                .await
+                .is_err()
+        );
+
+        // lock the overview from another provider
+        InProgressFlag::create(db.clone(), EBV_PROVIDER_ID, "file_name".into())
+            .await
+            .unwrap();
+
+        // unlock the overview
+        a.remove().await.unwrap();
+
+        // lock the overview again
+        let a = InProgressFlag::create(db.clone(), NETCDF_CF_PROVIDER_ID, "file_name".into())
+            .await
+            .unwrap();
+
+        // test drop
+        drop(a);
+
+        // lock the overview again
+        InProgressFlag::create(db.clone(), NETCDF_CF_PROVIDER_ID, "file_name".into())
+            .await
+            .unwrap();
     }
 }
