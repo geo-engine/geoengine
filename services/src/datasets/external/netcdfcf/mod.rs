@@ -60,15 +60,15 @@ pub use self::ebvportal_provider::{
 pub use self::error::NetCdfCf4DProviderError;
 pub use self::overviews::OverviewGeneration;
 
-mod database;
+pub(crate) mod database;
 mod ebvportal_api;
 mod ebvportal_provider;
 pub mod error;
-mod loading;
+pub(crate) mod loading;
 mod metadata;
-mod overviews;
+pub(crate) mod overviews;
 
-type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
+pub(crate) type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
 /// Singleton Provider with id `1690c483-b17f-4d98-95c8-00a64849cd0b`
 pub const NETCDF_CF_PROVIDER_ID: DataProviderId =
