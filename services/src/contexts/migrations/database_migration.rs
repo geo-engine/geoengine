@@ -1,3 +1,10 @@
+use crate::{
+    contexts::migrations::all_migrations,
+    error::{Result, UnexpectedDatabaseVersionDuringMigration},
+    layers::{
+        add_from_directory::UNSORTED_COLLECTION_ID, storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+    },
+};
 use async_trait::async_trait;
 use bb8_postgres::{bb8::PooledConnection, PostgresConnectionManager};
 use log::info;
@@ -8,8 +15,7 @@ use tokio_postgres::{
     Socket, Transaction,
 };
 
-use crate::error::{Result, UnexpectedDatabaseVersionDuringMigration};
-
+// TODO: type
 pub type DatabaseVersion = String;
 
 /// The logic for migrating the database from one version to another.
@@ -65,15 +71,15 @@ pub enum MigrationResult {
     AlreadyUpToDate,
 }
 
-/// Migrate the database to the latest version. If the database is empty, the initial migration is applied.
+/// Migrate the database to the latest version.
+/// If the database is empty, the latest schema is applied.
 ///
 /// # Panics
 ///
 /// Panics if there is an error in the migration logic.
+///
 pub async fn migrate_database<Tls>(
     conn: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    migrations: &[Box<dyn Migration>],
-    prefix: Option<&str>,
 ) -> Result<MigrationResult>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
@@ -81,14 +87,158 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    let prefix = prefix.unwrap_or_default();
-
     let pre_migration_version = determine_current_database_version(conn).await?;
-    info!(
-        target: prefix,
-        "{prefix}Current database version: {:?}",
-        pre_migration_version
+    info!("Current database version: {:?}", pre_migration_version);
+
+    let migrations = all_migrations();
+
+    let latest_version = migrations
+        .last()
+        .expect("there should be at least one migration, namely the inital migration.")
+        .version();
+
+    if let Some(pre_migration_version) = &pre_migration_version {
+        info!("Migrating database from version {pre_migration_version} to {latest_version}");
+
+        partially_migrate_database(conn, &migrations).await?;
+    } else {
+        info!("Database is empty. Applying latest schema.");
+
+        create_current_schema(conn, &latest_version).await;
+    }
+
+    let current_version = determine_current_database_version(conn)
+        .await?
+        .expect("after migration, there should be a current version.");
+
+    ensure!(
+        current_version == latest_version,
+        UnexpectedDatabaseVersionDuringMigration {
+            expected: latest_version,
+            found: current_version
+        }
     );
+
+    Ok(match pre_migration_version {
+        None => MigrationResult::CreatedDatabase,
+        Some(v) if v == latest_version => MigrationResult::AlreadyUpToDate,
+        _ => MigrationResult::MigratedDatabase,
+    })
+}
+
+pub(super) async fn create_current_schema<Tls>(
+    connection: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    database_version: &str,
+) -> Result<()>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let config = crate::util::config::get_config_element::<crate::util::config::Postgres>()?;
+    let schema_name = &config.schema;
+    let clear_database_on_start = config.clear_database_on_start;
+
+    let tx = connection.build_transaction().start().await?;
+
+    if schema_name != "pg_temp" {
+        tx.batch_execute(&format!("CREATE SCHEMA IF NOT EXISTS {schema_name};",))
+            .await?;
+    }
+
+    tx.batch_execute(include_str!("current_schema.sql")).await?;
+
+    tx.execute(
+        "
+        INSERT INTO geoengine (
+            clear_database_on_start,
+            database_version
+        ) VALUES (
+            $1,
+            $2
+        );",
+        &[&clear_database_on_start, &database_version],
+    )
+    .await?;
+
+    // insert some initial content
+
+    let stmt = tx
+        .prepare(
+            r#"
+            INSERT INTO layer_collections (
+                id,
+                name,
+                description,
+                properties
+            ) VALUES (
+                $1,
+                'Layers',
+                'All available Geo Engine layers',
+                ARRAY[]::"PropertyType"[]
+            );"#,
+        )
+        .await?;
+
+    tx.execute(&stmt, &[&INTERNAL_LAYER_DB_ROOT_COLLECTION_ID])
+        .await?;
+
+    let stmt = tx
+        .prepare(
+            r#"INSERT INTO layer_collections (
+                id,
+                name,
+                description,
+                properties
+            ) VALUES (
+                $1,
+                'Unsorted',
+                'Unsorted Layers',
+                ARRAY[]::"PropertyType"[]
+            );"#,
+        )
+        .await?;
+
+    tx.execute(&stmt, &[&UNSORTED_COLLECTION_ID]).await?;
+
+    let stmt = tx
+        .prepare(
+            "
+            INSERT INTO collection_children (parent, child) 
+            VALUES ($1, $2);",
+        )
+        .await?;
+
+    tx.execute(
+        &stmt,
+        &[
+            &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+            &UNSORTED_COLLECTION_ID,
+        ],
+    )
+    .await?;
+
+    tx.commit().await.map_err(Into::into)
+}
+
+/// Migrate the database to the latest version. If the database is empty, the initial migration is applied.
+///
+/// # Panics
+///
+/// Panics if there is an error in the migration logic.
+pub(super) async fn partially_migrate_database<Tls>(
+    conn: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    migrations: &[Box<dyn Migration>],
+) -> Result<MigrationResult>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let pre_migration_version = determine_current_database_version(conn).await?;
+    info!("Current database version: {:?}", pre_migration_version);
 
     // start with the first migration after the current version
     let applicable_migrations = migrations
@@ -106,7 +256,7 @@ where
             }
         );
 
-        info!(target: prefix, "Applying migration: {}", migration.version());
+        info!("Applying migration: {}", migration.version());
 
         let tx = conn.build_transaction().start().await?;
 

@@ -205,7 +205,7 @@ where
     ) -> Result<bool> {
         Self::maybe_clear_database(&conn).await?;
 
-        let migration = migrate_database(&mut conn, &all_migrations(), None).await?;
+        let migration = migrate_database(&mut conn).await?;
 
         Ok(migration == MigrationResult::CreatedDatabase)
     }
