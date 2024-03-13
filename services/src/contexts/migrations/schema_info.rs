@@ -1,4 +1,9 @@
-use tokio_postgres::Transaction;
+use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
+use tokio_postgres::{NoTls, Transaction};
+
+use crate::{contexts::migrate_database, util::config::get_config_element};
+
+use super::Migration;
 
 type Result<T, E = tokio_postgres::Error> = std::result::Result<T, E>;
 
@@ -272,99 +277,125 @@ async fn tables(transaction: &Transaction<'_>, schema_name: &str) -> Result<Vec<
         .collect::<Vec<String>>())
 }
 
-// #[derive(Debug, PartialEq)]
-// struct SchemaAttribute {
-//     udt_name: String,
-//     attribute_name: String,
-//     ordinal_position: i32,
-//     attribute_default: Option<String>,
-//     is_nullable: String,
-//     data_type: String,
-//     character_maximum_length: i32,
-//     character_octet_length: i32,
-//     numeric_precision: i32,
-//     numeric_precision_radix: i32,
-//     numeric_scale: i32,
-//     datetime_precision: i32,
-//     interval_type: String,
-//     interval_precision: i32,
-// }
-//
-// async fn columns(transaction: &Transaction<'_>, schema_name: &str) -> Result<Vec<SchemaColumn>> {
-//     Ok(transaction
-//         .query(
-//             "SELECT
-//                 table_name,
-//                 column_name,
-//                 ordinal_position,
-//                 column_default,
-//                 is_nullable,
-//                 data_type
-//             FROM
-//                 information_schema.columns
-//             WHERE
-//                 table_schema = $1
-//             ORDER BY table_name, ordinal_position ASC",
-//             &[&schema_name],
-//         )
-//         .await?
-//         .iter()
-//         .map(|row| SchemaColumn {
-//             table_name: row.get("table_name"),
-//             column_name: row.get("column_name"),
-//             ordinal_position: row.get("ordinal_position"),
-//             column_default: row.get("column_default"),
-//             is_nullable: row.get("is_nullable"),
-//             data_type: row.get("data_type"),
-//         })
-//         .collect::<Vec<SchemaColumn>>())
-// }
+pub struct AssertSchemaEqConfig {
+    pub has_views: bool,
+}
 
-// async fn attributes(
-//     transaction: &Transaction<'_>,
-//     schema_name: &str,
-// ) -> Result<Vec<SchemaAttribute>> {
-//     Ok(transaction
-//         .query(
-//             "SELECT
-//                 udt_name,
-//                 attribute_name,
-//                 ordinal_position,
-//                 attribute_default,
-//                 is_nullable,
-//                 data_type,
-//                 character_maximum_length,
-//                 character_octet_length,
-//                 numeric_precision,
-//                 numeric_precision_radix,
-//                 numeric_scale,
-//                 datetime_precision,
-//                 interval_type,
-//                 interval_precision
-//             FROM
-//                 information_schema.attributes
-//             WHERE
-//                 udt_schema = $1
-//             ORDER BY udt_name, ordinal_position ASC",
-//             &[&schema_name],
-//         )
-//         .await?
-//         .iter()
-//         .map(|row| SchemaAttribute {
-//             udt_name: row.get("udt_name"),
-//             attribute_name: row.get("attribute_name"),
-//             ordinal_position: row.get("ordinal_position"),
-//             attribute_default: row.get("attribute_default"),
-//             is_nullable: row.get("is_nullable"),
-//             data_type: row.get("data_type"),
-//             character_maximum_length: row.get("character_maximum_length"),
-//             character_octet_length: row.get("character_octet_length"),
-//             numeric_precision: row.get("numeric_precision"),
-//             numeric_precision_radix: row.get("numeric_precision_radix"),
-//             numeric_scale: row.get("numeric_scale"),
-//             datetime_precision: row.get("datetime_precision"),
-//             interval_type: row.get("interval_type"),
-//             interval_precision: row.get("interval_precision"),
-//         })
-//         .collect::<Vec<SchemaAttribute>>())
-// }
+pub async fn assert_schema_eq(
+    migrations: &[Box<dyn Migration>],
+    ground_truth_schema_definition: &str,
+    AssertSchemaEqConfig { has_views }: AssertSchemaEqConfig,
+) {
+    async fn get_pool() -> Pool<PostgresConnectionManager<NoTls>> {
+        let postgres_config = get_config_element::<crate::util::config::Postgres>().unwrap();
+        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into().unwrap(), NoTls);
+
+        Pool::builder().max_size(1).build(pg_mgr).await.unwrap()
+    }
+
+    async fn get_schema(
+        connection: &mut bb8_postgres::bb8::PooledConnection<
+            '_,
+            bb8_postgres::PostgresConnectionManager<tokio_postgres::NoTls>,
+        >,
+    ) -> SchemaInfo {
+        let transaction = connection
+            .build_transaction()
+            .read_only(true)
+            .start()
+            .await
+            .unwrap();
+        let schema = transaction
+            .query_one("SELECT current_schema", &[])
+            .await
+            .unwrap()
+            .get::<_, String>("current_schema");
+
+        schema_info_from_information_schema(transaction, &schema)
+            .await
+            .unwrap()
+    }
+
+    let schema_after_migrations = {
+        let pool = get_pool().await;
+        let mut connection = pool.get().await.unwrap();
+
+        // initial schema
+        migrate_database(&mut connection, migrations, None)
+            .await
+            .unwrap();
+
+        get_schema(&mut connection).await
+    };
+
+    let ground_truth_schema = {
+        let pool = get_pool().await;
+        let mut connection = pool.get().await.unwrap();
+
+        connection
+            .batch_execute(ground_truth_schema_definition)
+            .await
+            .unwrap();
+
+        get_schema(&mut connection).await
+    };
+
+    // it is easier to assess errors if we compare the schemas field by field
+
+    pretty_assertions::assert_eq!(schema_after_migrations.tables, ground_truth_schema.tables);
+    assert!(!ground_truth_schema.tables.is_empty());
+
+    pretty_assertions::assert_eq!(schema_after_migrations.columns, ground_truth_schema.columns);
+    assert!(!ground_truth_schema.columns.is_empty());
+
+    pretty_assertions::assert_eq!(
+        schema_after_migrations.attributes,
+        ground_truth_schema.attributes
+    );
+    assert!(!ground_truth_schema.attributes.is_empty());
+
+    pretty_assertions::assert_eq!(schema_after_migrations.views, ground_truth_schema.views);
+    assert!(has_views || ground_truth_schema.views.is_empty());
+    assert!(!has_views || !ground_truth_schema.views.is_empty());
+
+    pretty_assertions::assert_eq!(
+        schema_after_migrations.user_defined_types,
+        ground_truth_schema.user_defined_types
+    );
+    assert!(!ground_truth_schema.user_defined_types.is_empty());
+
+    pretty_assertions::assert_eq!(
+        schema_after_migrations.parameters,
+        ground_truth_schema.parameters
+    );
+    assert!(ground_truth_schema.parameters.is_empty()); // no FUNCTIONs currently
+
+    pretty_assertions::assert_eq!(schema_after_migrations.domains, ground_truth_schema.domains);
+    assert!(!ground_truth_schema.domains.is_empty());
+
+    // check constraints…
+
+    pretty_assertions::assert_eq!(
+        schema_after_migrations.domain_check_constraints,
+        ground_truth_schema.domain_check_constraints
+    );
+    assert!(!ground_truth_schema.domain_check_constraints.is_empty());
+
+    pretty_assertions::assert_eq!(
+        schema_after_migrations.table_key_constraints,
+        ground_truth_schema.table_key_constraints
+    );
+    assert!(!ground_truth_schema.table_key_constraints.is_empty());
+
+    pretty_assertions::assert_eq!(
+        schema_after_migrations.table_referential_constraints,
+        ground_truth_schema.table_referential_constraints
+    );
+    assert!(!ground_truth_schema.table_referential_constraints.is_empty());
+
+    pretty_assertions::assert_eq!(
+        schema_after_migrations.table_check_constraints,
+        ground_truth_schema.table_check_constraints
+    );
+    assert!(!ground_truth_schema.table_check_constraints.is_empty());
+}
