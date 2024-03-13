@@ -6,17 +6,21 @@ type Result<T, E = tokio_postgres::Error> = std::result::Result<T, E>;
 pub struct SchemaInfo {
     pub tables: Vec<String>,
     pub columns: Vec<SchemaColumn>,
-    pub attributes: Vec<SchemaAttribute>,
     pub views: Vec<SchemaView>,
-    pub table_constraints: Vec<SchemaTableConstraint>,
-    pub referential_constraints: Vec<SchemaReferentialConstraint>,
-    pub column_domain_constraints: Vec<SchemaDomainConstraint>,
-    pub column_domain_usages: Vec<SchemaColumnDomainUsage>,
-    pub constraint_column_usages: Vec<SchemaConstraintColumnUsage>,
-    pub constraint_table_usages: Vec<SchemaConstraintTableUsage>,
-    pub user_defined_types: Vec<SchemaUserDefinedTypes>,
-    pub parameters: Vec<SchemaParameters>,
+
+    // composite types, domains, udts
+    pub attributes: Vec<SchemaAttribute>,
     pub domains: Vec<SchemaDomain>,
+    pub user_defined_types: Vec<SchemaUserDefinedTypes>,
+
+    // functions
+    pub parameters: Vec<SchemaParameters>,
+
+    // constraints
+    pub domain_check_constraints: Vec<SchemaDomainCheckConstraint>,
+    pub table_key_constraints: Vec<SchemaTableKeyConstraint>,
+    pub table_referential_constraints: Vec<SchemaTableReferentialConstraint>,
+    pub table_check_constraints: Vec<SchemaTableCheckConstraint>,
 }
 
 pub async fn schema_info_from_information_schema(
@@ -26,17 +30,15 @@ pub async fn schema_info_from_information_schema(
     Ok(SchemaInfo {
         tables: tables(&transaction, schema_name).await?,
         columns: columns(&transaction, schema_name).await?,
-        attributes: attributes(&transaction, schema_name).await?,
         views: views(&transaction, schema_name).await?,
-        table_constraints: table_constraints(&transaction, schema_name).await?,
-        referential_constraints: referential_constraints(&transaction, schema_name).await?,
-        column_domain_constraints: domain_constraints(&transaction, schema_name).await?,
-        column_domain_usages: column_domain_usage(&transaction, schema_name).await?,
-        constraint_column_usages: constraint_column_usage(&transaction, schema_name).await?,
-        constraint_table_usages: constraint_table_usage(&transaction, schema_name).await?,
+        attributes: attributes(&transaction, schema_name).await?,
+        domains: domains(&transaction, schema_name).await?,
         user_defined_types: user_defined_types(&transaction, schema_name).await?,
         parameters: parameters(&transaction, schema_name).await?,
-        domains: domains(&transaction, schema_name).await?,
+        domain_check_constraints: domain_constraints(&transaction, schema_name).await?,
+        table_key_constraints: key_column_usage(&transaction, schema_name).await?,
+        table_check_constraints: table_constraints(&transaction, schema_name).await?,
+        table_referential_constraints: referential_constraints(&transaction, schema_name).await?,
     })
 }
 
@@ -44,6 +46,7 @@ macro_rules! schema_info_table {
     (
         $type_name:ident,
         $table_name:ident,
+        $(join = $join:literal,)?
         $schema_column:literal,
         $order:literal,
         $(($field_name:ident, $field_type:ty)),+
@@ -62,12 +65,14 @@ macro_rules! schema_info_table {
                             {columns}
                         FROM
                             information_schema.{table_name}
+                            {join}
                         WHERE
                             {schema_column} = $1
                         ORDER BY {order_by}
                     ",
                     columns = stringify!($($field_name),+),
                     table_name = stringify!($table_name),
+                    join = schema_info_table!(@join_str $($join)?),
                     schema_column = $schema_column,
                     order_by = $order,
                     ),
@@ -81,13 +86,16 @@ macro_rules! schema_info_table {
                 .collect::<Vec<$type_name>>())
         }
     };
+
+    (@join_str) => {""};
+    (@join_str $str:literal) => {$str};
 }
 
 schema_info_table!(
     SchemaColumn,
     columns,
     "table_schema",
-    "table_name, ordinal_position ASC",
+    "table_name ASC, ordinal_position ASC",
     (table_name, String),
     (column_name, String),
     (ordinal_position, i32),
@@ -108,10 +116,10 @@ schema_info_table!(
     SchemaAttribute,
     attributes,
     "udt_schema",
-    "udt_name, ordinal_position ASC",
+    "udt_name ASC, ordinal_position ASC, attribute_name ASC",
     (udt_name, String),
     (attribute_name, String),
-    (ordinal_position, i32),
+    // (ordinal_position, i32), // we cannot store them, as gaps remain after drops
     (attribute_default, Option<String>),
     (is_nullable, String),
     (data_type, String),
@@ -140,66 +148,60 @@ schema_info_table!(
 );
 
 schema_info_table!(
-    SchemaTableConstraint,
+    SchemaDomainCheckConstraint,
+    domain_constraints,
+    join = "NATURAL JOIN information_schema.check_constraints",
+    "constraint_schema",
+    "domain_name ASC, check_clause ASC",
+    (domain_name, String),
+    (check_clause, String),
+    (is_deferrable, String),
+    (initially_deferred, String)
+);
+
+schema_info_table!(
+    SchemaTableCheckConstraint,
     table_constraints,
+    join = "NATURAL JOIN information_schema.check_constraints",
     "table_schema",
-    "table_name, constraint_name ASC",
-    (constraint_name, String),
+    "table_name ASC, check_clause ASC",
     (table_name, String),
+    (check_clause, String),
     (constraint_type, String),
     (is_deferrable, String),
     (initially_deferred, String)
 );
 
 schema_info_table!(
-    SchemaReferentialConstraint,
+    SchemaTableReferentialConstraint,
     referential_constraints,
+    join = "NATURAL JOIN information_schema.table_constraints",
     "constraint_schema",
-    "constraint_name ASC",
+    "table_name ASC, unique_constraint_name ASC, constraint_name ASC",
+    (table_name, String),
     (constraint_name, String),
+    (unique_constraint_name, String),
     (match_option, String),
     (update_rule, String),
-    (delete_rule, String)
-);
-
-schema_info_table!(
-    SchemaDomainConstraint,
-    domain_constraints,
-    "constraint_schema",
-    "domain_name, constraint_name ASC",
-    (constraint_name, String),
-    (domain_name, String),
+    (delete_rule, String),
+    (constraint_type, String),
     (is_deferrable, String),
     (initially_deferred, String)
 );
 
 schema_info_table!(
-    SchemaColumnDomainUsage,
-    column_domain_usage,
+    SchemaTableKeyConstraint,
+    key_column_usage,
+    join = "NATURAL JOIN information_schema.table_constraints",
     "table_schema",
-    "table_name, column_name, domain_name ASC",
-    (domain_name, String),
-    (table_name, String),
-    (column_name, String)
-);
-
-schema_info_table!(
-    SchemaConstraintColumnUsage,
-    constraint_column_usage,
-    "table_schema",
-    "table_name, column_name, constraint_name ASC",
+    "table_name ASC, ordinal_position ASC, column_name ASC",
+    (constraint_name, String),
     (table_name, String),
     (column_name, String),
-    (constraint_name, String)
-);
-
-schema_info_table!(
-    SchemaConstraintTableUsage,
-    constraint_table_usage,
-    "table_schema",
-    "table_name, constraint_name ASC",
-    (table_name, String),
-    (constraint_name, String)
+    (constraint_type, String),
+    (position_in_unique_constraint, Option<i32>),
+    (is_deferrable, String),
+    (initially_deferred, String)
 );
 
 schema_info_table!(

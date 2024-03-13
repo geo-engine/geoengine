@@ -104,6 +104,61 @@ mod tests {
             get_schema(&mut connection).await
         };
 
-        pretty_assertions::assert_eq!(schema_after_migrations, ground_truth_schema);
+        // it is easier to assess errors if we compare the schemas field by field
+        pretty_assertions::assert_eq!(schema_after_migrations.tables, ground_truth_schema.tables);
+        assert!(!ground_truth_schema.tables.is_empty());
+
+        pretty_assertions::assert_eq!(schema_after_migrations.columns, ground_truth_schema.columns);
+        assert!(!ground_truth_schema.columns.is_empty());
+
+        pretty_assertions::assert_eq!(
+            schema_after_migrations.attributes,
+            ground_truth_schema.attributes
+        );
+        assert!(!ground_truth_schema.attributes.is_empty());
+
+        pretty_assertions::assert_eq!(schema_after_migrations.views, ground_truth_schema.views);
+        assert!(ground_truth_schema.views.is_empty()); // no VIEWs currently
+
+        pretty_assertions::assert_eq!(
+            schema_after_migrations.user_defined_types,
+            ground_truth_schema.user_defined_types
+        );
+        assert!(!ground_truth_schema.user_defined_types.is_empty());
+
+        pretty_assertions::assert_eq!(
+            schema_after_migrations.parameters,
+            ground_truth_schema.parameters
+        );
+        assert!(ground_truth_schema.parameters.is_empty()); // no FUNCTIONs currently
+
+        pretty_assertions::assert_eq!(schema_after_migrations.domains, ground_truth_schema.domains);
+        assert!(!ground_truth_schema.domains.is_empty());
+
+        // check constraints…
+
+        pretty_assertions::assert_eq!(
+            schema_after_migrations.domain_check_constraints,
+            ground_truth_schema.domain_check_constraints
+        );
+        assert!(!ground_truth_schema.domain_check_constraints.is_empty());
+
+        pretty_assertions::assert_eq!(
+            schema_after_migrations.table_key_constraints,
+            ground_truth_schema.table_key_constraints
+        );
+        assert!(!ground_truth_schema.table_key_constraints.is_empty());
+
+        pretty_assertions::assert_eq!(
+            schema_after_migrations.table_referential_constraints,
+            ground_truth_schema.table_referential_constraints
+        );
+        assert!(!ground_truth_schema.table_referential_constraints.is_empty());
+
+        pretty_assertions::assert_eq!(
+            schema_after_migrations.table_check_constraints,
+            ground_truth_schema.table_check_constraints
+        );
+        assert!(!ground_truth_schema.table_check_constraints.is_empty());
     }
 }

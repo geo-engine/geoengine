@@ -135,9 +135,22 @@ CREATE TYPE "PolygonSymbology" AS (
     auto_simplified boolean
 );
 
+CREATE TYPE "RasterColorizerType" AS ENUM (
+    'SingleBand'
+    -- TODO: 'MultiBand'
+);
+
+CREATE TYPE "RasterColorizer" AS (
+    "type" "RasterColorizerType",
+    -- single band colorizer
+    band bigint,
+    band_colorizer "Colorizer"
+    -- TODO: multi band colorizer
+);
+
 CREATE TYPE "RasterSymbology" AS (
     opacity double precision,
-    colorizer "Colorizer"
+    raster_colorizer "RasterColorizer"
 );
 
 CREATE TYPE "Symbology" AS (
@@ -218,14 +231,19 @@ CREATE TYPE "VectorColumnInfo" AS (
     measurement "Measurement"
 );
 
+CREATE TYPE "RasterBandDescriptor" AS (
+    "name" text,
+    measurement "Measurement"
+);
+
 CREATE TYPE "RasterResultDescriptor" AS (
     data_type "RasterDataType",
     -- SpatialReferenceOption
     spatial_reference "SpatialReference",
-    measurement "Measurement",
     "time" "TimeInterval",
     bbox "SpatialPartition2D",
-    resolution "SpatialResolution"
+    resolution "SpatialResolution",
+    bands "RasterBandDescriptor" []
 );
 
 CREATE TYPE "VectorResultDescriptor" AS (
@@ -640,7 +658,9 @@ CREATE TYPE "ArunaDataProviderDefinition" AS (
     project_id text,
     api_token text,
     filter_label text,
-    cache_ttl int
+    cache_ttl int,
+    description text,
+    priority smallint
 );
 
 CREATE TYPE "DatabaseConnectionConfig" AS (
@@ -655,13 +675,19 @@ CREATE TYPE "DatabaseConnectionConfig" AS (
 CREATE TYPE "GbifDataProviderDefinition" AS (
     "name" text,
     db_config "DatabaseConnectionConfig",
-    cache_ttl int
+    cache_ttl int,
+    autocomplete_timeout int,
+    description text,
+    priority smallint,
+    columns text []
 );
 
 CREATE TYPE "GfbioAbcdDataProviderDefinition" AS (
     "name" text,
     db_config "DatabaseConnectionConfig",
-    cache_ttl int
+    cache_ttl int,
+    description text,
+    priority smallint
 );
 
 CREATE TYPE "GfbioCollectionsDataProviderDefinition" AS (
@@ -670,28 +696,38 @@ CREATE TYPE "GfbioCollectionsDataProviderDefinition" AS (
     collection_api_auth_token text,
     abcd_db_config "DatabaseConnectionConfig",
     pangaea_url text,
-    cache_ttl int
+    cache_ttl int,
+    description text,
+    priority smallint
 );
 
 CREATE TYPE "EbvPortalDataProviderDefinition" AS (
     "name" text,
-    "path" text,
+    "data" text,
     base_url text,
     overviews text,
-    cache_ttl int
+    cache_ttl int,
+    description text,
+    priority smallint,
+    metadata_db_config "DatabaseConnectionConfig"
 );
 
 CREATE TYPE "NetCdfCfDataProviderDefinition" AS (
     "name" text,
-    "path" text,
+    "data" text,
     overviews text,
-    cache_ttl int
+    cache_ttl int,
+    description text,
+    priority smallint,
+    metadata_db_config "DatabaseConnectionConfig"
 );
 
 CREATE TYPE "PangaeaDataProviderDefinition" AS (
     "name" text,
     base_url text,
-    cache_ttl int
+    cache_ttl int,
+    description text,
+    priority smallint
 );
 
 CREATE TYPE "EdrVectorSpec" AS (
@@ -707,7 +743,23 @@ CREATE TYPE "EdrDataProviderDefinition" AS (
     vector_spec "EdrVectorSpec",
     cache_ttl int,
     discrete_vrs text [],
-    provenance "Provenance" []
+    provenance "Provenance" [],
+    description text,
+    priority smallint
+);
+
+CREATE TYPE "DatasetLayerListingCollection" AS (
+    "name" text,
+    description text,
+    tags text []
+);
+
+CREATE TYPE "DatasetLayerListingProviderDefinition" AS (
+    id uuid,
+    "name" text,
+    description text,
+    collections "DatasetLayerListingCollection" [],
+    priority smallint
 );
 
 CREATE TYPE "DataProviderDefinition" AS (
@@ -720,14 +772,17 @@ CREATE TYPE "DataProviderDefinition" AS (
     ebv_portal_data_provider_definition "EbvPortalDataProviderDefinition",
     net_cdf_cf_data_provider_definition "NetCdfCfDataProviderDefinition",
     pangaea_data_provider_definition "PangaeaDataProviderDefinition",
-    edr_data_provider_definition "EdrDataProviderDefinition"
+    edr_data_provider_definition "EdrDataProviderDefinition",
+    dataset_layer_listing_provider_definition
+    "DatasetLayerListingProviderDefinition"
 );
 
 CREATE TABLE layer_providers (
     id uuid PRIMARY KEY,
     type_name text NOT NULL,
     name text NOT NULL,
-    definition "DataProviderDefinition" NOT NULL
+    definition "DataProviderDefinition" NOT NULL,
+    priority smallint NOT NULL DEFAULT 0
 );
 
 -- TODO: relationship between uploads and datasets?
