@@ -226,6 +226,7 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
     tag = "Datasets",
     post,
     path = "/dataset/{dataset}",
+    request_body = UpdateDataset,
     responses(
         (status = 200, description = "OK" ),
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
@@ -247,7 +248,7 @@ pub async fn update_dataset_handler<C: ApplicationContext>(
     dataset: web::Path<DatasetName>,
     session: C::Session,
     app_ctx: web::Data<C>,
-    update: web::Json<UpdateDataset>,
+    update: ValidatedJson<UpdateDataset>,
 ) -> Result<impl Responder, UpdateDatasetError> {
     let session_ctx = app_ctx.session_context(session).db();
 
@@ -2652,6 +2653,7 @@ mod tests {
             name: DatasetName::new(None, "new_name"),
             display_name: "new display name".to_string(),
             description: "new description".to_string(),
+            tags: vec!["foo".to_string(), "bar".to_string()],
         };
 
         let req = actix_web::test::TestRequest::post()
@@ -2669,6 +2671,7 @@ mod tests {
         assert_eq!(dataset.name, update.name);
         assert_eq!(dataset.display_name, update.display_name);
         assert_eq!(dataset.description, update.description);
+        assert_eq!(dataset.tags, Some(update.tags));
 
         Ok(())
     }

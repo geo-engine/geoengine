@@ -554,12 +554,13 @@ where
         let conn = self.conn_pool.get().await?;
 
         conn.execute(
-            "UPDATE datasets SET name = $2, display_name = $3, description = $4 WHERE id = $1;",
+            "UPDATE datasets SET name = $2, display_name = $3, description = $4, tags = $5 WHERE id = $1;",
             &[
                 &dataset,
                 &update.name,
                 &update.display_name,
                 &update.description,
+                &update.tags,
             ],
         )
         .await?;

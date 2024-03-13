@@ -3,11 +3,13 @@ use crate::api::model::operators::{
     OgrMetaData,
 };
 use crate::datasets::listing::Provenance;
+use crate::datasets::storage::validate_tags;
 use crate::datasets::upload::{UploadId, VolumeName};
 use crate::datasets::DatasetName;
 use crate::projects::Symbology;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use validator::Validate;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]
@@ -129,9 +131,12 @@ pub enum DataPath {
     Upload(UploadId),
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema, Validate)]
 pub struct UpdateDataset {
     pub name: DatasetName,
+    #[validate(length(min = 1))]
     pub display_name: String,
     pub description: String,
+    #[validate(custom = "validate_tags")]
+    pub tags: Vec<String>,
 }
