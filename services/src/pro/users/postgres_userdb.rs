@@ -462,7 +462,7 @@ where
 #[async_trait]
 impl<Tls> UserDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -645,7 +645,7 @@ where
 #[async_trait]
 impl<Tls> RoleDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
