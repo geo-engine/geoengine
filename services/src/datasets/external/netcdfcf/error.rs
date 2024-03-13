@@ -137,6 +137,9 @@ pub enum NetCdfCf4DProviderError {
     CannotParseColorizer {
         source: serde_json::Error,
     },
+    CannotCreateColorizer {
+        source: Box<dyn ErrorSource>,
+    },
     CannotCreateFallbackColorizer {
         source: geoengine_datatypes::error::Error,
     },
@@ -222,9 +225,7 @@ pub enum NetCdfCf4DProviderError {
     Internal {
         source: Box<dyn ErrorSource>,
     },
-    CannotCreateInProgressFlag {
-        source: Box<dyn ErrorSource>,
-    }, //
+    CannotCreateInProgressFlag,
     CannotRemoveInProgressFlag {
         source: Box<dyn ErrorSource>,
     },

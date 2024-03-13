@@ -210,7 +210,7 @@ pub async fn insert_collection_parent<Tls>(
     parent: &LayerCollectionId,
 ) -> Result<()>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -400,7 +400,7 @@ fn create_search_query(full_info: bool) -> String {
 #[async_trait]
 impl<Tls> LayerDb for PostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -540,7 +540,7 @@ where
 #[async_trait]
 impl<Tls> LayerCollectionProvider for PostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -874,7 +874,7 @@ where
 #[async_trait]
 impl<Tls> LayerProviderDb for PostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,

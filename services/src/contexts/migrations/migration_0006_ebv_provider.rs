@@ -89,11 +89,11 @@ mod tests {
             .await
             .unwrap();
 
-        // verify that providers were removed
-        assert!(conn
+        // verify that we can access the field
+        assert!(!conn
             .query(
                 "
-                    SELECT (definition).ebv_portal_data_provider_definition.metadata_db_config
+                    SELECT (definition).ebv_portal_data_provider_definition.data
                     FROM layer_providers
                     WHERE NOT ((definition).ebv_portal_data_provider_definition IS NULL)
                 ",
