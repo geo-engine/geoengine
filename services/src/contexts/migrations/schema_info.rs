@@ -194,7 +194,7 @@ schema_info_table!(
     key_column_usage,
     join = "NATURAL JOIN information_schema.table_constraints",
     "table_schema",
-    "table_name ASC, ordinal_position ASC, column_name ASC",
+    "table_name ASC, constraint_name ASC, ordinal_position ASC, column_name ASC",
     (constraint_name, String),
     (table_name, String),
     (column_name, String),
