@@ -35,14 +35,17 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::migrations::{assert_schema_eq, AssertSchemaEqConfig};
+    use crate::contexts::migrations::{assert_migration_schema_eq, AssertSchemaEqPopulationConfig};
 
     #[tokio::test]
     async fn migrations_lead_to_ground_truth_schema() {
-        assert_schema_eq(
+        assert_migration_schema_eq(
             &pro_migrations(),
             include_str!("current_schema.sql"),
-            AssertSchemaEqConfig { has_views: true },
+            AssertSchemaEqPopulationConfig {
+                has_parameters: false,
+                ..Default::default()
+            },
         )
         .await;
     }

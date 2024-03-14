@@ -1,4 +1,8 @@
-use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
+use bb8_postgres::{
+    bb8::{Pool, PooledConnection},
+    PostgresConnectionManager,
+};
+use futures::future::BoxFuture;
 use tokio_postgres::{NoTls, Transaction};
 
 use crate::{contexts::migrate_database, util::config::get_config_element};
@@ -17,6 +21,8 @@ pub struct SchemaInfo {
     pub attributes: Vec<SchemaAttribute>,
     pub domains: Vec<SchemaDomain>,
     pub user_defined_types: Vec<SchemaUserDefinedTypes>,
+    // TODO: element_types
+    // TODO: pg_enum (https://dataedo.com/kb/query/postgresql/find-all-enum-columns)
 
     // functions
     pub parameters: Vec<SchemaParameters>,
@@ -277,14 +283,78 @@ async fn tables(transaction: &Transaction<'_>, schema_name: &str) -> Result<Vec<
         .collect::<Vec<String>>())
 }
 
-pub struct AssertSchemaEqConfig {
-    pub has_views: bool,
-}
-
-pub async fn assert_schema_eq(
+/// Asserts that the schema after applying the migrations is equal to the ground truth schema.
+///
+/// The ground truth schema is defined by the given SQL string, containing the schema definition.
+///
+/// Cf. [`assert_schema_eq`] for more information.
+///
+pub async fn assert_migration_schema_eq(
     migrations: &[Box<dyn Migration>],
     ground_truth_schema_definition: &str,
-    AssertSchemaEqConfig { has_views }: AssertSchemaEqConfig,
+    population_config: AssertSchemaEqPopulationConfig,
+) {
+    assert_schema_eq(
+        |mut connection| {
+            Box::pin(async move {
+                migrate_database(&mut connection, migrations, None)
+                    .await
+                    .unwrap();
+
+                connection
+            })
+        },
+        |connection| {
+            Box::pin(async move {
+                connection
+                    .batch_execute(ground_truth_schema_definition)
+                    .await
+                    .unwrap();
+
+                connection
+            })
+        },
+        population_config,
+    )
+    .await;
+}
+
+/// Asserts that two schemata, gathered by two transactions and their `CURRENT_SCHEMA`, are equal.
+///
+/// The check is not exhaustive, but it is a good start to ensure that the schemas are in fact equal.
+///
+/// What is covered:
+/// - table names
+/// - column names, types and constraints
+/// - view names and definitions
+/// - domains and types
+/// - some properties of user defined types
+/// - some properties of functions and parameters
+/// - key constraints, referential constraints, and table check constraints
+///
+/// What is not covered:
+/// - schema names
+/// - triggers
+/// - permissions and privileges
+/// - sequences
+/// - collations
+/// - foreign tables
+/// - (other things that are not mentioned above)
+///
+/// It gathers this information from the `information_schema`.
+/// This is described here for PostgreSQL: <https://www.postgresql.org/docs/current/information-schema.html>
+///
+/// There are some sanity checks involved, such as checking if the tables, columns, views, etc. are not empty.
+/// Uses [`AssertSchemaEqPopulationConfig`] to control which fields are checked for non-emptiness.
+///
+async fn assert_schema_eq<'c>(
+    f1: impl FnOnce(
+        PooledConnection<'static, PostgresConnectionManager<NoTls>>,
+    ) -> BoxFuture<'c, PooledConnection<'static, PostgresConnectionManager<NoTls>>>,
+    f2: impl FnOnce(
+        PooledConnection<'static, PostgresConnectionManager<NoTls>>,
+    ) -> BoxFuture<'c, PooledConnection<'static, PostgresConnectionManager<NoTls>>>,
+    population_config: AssertSchemaEqPopulationConfig,
 ) {
     async fn get_pool() -> Pool<PostgresConnectionManager<NoTls>> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>().unwrap();
@@ -293,18 +363,7 @@ pub async fn assert_schema_eq(
         Pool::builder().max_size(1).build(pg_mgr).await.unwrap()
     }
 
-    async fn get_schema(
-        connection: &mut bb8_postgres::bb8::PooledConnection<
-            '_,
-            bb8_postgres::PostgresConnectionManager<tokio_postgres::NoTls>,
-        >,
-    ) -> SchemaInfo {
-        let transaction = connection
-            .build_transaction()
-            .read_only(true)
-            .start()
-            .await
-            .unwrap();
+    async fn get_schema(transaction: Transaction<'_>) -> SchemaInfo {
         let schema = transaction
             .query_one("SELECT current_schema", &[])
             .await
@@ -316,86 +375,286 @@ pub async fn assert_schema_eq(
             .unwrap()
     }
 
-    let schema_after_migrations = {
+    let schema_a = {
         let pool = get_pool().await;
-        let mut connection = pool.get().await.unwrap();
-
-        // initial schema
-        migrate_database(&mut connection, migrations, None)
-            .await
-            .unwrap();
-
-        get_schema(&mut connection).await
+        let mut connection = pool.get_owned().await.unwrap();
+        connection = f1(connection).await;
+        get_schema(
+            connection
+                .build_transaction()
+                .read_only(true)
+                .start()
+                .await
+                .unwrap(),
+        )
+        .await
     };
 
-    let ground_truth_schema = {
+    let schema_b = {
         let pool = get_pool().await;
-        let mut connection = pool.get().await.unwrap();
-
-        connection
-            .batch_execute(ground_truth_schema_definition)
-            .await
-            .unwrap();
-
-        get_schema(&mut connection).await
+        let mut connection = pool.get_owned().await.unwrap();
+        connection = f2(connection).await;
+        get_schema(
+            connection
+                .build_transaction()
+                .read_only(true)
+                .start()
+                .await
+                .unwrap(),
+        )
+        .await
     };
 
-    // it is easier to assess errors if we compare the schemas field by field
+    assert_schema_info_eq(&schema_a, &schema_b);
 
-    pretty_assertions::assert_eq!(schema_after_migrations.tables, ground_truth_schema.tables);
-    assert!(!ground_truth_schema.tables.is_empty());
+    assert_schema_info_population(&schema_a, population_config);
+}
 
-    pretty_assertions::assert_eq!(schema_after_migrations.columns, ground_truth_schema.columns);
-    assert!(!ground_truth_schema.columns.is_empty());
-
-    pretty_assertions::assert_eq!(
-        schema_after_migrations.attributes,
-        ground_truth_schema.attributes
-    );
-    assert!(!ground_truth_schema.attributes.is_empty());
-
-    pretty_assertions::assert_eq!(schema_after_migrations.views, ground_truth_schema.views);
-    assert!(has_views || ground_truth_schema.views.is_empty());
-    assert!(!has_views || !ground_truth_schema.views.is_empty());
+/// Compares the schemas field by field.
+fn assert_schema_info_eq(schema_a: &SchemaInfo, schema_b: &SchemaInfo) {
+    pretty_assertions::assert_eq!(schema_a.tables, schema_b.tables, "Schema tables differ");
+    pretty_assertions::assert_eq!(schema_a.columns, schema_b.columns, "Table columns differ");
+    pretty_assertions::assert_eq!(schema_a.views, schema_b.views, "Schema views differ");
 
     pretty_assertions::assert_eq!(
-        schema_after_migrations.user_defined_types,
-        ground_truth_schema.user_defined_types
+        schema_a.attributes,
+        schema_b.attributes,
+        "Schemas have different composite types"
     );
-    assert!(!ground_truth_schema.user_defined_types.is_empty());
+    pretty_assertions::assert_eq!(
+        schema_a.domains,
+        schema_b.domains,
+        "Schemas have different domains"
+    );
 
     pretty_assertions::assert_eq!(
-        schema_after_migrations.parameters,
-        ground_truth_schema.parameters
+        schema_a.user_defined_types,
+        schema_b.user_defined_types,
+        "Schemas have different user defined types"
     );
-    assert!(ground_truth_schema.parameters.is_empty()); // no FUNCTIONs currently
-
-    pretty_assertions::assert_eq!(schema_after_migrations.domains, ground_truth_schema.domains);
-    assert!(!ground_truth_schema.domains.is_empty());
+    pretty_assertions::assert_eq!(
+        schema_a.parameters,
+        schema_b.parameters,
+        "Schemas have different functions"
+    );
 
     // check constraints…
 
     pretty_assertions::assert_eq!(
-        schema_after_migrations.domain_check_constraints,
-        ground_truth_schema.domain_check_constraints
+        schema_a.table_key_constraints,
+        schema_b.table_key_constraints,
+        "Schemas have different table key constraints"
     );
-    assert!(!ground_truth_schema.domain_check_constraints.is_empty());
+    pretty_assertions::assert_eq!(
+        schema_a.table_referential_constraints,
+        schema_b.table_referential_constraints,
+        "Schemas have different table referential constraints"
+    );
+    pretty_assertions::assert_eq!(
+        schema_a.table_check_constraints,
+        schema_b.table_check_constraints,
+        "Schemas have different table check constraints"
+    );
 
     pretty_assertions::assert_eq!(
-        schema_after_migrations.table_key_constraints,
-        ground_truth_schema.table_key_constraints
+        schema_a.domain_check_constraints,
+        schema_b.domain_check_constraints,
+        "Schemas have different domain check constraints"
     );
-    assert!(!ground_truth_schema.table_key_constraints.is_empty());
+}
 
-    pretty_assertions::assert_eq!(
-        schema_after_migrations.table_referential_constraints,
-        ground_truth_schema.table_referential_constraints
-    );
-    assert!(!ground_truth_schema.table_referential_constraints.is_empty());
+/// If an attribute is set to `true`, the corresponding field is checked for non-emptiness.
+#[allow(
+    clippy::struct_field_names, // prefix is important
+    clippy::struct_excessive_bools, // no state-machine
+)]
+pub struct AssertSchemaEqPopulationConfig {
+    pub has_tables: bool,
+    pub has_columns: bool,
+    pub has_views: bool,
+    pub has_attributes: bool,
+    pub has_domains: bool,
+    pub has_user_defined_types: bool,
+    pub has_parameters: bool,
+    pub has_table_key_constraints: bool,
+    pub has_table_referential_constraints: bool,
+    pub has_table_check_constraints: bool,
+    pub has_domain_check_constraints: bool,
+}
 
-    pretty_assertions::assert_eq!(
-        schema_after_migrations.table_check_constraints,
-        ground_truth_schema.table_check_constraints
-    );
-    assert!(!ground_truth_schema.table_check_constraints.is_empty());
+impl Default for AssertSchemaEqPopulationConfig {
+    fn default() -> Self {
+        Self {
+            has_tables: true,
+            has_columns: true,
+            has_views: true,
+            has_attributes: true,
+            has_domains: true,
+            has_user_defined_types: true,
+            has_parameters: true,
+            has_table_key_constraints: true,
+            has_table_referential_constraints: true,
+            has_table_check_constraints: true,
+            has_domain_check_constraints: true,
+        }
+    }
+}
+
+/// Checks if the schema info is populated correctly.
+/// This is more of a sanity check that the schema info is not empty.
+fn assert_schema_info_population(
+    schema: &SchemaInfo,
+    AssertSchemaEqPopulationConfig {
+        has_tables,
+        has_columns,
+        has_views,
+        has_attributes,
+        has_domains,
+        has_user_defined_types,
+        has_parameters,
+        has_table_key_constraints,
+        has_table_referential_constraints,
+        has_table_check_constraints,
+        has_domain_check_constraints,
+    }: AssertSchemaEqPopulationConfig,
+) {
+    assert!(!has_tables || !schema.tables.is_empty());
+    assert!(!has_columns || !schema.columns.is_empty());
+    assert!(!has_views || !schema.views.is_empty());
+    assert!(!has_attributes || !schema.attributes.is_empty());
+    assert!(!has_domains || !schema.domains.is_empty());
+    assert!(!has_user_defined_types || !schema.user_defined_types.is_empty());
+    assert!(!has_parameters || !schema.parameters.is_empty());
+    assert!(!has_table_key_constraints || !schema.table_key_constraints.is_empty());
+    assert!(!has_table_referential_constraints || !schema.table_referential_constraints.is_empty());
+    assert!(!has_table_check_constraints || !schema.table_check_constraints.is_empty());
+    assert!(!has_domain_check_constraints || !schema.domain_check_constraints.is_empty());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn it_compares_schemas() {
+        assert_schema_eq(
+            |connection| {
+                Box::pin(async move {
+                    connection
+                        .batch_execute(
+                            "
+                            CREATE TABLE test (
+                                id INT PRIMARY KEY CHECK (id >= 0)
+                            );
+            
+                            CREATE TYPE test_type1 AS (a FLOAT);
+                            CREATE TYPE test_type2 AS ENUM ('a', 'b', 'c');
+                            CREATE DOMAIN test_domain AS INT CHECK(VALUE > 0);
+            
+                            ALTER TABLE test ADD COLUMN test_column test_domain;
+                            ALTER TABLE test ADD COLUMN test_column2 test_type1;
+                            ALTER TABLE test ADD COLUMN test_column3 test_type2;
+            
+                            CREATE TABLE test_ref (
+                                foo TEXT
+                            );
+                            DROP TABLE test_ref;
+                            CREATE TABLE test_ref (
+                                id INT NOT NULL REFERENCES test(id)
+                            );
+            
+                            CREATE VIEW test_view AS SELECT * FROM test;
+                            ",
+                        )
+                        .await
+                        .unwrap();
+                    connection
+                })
+            },
+            |connection| {
+                Box::pin(async move {
+                    connection
+                        .batch_execute(
+                            "
+                            CREATE TYPE test_type1 AS (a FLOAT);
+                            CREATE TYPE test_type2 AS ENUM ('a', 'b', 'c');
+                            CREATE DOMAIN test_domain AS INT CHECK(VALUE > 0);
+                
+                            CREATE TABLE test (
+                                id INT PRIMARY KEY CHECK (id >= 0),
+                                test_column test_domain,
+                                test_column2 test_type1,
+                                test_column3 test_type2
+                            );
+                
+                            CREATE TABLE test_ref (
+                                id INT NOT NULL REFERENCES test(id)
+                            );
+                
+                            CREATE VIEW test_view AS SELECT * FROM test;
+                            ",
+                        )
+                        .await
+                        .unwrap();
+                    connection
+                })
+            },
+            AssertSchemaEqPopulationConfig {
+                has_parameters: false,
+                ..Default::default()
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    #[should_panic = "Schemas have different composite types"]
+    async fn it_catches_schema_diffs() {
+        assert_schema_eq(
+            |connection| {
+                Box::pin(async move {
+                    connection
+                        .batch_execute(
+                            "
+                            CREATE TYPE foo AS (id INT);
+            
+                            CREATE TABLE bar (
+                                id INT,
+                                foo foo
+                            );
+            
+                            ALTER TYPE foo ADD ATTRIBUTE baz TEXT;
+                            ",
+                        )
+                        .await
+                        .unwrap();
+                    connection
+                })
+            },
+            |connection| {
+                Box::pin(async move {
+                    connection
+                        .batch_execute(
+                            "
+                            CREATE TYPE foo AS (id INT);
+                
+                            CREATE TABLE bar (
+                                id INT,
+                                foo foo
+                            );
+                            ",
+                        )
+                        .await
+                        .unwrap();
+                    connection
+                })
+            },
+            AssertSchemaEqPopulationConfig {
+                has_views: false,
+                has_parameters: false,
+                ..Default::default()
+            },
+        )
+        .await;
+    }
 }

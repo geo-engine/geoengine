@@ -23,7 +23,7 @@ pub mod migration_0007_owner_role;
 #[cfg(test)]
 mod schema_info;
 #[cfg(test)]
-pub(crate) use schema_info::{assert_schema_eq, AssertSchemaEqConfig};
+pub(crate) use schema_info::{assert_migration_schema_eq, AssertSchemaEqPopulationConfig};
 
 /// All migrations that are available. The migrations are applied in the order they are defined here, starting from the current version of the database.
 ///
@@ -48,10 +48,14 @@ mod tests {
 
     #[tokio::test]
     async fn migrations_lead_to_ground_truth_schema() {
-        assert_schema_eq(
+        assert_migration_schema_eq(
             &all_migrations(),
             include_str!("current_schema.sql"),
-            AssertSchemaEqConfig { has_views: false },
+            AssertSchemaEqPopulationConfig {
+                has_views: false,
+                has_parameters: false,
+                ..Default::default()
+            },
         )
         .await;
     }
