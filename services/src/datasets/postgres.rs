@@ -584,6 +584,22 @@ where
         Ok(())
     }
 
+    async fn update_dataset_provenance(
+        &self,
+        dataset: DatasetId,
+        provenance: &[Provenance],
+    ) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+
+        conn.execute(
+            "UPDATE datasets SET provenance = $2 WHERE id = $1;",
+            &[&dataset, &provenance],
+        )
+        .await?;
+
+        Ok(())
+    }
+
     async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {
         let conn = self.conn_pool.get().await?;
 

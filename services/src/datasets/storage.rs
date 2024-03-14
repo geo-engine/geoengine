@@ -293,5 +293,11 @@ pub trait DatasetStore {
         symbology: &Symbology,
     ) -> Result<()>;
 
+    async fn update_dataset_provenance(
+        &self,
+        dataset: DatasetId,
+        provenance: &[Provenance],
+    ) -> Result<()>;
+
     async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
 }

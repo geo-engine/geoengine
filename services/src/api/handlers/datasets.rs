@@ -3,7 +3,7 @@ use crate::{
         responses::datasets::{errors::*, DatasetNameResponse},
         services::{
             AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
-            MetaDataSuggestion, UpdateDataset,
+            MetaDataSuggestion, Provenances, UpdateDataset,
         },
     },
     contexts::{ApplicationContext, SessionContext},
@@ -63,6 +63,10 @@ where
             .service(
                 web::resource("/{dataset}/symbology")
                     .route(web::put().to(update_dataset_symbology_handler::<C>)),
+            )
+            .service(
+                web::resource("/{dataset}/provenance")
+                    .route(web::put().to(update_dataset_provenance_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}")
@@ -350,6 +354,57 @@ pub async fn update_dataset_symbology_handler<C: ApplicationContext>(
 
     session_ctx
         .update_dataset_symbology(dataset_id, &symbology.into_inner())
+        .await?;
+
+    Ok(HttpResponse::Ok())
+}
+
+// Updates the dataset's provenance
+#[utoipa::path(
+    tag = "Datasets",
+    put,
+    path = "/dataset/{dataset}/provenance",
+    request_body = Provenances,
+    responses(
+        (status = 200, description = "OK"),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn update_dataset_provenance_handler<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    dataset: web::Path<DatasetName>,
+    provenance: ValidatedJson<Provenances>,
+) -> Result<impl Responder> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let real_dataset = dataset.into_inner();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id.ok_or(error::Error::UnknownDatasetName {
+        dataset_name: real_dataset.to_string(),
+    })?;
+
+    let provenance = provenance
+        .into_inner()
+        .provenances
+        .into_iter()
+        .map(Into::into)
+        .collect::<Vec<_>>();
+
+    session_ctx
+        .update_dataset_provenance(dataset_id, &provenance)
         .await?;
 
     Ok(HttpResponse::Ok())
@@ -1251,7 +1306,7 @@ mod tests {
     use crate::api::model::datatypes::NamedData;
     use crate::api::model::responses::datasets::DatasetNameResponse;
     use crate::api::model::responses::IdResponse;
-    use crate::api::model::services::DatasetDefinition;
+    use crate::api::model::services::{DatasetDefinition, Provenance};
     use crate::contexts::{PostgresContext, Session, SessionId, SimpleApplicationContext};
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::{UploadId, VolumeName};
@@ -2672,6 +2727,48 @@ mod tests {
         assert_eq!(dataset.display_name, update.display_name);
         assert_eq!(dataset.description, update.description);
         assert_eq!(dataset.tags, Some(update.tags));
+
+        Ok(())
+    }
+
+    #[ge_context::test()]
+    async fn it_updates_provenance(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let session_id = app_ctx.default_session_id().await;
+
+        let ctx = app_ctx.default_session_context().await?;
+
+        let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
+
+        let provenances: Provenances = Provenances {
+            provenances: vec![Provenance {
+                citation: "foo".to_string(),
+                license: "bar".to_string(),
+                uri: "http://example.com".to_string(),
+            }],
+        };
+
+        let req = actix_web::test::TestRequest::put()
+            .uri(&format!("/dataset/{dataset_name}/provenance"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(provenances.clone());
+        let res = send_test_request(req, app_ctx).await;
+
+        let res_status = res.status();
+        assert_eq!(res_status, 200);
+
+        let dataset = ctx.db().load_dataset(&dataset_id).await?;
+
+        assert_eq!(
+            dataset.provenance,
+            Some(
+                provenances
+                    .provenances
+                    .into_iter()
+                    .map(Into::into)
+                    .collect()
+            )
+        );
 
         Ok(())
     }
