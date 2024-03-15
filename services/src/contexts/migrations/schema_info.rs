@@ -21,8 +21,14 @@ pub struct SchemaInfo {
     pub attributes: Vec<SchemaAttribute>,
     pub domains: Vec<SchemaDomain>,
     pub user_defined_types: Vec<SchemaUserDefinedTypes>,
-    // TODO: element_types
-    // TODO: pg_enum (https://dataedo.com/kb/query/postgresql/find-all-enum-columns)
+
+    // arrays
+    pub column_arrays: Vec<SchemaColumnArrays>,
+    pub composite_arrays: Vec<SchemaCompositeArrays>,
+    pub domain_arrays: Vec<SchemaDomainArrays>,
+
+    // enums
+    pub enums: Vec<SchemaEnum>,
 
     // functions
     pub parameters: Vec<SchemaParameters>,
@@ -45,6 +51,10 @@ pub async fn schema_info_from_information_schema(
         attributes: attributes(&transaction, schema_name).await?,
         domains: domains(&transaction, schema_name).await?,
         user_defined_types: user_defined_types(&transaction, schema_name).await?,
+        column_arrays: schema_column_arrays(&transaction, schema_name).await?,
+        composite_arrays: schema_composite_arrays(&transaction, schema_name).await?,
+        domain_arrays: schema_domain_arrays(&transaction, schema_name).await?,
+        enums: schema_enums(&transaction, schema_name).await?,
         parameters: parameters(&transaction, schema_name).await?,
         domain_check_constraints: domain_constraints(&transaction, schema_name).await?,
         table_key_constraints: key_column_usage(&transaction, schema_name).await?,
@@ -57,7 +67,7 @@ macro_rules! schema_info_table {
     (
         $type_name:ident,
         $table_name:ident,
-        $(join = $join:literal,)?
+        $(from = $join:literal,)?
         $schema_column:literal,
         $order:literal,
         $(($field_name:ident, $field_type:ty)),+
@@ -75,15 +85,13 @@ macro_rules! schema_info_table {
                         SELECT
                             {columns}
                         FROM
-                            information_schema.{table_name}
-                            {join}
+                            {from_str}
                         WHERE
                             {schema_column} = $1
                         ORDER BY {order_by}
                     ",
                     columns = stringify!($($field_name),+),
-                    table_name = stringify!($table_name),
-                    join = schema_info_table!(@join_str $($join)?),
+                    from_str = schema_info_table!(@from_str $table_name $($join)?),
                     schema_column = $schema_column,
                     order_by = $order,
                     ),
@@ -98,8 +106,8 @@ macro_rules! schema_info_table {
         }
     };
 
-    (@join_str) => {""};
-    (@join_str $str:literal) => {$str};
+    (@from_str $table_name:ident) => {concat!("information_schema.", stringify!($table_name))};
+    (@from_str $table_name:ident $str:literal) => {$str};
 }
 
 schema_info_table!(
@@ -121,6 +129,109 @@ schema_info_table!(
     (datetime_precision, Option<i32>),
     (interval_type, Option<String>),
     (interval_precision, Option<i32>)
+);
+
+schema_info_table!(
+    SchemaColumnArrays,
+    schema_column_arrays,
+    from = "
+        information_schema.element_types e JOIN (
+            SELECT
+                table_catalog,
+                table_schema,
+                table_name,
+                column_name,
+                ordinal_position,
+                dtd_identifier
+            FROM information_schema.columns
+        ) c ON (
+            (c.table_catalog, c.table_schema, c.table_name, 'TABLE', c.dtd_identifier)
+          = (e.object_catalog, e.object_schema, e.object_name, e.object_type, e.collection_type_identifier)
+        )
+    ",
+    "table_schema",
+    "table_name ASC, ordinal_position ASC",
+    (table_name, String),
+    (column_name, String),
+    (ordinal_position, i32),
+    (object_type, String),
+    (data_type, String),
+    (character_maximum_length, Option<i32>),
+    (character_octet_length, Option<i32>),
+    (numeric_precision, Option<i32>),
+    (numeric_precision_radix, Option<i32>),
+    (numeric_scale, Option<i32>),
+    (datetime_precision, Option<i32>),
+    (interval_type, Option<String>),
+    (interval_precision, Option<i32>),
+    (udt_name, String)
+);
+
+schema_info_table!(
+    SchemaDomainArrays,
+    schema_domain_arrays,
+    from = "
+        information_schema.element_types e JOIN (
+            SELECT
+                domain_catalog as the_domain_catalog,
+                domain_schema as the_domain_schema,
+                domain_name as the_domain_name,
+                dtd_identifier
+            FROM information_schema.domains
+        ) d ON (
+            (d.the_domain_catalog, d.the_domain_schema, d.the_domain_name, 'DOMAIN', d.dtd_identifier)
+          = (e.object_catalog, e.object_schema, e.object_name, e.object_type, e.collection_type_identifier)
+        )
+    ",
+    "the_domain_schema",
+    "the_domain_name ASC",
+    (the_domain_name, String),
+    (object_type, String),
+    (data_type, String),
+    (character_maximum_length, Option<i32>),
+    (character_octet_length, Option<i32>),
+    (numeric_precision, Option<i32>),
+    (numeric_precision_radix, Option<i32>),
+    (numeric_scale, Option<i32>),
+    (datetime_precision, Option<i32>),
+    (interval_type, Option<String>),
+    (interval_precision, Option<i32>),
+    (udt_name, String)
+);
+
+schema_info_table!(
+    SchemaCompositeArrays,
+    schema_composite_arrays,
+    from = "
+        information_schema.element_types e JOIN (
+            SELECT
+                udt_catalog as the_udt_catalog,
+                udt_schema as the_udt_schema,
+                udt_name as the_udt_name,
+                attribute_name,
+                ordinal_position,
+                dtd_identifier
+            FROM information_schema.attributes
+        ) a ON (
+            (a.the_udt_catalog, a.the_udt_schema, a.the_udt_name, 'USER-DEFINED TYPE', a.dtd_identifier)
+          = (e.object_catalog, e.object_schema, e.object_name, e.object_type, e.collection_type_identifier)
+        )
+    ",
+    "the_udt_schema",
+    "the_udt_name ASC, ordinal_position ASC",
+    (the_udt_name, String),
+    (attribute_name, String),
+    (object_type, String),
+    (data_type, String),
+    (character_maximum_length, Option<i32>),
+    (character_octet_length, Option<i32>),
+    (numeric_precision, Option<i32>),
+    (numeric_precision_radix, Option<i32>),
+    (numeric_scale, Option<i32>),
+    (datetime_precision, Option<i32>),
+    (interval_type, Option<String>),
+    (interval_precision, Option<i32>),
+    (udt_name, String)
 );
 
 schema_info_table!(
@@ -161,7 +272,8 @@ schema_info_table!(
 schema_info_table!(
     SchemaDomainCheckConstraint,
     domain_constraints,
-    join = "NATURAL JOIN information_schema.check_constraints",
+    from =
+        "information_schema.domain_constraints NATURAL JOIN information_schema.check_constraints",
     "constraint_schema",
     "domain_name ASC, check_clause ASC",
     (domain_name, String),
@@ -173,7 +285,7 @@ schema_info_table!(
 schema_info_table!(
     SchemaTableCheckConstraint,
     table_constraints,
-    join = "NATURAL JOIN information_schema.check_constraints",
+    from = "information_schema.table_constraints NATURAL JOIN information_schema.check_constraints",
     "table_schema",
     "table_name ASC, check_clause ASC",
     (table_name, String),
@@ -186,7 +298,7 @@ schema_info_table!(
 schema_info_table!(
     SchemaTableReferentialConstraint,
     referential_constraints,
-    join = "NATURAL JOIN information_schema.table_constraints",
+    from = "information_schema.referential_constraints NATURAL JOIN information_schema.table_constraints",
     "constraint_schema",
     "table_name ASC, unique_constraint_name ASC, constraint_name ASC",
     (table_name, String),
@@ -203,7 +315,7 @@ schema_info_table!(
 schema_info_table!(
     SchemaTableKeyConstraint,
     key_column_usage,
-    join = "NATURAL JOIN information_schema.table_constraints",
+    from = "information_schema.key_column_usage NATURAL JOIN information_schema.table_constraints",
     "table_schema",
     "table_name ASC, constraint_name ASC, ordinal_position ASC, column_name ASC",
     (constraint_name, String),
@@ -281,6 +393,39 @@ async fn tables(transaction: &Transaction<'_>, schema_name: &str) -> Result<Vec<
         .iter()
         .map(|row| row.get("table_name"))
         .collect::<Vec<String>>())
+}
+
+#[derive(Debug, PartialEq)]
+pub struct SchemaEnum {
+    pub type_name: String,
+    pub enum_labels: Vec<String>,
+}
+
+async fn schema_enums(transaction: &Transaction<'_>, schema_name: &str) -> Result<Vec<SchemaEnum>> {
+    Ok(transaction
+        .query(
+            "
+            SELECT
+                t.typname AS type_name,
+                array_agg(e.enumlabel ORDER BY e.enumsortorder) AS enum_labels
+            FROM pg_catalog.pg_type t
+            JOIN pg_catalog.pg_namespace n ON (t.typnamespace = n.oid)
+            JOIN pg_catalog.pg_enum e ON (t.oid = e.enumtypid)
+            WHERE
+                n.nspname = $1 -- namespace = schema
+                AND t.typtype = 'e' -- enums
+            GROUP BY t.typname
+            ORDER BY t.typname;
+            ",
+            &[&schema_name],
+        )
+        .await?
+        .iter()
+        .map(|row| SchemaEnum {
+            type_name: row.get("type_name"),
+            enum_labels: row.get("enum_labels"),
+        })
+        .collect::<Vec<SchemaEnum>>())
 }
 
 /// Asserts that the schema after applying the migrations is equal to the ground truth schema.
@@ -438,6 +583,28 @@ fn assert_schema_info_eq(schema_a: &SchemaInfo, schema_b: &SchemaInfo) {
         "Schemas have different functions"
     );
 
+    pretty_assertions::assert_eq!(
+        schema_a.column_arrays,
+        schema_b.column_arrays,
+        "Columns with arrays differ"
+    );
+    pretty_assertions::assert_eq!(
+        schema_a.composite_arrays,
+        schema_b.composite_arrays,
+        "Composite types with arrays differ"
+    );
+    pretty_assertions::assert_eq!(
+        schema_a.domain_arrays,
+        schema_b.domain_arrays,
+        "Domains with arrays differ"
+    );
+
+    pretty_assertions::assert_eq!(
+        schema_a.enums,
+        schema_b.enums,
+        "Schemas have different enums"
+    );
+
     // check constraints…
 
     pretty_assertions::assert_eq!(
@@ -476,6 +643,10 @@ pub struct AssertSchemaEqPopulationConfig {
     pub has_domains: bool,
     pub has_user_defined_types: bool,
     pub has_parameters: bool,
+    pub has_columns_with_arrays: bool,
+    pub has_composite_tyes_with_arrays: bool,
+    pub has_domain_with_arrays: bool,
+    pub has_enums: bool,
     pub has_table_key_constraints: bool,
     pub has_table_referential_constraints: bool,
     pub has_table_check_constraints: bool,
@@ -492,10 +663,36 @@ impl Default for AssertSchemaEqPopulationConfig {
             has_domains: true,
             has_user_defined_types: true,
             has_parameters: true,
+            has_columns_with_arrays: true,
+            has_composite_tyes_with_arrays: true,
+            has_domain_with_arrays: true,
+            has_enums: true,
             has_table_key_constraints: true,
             has_table_referential_constraints: true,
             has_table_check_constraints: true,
             has_domain_check_constraints: true,
+        }
+    }
+}
+
+impl AssertSchemaEqPopulationConfig {
+    pub fn no_check() -> Self {
+        Self {
+            has_tables: false,
+            has_columns: false,
+            has_views: false,
+            has_attributes: false,
+            has_domains: false,
+            has_user_defined_types: false,
+            has_parameters: false,
+            has_columns_with_arrays: false,
+            has_composite_tyes_with_arrays: false,
+            has_domain_with_arrays: false,
+            has_enums: false,
+            has_table_key_constraints: false,
+            has_table_referential_constraints: false,
+            has_table_check_constraints: false,
+            has_domain_check_constraints: false,
         }
     }
 }
@@ -512,6 +709,10 @@ fn assert_schema_info_population(
         has_domains,
         has_user_defined_types,
         has_parameters,
+        has_columns_with_arrays,
+        has_composite_tyes_with_arrays,
+        has_domain_with_arrays,
+        has_enums,
         has_table_key_constraints,
         has_table_referential_constraints,
         has_table_check_constraints,
@@ -525,6 +726,10 @@ fn assert_schema_info_population(
     assert!(!has_domains || !schema.domains.is_empty());
     assert!(!has_user_defined_types || !schema.user_defined_types.is_empty());
     assert!(!has_parameters || !schema.parameters.is_empty());
+    assert!(!has_columns_with_arrays || !schema.column_arrays.is_empty());
+    assert!(!has_composite_tyes_with_arrays || !schema.composite_arrays.is_empty());
+    assert!(!has_domain_with_arrays || !schema.domain_arrays.is_empty());
+    assert!(!has_enums || !schema.enums.is_empty());
     assert!(!has_table_key_constraints || !schema.table_key_constraints.is_empty());
     assert!(!has_table_referential_constraints || !schema.table_referential_constraints.is_empty());
     assert!(!has_table_check_constraints || !schema.table_check_constraints.is_empty());
@@ -601,6 +806,9 @@ mod tests {
             },
             AssertSchemaEqPopulationConfig {
                 has_parameters: false,
+                has_columns_with_arrays: false,
+                has_composite_tyes_with_arrays: false,
+                has_domain_with_arrays: false,
                 ..Default::default()
             },
         )
@@ -654,6 +862,88 @@ mod tests {
                 has_parameters: false,
                 ..Default::default()
             },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    #[should_panic = "Schemas have different enums"]
+    async fn it_catches_enum_diffs() {
+        assert_schema_eq(
+            |connection| {
+                Box::pin(async move {
+                    connection
+                        .batch_execute(
+                            "
+                            CREATE TYPE test_enum AS ENUM ('a', 'b', 'c');
+            
+                            CREATE TABLE test (
+                                test_enum test_enum
+                            );
+                            ",
+                        )
+                        .await
+                        .unwrap();
+                    connection
+                })
+            },
+            |connection| {
+                Box::pin(async move {
+                    connection
+                        .batch_execute(
+                            "
+                            CREATE TYPE test_enum AS ENUM ('a', 'b');
+            
+                            CREATE TABLE test (
+                                test_enum test_enum
+                            );
+                            ",
+                        )
+                        .await
+                        .unwrap();
+                    connection
+                })
+            },
+            AssertSchemaEqPopulationConfig::no_check(),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    #[should_panic = "Columns with arrays differ"]
+    async fn it_catches_array_diffs() {
+        assert_schema_eq(
+            |connection| {
+                Box::pin(async move {
+                    connection
+                        .batch_execute(
+                            "
+                            CREATE TABLE test (
+                                test_array INT []
+                            );
+                            ",
+                        )
+                        .await
+                        .unwrap();
+                    connection
+                })
+            },
+            |connection| {
+                Box::pin(async move {
+                    connection
+                        .batch_execute(
+                            "
+                            CREATE TABLE test (
+                                test_array TEXT []
+                            );
+                            ",
+                        )
+                        .await
+                        .unwrap();
+                    connection
+                })
+            },
+            AssertSchemaEqPopulationConfig::no_check(),
         )
         .await;
     }
