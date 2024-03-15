@@ -395,38 +395,26 @@ async fn tables(transaction: &Transaction<'_>, schema_name: &str) -> Result<Vec<
         .collect::<Vec<String>>())
 }
 
-#[derive(Debug, PartialEq)]
-pub struct SchemaEnum {
-    pub type_name: String,
-    pub enum_labels: Vec<String>,
-}
-
-async fn schema_enums(transaction: &Transaction<'_>, schema_name: &str) -> Result<Vec<SchemaEnum>> {
-    Ok(transaction
-        .query(
-            "
-            SELECT
-                t.typname AS type_name,
-                array_agg(e.enumlabel ORDER BY e.enumsortorder) AS enum_labels
-            FROM pg_catalog.pg_type t
-            JOIN pg_catalog.pg_namespace n ON (t.typnamespace = n.oid)
-            JOIN pg_catalog.pg_enum e ON (t.oid = e.enumtypid)
-            WHERE
-                n.nspname = $1 -- namespace = schema
-                AND t.typtype = 'e' -- enums
-            GROUP BY t.typname
-            ORDER BY t.typname;
-            ",
-            &[&schema_name],
-        )
-        .await?
-        .iter()
-        .map(|row| SchemaEnum {
-            type_name: row.get("type_name"),
-            enum_labels: row.get("enum_labels"),
-        })
-        .collect::<Vec<SchemaEnum>>())
-}
+schema_info_table!(
+    SchemaEnum,
+    schema_enums,
+    from = "(
+        SELECT
+            n.nspname as enum_schema, -- namespace = schema
+            t.typname AS type_name,
+            array_agg(e.enumlabel ORDER BY e.enumsortorder) AS enum_labels
+        FROM pg_catalog.pg_type t
+        JOIN pg_catalog.pg_namespace n ON (t.typnamespace = n.oid)
+        JOIN pg_catalog.pg_enum e ON (t.oid = e.enumtypid)
+        WHERE
+            t.typtype = 'e' -- enums
+        GROUP BY n.nspname, t.typname
+    ) enums",
+    "enum_schema",
+    "type_name ASC",
+    (type_name, String),
+    (enum_labels, Vec<String>)
+);
 
 /// Asserts that the schema after applying the migrations is equal to the ground truth schema.
 ///
