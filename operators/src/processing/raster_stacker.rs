@@ -200,7 +200,7 @@ impl RasterOperator for RasterStacker {
 
         let output_band_descriptors = in_descriptors
             .into_iter()
-            .flat_map(|d| d.bands.clone().into_vec().into_iter())
+            .flat_map(|d| d.bands.iter().cloned())
             .zip(band_names)
             .map(|(descriptor, name)| RasterBandDescriptor { name, ..descriptor })
             .collect::<Vec<_>>()
