@@ -39,7 +39,12 @@ pub struct LayerCollectionParts<'a, E: Iterator<Item = NetCdfEntity>> {
     pub entities: E,
 }
 
-pub fn create_layer_collection_from_parts(
+pub trait LayerCollectionIdFn: Send + Sync {
+    fn layer_collection_id(&self, file_name: &Path, group_path: &[String]) -> LayerCollectionId;
+    fn layer_id(&self, file_name: &Path, group_path: &[String], entity_id: usize) -> LayerId;
+}
+
+pub fn create_layer_collection_from_parts<ID: LayerCollectionIdFn>(
     LayerCollectionParts {
         provider_id,
         collection_id,
@@ -49,8 +54,7 @@ pub fn create_layer_collection_from_parts(
         entities,
         subgroups,
     }: LayerCollectionParts<impl Iterator<Item = NetCdfEntity>>,
-    layer_collection_id_fn: impl Fn(&Path, &[String]) -> LayerCollectionId,
-    layer_id_fn: impl Fn(&Path, &[String], usize) -> LayerId,
+    id_fn: &ID,
 ) -> LayerCollection {
     let (name, description) = if let Some(group) = group {
         (group.title, group.description)
@@ -69,7 +73,7 @@ pub fn create_layer_collection_from_parts(
                 CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider_id,
-                        layer_id: layer_id_fn(
+                        layer_id: id_fn.layer_id(
                             Path::new(overview.file_name.as_str()),
                             group_path,
                             entity.id,
@@ -91,7 +95,7 @@ pub fn create_layer_collection_from_parts(
                 CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id,
-                        collection_id: layer_collection_id_fn(
+                        collection_id: id_fn.layer_collection_id(
                             Path::new(overview.file_name.as_str()),
                             &out_groups,
                         ),

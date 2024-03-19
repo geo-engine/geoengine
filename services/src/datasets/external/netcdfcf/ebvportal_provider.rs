@@ -1,6 +1,7 @@
 use super::{
-    ebvportal_api::EbvPortalApi, netcdf_entity_to_layer_id, netcdf_group_to_layer_collection_id,
-    NetCdfCfDataProvider, NetCdfCfDataProviderDefinition, NetCdfLayerCollectionId,
+    ebvportal_api::EbvPortalApi, loading::LayerCollectionIdFn, netcdf_entity_to_layer_id,
+    netcdf_group_to_layer_collection_id, NetCdfCfDataProvider, NetCdfCfDataProviderDefinition,
+    NetCdfLayerCollectionId,
 };
 use crate::{
     contexts::GeoEngineDb,
@@ -16,7 +17,6 @@ use crate::{
             LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
         },
     },
-    util::postgres::DatabaseConnectionConfig,
 };
 use async_trait::async_trait;
 use geoengine_datatypes::{
@@ -48,8 +48,6 @@ pub struct EbvPortalDataProviderDefinition {
     pub base_url: Url,
     /// Path were the NetCDF data can be found
     pub data: PathBuf,
-    /// Database configuration for storing metadata of overviews
-    pub metadata_db_config: DatabaseConnectionConfig,
     /// Path were overview files are stored
     pub overviews: PathBuf,
     #[serde(default)]
@@ -57,16 +55,16 @@ pub struct EbvPortalDataProviderDefinition {
 }
 
 #[derive(Debug)]
-pub struct EbvPortalDataProvider {
+pub struct EbvPortalDataProvider<D: GeoEngineDb> {
     pub name: String,
     pub description: String,
     pub ebv_api: EbvPortalApi,
-    pub netcdf_cf_provider: NetCdfCfDataProvider,
+    pub netcdf_cf_provider: NetCdfCfDataProvider<D>,
 }
 
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefinition {
-    async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
+    async fn initialize(self: Box<Self>, db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         let id = DataProviderDefinition::<D>::id(&*self);
         Ok(Box::new(EbvPortalDataProvider {
             name: self.name.clone(),
@@ -77,12 +75,10 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefiniti
                 description: self.description,
                 data: self.data,
                 overviews: self.overviews,
-                metadata_db_config: self.metadata_db_config,
                 cache_ttl: self.cache_ttl,
                 priority: self.priority,
             })
-            ._initialize(id)
-            .await?,
+            ._initialize(id, db),
         }))
     }
 
@@ -104,7 +100,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefiniti
 }
 
 #[async_trait]
-impl DataProvider for EbvPortalDataProvider {
+impl<D: GeoEngineDb> DataProvider for EbvPortalDataProvider<D> {
     async fn provenance(
         &self,
         id: &DataId,
@@ -246,7 +242,7 @@ impl TryFrom<EbvCollectionId> for LayerId {
     }
 }
 
-impl EbvPortalDataProvider {
+impl<D: GeoEngineDb> EbvPortalDataProvider<D> {
     async fn get_classes_collection(
         &self,
         collection: &LayerCollectionId,
@@ -426,7 +422,7 @@ impl EbvPortalDataProvider {
 }
 
 #[async_trait]
-impl LayerCollectionProvider for EbvPortalDataProvider {
+impl<D: GeoEngineDb> LayerCollectionProvider for EbvPortalDataProvider<D> {
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             listing: true,
@@ -478,8 +474,7 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
                     ._load_layer_collection(
                         &layer_collection_id,
                         options,
-                        layer_collection_fn(class.clone(), ebv.clone(), dataset.clone()),
-                        layer_fn(class.clone(), ebv.clone(), dataset.clone()),
+                        EbvPortalIdFn::new(class.clone(), ebv.clone(), dataset.clone()),
                     )
                     .await?;
 
@@ -506,8 +501,7 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
                     ._load_layer_collection(
                         &layer_collection_id,
                         options,
-                        layer_collection_fn(class.clone(), ebv.clone(), dataset.clone()),
-                        layer_fn(class.clone(), ebv.clone(), dataset.clone()),
+                        EbvPortalIdFn::new(class.clone(), ebv.clone(), dataset.clone()),
                     )
                     .await?;
 
@@ -560,24 +554,36 @@ impl LayerCollectionProvider for EbvPortalDataProvider {
     }
 }
 
-fn layer_collection_fn(
+struct EbvPortalIdFn {
     class: String,
     ebv: String,
     dataset: String,
-) -> impl Fn(&Path, &[String]) -> LayerCollectionId {
-    move |_path, groups| {
-        if groups.is_empty() {
+}
+
+impl EbvPortalIdFn {
+    pub fn new(class: String, ebv: String, dataset: String) -> Self {
+        Self {
+            class,
+            ebv,
+            dataset,
+        }
+    }
+}
+
+impl LayerCollectionIdFn for EbvPortalIdFn {
+    fn layer_collection_id(&self, _file_name: &Path, group_path: &[String]) -> LayerCollectionId {
+        if group_path.is_empty() {
             EbvCollectionId::Dataset {
-                class: class.clone(),
-                ebv: ebv.clone(),
-                dataset: dataset.clone(),
+                class: self.class.clone(),
+                ebv: self.ebv.clone(),
+                dataset: self.dataset.clone(),
             }
         } else {
             EbvCollectionId::Group {
-                class: class.clone(),
-                ebv: ebv.clone(),
-                dataset: dataset.clone(),
-                groups: groups.to_vec(),
+                class: self.class.clone(),
+                ebv: self.ebv.clone(),
+                dataset: self.dataset.clone(),
+                groups: group_path.to_vec(),
             }
         }
         .try_into()
@@ -585,20 +591,14 @@ fn layer_collection_fn(
             |_| LayerCollectionId(String::new()), // must not happen, but cover this defensively
         )
     }
-}
 
-fn layer_fn(
-    class: String,
-    ebv: String,
-    dataset: String,
-) -> impl Fn(&Path, &[String], usize) -> LayerId {
-    move |_path, groups, entity| {
+    fn layer_id(&self, _file_name: &Path, group_path: &[String], entity_id: usize) -> LayerId {
         EbvCollectionId::Entity {
-            class: class.clone(),
-            ebv: ebv.clone(),
-            dataset: dataset.clone(),
-            groups: groups.to_vec(),
-            entity,
+            class: self.class.clone(),
+            ebv: self.ebv.clone(),
+            dataset: self.dataset.clone(),
+            groups: group_path.to_vec(),
+            entity: entity_id,
         }
         .try_into()
         .unwrap_or_else(
@@ -640,8 +640,8 @@ fn _net_cdf_layer_collection_id_to_ebv_collection_id(
 }
 
 #[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for EbvPortalDataProvider
+impl<D: GeoEngineDb> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for EbvPortalDataProvider<D>
 {
     async fn meta_data(
         &self,
@@ -655,9 +655,9 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 }
 
 #[async_trait]
-impl
+impl<D: GeoEngineDb>
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for EbvPortalDataProvider
+    for EbvPortalDataProvider<D>
 {
     async fn meta_data(
         &self,
@@ -677,8 +677,9 @@ impl
 }
 
 #[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for EbvPortalDataProvider
+impl<D: GeoEngineDb>
+    MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for EbvPortalDataProvider<D>
 {
     async fn meta_data(
         &self,
@@ -701,7 +702,6 @@ mod tests {
 
     use crate::{
         contexts::{PostgresContext, SessionContext, SimpleApplicationContext},
-        datasets::external::netcdfcf::test_db_config,
         ge_context,
         layers::layer::{LayerListing, ProviderLayerId},
     };
@@ -859,7 +859,6 @@ mod tests {
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1000,7 +999,6 @@ mod tests {
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1169,7 +1167,6 @@ mod tests {
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1409,7 +1406,6 @@ mod tests {
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())
@@ -1573,7 +1569,6 @@ mod tests {
             data: test_data!("netcdf4d").into(),
             base_url: Url::parse(&mock_server.url_str("/api/v1")).unwrap(),
             overviews: test_data!("netcdf4d/overviews").into(),
-            metadata_db_config: test_db_config(),
             cache_ttl: Default::default(),
         })
         .initialize(app_ctx.default_session_context().await.unwrap().db())

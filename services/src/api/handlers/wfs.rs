@@ -1123,7 +1123,7 @@ x;y
         .await;
     }
 
-    async fn add_dataset_definition_to_datasets<Tls>(
+    async fn add_dataset_definition_to_datasets<Tls: std::fmt::Debug>(
         app_ctx: &PostgresContext<Tls>,
         dataset_definition_path: &Path,
     ) -> DatasetId
