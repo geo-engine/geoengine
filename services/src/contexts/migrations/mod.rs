@@ -20,6 +20,11 @@ pub mod migration_0005_gbif_column_selection;
 mod migration_0006_ebv_provider;
 pub mod migration_0007_owner_role;
 
+#[cfg(test)]
+mod schema_info;
+#[cfg(test)]
+pub(crate) use schema_info::{assert_migration_schema_eq, AssertSchemaEqPopulationConfig};
+
 /// All migrations that are available. The migrations are applied in the order they are defined here, starting from the current version of the database.
 ///
 /// NEW MIGRATIONS HAVE TO BE REGISTERED HERE!
@@ -35,4 +40,23 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0006EbvProvider),
         Box::new(Migration0007OwnerRole),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn migrations_lead_to_ground_truth_schema() {
+        assert_migration_schema_eq(
+            &all_migrations(),
+            include_str!("current_schema.sql"),
+            AssertSchemaEqPopulationConfig {
+                has_views: false,
+                has_parameters: false,
+                ..Default::default()
+            },
+        )
+        .await;
+    }
 }

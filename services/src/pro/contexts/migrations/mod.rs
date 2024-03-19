@@ -31,3 +31,22 @@ where
         Box::new(NoProMigrationImpl::from(Migration0007OwnerRole)),
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contexts::migrations::{assert_migration_schema_eq, AssertSchemaEqPopulationConfig};
+
+    #[tokio::test]
+    async fn migrations_lead_to_ground_truth_schema() {
+        assert_migration_schema_eq(
+            &pro_migrations(),
+            include_str!("current_schema.sql"),
+            AssertSchemaEqPopulationConfig {
+                has_parameters: false,
+                ..Default::default()
+            },
+        )
+        .await;
+    }
+}
