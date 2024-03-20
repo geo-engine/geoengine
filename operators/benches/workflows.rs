@@ -12,7 +12,7 @@ use futures::TryStreamExt;
 use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{QueryRectangle, RasterQueryRectangle, SpatialPartitioned};
-use geoengine_datatypes::raster::{Grid2D, RasterDataType};
+use geoengine_datatypes::raster::{Grid2D, RasterDataType, RenameBands};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 
 use geoengine_datatypes::util::Identifier;
@@ -27,7 +27,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
 use geoengine_operators::processing::{
-    Expression, ExpressionParams, RasterStacker, RasterStackerParams, RenameBands, Reprojection,
+    Expression, ExpressionParams, RasterStacker, RasterStackerParams, Reprojection,
     ReprojectionParams,
 };
 use geoengine_operators::source::GdalSource;

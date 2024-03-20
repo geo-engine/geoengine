@@ -448,7 +448,7 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{CacheHint, SpatialResolution, TimeInterval},
         raster::{
-            EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterDataType,
+            EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterDataType, RenameBands,
             TileInformation, TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
@@ -462,7 +462,7 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{
             raster_stacker::{RasterStacker, RasterStackerParams},
-            Expression, ExpressionParams, RenameBands,
+            Expression, ExpressionParams,
         },
     };
 

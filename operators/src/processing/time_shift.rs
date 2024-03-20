@@ -512,9 +512,7 @@ mod tests {
             SingleRasterSource,
         },
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
-        processing::{
-            Expression, ExpressionParams, RasterStacker, RasterStackerParams, RenameBands,
-        },
+        processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
         util::{gdal::add_ndvi_dataset, input::RasterOrVectorOperator},
     };
@@ -526,7 +524,10 @@ mod tests {
             BandSelection, BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialPartition2D,
             SpatialResolution, TimeGranularity,
         },
-        raster::{EmptyGrid2D, GridOrEmpty, RasterDataType, TileInformation, TilingSpecification},
+        raster::{
+            EmptyGrid2D, GridOrEmpty, RasterDataType, RenameBands, TileInformation,
+            TilingSpecification,
+        },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };

@@ -5,7 +5,7 @@ use geoengine_datatypes::{
     primitives::{
         BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     },
-    raster::{RasterDataType, RasterTile2D},
+    raster::{RasterDataType, RasterTile2D, RenameBands},
     util::test::TestDefault,
 };
 use geoengine_operators::{
@@ -13,7 +13,7 @@ use geoengine_operators::{
         MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterOperator,
         SingleRasterSource, WorkflowOperatorPath,
     },
-    processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams, RenameBands},
+    processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
     source::{GdalSource, GdalSourceParameters},
     util::{gdal::add_ndvi_dataset, number_statistics::NumberStatistics, Result},
 };

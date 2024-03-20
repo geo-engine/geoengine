@@ -460,7 +460,8 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
-            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, RenameBands, TileInformation,
+            TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -472,7 +473,7 @@ mod tests {
             RasterOperator, RasterResultDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
-        processing::{RasterStacker, RasterStackerParams, RenameBands},
+        processing::{RasterStacker, RasterStackerParams},
     };
 
     #[tokio::test]

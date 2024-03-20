@@ -421,7 +421,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         primitives::{BandSelection, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{RasterDataType, TilesEqualIgnoringCacheHint},
+        raster::{RasterDataType, RenameBands, TilesEqualIgnoringCacheHint},
         util::test::TestDefault,
     };
 
@@ -430,9 +430,7 @@ mod tests {
             ChunkByteSize, MockExecutionContext, MockQueryContext, MultipleRasterSources,
             QueryContextExtensions, RasterOperator, SingleRasterSource, WorkflowOperatorPath,
         },
-        processing::{
-            Expression, ExpressionParams, RasterStacker, RasterStackerParams, RenameBands,
-        },
+        processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
         util::gdal::add_ndvi_dataset,
     };

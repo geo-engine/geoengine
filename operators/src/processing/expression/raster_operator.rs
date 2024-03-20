@@ -206,14 +206,14 @@ mod tests {
         MockExecutionContext, MockQueryContext, MultipleRasterSources, QueryProcessor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use crate::processing::{RasterStacker, RasterStackerParams, RenameBands};
+    use crate::processing::{RasterStacker, RasterStackerParams};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
     use geoengine_datatypes::primitives::{
         RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, TileInformation,
+        Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, RenameBands, TileInformation,
         TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;

@@ -293,7 +293,7 @@ mod tests {
             RasterOperator, RasterResultDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
-        processing::{RasterStacker, RasterStackerParams, RenameBands},
+        processing::{RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
         util::{gdal::add_ndvi_dataset, raster_stream_to_png::raster_stream_to_png_bytes},
     };
@@ -306,7 +306,7 @@ mod tests {
             TimeInstance, TimeInterval,
         },
         raster::{
-            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation,
+            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, RenameBands, TileInformation,
             TilesEqualIgnoringCacheHint, TilingSpecification,
         },
         spatial_reference::SpatialReference,

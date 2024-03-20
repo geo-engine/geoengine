@@ -6,7 +6,7 @@ use geoengine_datatypes::{
         BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
         TimeStep,
     },
-    raster::{RasterDataType, RasterTile2D},
+    raster::{RasterDataType, RasterTile2D, RenameBands},
     util::test::TestDefault,
 };
 use geoengine_operators::{
@@ -15,7 +15,7 @@ use geoengine_operators::{
         SingleRasterSource, WorkflowOperatorPath,
     },
     processing::{
-        Aggregation, RasterStacker, RasterStackerParams, RenameBands, TemporalRasterAggregation,
+        Aggregation, RasterStacker, RasterStackerParams, TemporalRasterAggregation,
         TemporalRasterAggregationParameters,
     },
     source::{GdalSource, GdalSourceParameters},

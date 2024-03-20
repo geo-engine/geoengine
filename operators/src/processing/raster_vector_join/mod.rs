@@ -9,7 +9,7 @@ use crate::engine::{
     VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     WorkflowOperatorPath,
 };
-use crate::error::{self, Error};
+use crate::error::{self, ColumnNameConflict, Error};
 use crate::processing::raster_vector_join::non_aggregated::RasterVectorJoinProcessor;
 use crate::util::Result;
 
@@ -17,7 +17,7 @@ use crate::processing::raster_vector_join::aggregated::RasterVectorAggregateJoin
 use async_trait::async_trait;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::FeatureDataType;
-use geoengine_datatypes::raster::{Pixel, RasterDataType};
+use geoengine_datatypes::raster::{Pixel, RasterDataType, RenameBands};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -39,9 +39,9 @@ const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterVectorJoinParams {
-    /// Each name reflects the output column of the join result.
-    /// For each raster input, one name must be defined.
-    pub names: Vec<String>,
+    /// The names of the new columns are derived from the names of the raster bands.
+    /// This parameter specifies how to perform the derivation.
+    pub names: ColumnNames,
 
     /// Specifies which method is used for aggregating values for a feature
     pub feature_aggregation: FeatureAggregationMethod,
@@ -58,6 +58,24 @@ pub struct RasterVectorJoinParams {
     /// `false` by default
     #[serde(default)]
     pub temporal_aggregation_ignore_no_data: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "type", content = "values")]
+pub enum ColumnNames {
+    Default, // use the input band name and append " (n)" to the band name for the `n`-th conflict,
+    Suffix(Vec<String>), // A suffix for every input, to be appended to the original band names
+    Names(Vec<String>), // A column name for each band, to be used instead of the original band names
+}
+
+impl From<ColumnNames> for RenameBands {
+    fn from(column_names: ColumnNames) -> Self {
+        match column_names {
+            ColumnNames::Default => RenameBands::Default,
+            ColumnNames::Suffix(suffixes) => RenameBands::Suffix(suffixes),
+            ColumnNames::Names(names) => RenameBands::Rename(names),
+        }
+    }
 }
 
 /// How to aggregate the values for the geometries inside a feature e.g.
@@ -96,12 +114,6 @@ impl VectorOperator for RasterVectorJoin {
             error::InvalidNumberOfRasterInputs {
                 expected: 1..MAX_NUMBER_OF_RASTER_INPUTS,
                 found: self.sources.rasters.len()
-            }
-        );
-        ensure!(
-            self.sources.rasters.len() == self.params.names.len(),
-            error::InvalidOperatorSpec {
-                reason: "`rasters` must be of equal length as `names`"
             }
         );
 
@@ -162,16 +174,32 @@ impl VectorOperator for RasterVectorJoin {
             .map(|rd| rd.bands.count())
             .collect::<Vec<_>>();
 
+        let rename_bands: RenameBands = self.params.names.clone().into();
+
+        let new_column_names = rename_bands.apply(
+            source_descriptors
+                .iter()
+                .map(|d| d.bands.iter().map(|b| b.name.clone()).collect())
+                .collect(),
+        )?;
+
+        for name in vector_rd.columns.keys() {
+            ensure!(
+                !new_column_names.contains(name),
+                ColumnNameConflict { name }
+            );
+        }
+
         let params = self.params;
 
         let result_descriptor = vector_rd.map_columns(|columns| {
             let mut columns = columns.clone();
-            for ((i, new_column_name), source_descriptor) in
-                params.names.iter().enumerate().zip(&source_descriptors)
-            {
+            let mut new_column_name_idx = 0;
+
+            for source_descriptor in &source_descriptors {
                 let feature_data_type = match params.temporal_aggregation {
                     TemporalAggregationMethod::First | TemporalAggregationMethod::None => {
-                        match raster_sources[i].result_descriptor().data_type {
+                        match source_descriptor.data_type {
                             RasterDataType::U8
                             | RasterDataType::U16
                             | RasterDataType::U32
@@ -186,12 +214,9 @@ impl VectorOperator for RasterVectorJoin {
                     TemporalAggregationMethod::Mean => FeatureDataType::Float,
                 };
 
-                for (i, band) in source_descriptor.bands.iter().enumerate() {
-                    let column_name = if i == 0 {
-                        new_column_name.clone()
-                    } else {
-                        format!("{new_column_name}_{i}")
-                    };
+                for band in source_descriptor.bands.iter() {
+                    let column_name = new_column_names[new_column_name_idx].clone();
+                    new_column_name_idx += 1;
 
                     columns.insert(
                         column_name,
@@ -212,6 +237,7 @@ impl VectorOperator for RasterVectorJoin {
             raster_sources,
             raster_sources_bands,
             state: params,
+            new_column_names,
         }
         .boxed())
     }
@@ -226,6 +252,7 @@ pub struct InitializedRasterVectorJoin {
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
     raster_sources_bands: Vec<u32>,
     state: RasterVectorJoinParams,
+    new_column_names: Vec<String>,
 }
 
 impl InitializedVectorOperator for InitializedRasterVectorJoin {
@@ -249,7 +276,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                         self.result_descriptor.clone(),
                         typed_raster_processors,
                         self.raster_sources_bands.clone(),
-                        self.state.names.clone(),
+                        self.new_column_names.clone(),
                         self.state.feature_aggregation,
                         self.state.feature_aggregation_ignore_no_data,
                     )
@@ -260,7 +287,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                             self.result_descriptor.clone(),
                             typed_raster_processors,
                             self.raster_sources_bands.clone(),
-                            self.state.names.clone(),
+                            self.new_column_names.clone(),
                             self.state.feature_aggregation,
                             self.state.feature_aggregation_ignore_no_data,
                             self.state.temporal_aggregation,
@@ -277,7 +304,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                         self.result_descriptor.clone(),
                         typed_raster_processors,
                         self.raster_sources_bands.clone(),
-                        self.state.names.clone(),
+                        self.new_column_names.clone(),
                         self.state.feature_aggregation,
                         self.state.feature_aggregation_ignore_no_data,
                     )
@@ -288,7 +315,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                             self.result_descriptor.clone(),
                             typed_raster_processors,
                             self.raster_sources_bands.clone(),
-                            self.state.names.clone(),
+                            self.new_column_names.clone(),
                             self.state.feature_aggregation,
                             self.state.feature_aggregation_ignore_no_data,
                             self.state.temporal_aggregation,
@@ -363,7 +390,7 @@ mod tests {
     fn serialization() {
         let raster_vector_join = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: ["foo", "bar"].iter().copied().map(str::to_string).collect(),
+                names: ColumnNames::Default,
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
@@ -440,7 +467,7 @@ mod tests {
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: vec!["ndvi".to_string()],
+                names: ColumnNames::Default,
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::First,
@@ -519,7 +546,7 @@ mod tests {
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: vec!["ndvi".to_string()],
+                names: ColumnNames::Default,
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
@@ -601,7 +628,7 @@ mod tests {
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: vec!["ndvi".to_string()],
+                names: ColumnNames::Default,
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
@@ -674,7 +701,7 @@ mod tests {
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: vec!["ndvi".to_string()],
+                names: ColumnNames::Default,
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
@@ -762,7 +789,7 @@ mod tests {
 
         let join = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: vec!["s0".to_string(), "s1".to_string()],
+                names: ColumnNames::Names(vec!["s0".to_string(), "s1".to_string()]),
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::None,
