@@ -98,14 +98,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
-    use geoengine_datatypes::primitives::DateTime;
-    use geoengine_datatypes::test_data;
-    use tokio_postgres::NoTls;
-
-    use crate::contexts::Migration0000Initial;
+    use crate::contexts::{CurrentSchemaMigration, Migration0000Initial};
     use crate::pro::permissions::RoleId;
     use crate::pro::users::UserDb;
     use crate::projects::{ProjectDb, ProjectListOptions};
@@ -119,6 +112,11 @@ mod tests {
         },
         util::config::get_config_element,
     };
+    use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
+    use geoengine_datatypes::primitives::DateTime;
+    use geoengine_datatypes::test_data;
+    use std::str::FromStr;
+    use tokio_postgres::NoTls;
 
     use super::*;
 
@@ -132,6 +130,25 @@ mod tests {
         let mut conn = pool.get().await?;
 
         migrate_database(&mut conn, &pro_migrations(), None).await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_uses_the_current_schema_if_the_database_is_empty() -> Result<()> {
+        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+
+        let pool = Pool::builder().build(pg_mgr).await?;
+
+        let mut conn = pool.get().await?;
+
+        migrate_database(
+            &mut conn,
+            &pro_migrations(),
+            Some(Box::new(ProMigrationImpl::from(CurrentSchemaMigration))),
+        )
+        .await?;
 
         Ok(())
     }

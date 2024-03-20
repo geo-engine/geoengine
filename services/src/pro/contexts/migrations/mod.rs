@@ -1,12 +1,14 @@
-use crate::contexts::migrations::Migration0006EbvProvider;
+use crate::contexts::Migration;
 use crate::contexts::{
     Migration0000Initial, Migration0001RasterStacks, Migration0002DatasetListingProvider,
     Migration0003GbifConfig, Migration0004DatasetListingProviderPrio,
-    Migration0005GbifColumnSelection, Migration0007OwnerRole,
+    Migration0005GbifColumnSelection, Migration0006EbvProvider, Migration0007OwnerRole,
 };
 use crate::pro::contexts::migrations::database_migration::NoProMigrationImpl;
-use crate::{contexts::Migration, pro::contexts::migrations::database_migration::ProMigrationImpl};
 
+pub use crate::pro::contexts::migrations::database_migration::ProMigrationImpl;
+
+mod current_pro_schema;
 mod database_migration;
 mod migration_0000_initial;
 mod migration_0004_dataset_listing_provider_prio;
@@ -41,7 +43,10 @@ mod tests {
     async fn migrations_lead_to_ground_truth_schema() {
         assert_migration_schema_eq(
             &pro_migrations(),
-            include_str!("current_schema.sql"),
+            concat!(
+                include_str!("../../../contexts/migrations/current_schema.sql"),
+                include_str!("current_schema.sql"),
+            ),
             AssertSchemaEqPopulationConfig {
                 has_parameters: false,
                 ..Default::default()

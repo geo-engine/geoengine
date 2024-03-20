@@ -1,5 +1,5 @@
-use self::migration_0000_initial::Migration0000Initial;
 pub use crate::contexts::migrations::{
+    current_schema::CurrentSchemaMigration, migration_0000_initial::Migration0000Initial,
     migration_0001_raster_stacks::Migration0001RasterStacks,
     migration_0002_dataset_listing_provider::Migration0002DatasetListingProvider,
     migration_0003_gbif_config::Migration0003GbifConfig,
@@ -10,6 +10,7 @@ pub use crate::contexts::migrations::{
 };
 pub use database_migration::{migrate_database, DatabaseVersion, Migration, MigrationResult};
 
+mod current_schema;
 mod database_migration;
 pub mod migration_0000_initial;
 pub mod migration_0001_raster_stacks;

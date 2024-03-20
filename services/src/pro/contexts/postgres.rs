@@ -1,9 +1,9 @@
-use super::migrations::pro_migrations;
+use super::migrations::{pro_migrations, ProMigrationImpl};
 use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 use crate::api::cli::add_providers_from_directory;
 use crate::contexts::{
-    migrate_database, ApplicationContext, MigrationResult, PostgresContext, QueryContextImpl,
-    SessionId,
+    migrate_database, ApplicationContext, CurrentSchemaMigration, MigrationResult, PostgresContext,
+    QueryContextImpl, SessionId,
 };
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::upload::{Volume, Volumes};
@@ -215,7 +215,12 @@ where
     ) -> Result<bool> {
         PostgresContext::maybe_clear_database(&conn).await?;
 
-        let migration = migrate_database(&mut conn, &pro_migrations(), None).await?;
+        let migration = migrate_database(
+            &mut conn,
+            &pro_migrations(),
+            Some(Box::new(ProMigrationImpl::from(CurrentSchemaMigration))),
+        )
+        .await?;
 
         Ok(migration == MigrationResult::CreatedDatabase)
     }
