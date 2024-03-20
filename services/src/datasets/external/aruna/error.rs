@@ -1,4 +1,3 @@
-use aruna_rust_api::api::storage::models::v2::Status;
 use snafu::prelude::*;
 use tonic::metadata::errors::InvalidMetadataValue;
 
@@ -10,9 +9,7 @@ pub enum ArunaProviderError {
     InvalidDataId,
     InvalidUri { uri_string: String },
     InvalidMetaObject,
-    InvalidObjectStatus { status: Status },
     MissingProject,
-    MissingCollection,
     MissingDataset,
     MissingObject,
     MissingDataObject,
@@ -20,6 +17,8 @@ pub enum ArunaProviderError {
     MissingArunaMetaData,
     MissingRelation,
     MissingURL,
+    MissingLabel { resource_id: String },
+    ResourceNotAvailable { resource_id: String },
     Reqwest { source: reqwest::Error },
     UnexpectedObjectHierarchy,
     TonicStatus { source: tonic::Status },
