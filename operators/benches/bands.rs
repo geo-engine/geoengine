@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
+
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
     primitives::{
@@ -55,7 +57,7 @@ fn ndvi_source(execution_context: &mut MockExecutionContext) -> Box<dyn RasterOp
     gdal_operator.boxed()
 }
 
-async fn one_band_at_a_time(runs: usize, bands: usize, resolution: SpatialResolution) {
+async fn one_band_at_a_time(runs: usize, bands: u32, resolution: SpatialResolution) {
     let mut execution_context = MockExecutionContext::test_default();
     let query_context = MockQueryContext::test_default();
 
@@ -113,7 +115,7 @@ async fn one_band_at_a_time(runs: usize, bands: usize, resolution: SpatialResolu
     .unwrap();
 }
 
-async fn all_bands_at_once(runs: usize, bands: usize, resolution: SpatialResolution) {
+async fn all_bands_at_once(runs: usize, bands: u32, resolution: SpatialResolution) {
     let mut execution_context = MockExecutionContext::test_default();
     let query_context = MockQueryContext::test_default();
 
@@ -142,7 +144,7 @@ async fn all_bands_at_once(runs: usize, bands: usize, resolution: SpatialResolut
         spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
         time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         spatial_resolution: resolution,
-        attributes: (0..bands).collect::<Vec<_>>().into(),
+        attributes: (0..bands).collect::<Vec<_>>().try_into().unwrap(),
     };
 
     let mut times = NumberStatistics::default();
@@ -178,7 +180,7 @@ async fn all_bands_at_once(runs: usize, bands: usize, resolution: SpatialResolut
 #[tokio::main]
 async fn main() {
     const RUNS: usize = 5;
-    const BANDS: usize = 8;
+    const BANDS: u32 = 8;
     const RESOLUTION: f64 = 0.1;
 
     println!("one band at a time");
@@ -208,7 +210,7 @@ where
     let start = std::time::Instant::now();
     let result = f().await;
     let end = start.elapsed();
-    let secs = end.as_secs() as f64 + end.subsec_nanos() as f64 / 1_000_000_000.0;
+    let secs = end.as_secs() as f64 + f64::from(end.subsec_nanos()) / 1_000_000_000.0;
 
     (secs, result)
 }

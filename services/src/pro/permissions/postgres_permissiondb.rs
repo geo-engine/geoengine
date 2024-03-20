@@ -1,8 +1,15 @@
-use super::{Permission, PermissionDb, ResourceId, RoleId};
-use crate::error::{self, Error, Result};
+use super::{
+    Bb8PermissionDbError, Permission, PermissionDb, PermissionDbError, PermissionListing,
+    PostgresPermissionDbError, ResourceId, RoleId,
+};
+use crate::error::Result;
 use crate::pro::contexts::ProPostgresDb;
+use crate::pro::permissions::{
+    CannotGrantOwnerPermissionPermissionDbError, CannotRevokeOwnPermissionPermissionDbError,
+    MustBeAdminPermissionDbError, PermissionDeniedPermissionDbError, Role,
+};
 use async_trait::async_trait;
-use snafu::ensure;
+use snafu::{ensure, ResultExt};
 use tokio_postgres::{
     tls::{MakeTlsConnect, TlsConnect},
     Socket,
@@ -14,7 +21,7 @@ use uuid::Uuid;
 trait ResourceTypeName {
     fn resource_type_name(&self) -> &'static str;
 
-    fn uuid(&self) -> Result<Uuid>;
+    fn uuid(&self) -> Result<Uuid, PermissionDbError>;
 }
 
 impl ResourceTypeName for ResourceId {
@@ -28,11 +35,17 @@ impl ResourceTypeName for ResourceId {
         }
     }
 
-    fn uuid(&self) -> Result<Uuid> {
+    fn uuid(&self) -> Result<Uuid, PermissionDbError> {
         match self {
-            ResourceId::Layer(id) => Uuid::parse_str(&id.0).map_err(|_| Error::InvalidUuid),
+            ResourceId::Layer(id) => {
+                Uuid::parse_str(&id.0).map_err(|_| PermissionDbError::ResourceIdIsNotAValidUuid {
+                    resource_id: id.0.clone(),
+                })
+            }
             ResourceId::LayerCollection(id) => {
-                Uuid::parse_str(&id.0).map_err(|_| Error::InvalidUuid)
+                Uuid::parse_str(&id.0).map_err(|_| PermissionDbError::ResourceIdIsNotAValidUuid {
+                    resource_id: id.0.clone(),
+                })
             }
             ResourceId::Project(id) => Ok(id.0),
             ResourceId::DatasetId(id) => Ok(id.0),
@@ -52,7 +65,7 @@ pub trait TxPermissionDb {
         &self,
         resource: R,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
 
     /// Check `permission` for `resource`.
     async fn has_permission_in_tx<R: Into<ResourceId> + Send + Sync>(
@@ -60,16 +73,22 @@ pub trait TxPermissionDb {
         resource: R,
         permission: Permission,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<bool>;
+    ) -> Result<bool, PermissionDbError>;
 
     /// Ensure `permission` for `resource` exists. Throws error if not allowed.
     #[must_use]
-    async fn ensure_permission_in_tx<R: Into<ResourceId> + Send + Sync>(
+    async fn ensure_permission_in_tx(
         &self,
-        resource: R,
+        resource: ResourceId,
         permission: Permission,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
+
+    /// Ensure user is admin
+    async fn ensure_admin_in_tx(
+        &self,
+        tx: &tokio_postgres::Transaction<'_>,
+    ) -> Result<(), PermissionDbError>;
 
     /// Give `permission` to `role` for `resource`.
     /// Requires `Owner` permission for `resource`.
@@ -79,7 +98,7 @@ pub trait TxPermissionDb {
         resource: R,
         permission: Permission,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
 
     /// Remove `permission` from `role` for `resource`.
     /// Requires `Owner` permission for `resource`.
@@ -89,7 +108,7 @@ pub trait TxPermissionDb {
         resource: R,
         permission: Permission,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
 
     /// Remove all `permission` for `resource`.
     /// Requires `Owner` permission for `resource`.
@@ -97,13 +116,21 @@ pub trait TxPermissionDb {
         &self,
         resource: R,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
+
+    async fn list_permissions_in_tx<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        offset: u32,
+        limit: u32,
+        tx: &tokio_postgres::Transaction<'_>,
+    ) -> Result<Vec<PermissionListing>, PermissionDbError>;
 }
 
 #[async_trait]
 impl<Tls> TxPermissionDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -112,7 +139,7 @@ where
         &self,
         resource: R,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<()> {
+    ) -> Result<(), PermissionDbError> {
         let resource: ResourceId = resource.into();
 
         let stmt = tx
@@ -122,7 +149,8 @@ where
             VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
                 resource_type = resource.resource_type_name()
             ))
-            .await?;
+            .await
+            .context(PostgresPermissionDbError)?;
 
         tx.execute(
             &stmt,
@@ -132,7 +160,8 @@ where
                 &resource.uuid()?,
             ],
         )
-        .await?;
+        .await
+        .context(PostgresPermissionDbError)?;
 
         Ok(())
     }
@@ -142,7 +171,7 @@ where
         resource: R,
         permission: Permission,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<bool> {
+    ) -> Result<bool, PermissionDbError> {
         let resource: ResourceId = resource.into();
 
         // TODO: perform join to get all roles of a user instead of using the roles from the session object?
@@ -152,10 +181,10 @@ where
             SELECT COUNT(*) FROM permissions WHERE role_id = ANY($1) AND permission = ANY($2) AND {resource_type} = $3;",
                 resource_type = resource.resource_type_name()
             ))
-            .await?;
+            .await.context(PostgresPermissionDbError)?;
 
         let row = tx
-            .query_one(
+            .query_opt(
                 &stmt,
                 &[
                     &self.session.roles,
@@ -163,21 +192,44 @@ where
                     &resource.uuid()?,
                 ],
             )
-            .await?;
+            .await
+            .context(PostgresPermissionDbError)?
+            .ok_or(PermissionDbError::PermissionNotFound {
+                permission,
+                resource_id: resource,
+                role_ids: self.session.roles.clone(),
+            })?;
 
         Ok(row.get::<usize, i64>(0) > 0)
     }
 
     #[must_use]
-    async fn ensure_permission_in_tx<R: Into<ResourceId> + Send + Sync>(
+    async fn ensure_permission_in_tx(
         &self,
-        resource: R,
+        resource: ResourceId,
         permission: Permission,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<()> {
-        let has_permission = self.has_permission_in_tx(resource, permission, tx).await?;
+    ) -> Result<(), PermissionDbError> {
+        let has_permission = self
+            .has_permission_in_tx(resource.clone(), permission.clone(), tx)
+            .await?;
 
-        ensure!(has_permission, error::PermissionDenied);
+        ensure!(
+            has_permission,
+            PermissionDeniedPermissionDbError {
+                permission,
+                resource_id: resource,
+            }
+        );
+
+        Ok(())
+    }
+
+    async fn ensure_admin_in_tx(
+        &self,
+        _tx: &tokio_postgres::Transaction<'_>,
+    ) -> Result<(), PermissionDbError> {
+        ensure!(self.session.is_admin(), MustBeAdminPermissionDbError);
 
         Ok(())
     }
@@ -188,14 +240,11 @@ where
         resource: R,
         permission: Permission,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<()> {
+    ) -> Result<(), PermissionDbError> {
         let resource: ResourceId = resource.into();
 
-        ensure!(
-            self.has_permission_in_tx(resource.clone(), Permission::Owner, tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(resource.clone(), Permission::Owner, tx)
+            .await?;
 
         let stmt = tx
             .prepare(&format!(
@@ -204,10 +253,12 @@ where
             VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
                 resource_type = resource.resource_type_name()
             ))
-            .await?;
+            .await
+            .context(PostgresPermissionDbError)?;
 
         tx.execute(&stmt, &[&role, &permission, &resource.uuid()?])
-            .await?;
+            .await
+            .context(PostgresPermissionDbError)?;
 
         Ok(())
     }
@@ -218,13 +269,15 @@ where
         resource: R,
         permission: Permission,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<()> {
+    ) -> Result<(), PermissionDbError> {
         let resource: ResourceId = resource.into();
 
+        self.ensure_permission_in_tx(resource.clone(), Permission::Owner, tx)
+            .await?;
+
         ensure!(
-            self.has_permission_in_tx(resource.clone(), Permission::Owner, tx)
-                .await?,
-            error::PermissionDenied
+            role != RoleId::from(self.session.user.id),
+            CannotRevokeOwnPermissionPermissionDbError,
         );
 
         let stmt = tx
@@ -233,10 +286,11 @@ where
             DELETE FROM permissions WHERE role_id = $1 AND permission = $2 AND {resource_type} = $3;",
                 resource_type = resource.resource_type_name()
             ))
-            .await?;
+            .await.context(PostgresPermissionDbError)?;
 
         tx.execute(&stmt, &[&role, &permission, &resource.uuid()?])
-            .await?;
+            .await
+            .context(PostgresPermissionDbError)?;
 
         Ok(())
     }
@@ -245,14 +299,11 @@ where
         &self,
         resource: R,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<()> {
+    ) -> Result<(), PermissionDbError> {
         let resource: ResourceId = resource.into();
 
-        ensure!(
-            self.has_permission_in_tx(resource.clone(), Permission::Owner, tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(resource.clone(), Permission::Owner, tx)
+            .await?;
 
         let stmt = tx
             .prepare(&format!(
@@ -260,29 +311,92 @@ where
             DELETE FROM permissions WHERE {resource_type} = $3;",
                 resource_type = resource.resource_type_name()
             ))
-            .await?;
+            .await
+            .context(PostgresPermissionDbError)?;
 
-        tx.execute(&stmt, &[&resource.uuid()?]).await?;
+        tx.execute(&stmt, &[&resource.uuid()?])
+            .await
+            .context(PostgresPermissionDbError)?;
 
         Ok(())
+    }
+
+    async fn list_permissions_in_tx<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        offset: u32,
+        limit: u32,
+        tx: &tokio_postgres::Transaction<'_>,
+    ) -> Result<Vec<PermissionListing>, PermissionDbError> {
+        let resource: ResourceId = resource.into();
+
+        self.ensure_permission_in_tx(resource.clone(), Permission::Owner, tx)
+            .await?;
+
+        let stmt = tx
+            .prepare(&format!(
+                "
+            SELECT 
+                r.id, r.name, p.permission 
+            FROM 
+                permissions p JOIN roles r ON (p.role_id = r.id) 
+            WHERE 
+                {resource_type} = $1
+            ORDER BY r.name ASC
+            OFFSET $2
+            LIMIT $3;",
+                resource_type = resource.resource_type_name()
+            ))
+            .await
+            .context(PostgresPermissionDbError)?;
+
+        let rows = tx
+            .query(
+                &stmt,
+                &[&resource.uuid()?, &(i64::from(offset)), &(i64::from(limit))],
+            )
+            .await
+            .context(PostgresPermissionDbError)?;
+
+        let permissions = rows
+            .into_iter()
+            .map(|row| PermissionListing {
+                resource_id: resource.clone(),
+                role: Role {
+                    id: row.get(0),
+                    name: row.get(1),
+                },
+                permission: row.get(2),
+            })
+            .collect();
+
+        Ok(permissions)
     }
 }
 
 #[async_trait]
 impl<Tls> PermissionDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn create_resource<R: Into<ResourceId> + Send + Sync>(&self, resource: R) -> Result<()> {
-        let mut conn = self.conn_pool.get().await?;
-        let tx = conn.build_transaction().start().await?;
+    async fn create_resource<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+    ) -> Result<(), PermissionDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8PermissionDbError)?;
+
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresPermissionDbError)?;
 
         self.create_resource_in_tx(resource, &tx).await?;
 
-        tx.commit().await?;
+        tx.commit().await.context(PostgresPermissionDbError)?;
 
         Ok(())
     }
@@ -291,13 +405,17 @@ where
         &self,
         resource: R,
         permission: Permission,
-    ) -> Result<bool> {
-        let mut conn = self.conn_pool.get().await?;
-        let tx = conn.build_transaction().start().await?;
+    ) -> Result<bool, PermissionDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8PermissionDbError)?;
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresPermissionDbError)?;
 
         let result = self.has_permission_in_tx(resource, permission, &tx).await?;
 
-        tx.commit().await?;
+        tx.commit().await.context(PostgresPermissionDbError)?;
 
         Ok(result)
     }
@@ -307,14 +425,35 @@ where
         &self,
         resource: R,
         permission: Permission,
-    ) -> Result<()> {
-        let mut conn = self.conn_pool.get().await?;
-        let tx = conn.build_transaction().start().await?;
+    ) -> Result<(), PermissionDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8PermissionDbError)?;
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresPermissionDbError)?;
 
-        self.ensure_permission_in_tx(resource, permission, &tx)
+        self.ensure_permission_in_tx(resource.into(), permission, &tx)
             .await?;
 
-        tx.commit().await?;
+        tx.commit().await.context(PostgresPermissionDbError)?;
+
+        Ok(())
+    }
+
+    async fn ensure_admin<R: Into<ResourceId> + Send + Sync>(
+        &self,
+    ) -> Result<(), PermissionDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8PermissionDbError)?;
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresPermissionDbError)?;
+
+        self.ensure_admin_in_tx(&tx).await?;
+
+        tx.commit().await.context(PostgresPermissionDbError)?;
 
         Ok(())
     }
@@ -324,14 +463,23 @@ where
         role: RoleId,
         resource: R,
         permission: Permission,
-    ) -> Result<()> {
-        let mut conn = self.conn_pool.get().await?;
-        let tx = conn.build_transaction().start().await?;
+    ) -> Result<(), PermissionDbError> {
+        ensure!(
+            permission != Permission::Owner,
+            CannotGrantOwnerPermissionPermissionDbError
+        );
+
+        let mut conn = self.conn_pool.get().await.context(Bb8PermissionDbError)?;
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresPermissionDbError)?;
 
         self.add_permission_in_tx(role, resource, permission, &tx)
             .await?;
 
-        tx.commit().await?;
+        tx.commit().await.context(PostgresPermissionDbError)?;
 
         Ok(())
     }
@@ -341,14 +489,18 @@ where
         role: RoleId,
         resource: R,
         permission: Permission,
-    ) -> Result<()> {
-        let mut conn = self.conn_pool.get().await?;
-        let tx = conn.build_transaction().start().await?;
+    ) -> Result<(), PermissionDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8PermissionDbError)?;
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresPermissionDbError)?;
 
         self.remove_permission_in_tx(role, resource, permission, &tx)
             .await?;
 
-        tx.commit().await?;
+        tx.commit().await.context(PostgresPermissionDbError)?;
 
         Ok(())
     }
@@ -356,14 +508,40 @@ where
     async fn remove_permissions<R: Into<ResourceId> + Send + Sync>(
         &self,
         resource: R,
-    ) -> Result<()> {
-        let mut conn = self.conn_pool.get().await?;
-        let tx = conn.build_transaction().start().await?;
+    ) -> Result<(), PermissionDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8PermissionDbError)?;
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresPermissionDbError)?;
 
         self.remove_permissions_in_tx(resource, &tx).await?;
 
-        tx.commit().await?;
+        tx.commit().await.context(PostgresPermissionDbError)?;
 
         Ok(())
+    }
+
+    async fn list_permissions<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<PermissionListing>, PermissionDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8PermissionDbError)?;
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresPermissionDbError)?;
+
+        let permissions = self
+            .list_permissions_in_tx(resource, offset, limit, &tx)
+            .await?;
+
+        tx.commit().await.context(PostgresPermissionDbError)?;
+
+        Ok(permissions)
     }
 }

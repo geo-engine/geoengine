@@ -620,7 +620,7 @@ mod tests {
         assert_eq!(
             status,
             json!({
-                "error": "TaskError",
+                "error": "Task",
                 "message": format!("TaskError: Task was already aborted by the user: {task_id}"),
             })
         );

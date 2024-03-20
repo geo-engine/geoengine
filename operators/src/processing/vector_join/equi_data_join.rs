@@ -16,8 +16,8 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::adapters::FeatureCollectionChunkMerger;
-use crate::engine::QueryProcessor;
 use crate::engine::{QueryContext, VectorQueryProcessor};
+use crate::engine::{QueryProcessor, VectorResultDescriptor};
 use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -25,6 +25,7 @@ use futures::TryStreamExt;
 
 /// Implements an inner equi-join between a `GeoFeatureCollection` stream and a `DataCollection` stream.
 pub struct EquiGeoToDataJoinProcessor<G> {
+    result_descriptor: VectorResultDescriptor,
     left_processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     right_processor: Box<dyn VectorQueryProcessor<VectorType = DataCollection>>,
     left_column: Arc<String>,
@@ -40,6 +41,7 @@ where
     FeatureCollectionRowBuilder<G>: GeoFeatureCollectionRowBuilder<G>,
 {
     pub fn new(
+        result_descriptor: VectorResultDescriptor,
         left_processor: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
         right_processor: Box<dyn VectorQueryProcessor<VectorType = DataCollection>>,
         left_column: String,
@@ -47,6 +49,7 @@ where
         right_translation_table: HashMap<String, String>,
     ) -> Self {
         Self {
+            result_descriptor,
             left_processor,
             right_processor,
             left_column: Arc::new(left_column),
@@ -354,6 +357,7 @@ where
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -396,17 +400,24 @@ where
                 .boxed(),
         )
     }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use futures::executor::block_on_stream;
 
-    use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
+    use geoengine_datatypes::collections::{
+        ChunksEqualIgnoringCacheHint, MultiPointCollection, VectorDataType,
+    };
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
     use crate::engine::{
@@ -454,6 +465,19 @@ mod tests {
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
         let processor = EquiGeoToDataJoinProcessor::new(
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: left
+                    .result_descriptor()
+                    .columns
+                    .clone()
+                    .into_iter()
+                    .chain(right.result_descriptor().columns.clone().into_iter())
+                    .collect(),
+                time: None,
+                bbox: None,
+            },
             left_processor,
             right_processor,
             left_join_column.to_string(),

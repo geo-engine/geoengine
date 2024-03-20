@@ -21,6 +21,34 @@ where
     }
 }
 
+/// A pro migration which does nothing except from applying the regular migration.
+pub struct NoProMigrationImpl<M>
+where
+    M: Migration,
+{
+    migration: M,
+}
+
+impl<M> From<M> for NoProMigrationImpl<M>
+where
+    M: Migration,
+{
+    fn from(migration: M) -> Self {
+        Self { migration }
+    }
+}
+
+#[async_trait]
+impl<M> ProMigration for NoProMigrationImpl<M>
+where
+    M: Migration,
+{
+    async fn pro_migrate(&self, _conn: &Transaction<'_>) -> Result<()> {
+        // Nothing to do
+        Ok(())
+    }
+}
+
 /// A pro migration only contains the migration itself. The `prev_version` and `version` are taken from the corresponding (free) migration.
 #[async_trait]
 pub trait ProMigration: Send + Sync {
@@ -45,6 +73,26 @@ where
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
         self.migration.migrate(tx).await?;
         self.pro_migrate(tx).await
+    }
+}
+
+/// A generic implementaion of the `Migration` trait that only applies the regular migration.
+#[async_trait]
+impl<M> Migration for NoProMigrationImpl<M>
+where
+    M: Migration,
+    Self: ProMigration,
+{
+    fn prev_version(&self) -> Option<DatabaseVersion> {
+        self.migration.prev_version()
+    }
+
+    fn version(&self) -> DatabaseVersion {
+        self.migration.version()
+    }
+
+    async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
+        self.migration.migrate(tx).await
     }
 }
 
@@ -83,7 +131,7 @@ mod tests {
 
         let mut conn = pool.get().await?;
 
-        migrate_database(&mut conn, &pro_migrations()).await?;
+        migrate_database(&mut conn, &pro_migrations(), None).await?;
 
         Ok(())
     }
@@ -105,6 +153,7 @@ mod tests {
         migrate_database(
             &mut conn,
             &[Box::new(ProMigrationImpl::from(Migration0000Initial))],
+            None,
         )
         .await?;
 
@@ -116,7 +165,7 @@ mod tests {
         conn.batch_execute(&test_data_sql).await?;
 
         // migrate to latest schema
-        migrate_database(&mut conn, &pro_migrations()).await?;
+        migrate_database(&mut conn, &pro_migrations(), None).await?;
 
         // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
         drop(conn);

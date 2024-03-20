@@ -8,7 +8,7 @@ use super::aggregators::{
 use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
-use crate::adapters::{RasterStackerAdapter, StreamBundle};
+use crate::adapters::stack_individual_aligned_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
     RasterOperator, SingleRasterSource, WorkflowOperatorPath,
@@ -158,6 +158,7 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
         let res = call_on_generic_raster_processor!(
             source_processor, p =>
             TemporalRasterAggregationProcessor::new(
+                self.result_descriptor.clone(),
                 self.aggregation_type,
                 self.window,
                 self.window_reference,
@@ -180,6 +181,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
+    result_descriptor: RasterResultDescriptor,
     aggregation_type: Aggregation,
     window: TimeStep,
     window_reference: TimeInstance,
@@ -194,10 +196,12 @@ where
             Output = RasterTile2D<P>,
             SpatialBounds = SpatialPartition2D,
             Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
     fn new(
+        result_descriptor: RasterResultDescriptor,
         aggregation_type: Aggregation,
         window: TimeStep,
         window_reference: TimeInstance,
@@ -205,6 +209,7 @@ where
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
+            result_descriptor,
             aggregation_type,
             window,
             window_reference,
@@ -252,14 +257,18 @@ where
     #[allow(clippy::too_many_lines)]
     fn create_subquery_adapter_stream_for_single_band<'a>(
         &'a self,
-        query_rect_to_answer: RasterQueryRectangle,
-        band: usize,
+        query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> futures::stream::BoxStream<'a, Result<RasterTile2D<P>>> {
-        let mut query = query_rect_to_answer;
-        query.attributes = band.into();
+    ) -> Result<futures::stream::BoxStream<'a, Result<RasterTile2D<P>>>> {
+        ensure!(
+            query.attributes.count() == 1,
+            error::InvalidBandCount {
+                expected: 1u32,
+                found: query.attributes.count()
+            }
+        );
 
-        match self.aggregation_type {
+        Ok(match self.aggregation_type {
             Aggregation::Min {
                 ignore_no_data: true,
             } => self
@@ -397,7 +406,7 @@ where
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Sum"),
-        }
+        })
     }
 }
 
@@ -408,42 +417,28 @@ where
         Output = RasterTile2D<P>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
+
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
-        if query.attributes.count() == 1 {
-            // special case of single band query requires no tile stacking
-            return Ok(self.create_subquery_adapter_stream_for_single_band(
-                query.clone(),
-                query.attributes.as_slice()[0],
-                ctx,
-            ));
-        }
+        stack_individual_aligned_raster_bands(&query, ctx, |query, ctx| async {
+            self.create_subquery_adapter_stream_for_single_band(query, ctx)
+        })
+        .await
+    }
 
-        // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
-        let band_streams = query
-            .attributes
-            .as_slice()
-            .iter()
-            .map(|band| StreamBundle {
-                stream: self.create_subquery_adapter_stream_for_single_band(
-                    query.clone(),
-                    *band,
-                    ctx,
-                ),
-                bands: 1,
-            })
-            .collect::<Vec<_>>();
-
-        Ok(Box::pin(RasterStackerAdapter::new(band_streams)?))
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
     }
 }
 
@@ -467,7 +462,7 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{
             raster_stacker::{RasterStacker, RasterStackerParams},
-            Expression, ExpressionParams, ExpressionSources,
+            Expression, ExpressionParams,
         },
     };
 
@@ -2004,8 +1999,8 @@ mod tests {
                         output_measurement: Some(Measurement::Unitless),
                         map_no_data: true,
                     },
-                    sources: ExpressionSources::new_a(
-                        MockRasterSource {
+                    sources: SingleRasterSource {
+                        raster: MockRasterSource {
                             params: MockRasterSourceParams {
                                 data: make_raster(),
                                 result_descriptor: RasterResultDescriptor {
@@ -2019,7 +2014,7 @@ mod tests {
                             },
                         }
                         .boxed(),
-                    ),
+                    },
                 }
                 .boxed(),
             },
@@ -2788,7 +2783,7 @@ mod tests {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
             time_interval: TimeInterval::new_unchecked(0, 30),
             spatial_resolution: SpatialResolution::one(),
-            attributes: [0, 1].into(),
+            attributes: [0, 1].try_into().unwrap(),
         };
         let query_ctx = MockQueryContext::test_default();
 

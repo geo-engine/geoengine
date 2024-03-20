@@ -438,6 +438,7 @@ impl InitializedVectorOperator for InitializedOgrSource {
         Ok(match self.result_descriptor.data_type {
             VectorDataType::Data => TypedVectorQueryProcessor::Data(
                 OgrSourceProcessor::new(
+                    self.result_descriptor.clone(),
                     self.state.dataset_information.clone(),
                     self.state.attribute_filters.clone(),
                 )
@@ -445,6 +446,7 @@ impl InitializedVectorOperator for InitializedOgrSource {
             ),
             VectorDataType::MultiPoint => TypedVectorQueryProcessor::MultiPoint(
                 OgrSourceProcessor::new(
+                    self.result_descriptor.clone(),
                     self.state.dataset_information.clone(),
                     self.state.attribute_filters.clone(),
                 )
@@ -452,6 +454,7 @@ impl InitializedVectorOperator for InitializedOgrSource {
             ),
             VectorDataType::MultiLineString => TypedVectorQueryProcessor::MultiLineString(
                 OgrSourceProcessor::new(
+                    self.result_descriptor.clone(),
                     self.state.dataset_information.clone(),
                     self.state.attribute_filters.clone(),
                 )
@@ -459,6 +462,7 @@ impl InitializedVectorOperator for InitializedOgrSource {
             ),
             VectorDataType::MultiPolygon => TypedVectorQueryProcessor::MultiPolygon(
                 OgrSourceProcessor::new(
+                    self.result_descriptor.clone(),
                     self.state.dataset_information.clone(),
                     self.state.attribute_filters.clone(),
                 )
@@ -480,6 +484,7 @@ pub struct OgrSourceProcessor<G>
 where
     G: Geometry + ArrowTyped,
 {
+    result_descriptor: VectorResultDescriptor,
     dataset_information:
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
     attribute_filters: Vec<AttributeFilter>,
@@ -491,12 +496,14 @@ where
     G: Geometry + ArrowTyped,
 {
     pub fn new(
+        result_descriptor: VectorResultDescriptor,
         dataset_information: Box<
             dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
         >,
         attribute_filters: Vec<AttributeFilter>,
     ) -> Self {
         Self {
+            result_descriptor,
             dataset_information,
             attribute_filters,
             _collection_type: Default::default(),
@@ -513,6 +520,7 @@ where
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -528,6 +536,10 @@ where
         .await?
         .merge_chunks(ctx.chunk_byte_size().into()) // rechunk the data if necessary TODO: remove when source produces the right chunk sizes
         .boxed())
+    }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
     }
 }
 
@@ -751,7 +763,7 @@ where
                 OgrDatasetIterator::new(&dataset_information, &query_rectangle, attribute_filters)?;
 
             let (data_types, feature_collection_builder) =
-                Self::initialize_types_and_builder(&dataset_information);
+                Self::initialize_types_and_builder(&dataset_information)?;
 
             let dataset_information = Arc::new(dataset_information);
             let time_extractor = Self::initialize_time_extractors(dataset_information.time.clone());
@@ -977,47 +989,37 @@ where
 
     fn initialize_types_and_builder(
         dataset_information: &OgrSourceDataset,
-    ) -> (
+    ) -> Result<(
         HashMap<String, FeatureDataType>,
         FeatureCollectionBuilder<G>,
-    ) {
+    )> {
         let mut data_types = HashMap::new();
         let mut feature_collection_builder = FeatureCollection::<G>::builder();
         // TODO: what to do if there is nothing specified?
         if let Some(ref column_spec) = dataset_information.columns {
-            // TODO: error handling instead of unwrap
             for attribute in &column_spec.int {
                 data_types.insert(attribute.clone(), FeatureDataType::Int);
-                feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Int)
-                    .unwrap();
+                feature_collection_builder.add_column(attribute.clone(), FeatureDataType::Int)?;
             }
             for attribute in &column_spec.float {
                 data_types.insert(attribute.clone(), FeatureDataType::Float);
-                feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Float)
-                    .unwrap();
+                feature_collection_builder.add_column(attribute.clone(), FeatureDataType::Float)?;
             }
             for attribute in &column_spec.text {
                 data_types.insert(attribute.clone(), FeatureDataType::Text);
-                feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Text)
-                    .unwrap();
+                feature_collection_builder.add_column(attribute.clone(), FeatureDataType::Text)?;
             }
             for attribute in &column_spec.bool {
                 data_types.insert(attribute.clone(), FeatureDataType::Bool);
-                feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::Bool)
-                    .unwrap();
+                feature_collection_builder.add_column(attribute.clone(), FeatureDataType::Bool)?;
             }
             for attribute in &column_spec.datetime {
                 data_types.insert(attribute.clone(), FeatureDataType::DateTime);
                 feature_collection_builder
-                    .add_column(attribute.clone(), FeatureDataType::DateTime)
-                    .unwrap();
+                    .add_column(attribute.clone(), FeatureDataType::DateTime)?;
             }
         }
-        (data_types, feature_collection_builder)
+        Ok((data_types, feature_collection_builder))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2054,19 +2056,21 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), vec![]);
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -2107,19 +2111,21 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), vec![]);
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -2153,19 +2159,22 @@ mod tests {
             attribute_query: None,
             cache_ttl: CacheTtlSeconds::default(),
         };
+
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), vec![]);
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -2204,19 +2213,22 @@ mod tests {
             attribute_query: None,
             cache_ttl: CacheTtlSeconds::default(),
         };
+
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: Default::default(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), vec![]);
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -3984,44 +3996,46 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "a".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "b".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "c".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::Data,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "a".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "b".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "c".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info), vec![]);
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(rd, Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -4104,44 +4118,46 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "a".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "b".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "c".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "a".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "b".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "c".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<MultiPoint>::new(Box::new(info), vec![]);
+        let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -5548,44 +5564,46 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "a".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "b".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "c".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "a".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "b".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "c".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
-        let query_processor = OgrSourceProcessor::<NoGeometry>::new(Box::new(info), vec![]);
+        let query_processor = OgrSourceProcessor::<NoGeometry>::new(rd, Box::new(info), vec![]);
 
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
@@ -5666,44 +5684,47 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "a".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "b".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "c".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "a".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "b".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "c".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            rd,
             Box::new(info),
             vec![AttributeFilter {
                 attribute: "c".to_owned(),
@@ -5784,44 +5805,47 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "a".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "b".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "c".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "a".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "b".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "c".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            rd,
             Box::new(info),
             vec![AttributeFilter {
                 attribute: "a".to_owned(),
@@ -5900,44 +5924,47 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "a".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "b".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "c".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "a".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "b".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "c".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            rd,
             Box::new(info),
             vec![AttributeFilter {
                 attribute: "b".to_owned(),
@@ -6020,44 +6047,47 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "d".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "b".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "c".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "d".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "b".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "c".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            rd,
             Box::new(info),
             vec![AttributeFilter {
                 attribute: "d".to_owned(),
@@ -6136,44 +6166,47 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "foo".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "b".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "c".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "foo".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "b".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "c".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            rd,
             Box::new(info),
             vec![AttributeFilter {
                 attribute: "a".to_owned(),
@@ -6264,44 +6297,47 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "foo".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "b".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "c".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "foo".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "b".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "c".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            rd,
             Box::new(info),
             vec![
                 AttributeFilter {
@@ -6389,44 +6425,47 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "foo".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "b".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "c".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "foo".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "b".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "c".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            rd,
             Box::new(info),
             vec![AttributeFilter {
                 attribute: "a".to_owned(),
@@ -6504,37 +6543,40 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "natlscale".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "name".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "natlscale".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "name".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            rd,
             Box::new(info),
             vec![AttributeFilter {
                 attribute: "natlscale".to_owned(),
@@ -6595,37 +6637,40 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "natlscale".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "name".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "natlscale".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "name".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            rd,
             Box::new(info),
             vec![AttributeFilter {
                 attribute: "natlscale".to_owned(),
@@ -6689,37 +6734,40 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "natlscale".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "name".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "natlscale".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "name".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            rd,
             Box::new(info),
             vec![AttributeFilter {
                 attribute: "natlscale".to_owned(),
@@ -6780,37 +6828,40 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "natlscale".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "name".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "natlscale".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "name".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            rd,
             Box::new(info),
             vec![AttributeFilter {
                 attribute: "natlscale".to_owned(),
@@ -6871,37 +6922,40 @@ mod tests {
             cache_ttl: CacheTtlSeconds::max(),
         };
 
+        let rd = VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: [
+                (
+                    "natlscale".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+                (
+                    "name".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Text,
+                        measurement: Measurement::Unitless,
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            time: None,
+            bbox: None,
+        };
+
         let info = StaticMetaData {
             loading_info: dataset_information,
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                columns: [
-                    (
-                        "natlscale".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Float,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
-                        "name".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                ]
-                .iter()
-                .cloned()
-                .collect(),
-                time: None,
-                bbox: None,
-            },
+            result_descriptor: rd.clone(),
             phantom: Default::default(),
         };
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(
+            rd,
             Box::new(info),
             vec![AttributeFilter {
                 attribute: "natlscale".to_owned(),

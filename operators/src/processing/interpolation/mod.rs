@@ -77,14 +77,6 @@ impl RasterOperator for Interpolation {
         let raster_source = initialized_sources.raster;
         let in_descriptor = raster_source.result_descriptor();
 
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            in_descriptor.bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: Interpolation::TYPE_NAME
-            }
-        );
-
         ensure!(
             matches!(self.params.input_resolution, InputResolution::Value(_))
                 || in_descriptor.resolution.is_some(),
@@ -138,12 +130,14 @@ impl InitializedRasterOperator for InitializedInterpolation {
             source_processor, p => match self.interpolation_method  {
                 InterpolationMethod::NearestNeighbor => InterploationProcessor::<_,_, NearestNeighbor>::new(
                         p,
+                        self.result_descriptor.clone(),
                         self.input_resolution,
                         self.tiling_specification,
                     ).boxed()
                     .into(),
                 InterpolationMethod::BiLinear =>InterploationProcessor::<_,_, Bilinear>::new(
                         p,
+                        self.result_descriptor.clone(),
                         self.input_resolution,
                         self.tiling_specification,
                     ).boxed()
@@ -170,6 +164,7 @@ where
     I: InterpolationAlgorithm<P>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     input_resolution: SpatialResolution,
     tiling_specification: TilingSpecification,
     interpolation: PhantomData<I>,
@@ -183,11 +178,13 @@ where
 {
     pub fn new(
         source: Q,
+        result_descriptor: RasterResultDescriptor,
         input_resolution: SpatialResolution,
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
             source,
+            result_descriptor,
             input_resolution,
             tiling_specification,
             interpolation: PhantomData,
@@ -202,6 +199,7 @@ where
         Output = RasterTile2D<P>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
     P: Pixel,
     I: InterpolationAlgorithm<P>,
@@ -209,6 +207,7 @@ where
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -241,6 +240,10 @@ where
         .filter_and_fill(
             crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
         ))
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -287,7 +290,7 @@ where
         tile_info: TileInformation,
         _query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
-        band: usize,
+        band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         // enlarge the spatial bounds in order to have the neighbor pixels for the interpolation
         let spatial_bounds = tile_info.spatial_partition();
@@ -301,7 +304,7 @@ where
             spatial_bounds,
             time_interval: TimeInterval::new_instant(start_time)?,
             spatial_resolution: self.input_resolution,
-            attributes: band.into(),
+            attributes: band_idx.into(),
         }))
     }
 
@@ -465,10 +468,11 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor,
+            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            RasterOperator, RasterResultDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
+        processing::{RasterStacker, RasterStackerParams},
     };
 
     #[tokio::test]
@@ -668,6 +672,120 @@ mod tests {
         for tile in result {
             // dbg!(tile.time, tile.grid_array);
             assert_eq!(tile.cache_hint.expires(), cache_hint.expires());
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_interpolates_multiple_bands() -> Result<()> {
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [2, 2].into(),
+        ));
+
+        let operator = Interpolation {
+            params: InterpolationParams {
+                interpolation: InterpolationMethod::NearestNeighbor,
+                input_resolution: InputResolution::Value(SpatialResolution::one()),
+            },
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![
+                            make_raster(CacheHint::max_duration()),
+                            make_raster(CacheHint::max_duration()),
+                        ],
+                    },
+                }
+                .boxed(),
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .await?;
+
+        let processor = operator.query_processor()?.get_i8().unwrap();
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 20),
+            spatial_resolution: SpatialResolution::zero_point_five(),
+            attributes: [0, 1].try_into().unwrap(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        let result_stream = processor.query(query_rect, &query_ctx).await?;
+
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>()?;
+
+        let mut times: Vec<TimeInterval> = vec![TimeInterval::new_unchecked(0, 10); 8];
+        times.append(&mut vec![TimeInterval::new_unchecked(10, 20); 8]);
+
+        let times = times
+            .clone()
+            .into_iter()
+            .zip(times)
+            .flat_map(|(a, b)| vec![a, b])
+            .collect::<Vec<_>>();
+
+        let data = vec![
+            vec![1, 2, 5, 6],
+            vec![2, 3, 6, 7],
+            vec![3, 4, 7, 8],
+            vec![4, 0, 8, 0],
+            vec![5, 6, 0, 0],
+            vec![6, 7, 0, 0],
+            vec![7, 8, 0, 0],
+            vec![8, 0, 0, 0],
+            vec![8, 7, 4, 3],
+            vec![7, 6, 3, 2],
+            vec![6, 5, 2, 1],
+            vec![5, 0, 1, 0],
+            vec![4, 3, 0, 0],
+            vec![3, 2, 0, 0],
+            vec![2, 1, 0, 0],
+            vec![1, 0, 0, 0],
+        ];
+        let data = data
+            .clone()
+            .into_iter()
+            .zip(data)
+            .flat_map(|(a, b)| vec![a, b])
+            .collect::<Vec<_>>();
+
+        let valid = vec![
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true, false, true, false],
+            vec![true, true, false, false],
+            vec![true, true, false, false],
+            vec![true, true, false, false],
+            vec![true, false, false, false],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true, false, true, false],
+            vec![true, true, false, false],
+            vec![true, true, false, false],
+            vec![true, true, false, false],
+            vec![true, false, false, false],
+        ];
+        let valid = valid
+            .clone()
+            .into_iter()
+            .zip(valid)
+            .flat_map(|(a, b)| vec![a, b])
+            .collect::<Vec<_>>();
+
+        for (i, tile) in result.into_iter().enumerate() {
+            let tile = tile.into_materialized_tile();
+            assert_eq!(tile.time, times[i]);
+            assert_eq!(tile.grid_array.inner_grid.data, data[i]);
+            assert_eq!(tile.grid_array.validity_mask.data, valid[i]);
         }
 
         Ok(())

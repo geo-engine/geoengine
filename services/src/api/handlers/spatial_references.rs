@@ -155,7 +155,10 @@ fn proj_proj_string(srs_string: &str) -> Option<String> {
     }
 }
 
-#[allow(clippy::unused_async)] // the function signature of request handlers requires it
+#[allow(
+    clippy::unused_async, // the function signature of request handlers requires it
+    clippy::no_effect_underscore_binding // need `_session` to quire authentication
+)]
 #[utoipa::path(
     tag = "Spatial References",
     get,
@@ -246,8 +249,7 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
         .context(error::DataType)?;
 
     let axis_labels = json.coordinate_system.axis.as_ref().map(|axes| {
-        let a0 = axes.get(0).map_or(String::new(), |a| a.name.clone());
-        let a1 = axes.get(1).map_or(String::new(), |a| a.name.clone());
+        let [a0, a1] = [0, 1].map(|i| axes.get(i).map_or(String::new(), |a| a.name.clone()));
 
         match json.axis_order() {
             None | Some(AxisOrder::EastNorth) => (a0, a1),

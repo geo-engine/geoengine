@@ -1,5 +1,8 @@
 use gdal::errors::GdalError;
-use geoengine_datatypes::{dataset::DataProviderId, error::ErrorSource};
+use geoengine_datatypes::{
+    dataset::{DataId, DataProviderId},
+    error::ErrorSource,
+};
 use snafu::Snafu;
 use std::path::PathBuf;
 
@@ -84,7 +87,7 @@ pub enum NetCdfCf4DProviderError {
         source: geoengine_datatypes::error::Error,
     },
     InvalidExternalDataId {
-        provider: DataProviderId,
+        data_id: DataId,
     },
     InvalidDataIdLength {
         length: usize,
@@ -134,6 +137,9 @@ pub enum NetCdfCf4DProviderError {
     CannotParseColorizer {
         source: serde_json::Error,
     },
+    CannotCreateColorizer {
+        source: Box<dyn ErrorSource>,
+    },
     CannotCreateFallbackColorizer {
         source: geoengine_datatypes::error::Error,
     },
@@ -155,6 +161,23 @@ pub enum NetCdfCf4DProviderError {
     CannotCreateOverviews {
         source: Box<dyn ErrorSource>,
     },
+
+    #[snafu(display("For a refresh, all overview files for `{dataset}` must be there, but {missing} is missing.", dataset = dataset.display(), missing = missing.display()))]
+    OverviewMissingForRefresh {
+        dataset: PathBuf,
+        missing: PathBuf,
+    },
+
+    #[snafu(display("Cannot find overviews for `{dataset}`", dataset = dataset.display()))]
+    MissingOverviews {
+        dataset: PathBuf,
+    },
+
+    #[snafu(display("New metadata for `{dataset}` do not match group and entity structure. Please recreate the overviews.", dataset = dataset.display()))]
+    RefreshedMetadataDoNotMatch {
+        dataset: PathBuf,
+    },
+
     CannotWriteMetadataFile {
         source: Box<dyn ErrorSource>,
     },
@@ -167,9 +190,16 @@ pub enum NetCdfCf4DProviderError {
     CannotOpenNetCdfSubdataset {
         source: Box<dyn ErrorSource>,
     },
+
     CannotGenerateLoadingInfo {
         source: Box<dyn ErrorSource>,
     },
+
+    #[snafu(display("Cannot store loading info in database: {source}"))]
+    CannotStoreLoadingInfo {
+        source: Box<dyn ErrorSource>,
+    },
+
     InvalidCollectionId {
         id: String,
     },
@@ -195,9 +225,7 @@ pub enum NetCdfCf4DProviderError {
     Internal {
         source: Box<dyn ErrorSource>,
     },
-    CannotCreateInProgressFlag {
-        source: Box<dyn ErrorSource>,
-    }, //
+    CannotCreateInProgressFlag,
     CannotRemoveInProgressFlag {
         source: Box<dyn ErrorSource>,
     },
@@ -205,13 +233,45 @@ pub enum NetCdfCf4DProviderError {
         path: String,
     },
     CannotRemoveOverviewsWhileCreationIsInProgress,
+
+    #[snafu(display("NetCdfCf provider cannot remove overviews: {source}"))]
     CannotRemoveOverviews {
         source: Box<dyn ErrorSource>,
     },
-    #[snafu(display("NetCdfCf provider cannot create overviews"))]
+    #[snafu(display("NetCdfCf provider cannot create overviews for `{dataset}`: {source}", dataset = dataset.display()))]
     CannotCreateOverview {
         dataset: PathBuf,
         source: Box<dyn ErrorSource>,
     },
     UnsupportedMetaDataDefinition,
+
+    #[snafu(display("Cannot serialize layer definition: {source}"))]
+    CannotSerializeLayer {
+        source: serde_json::Error,
+    },
+
+    #[snafu(display("Cannot serialize layer collection definition: {source}"))]
+    CannotSerializeLayerCollection {
+        source: serde_json::Error,
+    },
+
+    #[snafu(display("Cannot get database connection: {source}"))]
+    DatabaseConnection {
+        source: Box<dyn ErrorSource>,
+    },
+
+    #[snafu(display("Cannot start database transaction: {source}"))]
+    DatabaseTransaction {
+        source: Box<dyn ErrorSource>,
+    },
+
+    #[snafu(display("Cannot commit overview to database: {source}"))]
+    DatabaseTransactionCommit {
+        source: Box<dyn ErrorSource>,
+    },
+
+    #[snafu(display("Unexpected execution error: Please contact the system administrator"))]
+    UnexpectedExecution {
+        source: Box<dyn ErrorSource>,
+    },
 }

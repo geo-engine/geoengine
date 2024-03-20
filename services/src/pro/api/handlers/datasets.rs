@@ -1,12 +1,15 @@
 use crate::{
-    api::handlers::datasets::{
-        adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
-        delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
-        suggest_meta_data_handler,
-    },
-    api::model::{
-        responses::datasets::{errors::*, DatasetNameResponse},
-        services::{CreateDataset, DataPath, DatasetDefinition},
+    api::{
+        handlers::datasets::{
+            adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
+            delete_dataset_handler, get_dataset_handler, get_loading_info_handler,
+            list_datasets_handler, list_volumes_handler, suggest_meta_data_handler,
+            update_dataset_handler, update_dataset_symbology_handler,
+        },
+        model::{
+            responses::datasets::{errors::*, DatasetNameResponse},
+            services::{CreateDataset, DataPath, DatasetDefinition},
+        },
     },
     contexts::{ApplicationContext, SessionContext},
     datasets::{
@@ -21,6 +24,7 @@ use crate::{
     util::config::{get_config_element, Data},
 };
 use actix_web::{web, FromRequest};
+use geoengine_datatypes::error::BoxedResultExt;
 use snafu::ResultExt;
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
@@ -35,8 +39,17 @@ where
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
+                web::resource("/{dataset}/loadingInfo")
+                    .route(web::get().to(get_loading_info_handler::<C>)),
+            )
+            .service(
+                web::resource("/{dataset}/symbology")
+                    .route(web::put().to(update_dataset_symbology_handler::<C>)),
+            )
+            .service(
                 web::resource("/{dataset}")
                     .route(web::get().to(get_dataset_handler::<C>))
+                    .route(web::post().to(update_dataset_handler::<C>))
                     .route(web::delete().to(delete_dataset_handler::<C>)),
             )
             .service(web::resource("").route(web::post().to(create_dataset_handler::<C>))), // must come last to not match other routes
@@ -104,10 +117,9 @@ where
         .context(CannotResolveUploadFilePath)?;
 
     let db = app_ctx.session_context(session).db();
-    let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let dataset = db
-        .add_dataset(definition.properties.into(), meta_data)
+        .add_dataset(definition.properties.into(), definition.meta_data.into())
         .await
         .context(DatabaseAccess)?;
 
@@ -117,10 +129,12 @@ where
         Permission::Read,
     )
     .await
+    .boxed_context(crate::error::PermissionDb)
     .context(DatabaseAccess)?;
 
     db.add_permission(Role::anonymous_role_id(), dataset.id, Permission::Read)
         .await
+        .boxed_context(crate::error::PermissionDb)
         .context(DatabaseAccess)?;
 
     Ok(web::Json(dataset.name.into()))
@@ -391,6 +405,7 @@ mod tests {
                     source_operator: "GdalSource".to_string(),
                     symbology: None,
                     provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
             },
@@ -438,7 +453,11 @@ mod tests {
             construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
 
         let db = ctx.db();
-        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
 
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
@@ -476,6 +495,7 @@ mod tests {
                     source_operator: "GdalSource".to_string(),
                     symbology: None,
                     provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
             },
@@ -495,7 +515,11 @@ mod tests {
         let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
-        let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await.unwrap();
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
 
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 

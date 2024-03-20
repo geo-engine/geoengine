@@ -1,5 +1,7 @@
 use super::listing::Provenance;
+use super::postgres::DatasetMetaData;
 use super::{DatasetIdAndName, DatasetName};
+use crate::api::model::services::UpdateDataset;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
@@ -7,7 +9,7 @@ use crate::error;
 use crate::error::Result;
 use crate::projects::Symbology;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::{MetaData, TypedResultDescriptor};
 use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf};
@@ -20,9 +22,6 @@ use std::fmt::Debug;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
-
-pub const DATASET_DB_LAYER_PROVIDER_ID: DataProviderId =
-    DataProviderId::from_u128(0xac50_ed0d_c9a0_41f8_9ce8_35fc_9e38_299b);
 
 pub const DATASET_DB_ROOT_COLLECTION_ID: Uuid =
     Uuid::from_u128(0x5460_73b6_d535_4205_b601_9967_5c9f_6dd7);
@@ -38,6 +37,7 @@ pub struct Dataset {
     pub source_operator: String,
     pub symbology: Option<Symbology>,
     pub provenance: Option<Vec<Provenance>>,
+    pub tags: Option<Vec<String>>,
 }
 
 impl Dataset {
@@ -47,7 +47,7 @@ impl Dataset {
             name: self.name.clone(),
             display_name: self.display_name.clone(),
             description: self.description.clone(),
-            tags: vec![], // TODO
+            tags: self.tags.clone().unwrap_or_default(), // TODO: figure out if we want to use Option<Vec<String>> everywhere or if Vec<String> is fine
             source_operator: self.source_operator.clone(),
             result_descriptor: self.result_descriptor.clone(),
             symbology: self.symbology.clone(),
@@ -64,6 +64,7 @@ pub struct AddDataset {
     pub source_operator: String,
     pub symbology: Option<Symbology>,
     pub provenance: Option<Vec<Provenance>>,
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
@@ -79,7 +80,8 @@ pub struct DatasetDefinition {
     "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
     "datasetName": "Germany Border (auto)",
     "datasetDescription": "The Outline of Germany (auto detected format)",
-    "mainFile": "germany_polygon.gpkg"
+    "mainFile": "germany_polygon.gpkg",
+    "tags": ["area"]
 }))]
 pub struct AutoCreateDataset {
     pub upload: UploadId,
@@ -89,11 +91,24 @@ pub struct AutoCreateDataset {
     #[validate(custom = "validate_main_file")]
     pub main_file: String,
     pub layer_name: Option<String>,
+    #[validate(custom = "validate_tags")]
+    pub tags: Option<Vec<String>>,
 }
 
-fn validate_main_file(main_file: &String) -> Result<(), ValidationError> {
+fn validate_main_file(main_file: &str) -> Result<(), ValidationError> {
     if main_file.is_empty() || main_file.contains('/') || main_file.contains("..") {
         return Err(ValidationError::new("Invalid upload file name"));
+    }
+
+    Ok(())
+}
+
+pub fn validate_tags(tags: &Vec<String>) -> Result<(), ValidationError> {
+    for tag in tags {
+        if tag.is_empty() || tag.contains('/') || tag.contains("..") || tag.contains(' ') {
+            // TODO: more validation
+            return Err(ValidationError::new("Invalid tag"));
+        }
     }
 
     Ok(())
@@ -133,6 +148,40 @@ pub enum MetaDataDefinition {
     GdalStatic(GdalMetaDataStatic),
     GdalMetadataNetCdfCf(GdalMetadataNetCdfCf),
     GdalMetaDataList(GdalMetaDataList),
+}
+
+impl From<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>
+    for MetaDataDefinition
+{
+    fn from(
+        meta_data: StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+    ) -> Self {
+        MetaDataDefinition::OgrMetaData(meta_data)
+    }
+}
+
+impl From<GdalMetaDataRegular> for MetaDataDefinition {
+    fn from(meta_data: GdalMetaDataRegular) -> Self {
+        MetaDataDefinition::GdalMetaDataRegular(meta_data)
+    }
+}
+
+impl From<GdalMetaDataStatic> for MetaDataDefinition {
+    fn from(meta_data: GdalMetaDataStatic) -> Self {
+        MetaDataDefinition::GdalStatic(meta_data)
+    }
+}
+
+impl From<GdalMetadataNetCdfCf> for MetaDataDefinition {
+    fn from(meta_data: GdalMetadataNetCdfCf) -> Self {
+        MetaDataDefinition::GdalMetadataNetCdfCf(meta_data)
+    }
+}
+
+impl From<GdalMetaDataList> for MetaDataDefinition {
+    fn from(meta_data: GdalMetaDataList) -> Self {
+        MetaDataDefinition::GdalMetaDataList(meta_data)
+    }
 }
 
 impl MetaDataDefinition {
@@ -192,30 +241,57 @@ impl MetaDataDefinition {
                 .context(error::Operator),
         }
     }
+
+    pub fn to_typed_metadata(&self) -> DatasetMetaData {
+        match self {
+            MetaDataDefinition::MockMetaData(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+            MetaDataDefinition::OgrMetaData(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+            MetaDataDefinition::GdalMetaDataRegular(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+            MetaDataDefinition::GdalStatic(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+            MetaDataDefinition::GdalMetadataNetCdfCf(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+            MetaDataDefinition::GdalMetaDataList(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
+        }
+    }
 }
 
 /// Handling of datasets provided by geo engine internally, staged and by external providers
 #[async_trait]
 pub trait DatasetDb: DatasetStore + DatasetProvider + UploadDb + Send + Sync {}
 
-/// Defines the type of meta data a `DatasetDB` is able to store
-pub trait DatasetStorer: Send + Sync {
-    type StorageType: Send + Sync;
-}
-
-/// Allow storage of meta data of a particular storage type, e.g. `HashMapStorable` meta data for
-/// `HashMapDatasetDB`
+/// Storage of datasets
 #[async_trait]
-pub trait DatasetStore: DatasetStorer {
+pub trait DatasetStore {
     async fn add_dataset(
         &self,
         dataset: AddDataset,
-        meta_data: Self::StorageType,
+        meta_data: MetaDataDefinition,
     ) -> Result<DatasetIdAndName>;
 
-    async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
+    async fn update_dataset(&self, dataset: DatasetId, update: UpdateDataset) -> Result<()>;
 
-    /// turn given `meta` data definition into the corresponding `StorageType` for the `DatasetStore`
-    /// for use in the `add_dataset` method
-    fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType;
+    async fn update_dataset_symbology(
+        &self,
+        dataset: DatasetId,
+        symbology: &Symbology,
+    ) -> Result<()>;
+
+    async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
 }

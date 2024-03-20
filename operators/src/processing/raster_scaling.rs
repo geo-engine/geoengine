@@ -1,8 +1,7 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    OperatorName, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -20,7 +19,6 @@ use num::FromPrimitive;
 use num_traits::AsPrimitive;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -99,14 +97,6 @@ impl RasterOperator for RasterScaling {
         let input = self.sources.initialize_sources(path, context).await?;
         let in_desc = input.raster.result_descriptor();
 
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            in_desc.bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: RasterScaling::TYPE_NAME
-            }
-        );
-
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: in_desc.data_type,
@@ -114,12 +104,20 @@ impl RasterOperator for RasterScaling {
             bbox: in_desc.bbox,
             time: in_desc.time,
             resolution: in_desc.resolution,
-            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                in_desc.bands[0].name.clone(),
-                self.params
-                    .output_measurement
-                    .unwrap_or_else(|| in_desc.bands[0].measurement.clone()),
-            )])?,
+            bands: in_desc
+                .bands
+                .iter()
+                .map(|b| {
+                    RasterBandDescriptor::new(
+                        b.name.clone(),
+                        self.params
+                            .output_measurement
+                            .clone()
+                            .unwrap_or_else(|| b.measurement.clone()),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .try_into()?,
         };
 
         let initialized_operator = InitializedRasterScalingOperator {
@@ -150,10 +148,10 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
 
         let res = match scaling_mode {
             ScalingMode::SubOffsetDivSlope => {
-                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, CheckedSubThenDivTransformation>(slope, offset,  source_proc)) })
+                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, CheckedSubThenDivTransformation>(self.result_descriptor.clone(), slope, offset,  source_proc)) })
             }
             ScalingMode::MulSlopeAddOffset => {
-                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, CheckedMulThenAddTransformation>(slope, offset,  source_proc)) })
+                call_on_generic_raster_processor!(source, source_proc => { TypedRasterQueryProcessor::from(create_boxed_processor::<_,_, CheckedMulThenAddTransformation>(self.result_descriptor.clone(), slope, offset,  source_proc)) })
             }
         };
 
@@ -170,12 +168,14 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     slope: SlopeOffsetSelection,
     offset: SlopeOffsetSelection,
     _transformation: PhantomData<S>,
 }
 
 fn create_boxed_processor<Q, P, S>(
+    result_descriptor: RasterResultDescriptor,
     slope: SlopeOffsetSelection,
     offset: SlopeOffsetSelection,
     source: Q,
@@ -186,7 +186,8 @@ where
     f64: AsPrimitive<P>,
     S: Send + Sync + 'static + ScalingTransformation<P>,
 {
-    RasterTransformationProcessor::<Q, P, S>::create(slope, offset, source).boxed()
+    RasterTransformationProcessor::<Q, P, S>::create(result_descriptor, slope, offset, source)
+        .boxed()
 }
 
 impl<Q, P, S> RasterTransformationProcessor<Q, P, S>
@@ -197,12 +198,14 @@ where
     S: Send + Sync + 'static + ScalingTransformation<P>,
 {
     pub fn create(
+        result_descriptor: RasterResultDescriptor,
         slope: SlopeOffsetSelection,
         offset: SlopeOffsetSelection,
         source: Q,
     ) -> RasterTransformationProcessor<Q, P, S> {
         RasterTransformationProcessor {
             source,
+            result_descriptor,
             slope,
             offset,
             _transformation: PhantomData,
@@ -259,6 +262,10 @@ where
         let rs = src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
     }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[cfg(test)]
@@ -277,7 +284,7 @@ mod tests {
     };
 
     use crate::{
-        engine::{ChunkByteSize, MockExecutionContext},
+        engine::{ChunkByteSize, MockExecutionContext, RasterBandDescriptors},
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 

@@ -401,7 +401,10 @@ impl RawFeatureCollectionBuilder {
         let mut arrays: Vec<ArrayRef> = Vec::with_capacity(self.types.len() + 2);
 
         for (column_name, array) in self.column_arrays.drain() {
-            let column_type = self.types.get(&column_name).unwrap(); // column must exist
+            let column_type = self
+                .types
+                .get(&column_name)
+                .expect("column should exist because `types` and `column_arrays` are kept in sync");
             columns.push(Field::new(
                 &column_name,
                 column_type.arrow_data_type(),
@@ -523,8 +526,8 @@ mod tests {
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }, {
@@ -538,8 +541,8 @@ mod tests {
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }, {
@@ -550,8 +553,8 @@ mod tests {
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }]
@@ -681,8 +684,8 @@ mod tests {
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }, {
@@ -697,8 +700,8 @@ mod tests {
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }]
@@ -774,8 +777,8 @@ mod tests {
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }, {
@@ -793,8 +796,8 @@ mod tests {
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }]

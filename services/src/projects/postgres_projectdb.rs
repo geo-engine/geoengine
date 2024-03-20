@@ -288,7 +288,7 @@ pub async fn update_project(
 #[async_trait]
 impl<Tls> ProjectDb for PostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -361,8 +361,6 @@ where
 
     #[allow(clippy::too_many_lines)]
     async fn update_project(&self, update: UpdateProject) -> Result<(), ProjectDbError> {
-        let update = update;
-
         let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
         let trans = conn

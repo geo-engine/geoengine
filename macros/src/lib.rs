@@ -21,7 +21,7 @@ pub fn test(
     attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    match testing::test(attr.into(), item.clone().into()) {
+    match testing::test(attr.into(), &item.clone().into()) {
         Ok(ts) => ts.into(),
         Err(e) => token_stream_with_error(item.into(), e).into(),
     }
@@ -51,7 +51,7 @@ pub fn pro_test(
     attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    match pro::test(attr.into(), item.clone().into()) {
+    match pro::test(attr.into(), &item.clone().into()) {
         Ok(ts) => ts.into(),
         Err(e) => token_stream_with_error(item.into(), e).into(),
     }

@@ -12,7 +12,7 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{
     QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
-    VectorQueryProcessor,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::processing::raster_vector_join::aggregator::{
     Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
@@ -28,7 +28,9 @@ use super::{create_feature_aggregator, FeatureAggregationMethod};
 
 pub struct RasterVectorAggregateJoinProcessor<G> {
     collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+    result_descriptor: VectorResultDescriptor,
     raster_processors: Vec<TypedRasterQueryProcessor>,
+    raster_bands: Vec<u32>,
     column_names: Vec<String>,
     feature_aggregation: FeatureAggregationMethod,
     feature_aggregation_ignore_no_data: bool,
@@ -41,9 +43,12 @@ where
     G: Geometry + ArrowTyped,
     FeatureCollection<G>: PixelCoverCreator<G>,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
+        result_descriptor: VectorResultDescriptor,
         raster_processors: Vec<TypedRasterQueryProcessor>,
+        raster_bands: Vec<u32>,
         column_names: Vec<String>,
         feature_aggregation: FeatureAggregationMethod,
         feature_aggregation_ignore_no_data: bool,
@@ -52,7 +57,9 @@ where
     ) -> Self {
         Self {
             collection,
+            result_descriptor,
             raster_processors,
+            raster_bands,
             column_names,
             feature_aggregation,
             feature_aggregation_ignore_no_data,
@@ -61,10 +68,11 @@ where
         }
     }
 
-    #[allow(clippy::too_many_arguments)] // TODO: refactor to reduce arguments
+    #[allow(clippy::too_many_arguments, clippy::too_many_lines)] // TODO: refactor to reduce arguments
     async fn extract_raster_values<P: Pixel>(
         collection: &FeatureCollection<G>,
         raster_processor: &dyn RasterQueryProcessor<RasterType = P>,
+        num_bands: u32,
         new_column_name: &str,
         feature_aggreation: FeatureAggregationMethod,
         feature_aggregation_ignore_no_data: bool,
@@ -73,11 +81,15 @@ where
         query: VectorQueryRectangle,
         ctx: &dyn QueryContext,
     ) -> Result<FeatureCollection<G>> {
-        let mut temporal_aggregator = Self::create_aggregator::<P>(
-            collection.len(),
-            temporal_aggregation,
-            temporal_aggregation_ignore_no_data,
-        );
+        let mut temporal_band_aggregators = (0..num_bands)
+            .map(|_| {
+                Self::create_aggregator::<P>(
+                    collection.len(),
+                    temporal_aggregation,
+                    temporal_aggregation_ignore_no_data,
+                )
+            })
+            .collect::<Vec<_>>();
 
         let collection = collection.sort_by_time_asc()?;
 
@@ -104,32 +116,41 @@ where
 
             // TODO: optimize geo access (only specific tiles, etc.)
 
-            let mut feature_aggregator = create_feature_aggregator::<P>(
-                collection.len(),
-                feature_aggreation,
-                feature_aggregation_ignore_no_data,
-            );
+            let mut feature_band_aggregators = (0..num_bands)
+                .map(|_| {
+                    create_feature_aggregator::<P>(
+                        collection.len(),
+                        feature_aggreation,
+                        feature_aggregation_ignore_no_data,
+                    )
+                })
+                .collect::<Vec<_>>();
 
             let mut time_end = None;
 
             while let Some(raster) = rasters.next().await {
                 let raster = raster?;
+                let band = raster.band as usize;
 
                 if let Some(end) = time_end {
                     if end != raster.time.end() {
                         // new time slice => consume old aggregator and create new one
-                        temporal_aggregator.add_feature_data(
-                            feature_aggregator.into_data(),
-                            time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
-                        )?;
 
-                        feature_aggregator = create_feature_aggregator::<P>(
+                        let new_feature_agg = create_feature_aggregator::<P>(
                             collection.len(),
                             feature_aggreation,
                             feature_aggregation_ignore_no_data,
                         );
 
-                        if temporal_aggregator.is_satisfied() {
+                        let olg_feature_agg =
+                            std::mem::replace(&mut feature_band_aggregators[band], new_feature_agg);
+
+                        temporal_band_aggregators[band].add_feature_data(
+                            olg_feature_agg.into_data(),
+                            time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
+                        )?;
+
+                        if temporal_band_aggregators[band].is_satisfied() {
                             break;
                         }
                     }
@@ -144,13 +165,13 @@ where
                         if let Ok(pixel) = raster.get_at_grid_index(grid_idx) {
                             // finally, attach value to feature
                             if let Some(data) = pixel {
-                                feature_aggregator.add_value(feature_index, data, 1);
+                                feature_band_aggregators[band].add_value(feature_index, data, 1);
                             } else {
                                 // TODO: weigh by area?
-                                feature_aggregator.add_null(feature_index);
+                                feature_band_aggregators[band].add_null(feature_index);
                             }
 
-                            if feature_aggregator.is_satisfied() {
+                            if feature_band_aggregators[band].is_satisfied() {
                                 satisfied = true;
                                 break;
                             }
@@ -164,19 +185,40 @@ where
 
                 cache_hint.merge_with(&raster.cache_hint);
             }
+            for (band, feature_aggregator) in feature_band_aggregators.into_iter().enumerate() {
+                temporal_band_aggregators[band].add_feature_data(
+                    feature_aggregator.into_data(),
+                    time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
+                )?;
+            }
 
-            temporal_aggregator.add_feature_data(
-                feature_aggregator.into_data(),
-                time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
-            )?;
-
-            if temporal_aggregator.is_satisfied() {
+            if (0..num_bands).all(|band| temporal_band_aggregators[band as usize].is_satisfied()) {
                 break;
             }
         }
 
+        let new_column_names_vec = (0..num_bands)
+            .map(|i| {
+                if i == 0 {
+                    new_column_name.to_owned()
+                } else {
+                    format!("{new_column_name}_{i}")
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let feature_data = temporal_band_aggregators
+            .into_iter()
+            .map(TypedAggregator::into_data);
+
+        let columns = new_column_names_vec
+            .iter()
+            .map(String::as_str)
+            .zip(feature_data)
+            .collect::<Vec<_>>();
+
         let mut new_collection = collection
-            .add_column(new_column_name, temporal_aggregator.into_data())
+            .add_columns(&columns)
             .map_err(Into::<crate::error::Error>::into)?;
 
         new_collection.cache_hint = cache_hint;
@@ -224,6 +266,7 @@ where
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -237,13 +280,17 @@ where
             .and_then(move |mut collection| {
                 let query = query.clone();
                 async move {
-                    for (raster, new_column_name) in
-                        self.raster_processors.iter().zip(&self.column_names)
+                    for ((raster, new_column_name), bands) in self
+                        .raster_processors
+                        .iter()
+                        .zip(&self.column_names)
+                        .zip(&self.raster_bands)
                     {
                         collection = call_on_generic_raster_processor!(raster, raster => {
                             Self::extract_raster_values(
                                 &collection,
                                 raster,
+                                *bands,
                                 new_column_name,
                                 self.feature_aggregation,
                                 self.feature_aggregation_ignore_no_data,
@@ -262,6 +309,10 @@ where
 
         Ok(stream)
     }
+
+    fn result_descriptor(&self) -> &Self::ResultDescription {
+        &self.result_descriptor
+    }
 }
 
 #[cfg(test)]
@@ -269,16 +320,18 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, RasterBandDescriptors, RasterResultDescriptor,
-        WorkflowOperatorPath,
+        ChunkByteSize, MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors,
+        RasterResultDescriptor, VectorColumnInfo, VectorOperator, WorkflowOperatorPath,
     };
     use crate::engine::{MockQueryContext, RasterOperator};
-    use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use geoengine_datatypes::collections::{MultiPointCollection, MultiPolygonCollection};
-    use geoengine_datatypes::primitives::CacheHint;
+    use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
+    use geoengine_datatypes::collections::{
+        ChunksEqualIgnoringCacheHint, MultiPointCollection, MultiPolygonCollection, VectorDataType,
+    };
     use geoengine_datatypes::primitives::MultiPolygon;
+    use geoengine_datatypes::primitives::{CacheHint, FeatureData, FeatureDataType, Measurement};
     use geoengine_datatypes::raster::{Grid2D, RasterTile2D, TileInformation};
-    use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         primitives::{BoundingBox2D, FeatureDataRef, MultiPoint, SpatialResolution, TimeInterval},
@@ -344,6 +397,7 @@ mod tests {
         let result = RasterVectorAggregateJoinProcessor::extract_raster_values(
             &points,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
+            1,
             "foo",
             FeatureAggregationMethod::First,
             false,
@@ -440,6 +494,7 @@ mod tests {
         let result = RasterVectorAggregateJoinProcessor::extract_raster_values(
             &points,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
+            1,
             "foo",
             FeatureAggregationMethod::First,
             false,
@@ -563,6 +618,7 @@ mod tests {
         let result = RasterVectorAggregateJoinProcessor::extract_raster_values(
             &points,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
+            1,
             "foo",
             FeatureAggregationMethod::Mean,
             false,
@@ -720,6 +776,7 @@ mod tests {
         let result = RasterVectorAggregateJoinProcessor::extract_raster_values(
             &polygons,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
+            1,
             "foo",
             FeatureAggregationMethod::Mean,
             false,
@@ -744,5 +801,318 @@ mod tests {
         } else {
             unreachable!();
         }
+    }
+
+    #[tokio::test]
+    #[allow(clippy::float_cmp)]
+    #[allow(clippy::too_many_lines)]
+    async fn polygons_multi_band() {
+        let raster_tile_a_0_band_0 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            0,
+            Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+        let raster_tile_a_0_band_1 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            1,
+            Grid2D::new([3, 2].into(), vec![255, 254, 253, 251, 250, 249])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+
+        let raster_tile_a_1_band_0 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 1].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            0,
+            Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+        let raster_tile_a_1_band_1 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 1].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            1,
+            Grid2D::new([3, 2].into(), vec![160, 150, 140, 130, 120, 110])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+
+        let raster_tile_a_2_band_0 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 2].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            0,
+            Grid2D::new([3, 2].into(), vec![600, 500, 400, 300, 200, 100])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+        let raster_tile_a_2_band_1 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(0, 10).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 2].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            1,
+            Grid2D::new([3, 2].into(), vec![610, 510, 410, 310, 210, 110])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+
+        let raster_tile_b_0_band_0 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            0,
+            Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+        let raster_tile_b_0_band_1 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            1,
+            Grid2D::new([3, 2].into(), vec![11, 22, 33, 44, 55, 66])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+        let raster_tile_b_1_band_0 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 1].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            0,
+            Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+        let raster_tile_b_1_band_1 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 1].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            1,
+            Grid2D::new([3, 2].into(), vec![100, 220, 300, 400, 500, 600])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+
+        let raster_tile_b_2_band_0 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 2].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            0,
+            Grid2D::new([3, 2].into(), vec![100, 200, 300, 400, 500, 600])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+        let raster_tile_b_2_band_1 = RasterTile2D::new_with_tile_info(
+            TimeInterval::new(10, 20).unwrap(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 2].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            1,
+            Grid2D::new([3, 2].into(), vec![101, 201, 301, 401, 501, 601])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+
+        let raster_source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: vec![
+                    raster_tile_a_0_band_0,
+                    raster_tile_a_0_band_1,
+                    raster_tile_a_1_band_0,
+                    raster_tile_a_1_band_1,
+                    raster_tile_a_2_band_0,
+                    raster_tile_a_2_band_1,
+                    raster_tile_b_0_band_0,
+                    raster_tile_b_0_band_1,
+                    raster_tile_b_1_band_0,
+                    raster_tile_b_1_band_1,
+                    raster_tile_b_2_band_0,
+                    raster_tile_b_2_band_1,
+                ],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U16,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                    bands: RasterBandDescriptors::new(vec![
+                        RasterBandDescriptor::new_unitless("band_0".into()),
+                        RasterBandDescriptor::new_unitless("band_1".into()),
+                    ])
+                    .unwrap(),
+                },
+            },
+        }
+        .boxed();
+
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
+        );
+
+        let raster = raster_source
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap();
+
+        let polygons = MultiPolygonCollection::from_data(
+            vec![MultiPolygon::new(vec![vec![vec![
+                (0.5, -0.5).into(),
+                (4., -1.).into(),
+                (0.5, -2.5).into(),
+                (0.5, -0.5).into(),
+            ]]])
+            .unwrap()],
+            vec![TimeInterval::default(); 1],
+            Default::default(),
+            CacheHint::default(),
+        )
+        .unwrap();
+
+        let polygons = MockFeatureCollectionSource::single(polygons).boxed();
+
+        let points = polygons
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .multi_polygon()
+            .unwrap();
+
+        let processor = RasterVectorAggregateJoinProcessor::new(
+            points,
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                columns: [(
+                    "ndvi".to_string(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
+            vec![raster],
+            vec![2],
+            vec!["foo".to_owned()],
+            FeatureAggregationMethod::Mean,
+            false,
+            TemporalAggregationMethod::Mean,
+            false,
+        );
+
+        let mut result = processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::new_unchecked(0, 20),
+                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
+                    attributes: ColumnSelection::all(),
+                },
+                &MockQueryContext::new(ChunkByteSize::MAX),
+            )
+            .await
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<MultiPolygonCollection>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+
+        let result = result.remove(0);
+
+        assert!(result.chunks_equal_ignoring_cache_hint(
+            &MultiPolygonCollection::from_slices(
+                &[MultiPolygon::new(vec![vec![vec![
+                    (0.5, -0.5).into(),
+                    (4., -1.).into(),
+                    (0.5, -2.5).into(),
+                    (0.5, -0.5).into(),
+                ]]])
+                .unwrap(),],
+                &[TimeInterval::default()],
+                &[
+                    (
+                        "foo",
+                        FeatureData::Float(vec![
+                            (((3. + 1. + 40. + 30. + 400.) / 5.)
+                                + ((4. + 6. + 30. + 40. + 300.) / 5.))
+                                / 2.
+                        ])
+                    ),
+                    (
+                        "foo_1",
+                        FeatureData::Float(vec![
+                            (((251. + 249. + 140. + 130. + 410.) / 5.)
+                                + ((44. + 66. + 300. + 400. + 301.) / 5.))
+                                / 2.
+                        ])
+                    )
+                ],
+            )
+            .unwrap()
+        ));
     }
 }

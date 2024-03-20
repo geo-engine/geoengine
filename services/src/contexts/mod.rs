@@ -1,6 +1,7 @@
+use crate::datasets::external::netcdfcf::NetCdfCfProviderDb;
 use crate::datasets::upload::Volume;
 use crate::error::Result;
-use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionProvider};
+use crate::layers::listing::LayerCollectionProvider;
 use crate::layers::storage::{LayerDb, LayerProviderDb};
 use crate::tasks::{TaskContext, TaskManager};
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
@@ -12,7 +13,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 mod db_types;
-mod migrations;
+pub(crate) mod migrations;
 mod postgres;
 mod session;
 mod simple_context;
@@ -33,8 +34,12 @@ use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 pub use migrations::{
     migrate_database, migration_0000_initial::Migration0000Initial,
-    migration_0001_raster_stacks::Migration0001RasterStacks, DatabaseVersion, Migration,
-    MigrationResult,
+    migration_0001_raster_stacks::Migration0001RasterStacks,
+    migration_0002_dataset_listing_provider::Migration0002DatasetListingProvider,
+    migration_0003_gbif_config::Migration0003GbifConfig,
+    migration_0004_dataset_listing_provider_prio::Migration0004DatasetListingProviderPrio,
+    migration_0005_gbif_column_selection::Migration0005GbifColumnSelection,
+    migration_0007_owner_role::Migration0007OwnerRole, DatabaseVersion, Migration, MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
@@ -91,9 +96,10 @@ pub trait GeoEngineDb:
     + LayerDb
     + LayerProviderDb
     + LayerCollectionProvider
-    + DatasetLayerCollectionProvider
     + ProjectDb
     + WorkflowRegistry
+    + NetCdfCfProviderDb
+    + std::fmt::Debug
 {
 }
 
@@ -272,6 +278,10 @@ where
                     source: Box::new(source),
                 },
             )?;
+
+        // handle the case where the dataset name is not known
+        let dataset_id = dataset_id
+            .ok_or(geoengine_operators::error::Error::UnknownDatasetName { name: data.clone() })?;
 
         Ok(dataset_id.into())
     }

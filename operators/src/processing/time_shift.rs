@@ -15,14 +15,14 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    BandSelection, ColumnSelection, Duration, Geometry, RasterQueryRectangle, TimeGranularity,
-    TimeInstance, TimeInterval,
+    ColumnSelection, Duration, Geometry, RasterQueryRectangle, TimeGranularity, TimeInstance,
+    TimeInterval,
 };
 use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, Snafu};
+use snafu::Snafu;
 
 /// Project the query rectangle to a new time interval.
 pub type TimeShift = Operator<TimeShiftParams, SingleRasterOrVectorSource>;
@@ -266,14 +266,6 @@ impl RasterOperator for TimeShift {
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
-                // TODO: implement multi-band functionality and remove this check
-                ensure!(
-                    result_descriptor.bands.len() == 1,
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: TimeShift::TYPE_NAME
-                    }
-                );
-
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
                     source,
@@ -294,14 +286,6 @@ impl RasterOperator for TimeShift {
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
 
-                // TODO: implement multi-band functionality and remove this check
-                ensure!(
-                    result_descriptor.bands.len() == 1,
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: TimeShift::TYPE_NAME
-                    }
-                );
-
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
                     source,
@@ -316,14 +300,6 @@ impl RasterOperator for TimeShift {
                 let shift = AbsoluteShift { time_interval };
 
                 let result_descriptor = shift_result_descriptor(source.result_descriptor(), shift);
-
-                // TODO: implement multi-band functionality and remove this check
-                ensure!(
-                    result_descriptor.bands.len() == 1,
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: TimeShift::TYPE_NAME
-                    }
-                );
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
@@ -381,6 +357,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedVectorOperator
         Ok(
             call_on_generic_vector_processor!(source_processor, processor => VectorTimeShiftProcessor {
                 processor,
+                result_descriptor: self.result_descriptor.clone(),
                 shift: self.shift,
             }.boxed().into()),
         )
@@ -404,6 +381,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
         Ok(
             call_on_generic_raster_processor!(source_processor, processor => RasterTimeShiftProcessor {
                 processor,
+                result_descriptor: self.result_descriptor.clone(),
                 shift: self.shift,
             }.boxed().into()),
         )
@@ -419,6 +397,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     processor: Q,
+    result_descriptor: RasterResultDescriptor,
     shift: Shift,
 }
 
@@ -428,6 +407,7 @@ where
     Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
     processor: Q,
+    result_descriptor: VectorResultDescriptor,
     shift: Shift,
 }
 
@@ -476,6 +456,10 @@ where
 
         Ok(stream.boxed())
     }
+
+    fn vector_result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[async_trait]
@@ -497,7 +481,7 @@ where
             spatial_bounds: query.spatial_bounds,
             time_interval,
             spatial_resolution: query.spatial_resolution,
-            attributes: BandSelection::first(),
+            attributes: query.attributes,
         };
         let stream = self.processor.raster_query(query, ctx).await?;
 
@@ -512,6 +496,10 @@ where
 
         Ok(Box::pin(stream))
     }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[cfg(test)]
@@ -519,9 +507,12 @@ mod tests {
     use super::*;
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterBandDescriptors},
+        engine::{
+            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            SingleRasterSource,
+        },
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
-        processing::{Expression, ExpressionParams, ExpressionSources},
+        processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
         util::{gdal::add_ndvi_dataset, input::RasterOrVectorOperator},
     };
@@ -530,8 +521,8 @@ mod tests {
         collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection},
         dataset::NamedData,
         primitives::{
-            BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialPartition2D, SpatialResolution,
-            TimeGranularity,
+            BandSelection, BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialPartition2D,
+            SpatialResolution, TimeGranularity,
         },
         raster::{EmptyGrid2D, GridOrEmpty, RasterDataType, TileInformation, TilingSpecification},
         spatial_reference::SpatialReference,
@@ -1196,7 +1187,15 @@ mod tests {
                 output_measurement: None,
                 map_no_data: false,
             },
-            sources: ExpressionSources::new_a_b(ndvi_source, shifted_ndvi_source),
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![ndvi_source, shifted_ndvi_source],
+                    },
+                }
+                .boxed(),
+            },
         }
         .boxed();
 

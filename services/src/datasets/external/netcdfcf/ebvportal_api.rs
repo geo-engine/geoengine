@@ -2,15 +2,12 @@
 //!
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
-use crate::datasets::external::netcdfcf::NetCdfCfDataProvider;
-use crate::datasets::external::netcdfcf::{error, NetCdfOverview, NETCDF_CF_PROVIDER_ID};
+use crate::datasets::external::netcdfcf::{error, NetCdfOverview};
 use crate::error::Result;
 use error::NetCdfCf4DProviderError;
 use geoengine_datatypes::dataset::DataProviderId;
 use log::debug;
 use serde::Serialize;
-use snafu::ResultExt;
-use std::path::PathBuf;
 use url::Url;
 
 mod portal_responses {
@@ -151,7 +148,7 @@ impl EbvPortalApi {
             .collect())
     }
 
-    async fn get_dataset_metadata(&self, id: &str) -> Result<EbvDataset> {
+    pub async fn get_dataset_metadata(&self, id: &str) -> Result<EbvDataset> {
         let url = format!("{}/datasets/{id}", self.base_url);
 
         debug!("Calling {url}");
@@ -186,37 +183,6 @@ impl EbvPortalApi {
             None => Err(NetCdfCf4DProviderError::CannotLookupDataset { id: id.to_string() }.into()),
         }
     }
-
-    pub async fn get_ebv_subdatasets(
-        &self,
-        provider_paths: NetCdfCfDataProviderPaths,
-        dataset_id: &str,
-    ) -> Result<EbvHierarchy> {
-        let dataset = self.get_dataset_metadata(dataset_id).await?;
-
-        let listing = {
-            let dataset_path = PathBuf::from(dataset.dataset_path.trim_start_matches('/'));
-
-            debug!("Accessing dataset {}", dataset_path.display());
-
-            crate::util::spawn_blocking(move || {
-                NetCdfCfDataProvider::build_netcdf_tree(
-                    &provider_paths.provider_path,
-                    Some(&provider_paths.overview_path),
-                    &dataset_path,
-                    &Default::default(),
-                )
-            })
-            .await?
-            .map_err(|e| Box::new(e) as _)
-            .context(error::CannotParseNetCdfFile)?
-        };
-
-        Ok(EbvHierarchy {
-            provider_id: NETCDF_CF_PROVIDER_ID,
-            tree: listing,
-        })
-    }
 }
 
 #[derive(Debug, Serialize)]
@@ -239,11 +205,6 @@ pub struct EbvDataset {
 pub struct EbvHierarchy {
     pub provider_id: DataProviderId,
     pub tree: NetCdfOverview,
-}
-
-pub struct NetCdfCfDataProviderPaths {
-    pub provider_path: PathBuf,
-    pub overview_path: PathBuf,
 }
 
 #[cfg(test)]

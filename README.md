@@ -71,7 +71,7 @@ CREATE EXTENSION postgis;
 EOF
 ```
 
-During development, you can use the following setting in your Settings.toml to clean the database on server startup:
+During development, you can use the following setting in your `Settings.toml` to clean the database on server startup:
 
 ```
 [postgres]

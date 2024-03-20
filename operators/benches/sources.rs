@@ -1,8 +1,11 @@
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
+
 use std::time::Instant;
 use std::{hint::black_box, marker::PhantomData};
 
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
     raster::{
@@ -10,6 +13,7 @@ use geoengine_datatypes::{
     },
     util::test::TestDefault,
 };
+use geoengine_operators::engine::RasterResultDescriptor;
 use geoengine_operators::{
     engine::{ChunkByteSize, MockQueryContext, QueryContext, RasterQueryProcessor},
     mock::MockRasterSourceProcessor,
@@ -22,6 +26,10 @@ fn setup_gdal_source(
     tiling_specification: TilingSpecification,
 ) -> GdalSourceProcessor<u8> {
     GdalSourceProcessor::<u8> {
+        result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+            RasterDataType::U8,
+            1,
+        ),
         tiling_specification,
         meta_data: Box::new(meta_data),
         _phantom_data: PhantomData,
@@ -40,6 +48,10 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
     let time = TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap();
 
     MockRasterSourceProcessor {
+        result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+            RasterDataType::U8,
+            1,
+        ),
         data: vec![
             RasterTile2D::new(
                 time,
@@ -115,7 +127,6 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             ),
         ],
         tiling_specification: tiling_spec,
-        bands: 1,
     }
 }
 

@@ -115,6 +115,12 @@ pub enum TaskStatus {
     },
 }
 
+impl TaskStatus {
+    pub fn is_completed(&self) -> bool {
+        matches!(self, TaskStatus::Completed { .. })
+    }
+}
+
 // TODO: replace TaskStatus with a more API friendly type
 impl<'a> ToSchema<'a> for TaskStatus {
     fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {

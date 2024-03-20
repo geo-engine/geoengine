@@ -1,11 +1,56 @@
 [workspace]
-members = ["datatypes", "macros", "operators", "services"]
+members = ["datatypes", "expression", "macros", "operators", "services"]
 # Edition 2021 defaults to resolver 2, but virtul workspaces default to resolver 1, so we need to set it explicitly.
 # TODO: This fails only for our xgboost dependency. If we can fix this, we can set this to "2".
 resolver = "1"
 # resolver = "2"
 
+[workspace.package]
+version = "0.8.0"
+authors = [
+    "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
+    "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
+    "Michael Mattig <mattig@mathematik.uni-marburg.de>",
+]
+edition = "2021"
+publish = false
+license-file = "LICENSE"
+documentation = "https://docs.geoengine.io"
+repository = "https://github.com/geo-engine/geoengine"
+
 # Rust does not inline across crates if link-time optimization (LTO) is off, which it is by default.
 # TODO: Maybe https://rust-lang.github.io/rust-clippy/stable/index.html#missing_inline_in_public_items is more suitable
 [profile.release]
 lto = true
+
+[workspace.lints.clippy]
+# configure default clippy lints
+complexity = { level = "warn", priority = 0 }
+style = { level = "warn", priority = 0 }
+perf = { level = "warn", priority = 0 }
+pedantic = { level = "warn", priority = 0 }
+correctness = "deny"
+
+# disable some pedantic lints
+result_large_err = { level = "allow", priority = 1 }          # TODO: investigate this
+cast_possible_truncation = { level = "allow", priority = 1 }
+cast_possible_wrap = { level = "allow", priority = 1 }
+cast_precision_loss = { level = "allow", priority = 1 }
+cast_sign_loss = { level = "allow", priority = 1 }
+default_trait_access = { level = "allow", priority = 1 }
+missing_errors_doc = { level = "allow", priority = 1 }
+module_name_repetitions = { level = "allow", priority = 1 }
+must_use_candidate = { level = "allow", priority = 1 }
+non_ascii_literal = { level = "allow", priority = 1 }
+option_if_let_else = { level = "allow", priority = 1 }
+similar_names = { level = "allow", priority = 1 }
+single_match_else = { level = "allow", priority = 1 }
+type_repetition_in_bounds = { level = "allow", priority = 1 }
+wildcard_imports = { level = "allow", priority = 1 }
+
+# enable some restriction lints
+dbg_macro = { level = "warn", priority = 1 }
+print_stderr = { level = "warn", priority = 1 }
+print_stdout = { level = "warn", priority = 1 }
+unimplemented = { level = "warn", priority = 1 }
+unwrap_used = { level = "warn", priority = 1 }

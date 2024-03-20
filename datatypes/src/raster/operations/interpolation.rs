@@ -5,9 +5,7 @@ use crate::raster::{
     TileInformation,
 };
 use crate::util::Result;
-use async_trait::async_trait;
 
-#[async_trait]
 pub trait InterpolationAlgorithm<P: Pixel>: Send + Sync + Clone + 'static {
     /// interpolate the given input tile into the output tile
     /// the output must be fully contained in the input tile and have an additional row and column in order
@@ -22,7 +20,6 @@ pub trait InterpolationAlgorithm<P: Pixel>: Send + Sync + Clone + 'static {
 #[derive(Clone, Debug)]
 pub struct NearestNeighbor {}
 
-#[async_trait]
 impl<P> InterpolationAlgorithm<P> for NearestNeighbor
 where
     P: Pixel,
@@ -102,7 +99,6 @@ impl Bilinear {
     }
 }
 
-#[async_trait]
 impl<P> InterpolationAlgorithm<P> for Bilinear
 where
     P: Pixel,

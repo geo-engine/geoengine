@@ -1,5 +1,5 @@
 use super::users::UserId;
-use crate::error::Result;
+use crate::error::{self, Error, Result};
 use crate::identifier;
 use crate::layers::listing::LayerCollectionId;
 use crate::projects::ProjectId;
@@ -8,8 +8,11 @@ use geoengine_datatypes::dataset::{DatasetId, LayerId};
 use geoengine_datatypes::pro::MlModelId;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
+use snafu::Snafu;
 use std::str::FromStr;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 pub mod postgres_permissiondb;
 
@@ -56,6 +59,15 @@ pub enum Permission {
     Owner,
 }
 
+impl std::fmt::Display for Permission {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Permission::Read => write!(f, "Read"),
+            Permission::Owner => write!(f, "Owner"),
+        }
+    }
+}
+
 impl Permission {
     /// Return true if this permission includes the given permission.
     pub fn allows(&self, permission: &Permission) -> bool {
@@ -90,6 +102,20 @@ pub enum ResourceId {
     ModelId(MlModelId),
 }
 
+impl std::fmt::Display for ResourceId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResourceId::Layer(layer_id) => write!(f, "layer:{}", layer_id.0),
+            ResourceId::LayerCollection(layer_collection_id) => {
+                write!(f, "layer_collection:{}", layer_collection_id.0)
+            }
+            ResourceId::Project(project_id) => write!(f, "project:{}", project_id.0),
+            ResourceId::DatasetId(dataset_id) => write!(f, "dataset:{}", dataset_id.0),
+            ResourceId::ModelId(model_id) => write!(f, "model:{}", model_id.0),
+        }
+    }
+}
+
 impl From<LayerId> for ResourceId {
     fn from(layer_id: LayerId) -> Self {
         ResourceId::Layer(layer_id)
@@ -114,19 +140,88 @@ impl From<DatasetId> for ResourceId {
     }
 }
 
+impl TryFrom<(String, String)> for ResourceId {
+    type Error = Error;
+
+    fn try_from(value: (String, String)) -> Result<Self> {
+        Ok(match value.0.as_str() {
+            "layer" => ResourceId::Layer(LayerId(value.1)),
+            "layer_collection" => ResourceId::LayerCollection(LayerCollectionId(value.1)),
+            "project" => {
+                ResourceId::Project(ProjectId(Uuid::from_str(&value.1).context(error::Uuid)?))
+            }
+            "dataset" => {
+                ResourceId::DatasetId(DatasetId(Uuid::from_str(&value.1).context(error::Uuid)?))
+            }
+            "model" => {
+                ResourceId::ModelId(MlModelId(Uuid::from_str(&value.1).context(error::Uuid)?))
+            }
+            _ => {
+                return Err(Error::InvalidResourceId {
+                    resource_type: value.0,
+                    resource_id: value.1,
+                })
+            }
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionListing {
+    pub resource_id: ResourceId,
+    pub role: Role,
+    pub permission: Permission,
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)), context(suffix(PermissionDbError)))]
+pub enum PermissionDbError {
+    #[snafu(display("Permission {permission} for resource {resource_id} denied."))]
+    PermissionDenied {
+        resource_id: ResourceId,
+        permission: Permission,
+    },
+    #[snafu(display("Must be admin to perform this action."))]
+    MustBeAdmin,
+    #[snafu(display(
+        "Permission {permission} for resource {resource_id} and roles {} not found.", role_ids.iter().map(std::string::ToString::to_string).collect::<Vec<String>>().join(", ")
+    ))]
+    PermissionNotFound {
+        resource_id: ResourceId,
+        permission: Permission,
+        role_ids: Vec<RoleId>,
+    },
+    #[snafu(display("Cannot revoke own permission"))]
+    CannotRevokeOwnPermission,
+    #[snafu(display("Cannot grant Owner permission, because there can only be one owner."))]
+    CannotGrantOwnerPermission,
+    #[snafu(display("Resource Id {resource_id} is not a valid Uuid."))]
+    ResourceIdIsNotAValidUuid { resource_id: String },
+    #[snafu(display("An unexpected database error occurred."))]
+    Postgres { source: tokio_postgres::Error },
+    #[snafu(display("An unexpected database error occurred."))]
+    Bb8 {
+        source: bb8_postgres::bb8::RunError<tokio_postgres::Error>,
+    },
+}
+
 /// Management and checking of permissions.
 // TODO: accept references of things that are Into<ResourceId> as well
 #[async_trait]
 pub trait PermissionDb {
     /// Create a new resource. Gives the current user the owner permission.
-    async fn create_resource<R: Into<ResourceId> + Send + Sync>(&self, resource: R) -> Result<()>;
+    async fn create_resource<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+    ) -> Result<(), PermissionDbError>;
 
     /// Check `permission` for `resource`.
     async fn has_permission<R: Into<ResourceId> + Send + Sync>(
         &self,
         resource: R,
         permission: Permission,
-    ) -> Result<bool>;
+    ) -> Result<bool, PermissionDbError>;
 
     /// Ensure `permission` for `resource` exists. Throws error if not allowed.
     #[must_use]
@@ -134,7 +229,13 @@ pub trait PermissionDb {
         &self,
         resource: R,
         permission: Permission,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
+
+    /// Ensure user is admin
+    #[must_use]
+    async fn ensure_admin<R: Into<ResourceId> + Send + Sync>(
+        &self,
+    ) -> Result<(), PermissionDbError>;
 
     /// Give `permission` to `role` for `resource`.
     /// Requires `Owner` permission for `resource`.
@@ -143,7 +244,7 @@ pub trait PermissionDb {
         role: RoleId,
         resource: R,
         permission: Permission,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
 
     /// Remove `permission` from `role` for `resource`.
     /// Requires `Owner` permission for `resource`.
@@ -152,12 +253,21 @@ pub trait PermissionDb {
         role: RoleId,
         resource: R,
         permission: Permission,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
 
     /// Remove all `permission` for `resource`.
     /// Requires `Owner` permission for `resource`.
     async fn remove_permissions<R: Into<ResourceId> + Send + Sync>(
         &self,
         resource: R,
-    ) -> Result<()>;
+    ) -> Result<(), PermissionDbError>;
+
+    /// list all `permission` for `resource`.
+    /// Requires `Owner` permission for `resource`.
+    async fn list_permissions<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<PermissionListing>, PermissionDbError>;
 }

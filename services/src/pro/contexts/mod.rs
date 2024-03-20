@@ -1,5 +1,5 @@
 mod db_types;
-mod migrations;
+pub(crate) mod migrations;
 mod postgres;
 
 use std::str::FromStr;
@@ -187,6 +187,10 @@ where
                     source: Box::new(source),
                 },
             )?;
+
+        // handle the case where the dataset name is not known
+        let dataset_id = dataset_id
+            .ok_or(geoengine_operators::error::Error::UnknownDatasetName { name: data.clone() })?;
 
         Ok(dataset_id.into())
     }

@@ -1,8 +1,12 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
 use crate::pro::contexts::ProPostgresDb;
+use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Role, RoleDescription, RoleId};
 use crate::pro::users::oidc::ExternalUserClaims;
+use crate::pro::users::userdb::{
+    CannotRevokeRoleThatIsNotAssignedRoleDbError, RoleIdDoesNotExistRoleDbError,
+};
 use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
 };
@@ -16,10 +20,12 @@ use bb8_postgres::{
 };
 use geoengine_datatypes::primitives::Duration;
 use pwhash::bcrypt;
-use snafu::ensure;
+use snafu::{ensure, ResultExt};
 use uuid::Uuid;
 
-use super::userdb::{RoleDb, UserAuth};
+use super::userdb::{
+    Bb8RoleDbError, PermissionDbRoleDbError, PostgresRoleDbError, RoleDb, RoleDbError, UserAuth,
+};
 
 #[async_trait]
 impl<Tls> UserAuth for ProPostgresContext<Tls>
@@ -60,7 +66,7 @@ where
 
         let quota_available =
             crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
-                .default_available_quota;
+                .initial_credits;
 
         tx.execute(
             &stmt,
@@ -106,7 +112,7 @@ where
 
         let quota_available =
             crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
-                .default_available_quota;
+                .initial_credits;
 
         let stmt = tx
             .prepare("INSERT INTO users (id, quota_available, active) VALUES ($1, $2, TRUE);")
@@ -294,7 +300,7 @@ where
 
                 let quota_available =
                     crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
-                        .default_available_quota;
+                        .initial_credits;
 
                 //TODO: Inconsistent to hashmap implementation, where an external user is not part of the user database.
                 //TODO: A user might be able to login without external login using this (internal) id. Would be a problem with anonymous users as well.
@@ -456,7 +462,7 @@ where
 #[async_trait]
 impl<Tls> UserDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -639,77 +645,149 @@ where
 #[async_trait]
 impl<Tls> RoleDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn add_role(&self, role_name: &str) -> Result<RoleId> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
+    async fn add_role(&self, role_name: &str) -> Result<RoleId, RoleDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8RoleDbError)?;
 
-        let conn = self.conn_pool.get().await?;
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresRoleDbError)?;
+
+        self.ensure_admin_in_tx(&tx)
+            .await
+            .context(PermissionDbRoleDbError)?;
 
         let id = RoleId::new();
 
-        let stmt = conn
-            .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
-            .await?;
+        let res = tx
+            .execute(
+                "INSERT INTO roles (id, name) VALUES ($1, $2);",
+                &[&id, &role_name],
+            )
+            .await;
 
-        // TODO: map postgres error code to error::Error::RoleAlreadyExists
+        if let Err(err) = res {
+            if err.code() == Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION) {
+                return Err(RoleDbError::RoleAlreadyExists {
+                    role_name: role_name.to_string(),
+                });
+            }
+        }
 
-        conn.execute(&stmt, &[&id, &role_name]).await?;
+        tx.commit().await.context(PostgresRoleDbError)?;
 
         Ok(id)
     }
 
-    async fn remove_role(&self, role_id: &RoleId) -> Result<()> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
+    async fn load_role_by_name(&self, role_name: &str) -> Result<RoleId, RoleDbError> {
+        let conn = self.conn_pool.get().await.context(Bb8RoleDbError)?;
 
-        let conn = self.conn_pool.get().await?;
+        let row = conn
+            .query_opt("SELECT id FROM roles WHERE name = $1;", &[&role_name])
+            .await
+            .context(PostgresRoleDbError)?
+            .ok_or(RoleDbError::RoleNameDoesNotExist {
+                role_name: role_name.to_string(),
+            })?;
 
-        let stmt = conn.prepare("DELETE FROM roles WHERE id = $1;").await?;
+        Ok(RoleId(row.get(0)))
+    }
 
-        let deleted = conn.execute(&stmt, &[&role_id]).await?;
+    async fn remove_role(&self, role_id: &RoleId) -> Result<(), RoleDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8RoleDbError)?;
 
-        ensure!(deleted > 0, error::RoleDoesNotExist);
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresRoleDbError)?;
+
+        self.ensure_admin_in_tx(&tx)
+            .await
+            .context(PermissionDbRoleDbError)?;
+
+        let deleted = tx
+            .execute("DELETE FROM roles WHERE id = $1;", &[&role_id])
+            .await
+            .context(PostgresRoleDbError)?;
+
+        tx.commit().await.context(PostgresRoleDbError)?;
+
+        ensure!(
+            deleted > 0,
+            RoleIdDoesNotExistRoleDbError { role_id: *role_id }
+        );
 
         Ok(())
     }
 
-    async fn assign_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
+    async fn assign_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<(), RoleDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8RoleDbError)?;
 
-        let conn = self.conn_pool.get().await?;
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresRoleDbError)?;
 
-        let stmt = conn
-            .prepare("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);")
-            .await?;
+        self.ensure_admin_in_tx(&tx)
+            .await
+            .context(PermissionDbRoleDbError)?;
 
-        // TODO: map postgres error code to error::Error::RoleAlreadyAssigned, RoleDoesNotExist
+        tx.execute(
+            "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;",
+            &[&user_id, &role_id],
+        )
+        .await
+        .context(PostgresRoleDbError)?;
 
-        conn.execute(&stmt, &[&user_id, &role_id]).await?;
-
-        Ok(())
-    }
-
-    async fn revoke_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<()> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
-
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare("DELETE FROM user_roles WHERE user_id= $1 AND role_id = $2;")
-            .await?;
-
-        let deleted = conn.execute(&stmt, &[&user_id, &role_id]).await?;
-
-        ensure!(deleted > 0, error::RoleNotAssigned);
+        tx.commit().await.context(PostgresRoleDbError)?;
 
         Ok(())
     }
 
-    async fn get_role_descriptions(&self, user_id: &UserId) -> Result<Vec<RoleDescription>> {
-        let conn = self.conn_pool.get().await?;
+    async fn revoke_role(&self, role_id: &RoleId, user_id: &UserId) -> Result<(), RoleDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8RoleDbError)?;
+
+        let tx = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresRoleDbError)?;
+
+        self.ensure_admin_in_tx(&tx)
+            .await
+            .context(PermissionDbRoleDbError)?;
+
+        let deleted = tx
+            .execute(
+                "DELETE FROM user_roles WHERE user_id= $1 AND role_id = $2;",
+                &[&user_id, &role_id],
+            )
+            .await
+            .context(PostgresRoleDbError)?;
+
+        tx.commit().await.context(PostgresRoleDbError)?;
+
+        ensure!(
+            deleted > 0,
+            CannotRevokeRoleThatIsNotAssignedRoleDbError { role_id: *role_id }
+        );
+
+        Ok(())
+    }
+
+    async fn get_role_descriptions(
+        &self,
+        user_id: &UserId,
+    ) -> Result<Vec<RoleDescription>, RoleDbError> {
+        let conn = self.conn_pool.get().await.context(Bb8RoleDbError)?;
 
         let stmt = conn
             .prepare(
@@ -718,9 +796,13 @@ where
                 WHERE user_roles.user_id=$1 \
                 ORDER BY roles.name;",
             )
-            .await?;
+            .await
+            .context(PostgresRoleDbError)?;
 
-        let results = conn.query(&stmt, &[&user_id]).await?;
+        let results = conn
+            .query(&stmt, &[&user_id])
+            .await
+            .context(PostgresRoleDbError)?;
 
         let mut result_vec = Vec::new();
 

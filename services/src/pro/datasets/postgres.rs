@@ -1,34 +1,21 @@
+use crate::api::model::services::UpdateDataset;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::listing::{OrderBy, ProvenanceOutput};
 use crate::datasets::postgres::resolve_dataset_name_to_id;
-use crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID;
-use crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID;
-use crate::datasets::storage::{
-    Dataset, DatasetDb, DatasetStore, DatasetStorer, MetaDataDefinition,
-};
+use crate::datasets::storage::{Dataset, DatasetDb, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::error::{self, Error, Result};
-use crate::layers::layer::CollectionItem;
-use crate::layers::layer::Layer;
-use crate::layers::layer::LayerCollection;
-use crate::layers::layer::LayerCollectionListOptions;
-use crate::layers::layer::LayerListing;
-use crate::layers::layer::ProviderLayerCollectionId;
-use crate::layers::layer::ProviderLayerId;
-use crate::layers::listing::{DatasetLayerCollectionProvider, LayerCollectionId};
-use crate::layers::storage::INTERNAL_PROVIDER_ID;
 use crate::pro::contexts::ProPostgresDb;
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Permission, RoleId};
 use crate::projects::Symbology;
-use crate::util::operators::source_operator_from_dataset;
-use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
-use geoengine_datatypes::dataset::{DataId, DatasetId, LayerId};
+use geoengine_datatypes::dataset::{DataId, DatasetId};
+use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
@@ -39,24 +26,21 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use postgres_types::{FromSql, ToSql};
-use snafu::ensure;
-use std::collections::HashMap;
-use std::str::FromStr;
-use uuid::Uuid;
 
 impl<Tls> DatasetDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
 }
 
+#[allow(clippy::too_many_lines)]
 #[async_trait]
 impl<Tls> DatasetProvider for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -64,16 +48,25 @@ where
     async fn list_datasets(&self, options: DatasetListOptions) -> Result<Vec<DatasetListing>> {
         let conn = self.conn_pool.get().await?;
 
+        let mut pos = 3;
         let order_sql = if options.order == OrderBy::NameAsc {
-            "name ASC"
+            "display_name ASC"
         } else {
-            "name DESC"
+            "display_name DESC"
         };
 
         let filter_sql = if options.filter.is_some() {
-            "AND (name).name ILIKE $4 ESCAPE '\\'"
+            pos += 1;
+            format!("AND display_name ILIKE ${pos} ESCAPE '\\'")
         } else {
-            ""
+            String::new()
+        };
+
+        let (filter_tags_sql, filter_tags_list) = if let Some(filter_tags) = &options.tags {
+            pos += 1;
+            (format!("AND d.tags @> ${pos}::text[]"), filter_tags.clone())
+        } else {
+            (String::new(), vec![])
         };
 
         let stmt = conn
@@ -94,6 +87,7 @@ where
             WHERE 
                 p.user_id = $1
                 {filter_sql}
+                {filter_tags_sql}
             ORDER BY {order_sql}
             LIMIT $2
             OFFSET $3;  
@@ -101,27 +95,55 @@ where
             ))
             .await?;
 
-        let rows = if let Some(filter) = options.filter {
-            conn.query(
-                &stmt,
-                &[
-                    &self.session.user.id,
-                    &i64::from(options.limit),
-                    &i64::from(options.offset),
-                    &format!("%{}%", filter.replace('%', "\\%").replace('_', "\\_")),
-                ],
-            )
-            .await?
-        } else {
-            conn.query(
-                &stmt,
-                &[
-                    &self.session.user.id,
-                    &i64::from(options.limit),
-                    &i64::from(options.offset),
-                ],
-            )
-            .await?
+        let rows = match (options.filter, options.tags) {
+            (Some(filter), Some(_)) => {
+                conn.query(
+                    &stmt,
+                    &[
+                        &self.session.user.id,
+                        &i64::from(options.limit),
+                        &i64::from(options.offset),
+                        &format!("%{}%", filter.replace('%', "\\%").replace('_', "\\_")),
+                        &filter_tags_list,
+                    ],
+                )
+                .await?
+            }
+            (Some(filter), None) => {
+                conn.query(
+                    &stmt,
+                    &[
+                        &self.session.user.id,
+                        &i64::from(options.limit),
+                        &i64::from(options.offset),
+                        &format!("%{}%", filter.replace('%', "\\%").replace('_', "\\_")),
+                    ],
+                )
+                .await?
+            }
+            (None, Some(_)) => {
+                conn.query(
+                    &stmt,
+                    &[
+                        &self.session.user.id,
+                        &i64::from(options.limit),
+                        &i64::from(options.offset),
+                        &filter_tags_list,
+                    ],
+                )
+                .await?
+            }
+            (None, None) => {
+                conn.query(
+                    &stmt,
+                    &[
+                        &self.session.user.id,
+                        &i64::from(options.limit),
+                        &i64::from(options.offset),
+                    ],
+                )
+                .await?
+            }
         };
 
         Ok(rows
@@ -155,7 +177,8 @@ where
                 d.result_descriptor,
                 d.source_operator,
                 d.symbology,
-                d.provenance
+                d.provenance,
+                d.tags
             FROM 
                 user_permitted_datasets p JOIN datasets d 
                     ON (p.dataset_id = d.id)
@@ -166,10 +189,11 @@ where
             )
             .await?;
 
-        // TODO: throw proper dataset does not exist/no permission error
         let row = conn
-            .query_one(&stmt, &[&self.session.user.id, dataset])
+            .query_opt(&stmt, &[&self.session.user.id, dataset])
             .await?;
+
+        let row = row.ok_or(error::Error::UnknownDatasetId)?;
 
         Ok(Dataset {
             id: row.get(0),
@@ -180,6 +204,7 @@ where
             source_operator: row.get(5),
             symbology: row.get(6),
             provenance: row.get(7),
+            tags: row.get(8),
         })
     }
 
@@ -200,8 +225,10 @@ where
             .await?;
 
         let row = conn
-            .query_one(&stmt, &[&self.session.user.id, dataset])
+            .query_opt(&stmt, &[&self.session.user.id, dataset])
             .await?;
+
+        let row = row.ok_or(error::Error::UnknownDatasetId)?;
 
         Ok(ProvenanceOutput {
             data: (*dataset).into(),
@@ -209,9 +236,83 @@ where
         })
     }
 
-    async fn resolve_dataset_name_to_id(&self, dataset_name: &DatasetName) -> Result<DatasetId> {
+    async fn load_loading_info(&self, dataset: &DatasetId) -> Result<MetaDataDefinition> {
+        let conn = self.conn_pool.get().await?;
+
+        let stmt = conn
+            .prepare(
+                "
+            SELECT 
+                meta_data 
+            FROM 
+                user_permitted_datasets p JOIN datasets d
+                    ON(p.dataset_id = d.id)
+            WHERE 
+                p.user_id = $1 AND d.id = $2",
+            )
+            .await?;
+
+        let row = conn
+            .query_one(&stmt, &[&self.session.user.id, dataset])
+            .await?;
+
+        Ok(row.get(0))
+    }
+
+    async fn resolve_dataset_name_to_id(
+        &self,
+        dataset_name: &DatasetName,
+    ) -> Result<Option<DatasetId>> {
         let conn = self.conn_pool.get().await?;
         resolve_dataset_name_to_id(&conn, dataset_name).await
+    }
+
+    async fn dataset_autocomplete_search(
+        &self,
+        tags: Option<Vec<String>>,
+        search_string: String,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<String>> {
+        let connection = self.conn_pool.get().await?;
+
+        let limit = i64::from(limit);
+        let offset = i64::from(offset);
+        let search_string = format!(
+            "%{}%",
+            search_string.replace('%', "\\%").replace('_', "\\_")
+        );
+
+        let mut query_params: Vec<&(dyn ToSql + Sync)> =
+            vec![&self.session.user.id, &limit, &offset, &search_string];
+
+        let tags_clause = if let Some(tags) = &tags {
+            query_params.push(tags);
+            " AND tags @> $5::text[]".to_string()
+        } else {
+            String::new()
+        };
+
+        let stmt = connection
+            .prepare(&format!(
+                "
+            SELECT 
+                display_name
+            FROM 
+                user_permitted_datasets p JOIN datasets d ON (p.dataset_id = d.id)
+            WHERE 
+                p.user_id = $1
+                AND display_name ILIKE $4 ESCAPE '\\'
+                {tags_clause}
+            ORDER BY display_name ASC
+            LIMIT $2
+            OFFSET $3;"
+            ))
+            .await?;
+
+        let rows = connection.query(&stmt, &query_params).await?;
+
+        Ok(rows.iter().map(|row| row.get(0)).collect())
     }
 }
 
@@ -220,7 +321,7 @@ impl<Tls>
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -245,7 +346,7 @@ where
 impl<Tls> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -329,7 +430,7 @@ where
 impl<Tls> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -412,18 +513,8 @@ where
 }
 
 pub struct DatasetMetaData<'m> {
-    meta_data: &'m MetaDataDefinition,
-    result_descriptor: TypedResultDescriptor,
-}
-
-impl<Tls> DatasetStorer for ProPostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    type StorageType = Box<dyn PostgresStorable<Tls>>;
+    pub meta_data: &'m MetaDataDefinition,
+    pub result_descriptor: TypedResultDescriptor,
 }
 
 impl<Tls> PostgresStorable<Tls> for MetaDataDefinition
@@ -466,7 +557,7 @@ where
 #[async_trait]
 impl<Tls> DatasetStore for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -474,7 +565,7 @@ where
     async fn add_dataset(
         &self,
         dataset: AddDataset,
-        meta_data: Box<dyn PostgresStorable<Tls>>,
+        meta_data: MetaDataDefinition,
     ) -> Result<DatasetIdAndName> {
         let id = DatasetId::new();
         let name = dataset.name.unwrap_or_else(|| DatasetName {
@@ -482,9 +573,15 @@ where
             name: id.to_string(),
         });
 
+        log::info!(
+            "Adding dataset with name: {:?}, tags: {:?}",
+            name,
+            dataset.tags
+        );
+
         self.check_namespace(&name)?;
 
-        let typed_meta_data = meta_data.to_typed_metadata()?;
+        let typed_meta_data = meta_data.to_typed_metadata();
 
         let mut conn = self.conn_pool.get().await?;
 
@@ -504,9 +601,10 @@ where
                     result_descriptor,
                     meta_data,
                     symbology,
-                    provenance
+                    provenance,
+                    tags
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::\"Provenance\"[])",
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::\"Provenance\"[], $10::text[])",
             )
             .await?;
 
@@ -522,6 +620,7 @@ where
                 typed_meta_data.meta_data,
                 &dataset.symbology,
                 &dataset.provenance,
+                &dataset.tags,
             ],
         )
         .await?;
@@ -549,15 +648,62 @@ where
         Ok(DatasetIdAndName { id, name })
     }
 
+    async fn update_dataset(&self, dataset: DatasetId, update: UpdateDataset) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        tx.execute(
+            "UPDATE datasets SET name = $2, display_name = $3, description = $4 WHERE id = $1;",
+            &[
+                &dataset,
+                &update.name,
+                &update.display_name,
+                &update.description,
+            ],
+        )
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn update_dataset_symbology(
+        &self,
+        dataset: DatasetId,
+        symbology: &Symbology,
+    ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        tx.execute(
+            "UPDATE datasets SET symbology = $2 WHERE id = $1;",
+            &[&dataset, &symbology],
+        )
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
     async fn delete_dataset(&self, dataset_id: DatasetId) -> Result<()> {
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(dataset_id, Permission::Owner, &tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(dataset_id.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         let stmt = tx
             .prepare(
@@ -588,16 +734,12 @@ where
 
         Ok(())
     }
-
-    fn wrap_meta_data(&self, meta: MetaDataDefinition) -> Self::StorageType {
-        Box::new(meta)
-    }
 }
 
 #[async_trait]
 impl<Tls> UploadDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -662,146 +804,6 @@ where
     }
 }
 
-#[async_trait]
-impl<Tls> DatasetLayerCollectionProvider for ProPostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    async fn load_dataset_layer_collection(
-        &self,
-        collection: &LayerCollectionId,
-        options: LayerCollectionListOptions,
-    ) -> Result<LayerCollection> {
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare(
-                "
-                SELECT 
-                    concat(d.id, ''), 
-                    d.display_name, 
-                    d.description
-                FROM 
-                    user_permitted_datasets p JOIN datasets d 
-                        ON (p.dataset_id = d.id)
-                WHERE 
-                    p.user_id = $1
-                ORDER BY d.name ASC
-                LIMIT $2
-                OFFSET $3;",
-            )
-            .await?;
-
-        let rows = conn
-            .query(
-                &stmt,
-                &[
-                    &self.session.user.id,
-                    &i64::from(options.limit),
-                    &i64::from(options.offset),
-                ],
-            )
-            .await?;
-
-        let items = rows
-            .iter()
-            .map(|row| {
-                Result::<CollectionItem>::Ok(CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DATASET_DB_LAYER_PROVIDER_ID,
-                        layer_id: LayerId(row.get(0)),
-                    },
-                    name: row.get(1),
-                    description: row.get(2),
-                    properties: vec![],
-                }))
-            })
-            .filter_map(Result::ok)
-            .collect();
-
-        Ok(LayerCollection {
-            id: ProviderLayerCollectionId {
-                provider_id: INTERNAL_PROVIDER_ID,
-                collection_id: collection.clone(),
-            },
-            name: "Datasets".to_string(),
-            description: "Basic Layers for all Datasets".to_string(),
-            items,
-            entry_label: None,
-            properties: vec![],
-        })
-    }
-
-    async fn get_dataset_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
-        Ok(LayerCollectionId(DATASET_DB_ROOT_COLLECTION_ID.to_string()))
-    }
-
-    async fn load_dataset_layer(&self, id: &LayerId) -> Result<Layer> {
-        let dataset_id = DatasetId::from_str(&id.0)?;
-
-        let mut conn = self.conn_pool.get().await?;
-        let tx = conn.build_transaction().start().await?;
-
-        ensure!(
-            self.has_permission_in_tx(dataset_id, Permission::Read, &tx)
-                .await?,
-            error::PermissionDenied
-        );
-
-        let stmt = tx
-            .prepare(
-                "
-                SELECT 
-                    d.name, 
-                    d.display_name,
-                    d.description,
-                    d.source_operator,
-                    d.symbology
-                FROM 
-                    datasets d
-                WHERE id = $1;",
-            )
-            .await?;
-
-        let row = tx
-            .query_one(
-                &stmt,
-                &[
-                    &Uuid::from_str(&id.0).map_err(|_| error::Error::IdStringMustBeUuid {
-                        found: id.0.clone(),
-                    })?,
-                ],
-            )
-            .await?;
-
-        tx.commit().await?;
-
-        let name: DatasetName = row.get(0);
-        let display_name: String = row.get(1);
-        let description: String = row.get(2);
-        let source_operator: String = row.get(3);
-        let symbology: Option<Symbology> = row.get(4);
-
-        let operator = source_operator_from_dataset(&source_operator, &name.into())?;
-
-        Ok(Layer {
-            id: ProviderLayerId {
-                provider_id: DATASET_DB_LAYER_PROVIDER_ID,
-                layer_id: id.clone(),
-            },
-            name: display_name,
-            description,
-            workflow: Workflow { operator },
-            symbology,
-            properties: vec![],
-            metadata: HashMap::new(),
-        })
-    }
-}
-
 #[derive(Debug, Clone, ToSql, FromSql)]
 pub struct FileUpload {
     pub id: FileId,
@@ -836,5 +838,149 @@ impl From<FileUpload> for crate::datasets::upload::FileUpload {
             name: upload.name,
             byte_size: upload.byte_size as u64,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+    use crate::{
+        contexts::{ApplicationContext, SessionContext},
+        pro::{
+            contexts::ProPostgresContext,
+            ge_context,
+            users::{UserAuth, UserSession},
+        },
+    };
+    use geoengine_datatypes::{
+        collections::VectorDataType,
+        primitives::{CacheTtlSeconds, FeatureDataType, Measurement},
+        spatial_reference::SpatialReference,
+    };
+    use geoengine_operators::{
+        engine::{StaticMetaData, VectorColumnInfo},
+        source::{
+            CsvHeader, FormatSpecifics, OgrSourceColumnSpec, OgrSourceDatasetTimeType,
+            OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
+        },
+    };
+    use tokio_postgres::NoTls;
+
+    #[ge_context::test]
+    async fn it_autocompletes_datasets(app_ctx: ProPostgresContext<NoTls>) {
+        let session_a = app_ctx.create_anonymous_session().await.unwrap();
+        let session_b = app_ctx.create_anonymous_session().await.unwrap();
+
+        let db_a = app_ctx.session_context(session_a.clone()).db();
+        let db_b = app_ctx.session_context(session_b.clone()).db();
+
+        add_single_dataset(&db_a, &session_a).await;
+
+        assert_eq!(
+            db_a.dataset_autocomplete_search(None, "Ogr".to_owned(), 10, 0)
+                .await
+                .unwrap(),
+            vec!["Ogr Test"]
+        );
+        assert_eq!(
+            db_a.dataset_autocomplete_search(
+                Some(vec!["upload".to_string()]),
+                "Ogr".to_owned(),
+                10,
+                0
+            )
+            .await
+            .unwrap(),
+            vec!["Ogr Test"]
+        );
+
+        // check that other user B cannot access datasets of user A
+
+        assert!(db_b
+            .dataset_autocomplete_search(None, "Ogr".to_owned(), 10, 0)
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(db_b
+            .dataset_autocomplete_search(Some(vec!["upload".to_string()]), "Ogr".to_owned(), 10, 0)
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    async fn add_single_dataset(db: &ProPostgresDb<NoTls>, session: &UserSession) {
+        let loading_info = OgrSourceDataset {
+            file_name: PathBuf::from("test.csv"),
+            layer_name: "test.csv".to_owned(),
+            data_type: Some(VectorDataType::MultiPoint),
+            time: OgrSourceDatasetTimeType::Start {
+                start_field: "start".to_owned(),
+                start_format: OgrSourceTimeFormat::Auto,
+                duration: OgrSourceDurationSpec::Zero,
+            },
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: Some(FormatSpecifics::Csv {
+                    header: CsvHeader::Auto,
+                }),
+                x: "x".to_owned(),
+                y: None,
+                int: vec![],
+                float: vec![],
+                text: vec![],
+                bool: vec![],
+                datetime: vec![],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
+        };
+
+        let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+            OgrSourceDataset,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        > {
+            loading_info: loading_info.clone(),
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: [(
+                    "foo".to_owned(),
+                    VectorColumnInfo {
+                        data_type: FeatureDataType::Float,
+                        measurement: Measurement::Unitless,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
+            phantom: Default::default(),
+        });
+
+        let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
+
+        db.add_dataset(
+            AddDataset {
+                name: Some(dataset_name.clone()),
+                display_name: "Ogr Test".to_owned(),
+                description: "desc".to_owned(),
+                source_operator: "OgrSource".to_owned(),
+                symbology: None,
+                provenance: None,
+                tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+            },
+            meta_data,
+        )
+        .await
+        .unwrap();
     }
 }

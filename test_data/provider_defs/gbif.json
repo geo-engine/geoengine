@@ -1,6 +1,8 @@
 {
   "type": "GbifDataProviderDefinition",
   "name": "GBIF",
+  "description": "Access to GBIF occurrence data",
+  "priority": -30,
   "dbConfig": {
     "user": "geoengine",
     "password": "geoengine",
@@ -9,5 +11,7 @@
     "database": "geoengine",
     "schema": "gbif"
   },
-  "cacheTtl": 0
+  "cacheTtl": 0,
+  "autocompleteTimeout": 5,
+  "columns": ["gbifid", "basisofrecord", "scientificname"]
 }

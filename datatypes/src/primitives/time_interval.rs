@@ -130,8 +130,12 @@ impl TimeInterval {
         A::Error: Debug,
         B::Error: Debug,
     {
-        let start = start.try_into().unwrap();
-        let end = end.try_into().unwrap();
+        let start = start
+            .try_into()
+            .expect("start's validity should be checked by the caller");
+        let end = end
+            .try_into()
+            .expect("end's validity should be checked by the caller");
         debug_assert!(start <= end);
         Self { start, end }
     }
@@ -532,15 +536,15 @@ mod tests {
 
     #[test]
     fn to_geo_json_event() {
-        let min_visualizable_value = -8_334_632_851_200_001 + 1;
-        let max_visualizable_value = 8_210_298_412_800_000 - 1;
+        let min_visualizable_value = -8_334_601_228_800_000;
+        let max_visualizable_value = 8_210_266_876_799_999;
 
         assert_eq!(
             TimeInterval::new_unchecked(min_visualizable_value, max_visualizable_value)
                 .as_geo_json_event(),
             serde_json::json!({
-                "start": "-262144-01-01T00:00:00+00:00",
-                "end": "+262143-12-31T23:59:59.999+00:00",
+                "start": "-262143-01-01T00:00:00+00:00",
+                "end": "+262142-12-31T23:59:59.999+00:00",
                 "type": "Interval",
             })
         );
@@ -551,8 +555,8 @@ mod tests {
             )
             .as_geo_json_event(),
             serde_json::json!({
-                "start": "-262144-01-01T00:00:00+00:00",
-                "end": "+262143-12-31T23:59:59.999+00:00",
+                "start": "-262143-01-01T00:00:00+00:00",
+                "end": "+262142-12-31T23:59:59.999+00:00",
                 "type": "Interval",
             })
         );
@@ -563,8 +567,8 @@ mod tests {
             )
             .as_geo_json_event(),
             serde_json::json!({
-                "start": "-262144-01-01T00:00:00+00:00",
-                "end": "+262143-12-31T23:59:59.999+00:00",
+                "start": "-262143-01-01T00:00:00+00:00",
+                "end": "+262142-12-31T23:59:59.999+00:00",
                 "type": "Interval",
             })
         );
@@ -574,7 +578,7 @@ mod tests {
     fn duration_millis() {
         assert_eq!(
             TimeInterval::default().duration_ms(),
-            16_544_931_263_999_999
+            16_544_868_105_599_999
         );
 
         let time_interval = TimeInterval::new(
@@ -589,32 +593,32 @@ mod tests {
             TimeInterval::new(-1, TimeInstance::MAX)
                 .unwrap()
                 .duration_ms(),
-            8_210_298_412_800_000
+            8_210_266_876_800_000
         );
         assert_eq!(
             TimeInterval::new(0, TimeInstance::MAX)
                 .unwrap()
                 .duration_ms(),
-            8_210_298_412_799_999
+            8_210_266_876_799_999
         );
 
         assert_eq!(
             TimeInterval::new(TimeInstance::MIN, -1)
                 .unwrap()
                 .duration_ms(),
-            8_334_632_851_199_999
+            8_334_601_228_799_999
         );
         assert_eq!(
             TimeInterval::new(TimeInstance::MIN, 0)
                 .unwrap()
                 .duration_ms(),
-            8_334_632_851_200_000
+            8_334_601_228_800_000
         );
         assert_eq!(
             TimeInterval::new(TimeInstance::MIN, 1)
                 .unwrap()
                 .duration_ms(),
-            8_334_632_851_200_001
+            8_334_601_228_800_001
         );
     }
 

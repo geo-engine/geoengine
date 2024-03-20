@@ -2,6 +2,8 @@ use crate::util::statistics::StatisticsError;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{FeatureDataType, TimeInterval};
+use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::ops::Range;
@@ -102,7 +104,13 @@ pub enum Error {
 
     InvalidExpression,
 
-    InvalidNumberOfExpressionInputs,
+    #[snafu(display(
+        "The expression operator only supports inputs with up to 8 bands. Found {found} bands.",
+    ))]
+    InvalidNumberOfExpressionInputBands {
+        found: usize,
+    },
+    InvalidNumberOfRasterStackerInputs,
 
     InvalidNoDataValueValueForOutputDataType,
 
@@ -251,6 +259,7 @@ pub enum Error {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    #[snafu(display("CreatingProcessorFailed: {}", source))]
     CreatingProcessorFailed {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
@@ -310,7 +319,12 @@ pub enum Error {
     },
     #[snafu(context(false))]
     ExpressionOperator {
-        source: crate::processing::ExpressionError,
+        source: crate::processing::RasterExpressionError,
+    },
+
+    #[snafu(context(false), display("VectorExpression: {}", source))]
+    VectorExpressionOperator {
+        source: crate::processing::VectorExpressionError,
     },
 
     #[snafu(context(false))]
@@ -335,7 +349,7 @@ pub enum Error {
     SpatialReferenceMustNotBeUnreferenced,
 
     #[snafu(context(false))]
-    RasterKernelError {
+    RasterKernel {
         source: crate::processing::NeighborhoodAggregateError,
     },
 
@@ -378,7 +392,7 @@ pub enum Error {
         source: crate::pro::xg_error::XGBoostModuleError,
     },
 
-    #[snafu(context(false))]
+    #[snafu(context(false), display("PieChart: {}", source))]
     PieChart {
         source: crate::plot::PieChartError,
     },
@@ -427,8 +441,13 @@ pub enum Error {
 
     AtLeastOneStreamRequired,
 
-    #[snafu(display("Operator {operator:?} does not support sources with multiple bands."))]
+    #[snafu(display("Operator {operator:?} does not support sources with multiple bands yet."))]
     OperatorDoesNotSupportMultiBandsSourcesYet {
+        operator: &'static str,
+    },
+
+    #[snafu(display("Operator {operator:?} does not support sources with multiple bands."))]
+    OperatorDoesNotSupportMultiBandsSources {
         operator: &'static str,
     },
 
@@ -437,7 +456,16 @@ pub enum Error {
         operation: &'static str,
     },
 
-    RasterInputsMustHaveSameSpatialReferenceAndDatatype,
+    #[snafu(display("Invalid band count. Expected {}, found {}", expected, found))]
+    InvalidBandCount {
+        expected: u32,
+        found: u32,
+    },
+
+    RasterInputsMustHaveSameSpatialReferenceAndDatatype {
+        datatypes: Vec<RasterDataType>,
+        spatial_references: Vec<SpatialReferenceOption>,
+    },
 
     GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet,
 
@@ -451,6 +479,11 @@ pub enum Error {
     RasterBandNameTooLong,
 
     AtLeastOneRasterBandDescriptorRequired,
+
+    #[snafu(display("Band {band_idx} does not exist."))]
+    BandDoesNotExist {
+        band_idx: u32,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

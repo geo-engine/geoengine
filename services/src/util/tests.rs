@@ -30,6 +30,7 @@ use futures_util::Future;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::operations::image::Colorizer;
+use geoengine_datatypes::operations::image::RasterColorizer;
 use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::Coordinate2D;
@@ -94,7 +95,10 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
             visibility: Default::default(),
             symbology: Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
-                colorizer: Colorizer::Rgba,
+                raster_colorizer: RasterColorizer::SingleBand {
+                    band: 0,
+                    band_colorizer: Colorizer::Rgba,
+                },
             }),
         })]),
         plots: None,
@@ -170,6 +174,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
                 license: "Sample License".to_owned(),
                 uri: "http://example.org/".to_owned(),
             }]),
+            tags: Some(vec!["raster".to_owned(), "test".to_owned()]),
         },
         meta_data: MetaDataDefinition::GdalMetaDataRegular(create_ndvi_meta_data_with_cache_ttl(
             cache_ttl,
@@ -178,7 +183,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
 
     let db = &app_ctx.default_session_context().await.unwrap().db();
     let dataset_id = db
-        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
+        .add_dataset(ndvi.properties, ndvi.meta_data)
         .await
         .expect("dataset db access")
         .id;
@@ -200,9 +205,11 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
             display_name: "Land Cover".to_string(),
             description: "Land Cover derived from MODIS/Terra+Aqua Land Cover".to_string(),
             source_operator: "GdalSource".to_string(),
+            tags: Some(vec!["raster".to_owned(), "test".to_owned()]),
             symbology: Some(Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
-                colorizer: Colorizer::palette(
+                raster_colorizer: RasterColorizer::SingleBand {
+                    band: 0, band_colorizer: Colorizer::palette(
                     [
                         (0.0.try_into().unwrap(), RgbaColor::new(134, 201, 227, 255)),
                         (1.0.try_into().unwrap(), RgbaColor::new(30, 129, 62, 255)),
@@ -227,7 +234,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                     .collect(),
                     RgbaColor::transparent(),
                     RgbaColor::transparent(),
-                ).unwrap(),
+                ).unwrap()},
             })),
             provenance: Some(vec![Provenance {
                 citation: "Friedl, M., D. Sulla-Menashe. MCD12C1 MODIS/Terra+Aqua Land Cover Type Yearly L3 Global 0.05Deg CMG V006. 2015, distributed by NASA EOSDIS Land Processes DAAC, https://doi.org/10.5067/MODIS/MCD12C1.006. Accessed 2022-03-16.".to_owned(),
@@ -289,7 +296,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
         }),
     };
 
-    db.add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
+    db.add_dataset(ndvi.properties, ndvi.meta_data)
         .await
         .expect("dataset db access")
         .id

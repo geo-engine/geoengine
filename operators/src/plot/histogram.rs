@@ -25,7 +25,7 @@ use geoengine_datatypes::{
     raster::GridSize,
 };
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, OptionExt};
+use snafu::ensure;
 use std::convert::TryFrom;
 
 pub const HISTOGRAM_OPERATOR_NAME: &str = "Histogram";
@@ -44,8 +44,8 @@ impl OperatorName for Histogram {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistogramParams {
-    /// Name of the (numeric) attribute to compute the histogram on. Ignored for operation on rasters.
-    pub column_name: Option<String>,
+    /// Name of the (numeric) vector attribute or raster band to compute the histogram on.
+    pub attribute_name: String,
     /// The bounds (min/max) of the histogram.
     pub bounds: HistogramBounds,
     /// Specify the number of buckets or how it should be derived.
@@ -95,25 +95,19 @@ impl PlotOperator for Histogram {
 
         Ok(match self.sources.source {
             RasterOrVectorOperator::Raster(raster_source) => {
-                ensure!(
-                    self.params.column_name.is_none(),
-                    error::InvalidOperatorSpec {
-                        reason: "Histogram on raster input must not have `columnName` field set"
-                            .to_string(),
-                    }
-                );
-
                 let raster_source = raster_source
                     .initialize(path.clone_and_append(0), context)
                     .await?;
 
                 let in_desc = raster_source.result_descriptor();
 
-                // TODO: implement multi-band functionality and remove this check
                 ensure!(
-                    in_desc.bands.len() == 1,
-                    crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                        operator: Histogram::TYPE_NAME
+                    in_desc
+                        .bands
+                        .iter()
+                        .any(|b| b.name == self.params.attribute_name),
+                    error::InvalidOperatorSpec {
+                        reason: "Band with given `attribute_name` does not exist".to_string(),
                     }
                 );
 
@@ -133,15 +127,7 @@ impl PlotOperator for Histogram {
                 .boxed()
             }
             RasterOrVectorOperator::Vector(vector_source) => {
-                let column_name =
-                    self.params
-                        .column_name
-                        .as_ref()
-                        .context(error::InvalidOperatorSpec {
-                            reason: "Histogram on vector input is missing `columnName` field"
-                                .to_string(),
-                        })?;
-
+                let column_name = &self.params.attribute_name;
                 let vector_source = vector_source
                     .initialize(path.clone_and_append(0), context)
                     .await?;
@@ -188,7 +174,7 @@ pub struct InitializedHistogram<Op> {
     metadata: HistogramMetadataOptions,
     source: Op,
     interactive: bool,
-    column_name: Option<String>,
+    attribute_name: String,
 }
 
 impl<Op> InitializedHistogram<Op> {
@@ -224,16 +210,24 @@ impl<Op> InitializedHistogram<Op> {
             },
             source,
             interactive: params.interactive,
-            column_name: params.column_name,
+            attribute_name: params.attribute_name,
         }
     }
 }
 
 impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterOperator>> {
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
+        let (band_idx, band) = self
+            .source
+            .result_descriptor()
+            .bands
+            .iter().enumerate()
+            .find(|(_, b)| b.name == self.attribute_name).expect("the band with the attribute name should exist in the source because it was checked during initialization of the operator.");
+
         let processor = HistogramRasterQueryProcessor {
             input: self.source.query_processor()?,
-            measurement: self.source.result_descriptor().bands[0].measurement.clone(), // TODO: adjust for multibands
+            band_idx: band_idx as u32,
+            measurement: band.measurement.clone(),
             metadata: self.metadata,
             interactive: self.interactive,
         };
@@ -254,11 +248,11 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
     fn query_processor(&self) -> Result<TypedPlotQueryProcessor> {
         let processor = HistogramVectorQueryProcessor {
             input: self.source.query_processor()?,
-            column_name: self.column_name.clone().unwrap_or_default(),
+            column_name: self.attribute_name.clone(),
             measurement: self
                 .source
                 .result_descriptor()
-                .column_measurement(self.column_name.as_deref().unwrap_or_default())
+                .column_measurement(&self.attribute_name)
                 .cloned()
                 .into(),
             metadata: self.metadata,
@@ -280,6 +274,7 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
 /// A query processor that calculates the Histogram about its raster inputs.
 pub struct HistogramRasterQueryProcessor {
     input: TypedRasterQueryProcessor,
+    band_idx: u32,
     measurement: Measurement,
     metadata: HistogramMetadataOptions,
     interactive: bool,
@@ -379,7 +374,7 @@ impl HistogramRasterQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            process_metadata(processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first()), ctx).await?, self.metadata).await
+            process_metadata(processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::new_single(self.band_idx)), ctx).await?, self.metadata).await
         })
     }
 
@@ -399,7 +394,7 @@ impl HistogramRasterQueryProcessor {
         .map_err(Error::from)?;
 
         call_on_generic_raster_processor!(&self.input, processor => {
-            let mut query = processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first()), ctx).await?;
+            let mut query = processor.query(RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::new_single(self.band_idx)), ctx).await?;
 
             while let Some(tile) = query.next().await {
 
@@ -690,7 +685,7 @@ mod tests {
     fn serialization() {
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: Some("foobar".to_string()),
+                attribute_name: "foobar".to_string(),
                 bounds: HistogramBounds::Values {
                     min: 5.0,
                     max: 10.0,
@@ -706,7 +701,7 @@ mod tests {
         let serialized = json!({
             "type": "Histogram",
             "params": {
-                "columnName": "foobar",
+                "attributeName": "foobar",
                 "bounds": {
                     "min": 5.0,
                     "max": 10.0,
@@ -739,7 +734,7 @@ mod tests {
     fn serialization_alt() {
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: None,
+                attribute_name: "band".to_string(),
                 bounds: HistogramBounds::Data(Default::default()),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -754,6 +749,7 @@ mod tests {
         let serialized = json!({
             "type": "Histogram",
             "params": {
+                "attributeName": "band",
                 "bounds": "data",
                 "buckets": {
                     "type": "squareRootChoiceRule",
@@ -782,7 +778,7 @@ mod tests {
     async fn column_name_for_raster_source() {
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: Some("foo".to_string()),
+                attribute_name: "foo".to_string(),
                 bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
                 buckets: HistogramBuckets::Number { value: 3 },
                 interactive: false,
@@ -839,7 +835,7 @@ mod tests {
 
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: None,
+                attribute_name: "band".to_string(),
                 bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
                 buckets: HistogramBuckets::Number { value: 3 },
                 interactive: false,
@@ -892,7 +888,7 @@ mod tests {
 
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: None,
+                attribute_name: "band".to_string(),
                 bounds: HistogramBounds::Data(Default::default()),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -956,7 +952,7 @@ mod tests {
 
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: Some("foo".to_string()),
+                attribute_name: "foo".to_string(),
                 bounds: HistogramBounds::Values { min: 0.0, max: 8.0 },
                 buckets: HistogramBuckets::Number { value: 3 },
                 interactive: true,
@@ -1025,7 +1021,7 @@ mod tests {
 
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: Some("foo".to_string()),
+                attribute_name: "foo".to_string(),
                 bounds: HistogramBounds::Data(Default::default()),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -1081,7 +1077,7 @@ mod tests {
         let workflow = serde_json::json!({
             "type": "Histogram",
             "params": {
-                "columnName": "featurecla",
+                "attributeName": "featurecla",
                 "bounds": "data",
                 "buckets": {
                     "type": "squareRootChoiceRule",
@@ -1204,7 +1200,7 @@ mod tests {
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: None,
+                attribute_name: "band".to_string(),
                 bounds: HistogramBounds::Data(Data),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -1285,7 +1281,7 @@ mod tests {
 
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: Some("foo".to_string()),
+                attribute_name: "foo".to_string(),
                 bounds: HistogramBounds::Data(Default::default()),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -1351,7 +1347,7 @@ mod tests {
 
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: Some("foo".to_string()),
+                attribute_name: "foo".to_string(),
                 bounds: HistogramBounds::Data(Default::default()),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,
@@ -1413,7 +1409,7 @@ mod tests {
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
             params: HistogramParams {
-                column_name: None,
+                attribute_name: "band".to_string(),
                 bounds: HistogramBounds::Data(Data),
                 buckets: HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets: 100,

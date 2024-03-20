@@ -7,19 +7,19 @@ use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::permissions::{RoleDescription, RoleId};
 use crate::pro::users::OidcError::OidcDisabled;
-use crate::pro::users::RoleDb;
 use crate::pro::users::UserAuth;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserId;
 use crate::pro::users::UserRegistration;
 use crate::pro::users::UserSession;
-use crate::pro::users::{AuthCodeResponse, UserCredentials};
+use crate::pro::users::{AuthCodeRequestURL, AuthCodeResponse, RoleDb, UserCredentials};
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
 use crate::util::config;
 use crate::util::extractors::ValidatedJson;
 use actix_web::FromRequest;
 use actix_web::{web, HttpResponse, Responder};
+use geoengine_datatypes::error::BoxedResultExt;
 use serde::Deserialize;
 use serde::Serialize;
 use snafu::ensure;
@@ -51,6 +51,10 @@ where
         .service(web::resource("/oidcInit").route(web::post().to(oidc_init::<C>)))
         .service(web::resource("/oidcLogin").route(web::post().to(oidc_login::<C>)))
         .service(web::resource("/roles").route(web::put().to(add_role_handler::<C>)))
+        .service(
+            web::resource("/roles/byName/{name}")
+                .route(web::get().to(get_role_by_name_handler::<C>)),
+        )
         .service(web::resource("/roles/{role}").route(web::delete().to(remove_role_handler::<C>)))
         .service(
             web::resource("/users/{user}/roles/{role}")
@@ -84,7 +88,7 @@ where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
-        config::get_config_element::<crate::pro::util::config::User>()?.user_registration,
+        config::get_config_element::<crate::pro::util::config::User>()?.registration,
         error::UserRegistrationDisabled
     );
 
@@ -423,25 +427,24 @@ where
 
 /// Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.
 ///
-/// # Example
-///
-/// ```text
-/// POST /oidcInit
-///
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "url": "http://someissuer.com/authorize?client_id=someclient&redirect_uri=someuri&response_type=code&scope=somescope&state=somestate&nonce=somenonce&codechallenge=somechallenge&code_challenge_method=S256"
-/// }
-/// ```
-///
 /// # Errors
 ///
 /// This call fails if Open ID Connect is disabled, misconfigured or the Id Provider is unreachable.
+///
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/oidcInit",
+    responses(
+        (status = 200, body = AuthCodeRequestURL,
+        example = json!({
+            "url": "http://someissuer.com/authorize?client_id=someclient&redirect_uri=someuri&response_type=code&scope=somescope&state=somestate&nonce=somenonce&codechallenge=somechallenge&code_challenge_method=S256"
+        })
+    ))
+)]
 pub(crate) async fn oidc_init<C: ProApplicationContext>(
     app_ctx: web::Data<C>,
-) -> Result<impl Responder>
+) -> Result<web::Json<AuthCodeRequestURL>>
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -458,38 +461,11 @@ where
         .generate_request(oidc_client)
         .await?;
 
-    Ok(web::Json(result))
+    Ok::<web::Json<AuthCodeRequestURL>, crate::error::Error>(web::Json(result))
 }
 
 /// Creates a session for a user via a login with Open Id Connect.
 /// This call must be preceded by a call to oidcInit and match the parameters of that call.
-///
-/// # Example
-///
-/// ```text
-/// POST /oidcLogin
-///
-/// {
-///   "session_state": "somesessionstate",
-///   "code": "somecode",
-///   "state": "somestate"
-/// }
-/// ```
-/// Response:
-/// ```text
-/// {
-///   "id": "208fa24e-7a92-4f57-a3fe-d1177d9f18ad",
-///   "user": {
-///     "id": "5b4466d2-8bab-4ed8-a182-722af3c80958",
-///     "email": "foo@bar.de",
-///     "realName": "Foo Bar"
-///   },
-///   "created": "2021-04-26T13:47:10.579724800Z",
-///   "validUntil": "2021-04-26T14:47:10.579775400Z",
-///   "project": null,
-///   "view": null
-/// }
-/// ```
 ///
 /// # Errors
 ///
@@ -497,10 +473,32 @@ where
 /// if a previous oidcLogin call with the same state was already successfully or unsuccessfully resolved,
 /// if the Open Id Connect configuration is invalid,
 /// or if the Id Provider is unreachable.
+///
+#[utoipa::path(
+    tag = "Session",
+    post,
+    path = "/oidcLogin",
+    request_body = AuthCodeResponse,
+    responses(
+        (status = 200, body = UserSession,
+        example = json!({
+           "id": "208fa24e-7a92-4f57-a3fe-d1177d9f18ad",
+           "user": {
+             "id": "5b4466d2-8bab-4ed8-a182-722af3c80958",
+             "email": "foo@bar.de",
+             "realName": "Foo Bar"
+           },
+           "created": "2021-04-26T13:47:10.579724800Z",
+           "validUntil": "2021-04-26T14:47:10.579775400Z",
+           "project": null,
+           "view": null
+        })
+    ))
+)]
 pub(crate) async fn oidc_login<C: ProApplicationContext>(
     response: web::Json<AuthCodeResponse>,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder>
+) -> Result<web::Json<UserSession>>
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
@@ -555,9 +553,45 @@ where
         .session_context(session)
         .db()
         .add_role(&add_role.name)
-        .await?;
+        .await
+        .boxed_context(crate::error::RoleDb)?;
 
     Ok(web::Json(IdResponse::from(id)))
+}
+
+/// Get role by name
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/roles/byName/{name}",
+    responses(
+        (status = 200, response = IdResponse<RoleId>)
+    ),
+    params(
+        ("name" = String, description = "Role Name")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub(crate) async fn get_role_by_name_handler<C: ProApplicationContext>(
+    app_ctx: web::Data<C>,
+    session: C::Session,
+    role_name: web::Path<String>,
+) -> Result<web::Json<IdResponse<RoleId>>>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let role_name = role_name.into_inner();
+
+    let role_id = app_ctx
+        .session_context(session)
+        .db()
+        .load_role_by_name(&role_name)
+        .await
+        .boxed_context(crate::error::RoleDb)?;
+
+    Ok(web::Json(IdResponse::from(role_id)))
 }
 
 /// Remove a role. Requires admin privilige.
@@ -589,7 +623,8 @@ where
         .session_context(session)
         .db()
         .remove_role(&role)
-        .await?;
+        .await
+        .boxed_context(crate::error::RoleDb)?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -624,7 +659,8 @@ where
         .session_context(session)
         .db()
         .assign_role(&role, &user)
-        .await?;
+        .await
+        .boxed_context(crate::error::RoleDb)?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -659,7 +695,8 @@ where
         .session_context(session)
         .db()
         .revoke_role(&role, &user)
-        .await?;
+        .await
+        .boxed_context(crate::error::RoleDb)?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
 }
@@ -707,7 +744,8 @@ where
         .session_context(session)
         .db()
         .get_role_descriptions(&user)
-        .await?;
+        .await
+        .boxed_context(crate::error::RoleDb)?;
 
     Ok(web::Json(res))
 }
@@ -715,6 +753,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::model::datatypes::RasterColorizer;
     use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{Session, SessionContext};
     use crate::pro::ge_context;
@@ -1184,7 +1223,7 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        config::set_config("user.user_registration", false).unwrap();
+        config::set_config("user.registration", false).unwrap();
 
         let user_reg = UserRegistration {
             email: "foo@example.com".to_owned(),
@@ -1198,7 +1237,7 @@ mod tests {
             .set_json(&user_reg);
         let res = send_pro_test_request(req, app_ctx.clone()).await;
 
-        config::set_config("user.user_registration", true).unwrap();
+        config::set_config("user.registration", true).unwrap();
 
         ErrorResponse::assert(
             res,
@@ -1330,7 +1369,7 @@ mod tests {
         ErrorResponse::assert(
             res,
             400,
-            "OidcError",
+            "Oidc",
             "OidcError: ProviderDiscoveryError: Server returned invalid response: HTTP status code 404 Not Found",
         ).await;
     }
@@ -1408,13 +1447,7 @@ mod tests {
 
         let res = oidc_login_test_helper(Method::POST, app_ctx, auth_code_response).await;
 
-        ErrorResponse::assert(
-            res,
-            400,
-            "OidcError",
-            "OidcError: Login failed: Request unknown",
-        )
-        .await;
+        ErrorResponse::assert(res, 400, "Oidc", "OidcError: Login failed: Request unknown").await;
     }
 
     fn oidc_login_fail_oidc_db() -> (Server, impl Fn() -> OidcRequestDb) {
@@ -1460,7 +1493,7 @@ mod tests {
         ErrorResponse::assert(
             res,
             400,
-            "OidcError",
+            "Oidc",
             "OidcError: Verification failed: Request for code to token exchange failed",
         )
         .await;
@@ -1623,7 +1656,7 @@ mod tests {
             quota.available,
             crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                 .unwrap()
-                .default_available_quota
+                .initial_credits
         );
 
         let update = UpdateQuota { available: 123 };
@@ -1669,6 +1702,11 @@ mod tests {
         )
         .unwrap();
 
+        let raster_colorizer = RasterColorizer::SingleBand {
+            band: 0,
+            band_colorizer: colorizer.into(),
+        };
+
         let params = &[
             ("request", "GetMap"),
             ("service", "WMS"),
@@ -1683,7 +1721,10 @@ mod tests {
             ("crs", "EPSG:4326"),
             (
                 "styles",
-                &format!("custom:{}", serde_json::to_string(&colorizer).unwrap()),
+                &format!(
+                    "custom:{}",
+                    serde_json::to_string(&raster_colorizer).unwrap()
+                ),
             ),
             ("format", "image/png"),
             ("time", "2014-04-01T12:00:00.0Z"),

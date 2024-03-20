@@ -18,11 +18,8 @@ pub async fn add_datasets_from_directory<D: DatasetDb>(dataset_db: &mut D, file_
         let def: DatasetDefinition =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
-        db.add_dataset(
-            def.properties.clone(),
-            db.wrap_meta_data(def.meta_data.clone()),
-        )
-        .await?;
+        db.add_dataset(def.properties.clone(), def.meta_data.clone())
+            .await?;
 
         Ok(())
     }
@@ -79,7 +76,7 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_p
         match entry {
             Ok(entry) if entry.path().is_file() => {
                 match add_provider_definition_from_dir_entry(db, &entry).await {
-                    Ok(_) => info!("Added provider from file `{:?}`", entry.path()),
+                    Ok(()) => info!("Added provider from file `{:?}`", entry.path()),
                     Err(e) => {
                         warn!(
                             "Skipped adding provider from file `{:?}` error: `{}`",

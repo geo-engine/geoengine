@@ -6,5 +6,6 @@
     { "value": 100, "color": [253, 231, 37, 255] }
   ],
   "noDataColor": [0, 0, 0, 0],
-  "defaultColor": [0, 0, 0, 0]
+  "overColor": [0, 0, 0, 0],
+  "underColor": [0, 0, 0, 0]
 }

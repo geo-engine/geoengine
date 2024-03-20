@@ -84,7 +84,7 @@ impl RasterOperator for XgboostOperator {
 
         let init_rasters = initialized_sources.rasters;
 
-        let input = init_rasters.get(0).context(XgModuleError::NoInputData)?;
+        let input = init_rasters.first().context(XgModuleError::NoInputData)?;
 
         let spatial_reference = input.result_descriptor().spatial_reference;
 
@@ -174,6 +174,7 @@ impl InitializedRasterOperator for InitializedXgboostOperator {
 
         Ok(QueryProcessorOut(Box::new(XgboostProcessor::new(
             vec_of_rqps,
+            self.result_descriptor.clone(),
             self.model.clone(),
             self.no_data_value,
         ))))
@@ -189,6 +190,7 @@ where
     Q: RasterQueryProcessor<RasterType = f32>,
 {
     sources: Vec<Q>,
+    result_descriptor: RasterResultDescriptor,
     model: String,
     no_data_value: f32,
 }
@@ -197,9 +199,15 @@ impl<Q> XgboostProcessor<Q>
 where
     Q: RasterQueryProcessor<RasterType = f32>,
 {
-    pub fn new(sources: Vec<Q>, model_file_content: String, no_data_value: f32) -> Self {
+    pub fn new(
+        sources: Vec<Q>,
+        result_descriptor: RasterResultDescriptor,
+        model_file_content: String,
+        no_data_value: f32,
+    ) -> Self {
         Self {
             sources,
+            result_descriptor,
             model: model_file_content,
             no_data_value,
         }
@@ -211,11 +219,11 @@ where
         model_content: Arc<String>,
         pool: Arc<ThreadPool>,
     ) -> Result<BaseTile<GridOrEmpty<GridShape<[usize; 2]>, f32>>, XGBoostModuleError> {
-        let tile = bands_of_tile.get(0).context(XgModuleError::BaseTile)?;
+        let tile = bands_of_tile.first().context(XgModuleError::BaseTile)?;
 
         // gather the data
         let grid_shape = tile.grid_shape();
-        let n_bands = bands_of_tile.len() as i32;
+        let n_bands = bands_of_tile.len() as u32;
         let props = tile.properties.clone(); // = &tile.properties;
         let time = tile.time;
         let tile_position = tile.tile_position;
@@ -234,7 +242,7 @@ where
                 &pool,
                 &model_content,
                 grid_shape,
-                n_bands as usize,
+                n_bands,
                 ndv,
             )
         })
@@ -261,7 +269,7 @@ fn process_tile(
     pool: &ThreadPool,
     model_file: &Arc<String>,
     grid_shape: GridShape<[usize; 2]>,
-    n_bands: usize,
+    n_bands: u32,
     nan_val: f32,
 ) -> Result<geoengine_datatypes::raster::Grid<GridShape<[usize; 2]>, f32>, XGBoostModuleError> {
     pool.install(|| {
@@ -281,7 +289,7 @@ fn process_tile(
 
         // TODO: clarify: as of right now, this is not doing anything
         // because xgboost seems to be the fastest, when the chunks are big.
-        let chunk_size = grid_shape.number_of_elements() * n_bands;
+        let chunk_size = grid_shape.number_of_elements() * n_bands as usize;
 
         let res: Vec<Vec<f32>> = pixels
             .par_chunks(chunk_size)
@@ -289,10 +297,10 @@ fn process_tile(
                 // get xgboost style matrices
                 let xg_matrix = DMatrix::from_col_major_f32(
                     elem,
-                    mem::size_of::<f32>() * n_bands,
+                    mem::size_of::<f32>() * n_bands as usize,
                     mem::size_of::<f32>(),
                     grid_shape.number_of_elements(),
-                    n_bands,
+                    n_bands as usize,
                     -1, // TODO: add this to settings.toml: # of threads for xgboost to use
                     nan_val,
                 )
@@ -306,7 +314,7 @@ fn process_tile(
                 // measure time for prediction
                 let predictions: Result<Vec<f32>, XGBError> = bst.predict_from_dmat(
                     &xg_matrix,
-                    &[grid_shape.number_of_elements() as u64, n_bands as u64],
+                    &[grid_shape.number_of_elements() as u64, u64::from(n_bands)],
                     &mut out_dim,
                 );
 
@@ -332,11 +340,14 @@ where
         Output = RasterTile2D<f32>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
 {
     type Output = RasterTile2D<PixelOut>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
+
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -362,6 +373,10 @@ where
         });
 
         Ok(rs.boxed())
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 
@@ -460,7 +475,7 @@ mod tests {
         tile_size_in_pixels: GridShape<[usize; 2]>,
     ) -> SourceOperator<MockRasterSourceParams<i32>> {
         let n_pixels = data
-            .get(0)
+            .first()
             .expect("could not access the first data element")
             .len();
 
@@ -816,10 +831,10 @@ mod tests {
                 initial_training_config.insert("num_class".into(), "4".into());
                 initial_training_config.insert("eta".into(), "0.75".into());
 
-                let evals = &[(matrix_vec.get(0).unwrap(), "train")];
+                let evals = &[(matrix_vec.first().unwrap(), "train")];
                 let bst = Booster::train(
                     Some(evals),
-                    matrix_vec.get(0).unwrap(),
+                    matrix_vec.first().unwrap(),
                     initial_training_config,
                     None, // <- No old model yet
                 )
@@ -844,7 +859,10 @@ mod tests {
                 update_training_config.insert("num_class".into(), "4".into());
                 update_training_config.insert("max_depth".into(), "15".into());
 
-                let evals = &[(matrix_vec.get(0).unwrap(), "orig"), (&xg_matrix2, "train")];
+                let evals = &[
+                    (matrix_vec.first().unwrap(), "orig"),
+                    (&xg_matrix2, "train"),
+                ];
                 let bst_updated = Booster::train(
                     Some(evals),
                     &xg_matrix2,

@@ -1,3 +1,10 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::print_stdout,
+    clippy::print_stderr,
+    clippy::missing_panics_doc
+)] // okay in benchmarks
+
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
@@ -17,12 +24,13 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{
-    MetaData, RasterBandDescriptors, RasterResultDescriptor, SingleRasterOrVectorSource,
-    WorkflowOperatorPath,
+    MetaData, MultipleRasterSources, RasterBandDescriptors, RasterResultDescriptor,
+    SingleRasterOrVectorSource, SingleRasterSource, WorkflowOperatorPath,
 };
 use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
 use geoengine_operators::processing::{
-    Expression, ExpressionParams, ExpressionSources, Reprojection, ReprojectionParams,
+    Expression, ExpressionParams, RasterStacker, RasterStackerParams, Reprojection,
+    ReprojectionParams,
 };
 use geoengine_operators::source::GdalSource;
 use geoengine_operators::{
@@ -139,7 +147,7 @@ where
     ) -> Box<dyn RasterOperator>,
 {
     fn run_all_benchmarks(self, bencher: &mut BenchmarkCollector) {
-        bencher.add_benchmark_result(WorkflowSingleBenchmark::run_bench(&self))
+        bencher.add_benchmark_result(WorkflowSingleBenchmark::run_bench(&self));
     }
 }
 
@@ -284,17 +292,7 @@ where
 }
 
 fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        attributes: BandSelection::first(),
-    };
-    let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
-
-    let qrects = vec![("World in 36000x18000 pixels", qrect)];
-    let tiling_specs = vec![tiling_spec];
-
+    #[allow(clippy::needless_pass_by_value)] // must match signature
     fn operator_builder(
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
@@ -338,6 +336,17 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
         .boxed()
     }
 
+    let qrect = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+        attributes: BandSelection::first(),
+    };
+    let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
+
+    let qrects = vec![("World in 36000x18000 pixels", qrect)];
+    let tiling_specs = vec![tiling_spec];
+
     WorkflowMultiBenchmark::new(
         "mock_source",
         qrects,
@@ -353,23 +362,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
 }
 
 fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCollector) {
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: SpatialResolution::new(0.005, 0.005).unwrap(),
-        attributes: BandSelection::first(),
-    };
-
-    let qrects = vec![("World in 72000x36000 pixels", qrect)];
-    let tiling_specs = vec![
-        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
-        TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
-        TilingSpecification::new((0., 0.).into(), [18000, 18000].into()),
-    ];
-
+    #[allow(clippy::needless_pass_by_value)] // must match signature
     fn operator_builder(
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
@@ -418,13 +411,38 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                 output_measurement: Some(Measurement::Unitless),
                 map_no_data: false,
             },
-            sources: ExpressionSources::new_a_b(
-                mock_raster_operator.clone().boxed(),
-                mock_raster_operator.boxed(),
-            ),
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {},
+                    sources: MultipleRasterSources {
+                        rasters: vec![
+                            mock_raster_operator.clone().boxed(),
+                            mock_raster_operator.boxed(),
+                        ],
+                    },
+                }
+                .boxed(),
+            },
         }
         .boxed()
     }
+
+    let qrect = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        spatial_resolution: SpatialResolution::new(0.005, 0.005).unwrap(),
+        attributes: BandSelection::first(),
+    };
+
+    let qrects = vec![("World in 72000x36000 pixels", qrect)];
+    let tiling_specs = vec![
+        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
+        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
+        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
+        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
+        TilingSpecification::new((0., 0.).into(), [18000, 18000].into()),
+    ];
 
     WorkflowMultiBenchmark::new(
         "mock_source_with_expression_a+b",
@@ -441,23 +459,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
 }
 
 fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut BenchmarkCollector) {
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        attributes: BandSelection::first(),
-    };
-
-    let qrects = vec![("World in 36000x18000 pixels", qrect)];
-    let tiling_specs = vec![
-        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
-        TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
-        TilingSpecification::new((0., 0.).into(), [18000, 18000].into()),
-    ];
-
+    #[allow(clippy::needless_pass_by_value)] // must match signature
     fn operator_builder(
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
@@ -506,6 +508,23 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
         }
         .boxed()
     }
+
+    let qrect = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
+        attributes: BandSelection::first(),
+    };
+
+    let qrects = vec![("World in 36000x18000 pixels", qrect)];
+    let tiling_specs = vec![
+        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
+        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
+        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
+        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
+        TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
+        TilingSpecification::new((0., 0.).into(), [18000, 18000].into()),
+    ];
 
     WorkflowMultiBenchmark::new(
         "mock_source_512px_with_identity_reprojection",
@@ -524,21 +543,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
 fn bench_mock_source_operator_with_4326_to_3857_reprojection(
     bench_collector: &mut BenchmarkCollector,
 ) {
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new(
-            (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
-            (20_037_508.342_789_244, -20_048_966.104_014_594).into(),
-        )
-        .unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: SpatialResolution::new(1050., 2100.).unwrap(),
-        attributes: BandSelection::first(),
-    };
-    let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
-
-    let qrects = vec![("World in 36000x18000 pixels", qrect)];
-    let tiling_specs = vec![tiling_spec];
-
+    #[allow(clippy::needless_pass_by_value)] // must match signature
     fn operator_builder(
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
@@ -586,6 +591,21 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
         }
         .boxed()
     }
+
+    let qrect = RasterQueryRectangle {
+        spatial_bounds: SpatialPartition2D::new(
+            (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+            (20_037_508.342_789_244, -20_048_966.104_014_594).into(),
+        )
+        .unwrap(),
+        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        spatial_resolution: SpatialResolution::new(1050., 2100.).unwrap(),
+        attributes: BandSelection::first(),
+    };
+    let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
+
+    let qrects = vec![("World in 36000x18000 pixels", qrect)];
+    let tiling_specs = vec![tiling_spec];
 
     WorkflowMultiBenchmark::new(
         "mock_source projection 4326 -> 3857",
@@ -708,7 +728,15 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
             output_measurement: Some(Measurement::Unitless),
             map_no_data: false,
         },
-        sources: ExpressionSources::new_a_b(gdal_operator.clone().boxed(), gdal_operator.boxed()),
+        sources: SingleRasterSource {
+            raster: RasterStacker {
+                params: RasterStackerParams {},
+                sources: MultipleRasterSources {
+                    rasters: vec![gdal_operator.clone().boxed(), gdal_operator.boxed()],
+                },
+            }
+            .boxed(),
+        },
     }
     .boxed();
 

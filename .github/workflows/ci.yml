@@ -32,19 +32,23 @@ jobs:
         build: [""]
 
     steps:
-      - name: Make space by deleting unused software (Workaround cf. https://github.com/actions/runner-images/issues/2840#issuecomment-790492173)
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
       - name: Checkout code
         uses: actions/checkout@v3
-      - name: APT update
-        run: sudo apt-get update
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
       - name: Install lld & GDAL
         run: |
-          sudo apt-get install lld libgdal-dev gdal-bin build-essential curl
+          sudo apt-get update
+          sudo apt-get install lld libgdal-dev gdal-bin build-essential clang curl
+          sudo apt-get clean
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
@@ -53,10 +57,9 @@ jobs:
           curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL "https://sh.rustup.rs" | sh -s -- --profile minimal --default-toolchain none -y
           echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
       - name: Install SQLFluff
-        run: pip install sqlfluff==2.3.0
+        run: pip install sqlfluff==2.3.5
       - name: Init rustup toolchain
-        # somehow rustup show will take care to initialize the version based on the toolchain file
-        run: rustup show
+        run: rustup show # enough to initialize the toolchain
       - name: setup rust build cache
         uses: Swatinem/rust-cache@v2
         with:

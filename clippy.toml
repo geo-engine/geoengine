@@ -1,3 +1,7 @@
 avoid-breaking-exported-api = false
+
 # Adding "OpenAPI" is necessary because the word is used in a doc string in geoengine_services::api.
-doc-valid-idents = ["OpenAPI", ".."]
+doc-valid-idents = ["OpenAPI", "PostgreSQL", ".."]
+
+# It is okay to being able to easily write tests.
+allow-unwrap-in-tests = true

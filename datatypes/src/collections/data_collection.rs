@@ -8,14 +8,101 @@ use crate::primitives::NoGeometry;
 pub type DataCollection = FeatureCollection<NoGeometry>;
 
 impl<'i> IntoGeometryOptionsIterator<'i> for DataCollection {
-    type GeometryOptionIterator = std::iter::Take<std::iter::Repeat<Option<Self::GeometryType>>>;
+    type GeometryOptionIterator = NoGeometryIterator;
     type GeometryType = NoGeometry;
 
     fn geometry_options(&'i self) -> Self::GeometryOptionIterator {
-        std::iter::repeat(None).take(self.len())
+        NoGeometryIterator(std::iter::repeat(None).take(self.len()))
     }
 }
 
+pub struct NoGeometryIterator(std::iter::Take<std::iter::Repeat<Option<NoGeometry>>>);
+pub struct NoGeometryParIterator(NoGeometryIterator);
+
+impl Iterator for NoGeometryIterator {
+    type Item = Option<NoGeometry>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+}
+
+impl DoubleEndedIterator for NoGeometryIterator {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        // does not matter if we return a `None`` from the back or the front
+        self.0.next()
+    }
+}
+
+impl ExactSizeIterator for NoGeometryIterator {}
+
+mod par_iter {
+    use super::*;
+    use rayon::iter::{
+        plumbing::Producer, IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
+    };
+
+    impl IntoParallelIterator for NoGeometryIterator {
+        type Item = Option<NoGeometry>;
+        type Iter = NoGeometryParIterator;
+
+        fn into_par_iter(self) -> Self::Iter {
+            NoGeometryParIterator(self)
+        }
+    }
+
+    impl ParallelIterator for NoGeometryParIterator {
+        type Item = Option<NoGeometry>;
+
+        fn drive_unindexed<C>(self, consumer: C) -> C::Result
+        where
+            C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+        {
+            rayon::iter::plumbing::bridge(self, consumer)
+        }
+    }
+
+    impl Producer for NoGeometryParIterator {
+        type Item = Option<NoGeometry>;
+
+        type IntoIter = NoGeometryIterator;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.0
+        }
+
+        fn split_at(self, index: usize) -> (Self, Self) {
+            let n = self.0.len();
+            let left_len = (0..index).len();
+            let right_len = (index..n).len();
+
+            let left = NoGeometryIterator(std::iter::repeat(None).take(left_len));
+
+            let right = NoGeometryIterator(std::iter::repeat(None).take(right_len));
+
+            (Self(left), Self(right))
+        }
+    }
+
+    impl IndexedParallelIterator for NoGeometryParIterator {
+        fn len(&self) -> usize {
+            self.0.len()
+        }
+
+        fn drive<C: rayon::iter::plumbing::Consumer<Self::Item>>(self, consumer: C) -> C::Result {
+            rayon::iter::plumbing::bridge(self, consumer)
+        }
+
+        fn with_producer<CB: rayon::iter::plumbing::ProducerCallback<Self::Item>>(
+            self,
+            callback: CB,
+        ) -> CB::Output {
+            callback.callback(self)
+        }
+    }
+}
+
+#[allow(clippy::into_iter_without_iter)] // we provide `.geometries()` instead
 impl<'a> IntoIterator for &'a DataCollection {
     type Item = FeatureCollectionRow<'a, NoGeometry>;
     type IntoIter = FeatureCollectionIterator<'a, std::iter::Repeat<NoGeometry>>;

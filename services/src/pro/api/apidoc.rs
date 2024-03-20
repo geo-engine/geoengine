@@ -1,4 +1,4 @@
-use super::handlers::permissions::{PermissionRequest, Resource};
+use super::handlers::permissions::{PermissionListOptions, PermissionRequest, Resource};
 use super::handlers::users::AddRole;
 use super::model::MlModelId;
 use crate::api::handlers;
@@ -9,14 +9,15 @@ use crate::api::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse
 use crate::api::handlers::wfs::{CollectionType, GeoJson};
 use crate::api::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
 use crate::api::model::datatypes::{
-    AxisLabels, BoundingBox2D, Breakpoint, CacheTtlSeconds, ClassificationMeasurement, Colorizer,
-    ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DateTime,
-    DateTimeParseFormat, ExternalDataId, FeatureDataType, GdalConfigOption, LayerId,
-    LinearGradient, LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon,
-    NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle, RasterDataType,
-    RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
-    SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity,
-    TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
+    AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
+    ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
+    DataProviderId, DatasetId, DateTime, DateTimeParseFormat, ExternalDataId, FeatureDataType,
+    GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement, MultiLineString,
+    MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle,
+    RasterColorizer, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
+    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReferenceAuthority,
+    SpatialResolution, StringPair, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+    VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -36,6 +37,7 @@ use crate::api::model::responses::{
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
+    UpdateDataset,
 };
 use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
 use crate::contexts::SessionId;
@@ -47,16 +49,23 @@ use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
 };
-use crate::layers::listing::LayerCollectionId;
+use crate::layers::listing::{
+    LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
+};
 use crate::pro;
 use crate::pro::api::handlers::users::{Quota, UpdateQuota};
-use crate::pro::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
-use crate::pro::users::{UserCredentials, UserId, UserInfo, UserRegistration, UserSession};
+use crate::pro::permissions::{
+    Permission, PermissionListing, ResourceId, Role, RoleDescription, RoleId,
+};
+use crate::pro::users::{
+    AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
+    UserSession,
+};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
-    ProjectId, ProjectLayer, ProjectListing, ProjectVersion, ProjectVersionId, RasterSymbology,
-    STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
+    ProjectId, ProjectLayer, ProjectListing, ProjectUpdateToken, ProjectVersion, ProjectVersionId,
+    RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
 use crate::util::{
@@ -76,6 +85,9 @@ use utoipa::{Modify, OpenApi};
         handlers::layers::layer_to_workflow_id_handler,
         handlers::layers::list_collection_handler,
         handlers::layers::list_root_collections_handler,
+        handlers::layers::search_handler,
+        handlers::layers::autocomplete_handler,
+        handlers::layers::provider_capabilities_handler,
         handlers::layers::add_layer,
         handlers::layers::add_collection,
         handlers::layers::remove_collection,
@@ -107,11 +119,15 @@ use utoipa::{Modify, OpenApi};
         pro::api::handlers::users::login_handler,
         pro::api::handlers::users::logout_handler,
         pro::api::handlers::users::quota_handler,
+        pro::api::handlers::users::oidc_login,
+        pro::api::handlers::users::oidc_init,
+        pro::api::handlers::users::quota_handler,
         pro::api::handlers::users::get_user_quota_handler,
         pro::api::handlers::users::update_user_quota_handler,
         pro::api::handlers::users::register_user_handler,
         pro::api::handlers::users::session_handler,
         pro::api::handlers::users::add_role_handler,
+        pro::api::handlers::users::get_role_by_name_handler,
         pro::api::handlers::users::remove_role_handler,
         pro::api::handlers::users::assign_role_handler,
         pro::api::handlers::users::revoke_role_handler,
@@ -120,9 +136,12 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
         handlers::datasets::get_dataset_handler,
+        handlers::datasets::update_dataset_handler,
         handlers::datasets::create_dataset_handler,
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
+        handlers::datasets::get_loading_info_handler,
+        handlers::datasets::update_dataset_symbology_handler,
         handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::plots::get_plot_handler,
         handlers::projects::list_projects_handler,
@@ -136,7 +155,8 @@ use utoipa::{Modify, OpenApi};
         handlers::upload::list_upload_file_layers_handler,
         handlers::upload::upload_handler,
         pro::api::handlers::permissions::add_permission_handler,
-        pro::api::handlers::permissions::remove_permission_handler
+        pro::api::handlers::permissions::remove_permission_handler,
+        pro::api::handlers::permissions::get_resource_permissions_handler
     ),
     components(
         responses(
@@ -147,12 +167,14 @@ use utoipa::{Modify, OpenApi};
             IdResponse::<LayerId>,
             IdResponse::<LayerCollectionId>,
             IdResponse::<ProjectId>,
+            IdResponse::<RoleId>,
             DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
             BadRequestQueryResponse,
             PngResponse,
-            ZipResponse
+            ZipResponse,
+            AuthCodeRequestURL
         ),
         schemas(
             ErrorResponse,
@@ -163,6 +185,8 @@ use utoipa::{Modify, OpenApi};
             UserInfo,
             Quota,
             UpdateQuota,
+            AuthCodeResponse,
+            AuthCodeRequestURL,
 
             DataId,
             DataProviderId,
@@ -222,6 +246,7 @@ use utoipa::{Modify, OpenApi};
             RasterQueryRectangle,
             VectorQueryRectangle,
             PlotQueryRectangle,
+            BandSelection,
 
             TaskAbortOptions,
             TaskFilter,
@@ -238,6 +263,10 @@ use utoipa::{Modify, OpenApi};
             CollectionItem,
             AddLayer,
             AddLayerCollection,
+            SearchCapabilities,
+            ProviderCapabilities,
+            SearchTypes,
+            SearchType,
 
             Breakpoint,
             ColorParam,
@@ -250,6 +279,7 @@ use utoipa::{Modify, OpenApi};
             PointSymbology,
             PolygonSymbology,
             RasterSymbology,
+            RasterColorizer,
             RgbaColor,
             StrokeParam,
             Symbology,
@@ -290,6 +320,7 @@ use utoipa::{Modify, OpenApi};
             UploadFileLayersResponse,
 
             CreateDataset,
+            UpdateDataset,
             AutoCreateDataset,
             OrderBy,
             DatasetListing,
@@ -348,6 +379,7 @@ use utoipa::{Modify, OpenApi};
             ProjectVersion,
             LayerUpdate,
             PlotUpdate,
+            ProjectUpdateToken,
             Plot,
             ProjectLayer,
             LayerVisibility,
@@ -358,6 +390,8 @@ use utoipa::{Modify, OpenApi};
             Resource,
             ResourceId,
             Permission,
+            PermissionListing,
+            PermissionListOptions,
             AddRole,
             RoleDescription,
             Role,
@@ -374,7 +408,10 @@ struct SecurityAddon;
 
 impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        let components = openapi.components.as_mut().unwrap();
+        let Some(components) = openapi.components.as_mut() else {
+            debug_assert!(openapi.components.as_mut().is_some());
+            return;
+        };
         components.add_security_scheme(
             "session_token",
             SecurityScheme::Http(
@@ -403,7 +440,7 @@ impl Modify for ApiDocInfo {
 
         openapi.info.license = Some(
             utoipa::openapi::LicenseBuilder::new()
-                .name("Apache 2.0 (pro features excluded)")
+                .name("Apache-2.0")
                 .url(Some(
                     "https://github.com/geo-engine/geoengine/blob/main/LICENSE",
                 ))

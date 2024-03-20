@@ -3,15 +3,19 @@ mod raster_stacker;
 mod raster_subquery;
 mod raster_time;
 mod raster_time_substream;
+mod simple_raster_stacker;
 mod sparse_tiles_fill_adapter;
 
 pub use feature_collection_merger::FeatureCollectionChunkMerger;
-pub use raster_stacker::{RasterStackerAdapter, StreamBundle};
+pub use raster_stacker::{RasterStackerAdapter, RasterStackerSource};
 pub use raster_subquery::{
     fold_by_coordinate_lookup_future, FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter,
     SubQueryTileAggregator, TileReprojectionSubQuery,
 };
 pub use raster_time::{QueryWrapper, Queryable, RasterArrayTimeAdapter, RasterTimeAdapter};
+pub use simple_raster_stacker::{
+    stack_individual_aligned_raster_bands, SimpleRasterStackerAdapter, SimpleRasterStackerSource,
+};
 pub use sparse_tiles_fill_adapter::{
     FillerTileCacheExpirationStrategy, SparseTilesFillAdapter, SparseTilesFillAdapterError,
 };

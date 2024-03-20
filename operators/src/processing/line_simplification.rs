@@ -247,8 +247,7 @@ impl<P, G, A> LineSimplificationProcessor<P, G, A>
 where
     P: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
     G: Geometry,
-    for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>
-        + GeoFeatureCollectionModifications<G, Output = FeatureCollection<G>>,
+    for<'c> FeatureCollection<G>: IntoGeometryIterator<'c> + GeoFeatureCollectionModifications<G>,
     for<'c> A: LineSimplificationAlgorithmImpl<
         <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
         G,
@@ -276,10 +275,10 @@ where
         Output = FeatureCollection<G>,
         SpatialBounds = BoundingBox2D,
         Selection = ColumnSelection,
+        ResultDescription = VectorResultDescriptor,
     >,
     G: Geometry + ArrowTyped + 'static,
-    for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>
-        + GeoFeatureCollectionModifications<G, Output = FeatureCollection<G>>,
+    for<'c> FeatureCollection<G>: IntoGeometryIterator<'c> + GeoFeatureCollectionModifications<G>,
     for<'c> A: LineSimplificationAlgorithmImpl<
         <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
         G,
@@ -288,6 +287,7 @@ where
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -309,6 +309,10 @@ where
         });
 
         Ok(simplified_chunks.boxed())
+    }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        self.source.result_descriptor()
     }
 }
 

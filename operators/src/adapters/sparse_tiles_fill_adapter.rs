@@ -56,12 +56,12 @@ enum State {
 #[derive(Debug, PartialEq, Clone)]
 struct StateContainer<T> {
     current_idx: GridIdx2D,
-    current_band: usize,
+    current_band_idx: u32,
     current_time: TimeInterval,
     next_tile: Option<RasterTile2D<T>>,
     no_data_grid: EmptyGrid2D<T>,
     grid_bounds: GridBoundingBox2D,
-    bands: usize,
+    num_bands: u32,
     global_geo_transform: GeoTransform,
     state: State,
     cache_hint: FillerTileCacheHintProvider,
@@ -69,7 +69,7 @@ struct StateContainer<T> {
 
 struct GridIdxAndBand {
     idx: GridIdx2D,
-    band: usize,
+    band_idx: u32,
 }
 
 impl<T: Pixel> StateContainer<T> {
@@ -78,7 +78,7 @@ impl<T: Pixel> StateContainer<T> {
         RasterTile2D::new(
             self.current_time,
             self.current_idx,
-            self.current_band,
+            self.current_band_idx,
             self.global_geo_transform,
             self.no_data_grid.into(),
             self.cache_hint.next_hint(),
@@ -101,27 +101,27 @@ impl<T: Pixel> StateContainer<T> {
 
     /// Get the next `GridIdxAndBand` following the current state `GridIdx` and band. None if the current `GridIdx` is the max `GridIdx` of the grid.
     fn maybe_next_idx_and_band(&self) -> Option<GridIdxAndBand> {
-        if self.current_band + 1 < self.bands {
+        if self.current_band_idx + 1 < self.num_bands {
             // next band
             Some(GridIdxAndBand {
                 idx: self.current_idx,
-                band: self.current_band + 1,
+                band_idx: self.current_band_idx + 1,
             })
         } else {
             // next tile
             self.grid_bounds
                 .inc_idx_unchecked(self.current_idx, 1)
-                .map(|idx| GridIdxAndBand { idx, band: 0 })
+                .map(|idx| GridIdxAndBand { idx, band_idx: 0 })
         }
     }
 
     /// Get the next `GridIdxAndBand` following the current state `GridIdx` and band. Returns the minimal `GridIdx` if the current `GridIdx` is the max `GridIdx`.
     fn wrapped_next_idx_and_band(&self) -> GridIdxAndBand {
-        if self.current_band + 1 < self.bands {
+        if self.current_band_idx + 1 < self.num_bands {
             // next band
             GridIdxAndBand {
                 idx: self.current_idx,
-                band: self.current_band + 1,
+                band_idx: self.current_band_idx + 1,
             }
         } else {
             // next tile
@@ -130,7 +130,7 @@ impl<T: Pixel> StateContainer<T> {
                     .grid_bounds
                     .inc_idx_unchecked(self.current_idx, 1)
                     .unwrap_or_else(|| self.min_index()),
-                band: 0,
+                band_idx: 0,
             }
         }
     }
@@ -171,8 +171,8 @@ impl<T: Pixel> StateContainer<T> {
     }
 
     /// Check if a `GridIdx` is the next to produce i.e. the current state `GridIdx`.
-    fn grid_idx_and_band_is_the_next_to_produce(&self, tile_idx: GridIdx2D, band: usize) -> bool {
-        tile_idx == self.current_idx && band == self.current_band
+    fn grid_idx_and_band_is_the_next_to_produce(&self, tile_idx: GridIdx2D, band_idx: u32) -> bool {
+        tile_idx == self.current_idx && band_idx == self.current_band_idx
     }
 
     /// Check if a `TimeInterval` is directly connected to the end of the current state `TimeInterval`.
@@ -186,12 +186,12 @@ impl<T: Pixel> StateContainer<T> {
 
     /// Check if the current state `GridIdx`  is the first of a grid run i.e. it equals the minimal `GridIdx` .
     fn current_idx_and_band_is_first_in_grid_run(&self) -> bool {
-        self.current_idx == self.min_index() && self.current_band == 0
+        self.current_idx == self.min_index() && self.current_band_idx == 0
     }
 
     /// Check if the current state `GridIdx`  is the first of a grid run i.e. it equals the minimal `GridIdx` .
     fn current_idx_and_band_is_last_in_grid_run(&self) -> bool {
-        self.current_idx == self.max_index() && self.current_band == self.bands - 1
+        self.current_idx == self.max_index() && self.current_band_idx == self.num_bands - 1
     }
 }
 
@@ -211,7 +211,7 @@ where
     pub fn new(
         stream: S,
         tile_grid_bounds: GridBoundingBox2D,
-        bands: usize,
+        num_bands: u32,
         global_geo_transform: GeoTransform,
         tile_shape: GridShape2D,
         cache_expiration: FillerTileCacheExpirationStrategy, // Specifies the cache expiration for the produced filler tiles. Set this to unlimited if the filler tiles will always be empty
@@ -220,11 +220,11 @@ where
             stream,
             sc: StateContainer {
                 current_idx: tile_grid_bounds.min_index(),
-                current_band: 0,
+                current_band_idx: 0,
                 current_time: TimeInterval::default(),
                 global_geo_transform,
                 grid_bounds: tile_grid_bounds,
-                bands,
+                num_bands,
                 next_tile: None,
                 no_data_grid: EmptyGrid2D::new(tile_shape),
                 state: State::Initial,
@@ -268,7 +268,7 @@ where
         let min_idx = self.sc.min_index();
         let wrapped_next = self.sc.wrapped_next_idx_and_band();
         let wrapped_next_idx = wrapped_next.idx;
-        let wrapped_next_band = wrapped_next.band;
+        let wrapped_next_band = wrapped_next.band_idx;
 
         let mut this = self.project();
 
@@ -314,7 +314,7 @@ where
                 };
                 // move the current_idx. There is no need to do time progress here. Either a new tile triggers that or it is never needed for an empty source.
                 this.sc.current_idx = wrapped_next_idx;
-                this.sc.current_band = wrapped_next_band;
+                this.sc.current_band_idx = wrapped_next_band;
                 Poll::Ready(Some(Ok(result_tile)))
             }
             // this is the state where we are waiting for the next tile to arrive.
@@ -452,7 +452,7 @@ where
                 // move the current_idx and band. There is no need to do time progress here. Either a new tile sets that or it is not needed to fill to the end of the grid.
 
                 this.sc.current_idx = wrapped_next_idx;
-                this.sc.current_band = wrapped_next_band;
+                this.sc.current_band_idx = wrapped_next_band;
 
                 if this.sc.current_idx_and_band_is_first_in_grid_run() {
                     // we wrapped around. We need to do time progress.
@@ -482,7 +482,7 @@ where
 
                 this.sc.current_time = next_tile.time;
                 this.sc.current_idx = wrapped_next_idx;
-                this.sc.current_band = wrapped_next_band;
+                this.sc.current_band_idx = wrapped_next_band;
                 this.sc.state = State::PollingForNextTile;
 
                 Poll::Ready(Some(Ok(next_tile)))
@@ -498,7 +498,7 @@ where
 
                 let (next_idx, next_band, next_time) = match this.sc.maybe_next_idx_and_band() {
                     // the next GridIdx is in the current TimeInterval
-                    Some(idx) => (idx.idx, idx.band, this.sc.current_time),
+                    Some(idx) => (idx.idx, idx.band_idx, this.sc.current_time),
                     // the next GridIdx is in the next TimeInterval
                     None => {
                         if this
@@ -524,7 +524,7 @@ where
 
                 this.sc.current_time = next_time;
                 this.sc.current_idx = next_idx;
-                this.sc.current_band = next_band;
+                this.sc.current_band_idx = next_band;
 
                 Poll::Ready(Some(Ok(no_data_tile)))
             }
@@ -537,7 +537,7 @@ where
             State::FillToEnd => {
                 let no_data_tile = this.sc.current_no_data_tile();
                 this.sc.current_idx = wrapped_next_idx;
-                this.sc.current_band = wrapped_next_band;
+                this.sc.current_band_idx = wrapped_next_band;
                 Poll::Ready(Some(Ok(no_data_tile)))
             }
             State::Ended => Poll::Ready(None),

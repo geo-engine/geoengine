@@ -17,13 +17,11 @@ macro_rules! string_token {
         pub struct $struct;
 
         impl serde::Serialize for $struct {
-            paste::paste! {
-                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-                where
-                    S: serde::Serializer,
-                {
-                    serializer.serialize_str($string)
-                }
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_str($string)
             }
         }
 

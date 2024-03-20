@@ -14,25 +14,29 @@
     "symbology": {
       "type": "raster",
       "opacity": 1,
-      "colorizer": {
-        "type": "linearGradient",
-        "breakpoints": [
-          {
-            "value": 0,
-            "color": [255, 245, 240, 255]
-          },
-          {
-            "value": 127,
-            "color": [250, 105, 73, 255]
-          },
-          {
-            "value": 255,
-            "color": [254, 244, 239, 255]
-          }
-        ],
-        "noDataColor": [0, 0, 0, 0],
-        "underColor": [255, 245, 240, 255],
-        "overColor": [254, 244, 239, 255]
+      "rasterColorizer": {
+        "type": "singleBand",
+        "band": 0,
+        "bandColorizer": {
+          "type": "linearGradient",
+          "breakpoints": [
+            {
+              "value": 0,
+              "color": [255, 245, 240, 255]
+            },
+            {
+              "value": 127,
+              "color": [250, 105, 73, 255]
+            },
+            {
+              "value": 255,
+              "color": [254, 244, 239, 255]
+            }
+          ],
+          "noDataColor": [0, 0, 0, 0],
+          "underColor": [255, 245, 240, 255],
+          "overColor": [254, 244, 239, 255]
+        }
       }
     }
   },
@@ -42,8 +46,8 @@
       "dataType": "U8",
       "spatialReference": "EPSG:4326",
       "time": {
-        "start": "-262144-01-01T00:00:00+00:00",
-        "end": "+262143-12-31T23:59:59.999+00:00"
+        "start": "-262143-01-01T00:00:00+00:00",
+        "end": "+262142-12-31T23:59:59.999+00:00"
       },
       "bbox": {
         "upperLeftCoordinate": [-180, 90.0],

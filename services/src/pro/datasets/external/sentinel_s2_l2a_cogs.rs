@@ -1,3 +1,4 @@
+use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::{self, Error, Result};
 use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -5,14 +6,16 @@ use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
 };
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::layers::listing::{
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+};
 use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, StacAsset};
 use crate::util::operators::source_operator_from_dataset;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
-use geoengine_datatypes::operations::image::RgbaColor;
+use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, ReprojectClipped,
 };
@@ -51,6 +54,8 @@ static STAC_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
 pub struct SentinelS2L2ACogsProviderDefinition {
     pub name: String,
     pub id: DataProviderId,
+    pub description: String,
+    pub priority: Option<i16>,
     pub api_url: String,
     pub bands: Vec<StacBand>,
     pub zones: Vec<StacZone>,
@@ -97,10 +102,12 @@ impl Default for GdalRetries {
 }
 
 #[async_trait]
-impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for SentinelS2L2ACogsProviderDefinition {
+    async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(SentinelS2L2aCogsDataProvider::new(
             self.id,
+            self.name,
+            self.description,
             self.api_url,
             &self.bands,
             &self.zones,
@@ -120,6 +127,10 @@ impl DataProviderDefinition for SentinelS2L2ACogsProviderDefinition {
 
     fn id(&self) -> geoengine_datatypes::dataset::DataProviderId {
         self.id
+    }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
     }
 }
 
@@ -148,6 +159,9 @@ pub struct SentinelDataset {
 pub struct SentinelS2L2aCogsDataProvider {
     id: DataProviderId,
 
+    name: String,
+    description: String,
+
     api_url: String,
 
     datasets: HashMap<LayerId, SentinelDataset>,
@@ -159,8 +173,11 @@ pub struct SentinelS2L2aCogsDataProvider {
 }
 
 impl SentinelS2L2aCogsDataProvider {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: DataProviderId,
+        name: String,
+        description: String,
         api_url: String,
         bands: &[StacBand],
         zones: &[StacZone],
@@ -170,6 +187,8 @@ impl SentinelS2L2aCogsDataProvider {
     ) -> Self {
         Self {
             id,
+            name,
+            description,
             api_url,
             datasets: Self::create_datasets(&id, bands, zones),
             stac_api_retries,
@@ -208,7 +227,8 @@ impl SentinelS2L2aCogsDataProvider {
                         },
                         symbology: Some(Symbology::Raster(RasterSymbology {
                             opacity: 1.0,
-                            colorizer:
+                            raster_colorizer: RasterColorizer::SingleBand {
+                                band: 0, band_colorizer:
                                 geoengine_datatypes::operations::image::Colorizer::linear_gradient(
                                     vec![
                                         (0.0, RgbaColor::white())
@@ -223,7 +243,7 @@ impl SentinelS2L2aCogsDataProvider {
                                     RgbaColor::black(),
                                 )
                                 .expect("valid colorizer"),
-                        })), // TODO: individual colorizer per band
+                        }})), // TODO: individual colorizer per band
                         properties: vec![],
                         metadata: HashMap::new(),
                     };
@@ -253,6 +273,21 @@ impl DataProvider for SentinelS2L2aCogsDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities::none(),
+        }
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        &self.description
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
@@ -753,7 +788,10 @@ mod tests {
         contexts::{ApplicationContext, SessionContext},
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
         pro::{
-            contexts::ProPostgresContext, ge_context, layers::ProLayerProviderDb,
+            contexts::{ProPostgresContext, ProPostgresDb},
+            ge_context,
+            layers::ProLayerProviderDb,
+            users::UserAuth,
             util::tests::admin_login,
         },
         test_data,
@@ -780,15 +818,21 @@ mod tests {
     use std::{fs::File, io::BufReader, str::FromStr};
     use tokio_postgres::NoTls;
 
-    #[tokio::test]
-    async fn loading_info() -> Result<()> {
+    #[ge_context::test]
+    async fn loading_info(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
         // TODO: mock STAC endpoint
 
         let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
             File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
-        let provider = Box::new(def).initialize().await?;
+        let provider = Box::new(def)
+            .initialize(
+                app_ctx
+                    .session_context(app_ctx.create_anonymous_session().await?)
+                    .db(),
+            )
+            .await?;
 
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
@@ -859,8 +903,8 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn query_data() -> Result<()> {
+    #[ge_context::test]
+    async fn query_data(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
         // TODO: mock STAC endpoint
 
         let mut exe = MockExecutionContext::test_default();
@@ -869,7 +913,13 @@ mod tests {
             File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
-        let provider = Box::new(def).initialize().await?;
+        let provider = Box::new(def)
+            .initialize(
+                app_ctx
+                    .session_context(app_ctx.create_anonymous_session().await?)
+                    .db(),
+            )
+            .await?;
 
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
@@ -939,9 +989,9 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn query_data_with_failing_requests() {
+    async fn query_data_with_failing_requests(app_ctx: ProPostgresContext<NoTls>) {
         // crate::util::tests::initialize_debugging_in_test(); // use for debugging
         hide_gdal_errors();
 
@@ -1149,10 +1199,12 @@ mod tests {
 
         let provider_id: DataProviderId = "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".parse().unwrap();
 
-        let provider_def: Box<dyn DataProviderDefinition> =
+        let provider_def: Box<dyn DataProviderDefinition<ProPostgresDb<NoTls>>> =
             Box::new(SentinelS2L2ACogsProviderDefinition {
                 name: "Element 84 AWS STAC".into(),
                 id: provider_id,
+                description: "Access to Sentinel 2 L2A COGs on AWS".into(),
+                priority: Some(22),
                 api_url: server.url_str("/v0/collections/sentinel-s2-l2a-cogs/items"),
                 bands: vec![StacBand {
                     name: "B04".into(),
@@ -1170,7 +1222,14 @@ mod tests {
                 cache_ttl: Default::default(),
             });
 
-        let provider = provider_def.initialize().await.unwrap();
+        let provider = provider_def
+            .initialize(
+                app_ctx
+                    .session_context(app_ctx.create_anonymous_session().await.unwrap())
+                    .db(),
+            )
+            .await
+            .unwrap();
 
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
@@ -1444,7 +1503,7 @@ mod tests {
             LayerProviderListing {
                 id: DataProviderId::from_u128(0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5),
                 name: "Element 84 AWS STAC".to_owned(),
-                description: "SentinelS2L2ACogsProviderDefinition".to_owned(),
+                priority: 0,
             }
         );
     }

@@ -14,8 +14,8 @@ use super::FeatureCollection;
 /// This trait allows iterating over the geometries of a feature collection
 pub trait IntoGeometryIterator<'a> {
     type GeometryIterator: Iterator<Item = Self::GeometryType>
-        + Send
-        + IntoParallelIterator<Item = Self::GeometryType>;
+        + IntoParallelIterator<Item = Self::GeometryType>
+        + Send;
     type GeometryType: GeometryRef + Send;
 
     /// Return an iterator over geometries
@@ -32,7 +32,9 @@ pub trait GeometryRandomAccess<'a> {
 
 /// This trait allows iterating over the geometries of a feature collection if the collection has geometries
 pub trait IntoGeometryOptionsIterator<'i> {
-    type GeometryOptionIterator: Iterator<Item = Option<Self::GeometryType>> + Send;
+    type GeometryOptionIterator: Iterator<Item = Option<Self::GeometryType>>
+        + IntoParallelIterator<Item = Option<Self::GeometryType>>
+        + Send;
     type GeometryType: GeometryRef + Send;
 
     /// Return an iterator over geometries
@@ -59,21 +61,17 @@ pub trait ReplaceRawArrayCoords {
 
 /// A trait for common feature collection modifications that are specific to the geometry type
 pub trait GeoFeatureCollectionModifications<G: Geometry> {
-    type Output;
-
     /// Replaces the current geometries and returns an updated collection.
-    fn replace_geometries(&self, time_intervals: Vec<G>) -> Result<Self::Output>;
+    fn replace_geometries(&self, geometries: Vec<G>) -> Result<FeatureCollection<G>>;
 }
 
-impl<G> GeoFeatureCollectionModifications<G> for FeatureCollection<G>
+impl<GIn, GOut> GeoFeatureCollectionModifications<GOut> for FeatureCollection<GIn>
 where
-    FeatureCollection<G>: GeometryCollection,
-    G: Geometry + ArrowTyped,
+    GIn: Geometry + ArrowTyped,
+    GOut: Geometry + ArrowTyped,
 {
-    type Output = FeatureCollection<G>;
-
-    fn replace_geometries(&self, geometries: Vec<G>) -> Result<Self::Output> {
-        let geometries = G::from_vec(geometries)?;
+    fn replace_geometries(&self, geometries: Vec<GOut>) -> Result<FeatureCollection<GOut>> {
+        let geometries = GOut::from_vec(geometries)?;
 
         let mut columns = Vec::<arrow::datatypes::Field>::with_capacity(self.table.num_columns());
         let mut column_values =
@@ -82,7 +80,7 @@ where
         // copy geometry data
         columns.push(arrow::datatypes::Field::new(
             Self::GEOMETRY_COLUMN_NAME,
-            G::arrow_data_type(),
+            GOut::arrow_data_type(),
             false,
         ));
         column_values.push(Arc::new(geometries));
@@ -115,7 +113,7 @@ where
             );
         }
 
-        Ok(Self::new_from_internals(
+        Ok(FeatureCollection::<GOut>::new_from_internals(
             StructArray::try_new(columns.into(), column_values, None)?,
             self.types.clone(),
             self.cache_hint,

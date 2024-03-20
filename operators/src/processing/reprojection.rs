@@ -34,7 +34,6 @@ use geoengine_datatypes::{
     util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -241,6 +240,7 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
                 MapQueryProcessor::new(
                     source,
+                    self.result_descriptor.clone(),
                     move |query| reproject_query(query, source_srs, target_srs).map_err(From::from),
                     (),
                 )
@@ -248,17 +248,35 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
             )),
             TypedVectorQueryProcessor::MultiPoint(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPoint(
-                    VectorReprojectionProcessor::new(source, source_srs, target_srs).boxed(),
+                    VectorReprojectionProcessor::new(
+                        source,
+                        self.result_descriptor.clone(),
+                        source_srs,
+                        target_srs,
+                    )
+                    .boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiLineString(source) => {
                 Ok(TypedVectorQueryProcessor::MultiLineString(
-                    VectorReprojectionProcessor::new(source, source_srs, target_srs).boxed(),
+                    VectorReprojectionProcessor::new(
+                        source,
+                        self.result_descriptor.clone(),
+                        source_srs,
+                        target_srs,
+                    )
+                    .boxed(),
                 ))
             }
             TypedVectorQueryProcessor::MultiPolygon(source) => {
                 Ok(TypedVectorQueryProcessor::MultiPolygon(
-                    VectorReprojectionProcessor::new(source, source_srs, target_srs).boxed(),
+                    VectorReprojectionProcessor::new(
+                        source,
+                        self.result_descriptor.clone(),
+                        source_srs,
+                        target_srs,
+                    )
+                    .boxed(),
                 ))
             }
         }
@@ -274,6 +292,7 @@ where
     Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
     source: Q,
+    result_descriptor: VectorResultDescriptor,
     from: SpatialReference,
     to: SpatialReference,
 }
@@ -282,8 +301,18 @@ impl<Q, G> VectorReprojectionProcessor<Q, G>
 where
     Q: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
 {
-    pub fn new(source: Q, from: SpatialReference, to: SpatialReference) -> Self {
-        Self { source, from, to }
+    pub fn new(
+        source: Q,
+        result_descriptor: VectorResultDescriptor,
+        from: SpatialReference,
+        to: SpatialReference,
+    ) -> Self {
+        Self {
+            source,
+            result_descriptor,
+            from,
+            to,
+        }
     }
 }
 
@@ -294,6 +323,7 @@ where
         Output = FeatureCollection<G>,
         SpatialBounds = BoundingBox2D,
         Selection = ColumnSelection,
+        ResultDescription = VectorResultDescriptor,
     >,
     FeatureCollection<G>: Reproject<CoordinateProjector, Out = FeatureCollection<G>>,
     G: Geometry + ArrowTyped,
@@ -301,6 +331,7 @@ where
     type Output = FeatureCollection<G>;
     type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
+    type ResultDescription = VectorResultDescriptor;
 
     async fn _query<'a>(
         &'a self,
@@ -327,6 +358,10 @@ where
             Ok(Box::pin(stream::once(async { res })))
         }
     }
+
+    fn result_descriptor(&self) -> &VectorResultDescriptor {
+        &self.result_descriptor
+    }
 }
 
 #[typetag::serde]
@@ -348,14 +383,6 @@ impl RasterOperator for Reprojection {
                 })?;
 
         let initialized_source = raster_source.initialize_sources(path, context).await?;
-
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            initialized_source.raster.result_descriptor().bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: Reprojection::TYPE_NAME
-            }
-        );
 
         let initialized_operator = InitializedRasterReprojection::try_new_with_input(
             name,
@@ -382,9 +409,12 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
 
         Ok(match self.result_descriptor.data_type {
             geoengine_datatypes::raster::RasterDataType::U8 => {
-                let qt = q.get_u8().unwrap();
+                let qt = q
+                    .get_u8()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::U8(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -392,9 +422,12 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U16 => {
-                let qt = q.get_u16().unwrap();
+                let qt = q
+                    .get_u16()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::U16(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -403,9 +436,12 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
             }
 
             geoengine_datatypes::raster::RasterDataType::U32 => {
-                let qt = q.get_u32().unwrap();
+                let qt = q
+                    .get_u32()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::U32(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -413,9 +449,12 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::U64 => {
-                let qt = q.get_u64().unwrap();
+                let qt = q
+                    .get_u64()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::U64(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -423,9 +462,12 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I8 => {
-                let qt = q.get_i8().unwrap();
+                let qt = q
+                    .get_i8()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::I8(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -433,9 +475,12 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I16 => {
-                let qt = q.get_i16().unwrap();
+                let qt = q
+                    .get_i16()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::I16(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -443,9 +488,12 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I32 => {
-                let qt = q.get_i32().unwrap();
+                let qt = q
+                    .get_i32()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::I32(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -453,9 +501,12 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::I64 => {
-                let qt = q.get_i64().unwrap();
+                let qt = q
+                    .get_i64()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::I64(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -463,9 +514,12 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F32 => {
-                let qt = q.get_f32().unwrap();
+                let qt = q
+                    .get_f32()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::F32(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -473,9 +527,12 @@ impl InitializedRasterOperator for InitializedRasterReprojection {
                 )))
             }
             geoengine_datatypes::raster::RasterDataType::F64 => {
-                let qt = q.get_f64().unwrap();
+                let qt = q
+                    .get_f64()
+                    .expect("the result descriptor and query processor type should match");
                 TypedRasterQueryProcessor::F64(Box::new(RasterReprojectionProcessor::new(
                     qt,
+                    self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
                     self.tiling_spec,
@@ -495,6 +552,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
+    result_descriptor: RasterResultDescriptor,
     from: SpatialReference,
     to: SpatialReference,
     tiling_spec: TilingSpecification,
@@ -504,11 +562,17 @@ where
 
 impl<Q, P> RasterReprojectionProcessor<Q, P>
 where
-    Q: RasterQueryProcessor<RasterType = P>,
+    Q: QueryProcessor<
+        Output = RasterTile2D<P>,
+        SpatialBounds = SpatialPartition2D,
+        Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
+    >,
     P: Pixel,
 {
     pub fn new(
         source: Q,
+        result_descriptor: RasterResultDescriptor,
         from: SpatialReference,
         to: SpatialReference,
         tiling_spec: TilingSpecification,
@@ -516,6 +580,7 @@ where
     ) -> Self {
         Self {
             source,
+            result_descriptor,
             from,
             to,
             tiling_spec,
@@ -532,12 +597,15 @@ where
         Output = RasterTile2D<P>,
         SpatialBounds = SpatialPartition2D,
         Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
     >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = SpatialPartition2D;
     type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
+
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -591,6 +659,10 @@ where
                 FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
             )))
         }
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
     }
 }
 

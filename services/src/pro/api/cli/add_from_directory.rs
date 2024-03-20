@@ -5,6 +5,7 @@ use crate::{
 };
 use crate::{error::Result, pro::permissions::PermissionDb};
 use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::error::BoxedResultExt;
 use log::warn;
 use std::{
     fs::{self, DirEntry, File},
@@ -24,10 +25,7 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
         let dataset_id: DatasetId = db
-            .add_dataset(
-                def.properties.clone(),
-                db.wrap_meta_data(def.meta_data.clone()),
-            )
+            .add_dataset(def.properties.clone(), def.meta_data.clone())
             .await?
             .id;
 
@@ -36,10 +34,12 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
             dataset_id,
             Permission::Read,
         )
-        .await?;
+        .await
+        .boxed_context(crate::error::PermissionDb)?;
 
         db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
-            .await?;
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         Ok(())
     }

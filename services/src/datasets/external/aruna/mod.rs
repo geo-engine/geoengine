@@ -1,3 +1,16 @@
+pub use self::error::ArunaProviderError;
+use crate::contexts::GeoEngineDb;
+use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
+use crate::datasets::listing::ProvenanceOutput;
+use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerCollectionId, ProviderLayerId,
+};
+use crate::layers::listing::{
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+};
+use crate::workflows::workflow::Workflow;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -44,18 +57,6 @@ use geoengine_operators::source::{
     OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat,
 };
 
-use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
-use crate::datasets::listing::ProvenanceOutput;
-use crate::layers::external::{DataProvider, DataProviderDefinition};
-use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
-    ProviderLayerCollectionId, ProviderLayerId,
-};
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
-use crate::workflows::workflow::Workflow;
-
-pub use self::error::ArunaProviderError;
-
 pub mod error;
 pub mod metadata;
 #[cfg(test)]
@@ -71,6 +72,8 @@ const URL_REPLACEMENT: &str = "%URL%";
 pub struct ArunaDataProviderDefinition {
     pub id: DataProviderId,
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub api_url: String,
     pub project_id: String,
     pub api_token: String,
@@ -80,8 +83,8 @@ pub struct ArunaDataProviderDefinition {
 }
 
 #[async_trait::async_trait]
-impl DataProviderDefinition for ArunaDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> crate::error::Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for ArunaDataProviderDefinition {
+    async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(ArunaDataProvider::new(self).await?))
     }
 
@@ -95,6 +98,10 @@ impl DataProviderDefinition for ArunaDataProviderDefinition {
 
     fn id(&self) -> DataProviderId {
         self.id
+    }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
     }
 }
 
@@ -144,6 +151,7 @@ struct ArunaDatasetIds {
 #[derive(Debug)]
 pub struct ArunaDataProvider {
     name: String,
+    description: String,
     id: DataProviderId,
     project_id: String,
     project_stub: ProjectServiceClient<InterceptedService<Channel, APITokenInterceptor>>,
@@ -175,6 +183,7 @@ impl ArunaDataProvider {
 
         Ok(ArunaDataProvider {
             name: def.name,
+            description: def.description,
             id: def.id,
             project_id: def.project_id,
             project_stub,
@@ -482,8 +491,7 @@ impl ArunaDataProvider {
                 info.measurement
                     .as_ref()
                     .map_or(Measurement::Unitless, Clone::clone),
-            )])
-            .unwrap(),
+            )])?,
         })
     }
 
@@ -744,6 +752,21 @@ impl DataProvider for ArunaDataProvider {
 
 #[async_trait::async_trait]
 impl LayerCollectionProvider for ArunaDataProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities::none(),
+        }
+    }
+
+    fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    fn description(&self) -> &str {
+        self.description.as_ref()
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
@@ -1120,6 +1143,8 @@ mod tests {
             api_url: url,
             project_id: PROJECT_ID.to_string(),
             name: "NFDI".to_string(),
+            description: "Access to NFDI data stored in Aruna".to_string(),
+            priority: Some(123),
             filter_label: FILTER_LABEL.to_string(),
             cache_ttl: Default::default(),
         };

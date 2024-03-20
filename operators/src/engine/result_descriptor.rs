@@ -1,5 +1,6 @@
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, FeatureDataType, Measurement, SpatialPartition2D,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, FeatureDataType,
+    Measurement, PlotSeriesSelection, QueryAttributeSelection, QueryRectangle, SpatialPartition2D,
     SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::util::ByteSize;
@@ -21,6 +22,18 @@ use crate::util::Result;
 /// and spatial reference.
 pub trait ResultDescriptor: Clone + Serialize {
     type DataType;
+    type QueryRectangleSpatialBounds: AxisAlignedRectangle;
+    type QueryRectangleAttributeSelection: QueryAttributeSelection;
+
+    // Check the `query` against the `ResultDescriptor` and return `true` if the query is valid
+    // and `false` if, e.g., invalid attributes are specified
+    fn validate_query(
+        &self,
+        query: &QueryRectangle<
+            Self::QueryRectangleSpatialBounds,
+            Self::QueryRectangleAttributeSelection,
+        >,
+    ) -> Result<()>;
 
     /// Return the type-specific result data type
     fn data_type(&self) -> Self::DataType;
@@ -68,6 +81,19 @@ pub struct RasterResultDescriptor {
     pub bands: RasterBandDescriptors,
 }
 
+impl RasterResultDescriptor {
+    pub fn with_datatype_and_num_bands(data_type: RasterDataType, num_bands: u32) -> Self {
+        Self {
+            data_type,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            time: None,
+            bbox: None,
+            resolution: None,
+            bands: RasterBandDescriptors::new_multiple_bands(num_bands),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RasterBandDescriptors(Vec<RasterBandDescriptor>);
 
@@ -96,12 +122,25 @@ impl RasterBandDescriptors {
         }])
     }
 
+    /// Convenience method to crate multipe band result descriptors with no specific name and a unitless measurement
+    pub fn new_multiple_bands(num_bands: u32) -> Self {
+        Self(
+            (0..num_bands)
+                .map(RasterBandDescriptor::new_unitless_with_idx)
+                .collect(),
+        )
+    }
+
     pub fn bands(&self) -> &[RasterBandDescriptor] {
         &self.0
     }
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn count(&self) -> u32 {
+        self.0.len() as u32
     }
 
     pub fn is_empty(&self) -> bool {
@@ -238,10 +277,19 @@ impl RasterBandDescriptor {
             measurement: Measurement::Unitless,
         }
     }
+
+    pub fn new_unitless_with_idx(idx: u32) -> Self {
+        Self {
+            name: format!("band {idx}"),
+            measurement: Measurement::Unitless,
+        }
+    }
 }
 
 impl ResultDescriptor for RasterResultDescriptor {
     type DataType = RasterDataType;
+    type QueryRectangleSpatialBounds = SpatialPartition2D;
+    type QueryRectangleAttributeSelection = BandSelection;
 
     fn data_type(&self) -> Self::DataType {
         self.data_type
@@ -282,6 +330,22 @@ impl ResultDescriptor for RasterResultDescriptor {
             bands: self.bands.clone(),
             ..*self
         }
+    }
+
+    fn validate_query(
+        &self,
+        query: &QueryRectangle<
+            Self::QueryRectangleSpatialBounds,
+            Self::QueryRectangleAttributeSelection,
+        >,
+    ) -> Result<()> {
+        for band in query.attributes.as_slice() {
+            if *band as usize >= self.bands.len() {
+                return Err(Error::BandDoesNotExist { band_idx: *band });
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -331,6 +395,8 @@ impl VectorResultDescriptor {
 
 impl ResultDescriptor for VectorResultDescriptor {
     type DataType = VectorDataType;
+    type QueryRectangleSpatialBounds = BoundingBox2D;
+    type QueryRectangleAttributeSelection = ColumnSelection;
 
     fn data_type(&self) -> Self::DataType {
         self.data_type
@@ -374,6 +440,16 @@ impl ResultDescriptor for VectorResultDescriptor {
             ..*self
         }
     }
+
+    fn validate_query(
+        &self,
+        _query: &QueryRectangle<
+            Self::QueryRectangleSpatialBounds,
+            Self::QueryRectangleAttributeSelection,
+        >,
+    ) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// A `ResultDescriptor` for plot queries
@@ -387,6 +463,8 @@ pub struct PlotResultDescriptor {
 
 impl ResultDescriptor for PlotResultDescriptor {
     type DataType = (); // TODO: maybe distinguish between image, interactive plot, etc.
+    type QueryRectangleSpatialBounds = BoundingBox2D;
+    type QueryRectangleAttributeSelection = PlotSeriesSelection;
 
     fn data_type(&self) -> Self::DataType {}
 
@@ -416,6 +494,16 @@ impl ResultDescriptor for PlotResultDescriptor {
             time: f(&self.time),
             ..*self
         }
+    }
+
+    fn validate_query(
+        &self,
+        _query: &QueryRectangle<
+            Self::QueryRectangleSpatialBounds,
+            Self::QueryRectangleAttributeSelection,
+        >,
+    ) -> Result<()> {
+        Ok(())
     }
 }
 

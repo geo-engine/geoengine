@@ -403,7 +403,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::operations::image::Colorizer;
+    use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer};
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use serde_json::json;
@@ -746,7 +746,10 @@ mod tests {
                 visibility: Default::default(),
                 symbology: Symbology::Raster(RasterSymbology {
                     opacity: 1.0,
-                    colorizer: Colorizer::Rgba,
+                    raster_colorizer: RasterColorizer::SingleBand {
+                        band: 0,
+                        band_colorizer: Colorizer::Rgba,
+                    }
                 })
             })],
             "bounds": None::<String>,
@@ -763,7 +766,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "Error in user input: missing field `id` at line 1 column 260",
+            "Error in user input: missing field `id` at line 1 column 313",
         )
         .await;
     }
@@ -771,7 +774,7 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn update_layers(app_ctx: PostgresContext<NoTls>) {
-        async fn update_and_load_latest<Tls>(
+        async fn update_and_load_latest<Tls: std::fmt::Debug>(
             app_ctx: &PostgresContext<Tls>,
             session: &SimpleSession,
             project_id: ProjectId,
@@ -815,7 +818,10 @@ mod tests {
             },
             symbology: Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
-                colorizer: Colorizer::Rgba,
+                raster_colorizer: RasterColorizer::SingleBand {
+                    band: 0,
+                    band_colorizer: Colorizer::Rgba,
+                },
             }),
         };
 
@@ -828,7 +834,10 @@ mod tests {
             },
             symbology: Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
-                colorizer: Colorizer::Rgba,
+                raster_colorizer: RasterColorizer::SingleBand {
+                    band: 0,
+                    band_colorizer: Colorizer::Rgba,
+                },
             }),
         };
 
@@ -922,7 +931,7 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn update_plots(app_ctx: PostgresContext<NoTls>) {
-        async fn update_and_load_latest<Tls>(
+        async fn update_and_load_latest<Tls: std::fmt::Debug>(
             app_ctx: &PostgresContext<Tls>,
             session: &SimpleSession,
             project_id: ProjectId,

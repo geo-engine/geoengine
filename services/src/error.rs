@@ -8,6 +8,7 @@ use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId}
 use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use geoengine_datatypes::dataset::LayerId;
+use geoengine_datatypes::error::ErrorSource;
 use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::path::PathBuf;
@@ -22,6 +23,7 @@ pub enum Error {
     DataType {
         source: geoengine_datatypes::error::Error,
     },
+    #[snafu(display("Operator: {}", source))]
     Operator {
         source: geoengine_operators::error::Error,
     },
@@ -104,6 +106,14 @@ pub enum Error {
     #[snafu(display("Failed to delete the project."))]
     ProjectDeleteFailed,
     PermissionFailed,
+    #[snafu(display("A permission error occured: {source}."))]
+    PermissionDb {
+        source: Box<dyn ErrorSource>,
+    },
+    #[snafu(display("A role error occured: {source}."))]
+    RoleDb {
+        source: Box<dyn ErrorSource>,
+    },
     ProjectDbUnauthorized,
 
     InvalidNamespace,
@@ -183,6 +193,7 @@ pub enum Error {
     },
 
     // TODO: move to pro folder, because permissions are pro only
+    #[snafu(display("Permission denied"))]
     PermissionDenied,
 
     #[snafu(display("Parameter {} must have length between {} and {}", parameter, min, max))]
@@ -209,6 +220,15 @@ pub enum Error {
     InvalidUploadFileName,
     InvalidDatasetIdNamespace,
     DuplicateDatasetId,
+    #[snafu(display("Dataset name '{}' already exists", dataset_name))]
+    DatasetNameAlreadyExists {
+        dataset_name: String,
+        dataset_id: DatasetId,
+    },
+    #[snafu(display("Dataset name '{}' does not exist", dataset_name))]
+    UnknownDatasetName {
+        dataset_name: String,
+    },
     InvalidDatasetName,
     DatasetInvalidLayerName {
         layer_name: String,
@@ -346,8 +366,8 @@ pub enum Error {
         found: String,
     },
 
-    #[snafu(context(false))]
-    TaskError {
+    #[snafu(context(false), display("TaskError: {}", source))]
+    Task {
         source: crate::tasks::TaskError,
     },
 
@@ -392,8 +412,8 @@ pub enum Error {
     },
 
     #[cfg(feature = "pro")]
-    #[snafu(context(false))]
-    OidcError {
+    #[snafu(context(false), display("OidcError: {}", source))]
+    Oidc {
         source: crate::pro::users::OidcError,
     },
 
@@ -436,7 +456,7 @@ pub enum Error {
     // TODO: refactor error
     #[cfg(feature = "pro")]
     #[snafu(context(false))]
-    MachineLearningError {
+    MachineLearning {
         source: crate::pro::machine_learning::ml_error::MachineLearningError,
     },
 
@@ -465,6 +485,12 @@ pub enum Error {
     RasterBandNameMustNotBeEmpty,
     #[snafu(display("Raster band names must not be longer than 256 bytes"))]
     RasterBandNameTooLong,
+
+    #[snafu(display("Resource id is invalid: type: {}, id: {}", resource_type, resource_id))]
+    InvalidResourceId {
+        resource_type: String,
+        resource_id: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

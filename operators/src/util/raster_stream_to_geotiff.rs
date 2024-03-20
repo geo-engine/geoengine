@@ -108,7 +108,7 @@ where
 }
 
 fn create_multiband_dataset_and_writer<T>(
-    tiles: &Vec<RasterTile2D<T>>,
+    tiles: &[RasterTile2D<T>],
     query_rect: &QueryRectangle<SpatialPartition2D, BandSelection>,
     tiling_specification: TilingSpecification,
     gdal_tiff_options: GdalGeoTiffOptions,
@@ -1051,13 +1051,14 @@ mod tests {
 
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{DateTime, Duration};
-    use geoengine_datatypes::raster::Grid;
+    use geoengine_datatypes::raster::{Grid, RasterDataType};
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilingSpecification,
         util::test::TestDefault,
     };
 
+    use crate::engine::RasterResultDescriptor;
     use crate::mock::MockRasterSourceProcessor;
     use crate::util::gdal::gdal_open_dataset;
     use crate::{
@@ -1075,6 +1076,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1132,6 +1137,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1185,6 +1194,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1242,6 +1255,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1302,6 +1319,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1362,6 +1383,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1439,6 +1464,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1489,6 +1518,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1536,6 +1569,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
@@ -1604,7 +1641,7 @@ mod tests {
             generate_time_intervals(base_start_time, time_step, num_time_steps).unwrap();
         let data = vec![
             RasterTile2D {
-                time: *time_intervals.get(0).unwrap(),
+                time: *time_intervals.first().unwrap(),
                 tile_position: [-1, 0].into(),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
@@ -1627,9 +1664,12 @@ mod tests {
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
         let processor = MockRasterSourceProcessor {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             data,
             tiling_specification,
-            bands: 1,
         }
         .boxed();
         let query_rectangle = RasterQueryRectangle {
@@ -1742,6 +1782,10 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
+            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
+                RasterDataType::U8,
+                1,
+            ),
             tiling_specification,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,

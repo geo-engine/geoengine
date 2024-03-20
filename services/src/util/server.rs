@@ -27,7 +27,12 @@ pub struct CustomRootSpanBuilder;
 
 impl RootSpanBuilder for CustomRootSpanBuilder {
     fn on_request_start(request: &ServiceRequest) -> Span {
-        let request_id = request.extensions().get::<RequestId>().copied().unwrap();
+        // TODO: rethink this error handling
+        let request_id = request
+            .extensions()
+            .get::<RequestId>()
+            .copied()
+            .expect("it should not run without the `RequestId` extension");
 
         let span = tracing::info_span!("Request", request_id = %request_id);
 
@@ -421,7 +426,7 @@ impl CacheControlHeader for CacheHint {
             // from the time the response is sent. HTTP/1.1 servers SHOULD NOT send Expires dates more than one year in the future."
             s if s > 31_536_000 => HeaderValue::from_str("private, max-age=31536000")
                 .expect("should be a valid header value according to the HTTP standard"),
-            s if s == 0 => HeaderValue::from_str("no-cache")
+            0 => HeaderValue::from_str("no-cache")
                 .expect("should be a valid header value according to the HTTP standard"),
             s => HeaderValue::from_str(&format!("private, max-age={s}",))
                 .expect("should be a valid header value according to the HTTP standard"),

@@ -2,13 +2,14 @@ use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::api::model::responses::IdResponse;
 use crate::contexts::ApplicationContext;
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
+use crate::error::Error::NotImplemented;
 use crate::error::{Error, Result};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
     ProviderLayerCollectionId,
 };
 use crate::layers::listing::{
-    DatasetLayerCollectionProvider, LayerCollectionId, LayerCollectionProvider,
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchParameters,
 };
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::config::get_config_element;
@@ -40,21 +41,39 @@ where
         web::scope("/layers")
             .service(
                 web::scope("/collections")
+                    .service(
+                        web::scope("/search")
+                            .route(
+                                "/autocomplete/{provider}/{collection}",
+                                web::get().to(autocomplete_handler::<C>),
+                            )
+                            .route(
+                                "/{provider}/{collection}",
+                                web::get().to(search_handler::<C>),
+                            ),
+                    )
                     .route("", web::get().to(list_root_collections_handler::<C>))
                     .route(
-                        r#"/{provider}/{collection}"#,
+                        "/{provider}/{collection}",
                         web::get().to(list_collection_handler::<C>),
                     ),
             )
-            .route(
-                "/{provider}/{layer:.*}/workflowId",
-                web::post().to(layer_to_workflow_id_handler::<C>),
-            )
-            .route(
-                "/{provider}/{layer:.*}/dataset",
-                web::post().to(layer_to_dataset::<C>),
-            )
-            .route("/{provider}/{layer}", web::get().to(layer_handler::<C>)),
+            .service(
+                web::scope("/{provider}")
+                    .route(
+                        "/capabilities",
+                        web::get().to(provider_capabilities_handler::<C>),
+                    )
+                    .service(
+                        web::scope("/{layer}")
+                            .route(
+                                "/workflowId",
+                                web::post().to(layer_to_workflow_id_handler::<C>),
+                            )
+                            .route("/dataset", web::post().to(layer_to_dataset::<C>))
+                            .route("", web::get().to(layer_handler::<C>)),
+                    ),
+            ),
     )
     .service(
         web::scope("/layerDb").service(
@@ -147,33 +166,19 @@ async fn get_layer_providers<C: ApplicationContext>(
     if options.offset == 0 && options.limit > 0 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
             id: ProviderLayerCollectionId {
-                provider_id: crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID,
-                collection_id: LayerCollectionId(
-                    crate::datasets::storage::DATASET_DB_ROOT_COLLECTION_ID.to_string(),
-                ),
-            },
-            name: "Datasets".to_string(),
-            description: "Basic Layers for all Datasets".to_string(),
-            properties: Default::default(),
-        }));
-
-        options.limit -= 1;
-    }
-    if options.offset <= 1 && options.limit > 1 {
-        providers.push(CollectionItem::Collection(LayerCollectionListing {
-            id: ProviderLayerCollectionId {
                 provider_id: crate::layers::storage::INTERNAL_PROVIDER_ID,
                 collection_id: LayerCollectionId(
                     crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
                 ),
             },
-            name: "Layers".to_string(),
-            description: "All available Geo Engine layers".to_string(),
+            name: "Data Catalog".to_string(),
+            description: "Catalog of data and workflows".to_string(),
             properties: Default::default(),
         }));
 
         options.limit -= 1;
     }
+
     let external = app_ctx.session_context(session).db();
     for provider_listing in external
         .list_layer_providers(LayerProviderListingOptions {
@@ -182,6 +187,10 @@ async fn get_layer_providers<C: ApplicationContext>(
         })
         .await?
     {
+        if provider_listing.priority <= -1000 {
+            continue; // skip providers that are disabled
+        };
+
         // TODO: resolve providers in parallel
         let provider = match external.load_layer_provider(provider_listing.id).await {
             Ok(provider) => provider,
@@ -190,6 +199,10 @@ async fn get_layer_providers<C: ApplicationContext>(
                 continue;
             }
         };
+
+        if !provider.capabilities().listing {
+            continue; // skip providers that do not support listing
+        }
 
         let collection_id = match provider.get_root_layer_collection_id().await {
             Ok(root) => root,
@@ -207,8 +220,8 @@ async fn get_layer_providers<C: ApplicationContext>(
                 provider_id: provider_listing.id,
                 collection_id,
             },
-            name: provider_listing.name,
-            description: provider_listing.description,
+            name: provider.name().to_owned(),
+            description: provider.description().to_owned(),
             properties: Default::default(),
         }));
     }
@@ -289,14 +302,6 @@ async fn list_collection_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        let collection = db
-            .load_dataset_layer_collection(&item, options.into_inner())
-            .await?;
-
-        return Ok(web::Json(collection));
-    }
-
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
         let collection = db
             .load_layer_collection(&item, options.into_inner())
@@ -312,6 +317,188 @@ async fn list_collection_handler<C: ApplicationContext>(
         .await?;
 
     Ok(web::Json(collection))
+}
+
+// Returns the capabilities of the given provider
+#[utoipa::path(
+    tag = "Layers",
+    get,
+    path = "/layers/{provider}/capabilities",
+    responses(
+        (status = 200, description = "OK", body = ProviderCapabilities,
+            example = json!({
+                "listing": true,
+                "search": {
+                    "search_types": {
+                        "fulltext": true,
+                        "prefix": true
+                    },
+                    "autocomplete": true,
+                    "filters": [],
+                }
+            })
+        )
+    ),
+    params(
+        ("provider" = DataProviderId, description = "Data provider id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn provider_capabilities_handler<C: ApplicationContext>(
+    app_ctx: web::Data<C>,
+    path: web::Path<DataProviderId>,
+    session: C::Session,
+) -> Result<web::Json<ProviderCapabilities>> {
+    let provider = path.into_inner();
+
+    if provider == ROOT_PROVIDER_ID {
+        return Err(NotImplemented {
+            message: "Global search is not supported".to_string(),
+        });
+    }
+
+    let db = app_ctx.session_context(session).db();
+
+    let capabilities = match provider.into() {
+        crate::layers::storage::INTERNAL_PROVIDER_ID => LayerCollectionProvider::capabilities(&db),
+        provider => db.load_layer_provider(provider).await?.capabilities(),
+    };
+
+    Ok(web::Json(capabilities))
+}
+
+/// Searches the contents of the collection of the given provider
+#[utoipa::path(
+    tag = "Layers",
+    get,
+    path = "/layers/collections/search/{provider}/{collection}",
+    responses(
+        (status = 200, description = "OK", body = LayerCollection,
+            example = json!({
+                "id": {
+                    "providerId": "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74",
+                    "collectionId": "05102bb3-a855-4a37-8a8a-30026a91fef1"
+                },
+                "name": "Layers",
+                "description": "All available Geo Engine layers",
+                "items": [
+                    {
+                        "type": "collection",
+                        "id": {
+                            "providerId": "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74",
+                            "collectionId": "a29f77cc-51ce-466b-86ef-d0ab2170bc0a"
+                        },
+                        "name": "An empty collection",
+                        "description": "There is nothing here",
+                        "properties": []
+                    },
+                    {
+                        "type": "layer",
+                        "id": {
+                            "providerId": "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74",
+                            "layerId": "b75db46e-2b9a-4a86-b33f-bc06a73cd711"
+                        },
+                        "name": "Ports in Germany",
+                        "description": "Natural Earth Ports point filtered with Germany polygon",
+                        "properties": []
+                    }
+                ],
+                "entryLabel": null,
+                "properties": []
+            })
+        )
+    ),
+    params(
+        ("provider" = DataProviderId, description = "Data provider id", example = "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74"),
+        ("collection" = LayerCollectionId, description = "Layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
+        SearchParameters
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn search_handler<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    path: web::Path<(DataProviderId, LayerCollectionId)>,
+    options: ValidatedQuery<SearchParameters>,
+) -> Result<web::Json<LayerCollection>> {
+    let (provider, collection) = path.into_inner();
+
+    if provider == ROOT_PROVIDER_ID {
+        return Err(NotImplemented {
+            message: "Global search is not supported".to_string(),
+        });
+    }
+
+    let db = app_ctx.session_context(session).db();
+
+    let collection = match provider.into() {
+        crate::layers::storage::INTERNAL_PROVIDER_ID => {
+            LayerCollectionProvider::search(&db, &collection, options.into_inner()).await?
+        }
+        provider => {
+            db.load_layer_provider(provider)
+                .await?
+                .search(&collection, options.into_inner())
+                .await?
+        }
+    };
+
+    Ok(web::Json(collection))
+}
+
+/// Autocompletes the search on the contents of the collection of the given provider
+#[utoipa::path(
+    tag = "Layers",
+    get,
+    path = "/layers/collections/search/autocomplete/{provider}/{collection}",
+    responses(
+        (status = 200, description = "OK", body = Vec<String>,
+            example = json!(["An empty collection", "Ports in Germany"])
+        )
+    ),
+    params(
+        ("provider" = DataProviderId, description = "Data provider id", example = "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74"),
+        ("collection" = LayerCollectionId, description = "Layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
+        SearchParameters
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn autocomplete_handler<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    path: web::Path<(DataProviderId, LayerCollectionId)>,
+    options: ValidatedQuery<SearchParameters>,
+) -> Result<web::Json<Vec<String>>> {
+    let (provider, collection) = path.into_inner();
+
+    if provider == ROOT_PROVIDER_ID {
+        return Err(NotImplemented {
+            message: "Global search is not supported".to_string(),
+        });
+    }
+
+    let db = app_ctx.session_context(session).db();
+
+    let suggestions = match provider.into() {
+        crate::layers::storage::INTERNAL_PROVIDER_ID => {
+            LayerCollectionProvider::autocomplete_search(&db, &collection, options.into_inner())
+                .await?
+        }
+        provider => {
+            db.load_layer_provider(provider)
+                .await?
+                .autocomplete_search(&collection, options.into_inner())
+                .await?
+        }
+    };
+
+    Ok(web::Json(suggestions))
 }
 
 /// Retrieves the layer of the given provider
@@ -485,12 +672,6 @@ async fn layer_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    if provider == crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID.into() {
-        let collection = db.load_dataset_layer(&item.into()).await?;
-
-        return Ok(web::Json(collection));
-    }
-
     if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
         let collection = db.load_layer(&item.into()).await?;
 
@@ -529,11 +710,8 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
 ) -> Result<web::Json<IdResponse<WorkflowId>>> {
     let (provider, item) = path.into_inner();
 
-    let db = app_ctx.session_context(session).db();
+    let db = app_ctx.session_context(session.clone()).db();
     let layer = match provider.into() {
-        crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID => {
-            db.load_dataset_layer(&item.into()).await?
-        }
         crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item.into()).await?,
         _ => {
             db.load_layer_provider(provider.into())
@@ -543,6 +721,7 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
         }
     };
 
+    let db = app_ctx.session_context(session).db();
     let workflow_id = db.register_workflow(layer.workflow).await?;
 
     Ok(web::Json(IdResponse::from(workflow_id)))
@@ -581,9 +760,6 @@ async fn layer_to_dataset<C: ApplicationContext>(
     let db = ctx.db();
 
     let layer = match provider.into() {
-        crate::datasets::storage::DATASET_DB_LAYER_PROVIDER_ID => {
-            db.load_dataset_layer(&item).await?
-        }
         crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item).await?,
         _ => {
             db.load_layer_provider(provider.into())
@@ -899,6 +1075,7 @@ mod tests {
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::ge_context;
     use crate::layers::layer::Layer;
+    use crate::layers::storage::INTERNAL_PROVIDER_ID;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
@@ -1228,7 +1405,7 @@ mod tests {
         // try removing root collection id --> should fail
 
         let req = test::TestRequest::delete()
-            .uri(&format!("/layers/collections/{root_collection_id}"))
+            .uri(&format!("/layerDb/collections/{root_collection_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx.clone()).await;
 
@@ -1278,6 +1455,54 @@ mod tests {
                 .any(|item| item.name() == "Foo"),
             "{root_collection:#?}"
         );
+    }
+
+    #[ge_context::test]
+    async fn test_search_capabilities(app_ctx: PostgresContext<NoTls>) {
+        let session_id = app_ctx.default_session_id().await;
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/layers/{INTERNAL_PROVIDER_ID}/capabilities",))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+    }
+
+    #[ge_context::test]
+    async fn test_search(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = app_ctx.default_session_id().await;
+
+        let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/layers/collections/search/{INTERNAL_PROVIDER_ID}/{root_collection_id}?limit=5&offset=0&searchType=fulltext&searchString=x"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+    }
+
+    #[ge_context::test]
+    async fn test_search_autocomplete(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = app_ctx.default_session_id().await;
+
+        let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/layers/collections/search/autocomplete/{INTERNAL_PROVIDER_ID}/{root_collection_id}?limit=5&offset=0&searchType=fulltext&searchString=x"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
     }
 
     struct MockRasterWorkflowLayerDescription {

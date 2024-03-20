@@ -142,17 +142,6 @@ impl VectorOperator for RasterVectorJoin {
             .map(InitializedRasterOperator::result_descriptor)
             .collect::<Vec<_>>();
 
-        // TODO: implement multi-band functionality for aggregated join and remove this check
-        ensure!(
-            matches!(
-                self.params.temporal_aggregation,
-                TemporalAggregationMethod::None
-            ) || source_descriptors.iter().all(|rd| rd.bands.len() == 1),
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: "RasterVectorAggregateJoin"
-            }
-        );
-
         let spatial_reference = vector_rd.spatial_reference;
 
         for other_spatial_reference in source_descriptors
@@ -170,7 +159,7 @@ impl VectorOperator for RasterVectorJoin {
 
         let raster_sources_bands = source_descriptors
             .iter()
-            .map(|rd| rd.bands.len())
+            .map(|rd| rd.bands.count())
             .collect::<Vec<_>>();
 
         let params = self.params;
@@ -235,7 +224,7 @@ pub struct InitializedRasterVectorJoin {
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
-    raster_sources_bands: Vec<usize>,
+    raster_sources_bands: Vec<u32>,
     state: RasterVectorJoinParams,
 }
 
@@ -257,6 +246,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                 TypedVectorQueryProcessor::MultiPoint(match self.state.temporal_aggregation {
                     TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
                         points,
+                        self.result_descriptor.clone(),
                         typed_raster_processors,
                         self.raster_sources_bands.clone(),
                         self.state.names.clone(),
@@ -267,7 +257,9 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
                         RasterVectorAggregateJoinProcessor::new(
                             points,
+                            self.result_descriptor.clone(),
                             typed_raster_processors,
+                            self.raster_sources_bands.clone(),
                             self.state.names.clone(),
                             self.state.feature_aggregation,
                             self.state.feature_aggregation_ignore_no_data,
@@ -282,6 +274,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                 TypedVectorQueryProcessor::MultiPolygon(match self.state.temporal_aggregation {
                     TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
                         polygons,
+                        self.result_descriptor.clone(),
                         typed_raster_processors,
                         self.raster_sources_bands.clone(),
                         self.state.names.clone(),
@@ -292,7 +285,9 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     TemporalAggregationMethod::First | TemporalAggregationMethod::Mean => {
                         RasterVectorAggregateJoinProcessor::new(
                             polygons,
+                            self.result_descriptor.clone(),
                             typed_raster_processors,
+                            self.raster_sources_bands.clone(),
                             self.state.names.clone(),
                             self.state.feature_aggregation,
                             self.state.feature_aggregation_ignore_no_data,
