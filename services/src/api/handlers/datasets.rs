@@ -21,7 +21,7 @@ use crate::{
         path_with_base_path,
     },
 };
-use actix_web::{web, FromRequest, HttpResponse, Responder};
+use actix_web::{web, FromRequest, HttpResponse, HttpResponseBuilder, Responder};
 use gdal::{
     vector::{Layer, LayerAccess, OGRFieldType},
     Dataset, DatasetOptions,
@@ -382,7 +382,7 @@ pub async fn update_dataset_provenance_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     dataset: web::Path<DatasetName>,
     provenance: ValidatedJson<Provenances>,
-) -> Result<impl Responder> {
+) -> Result<HttpResponseBuilder> {
     let session_ctx = app_ctx.session_context(session).db();
 
     let real_dataset = dataset.into_inner();
