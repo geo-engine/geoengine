@@ -1,4 +1,6 @@
-use super::migrations::{all_migrations, migrate_database, MigrationResult};
+use super::migrations::{
+    all_migrations, migrate_database, CurrentSchemaMigration, MigrationResult,
+};
 use super::{ExecutionContextImpl, Session, SimpleApplicationContext};
 use crate::api::cli::{add_datasets_from_directory, add_providers_from_directory};
 use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId, SimpleSession};
@@ -205,7 +207,12 @@ where
     ) -> Result<bool> {
         Self::maybe_clear_database(&conn).await?;
 
-        let migration = migrate_database(&mut conn, &all_migrations(), None).await?;
+        let migration = migrate_database(
+            &mut conn,
+            &all_migrations(),
+            Some(Box::new(CurrentSchemaMigration)),
+        )
+        .await?;
 
         Ok(migration == MigrationResult::CreatedDatabase)
     }

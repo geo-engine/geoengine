@@ -1,5 +1,7 @@
+use crate::error::{Result, UnexpectedDatabaseVersionDuringMigration};
 use async_trait::async_trait;
 use bb8_postgres::{bb8::PooledConnection, PostgresConnectionManager};
+use itertools::Either;
 use log::info;
 use snafu::ensure;
 use tokio_postgres::{
@@ -7,8 +9,6 @@ use tokio_postgres::{
     tls::{MakeTlsConnect, TlsConnect},
     Socket, Transaction,
 };
-
-use crate::error::{Result, UnexpectedDatabaseVersionDuringMigration};
 
 pub type DatabaseVersion = String;
 
@@ -70,10 +70,11 @@ pub enum MigrationResult {
 /// # Panics
 ///
 /// Panics if there is an error in the migration logic.
+///
 pub async fn migrate_database<Tls>(
-    conn: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    connection: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
     migrations: &[Box<dyn Migration>],
-    prefix: Option<&str>,
+    migration_if_uninitialized: Option<Box<dyn Migration>>,
 ) -> Result<MigrationResult>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
@@ -81,19 +82,20 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    let prefix = prefix.unwrap_or_default();
+    let pre_migration_version = determine_current_database_version(connection).await?;
+    info!("Current database version: {:?}", pre_migration_version);
 
-    let pre_migration_version = determine_current_database_version(conn).await?;
-    info!(
-        target: prefix,
-        "{prefix}Current database version: {:?}",
-        pre_migration_version
-    );
-
-    // start with the first migration after the current version
-    let applicable_migrations = migrations
-        .iter()
-        .skip_while(|m| m.prev_version() != pre_migration_version);
+    let applicable_migrations =
+        if let (None, Some(migration)) = (&pre_migration_version, &migration_if_uninitialized) {
+            // just use the [`CurrentSchemaMigration`] if the database is empty
+            Either::Left(std::iter::once(migration))
+        } else {
+            // start with the first migration after the current version
+            let applicable_migrations = migrations
+                .iter()
+                .skip_while(|m| m.prev_version() != pre_migration_version);
+            Either::Right(applicable_migrations)
+        };
 
     let mut current_version = pre_migration_version.clone();
 
@@ -106,24 +108,24 @@ where
             }
         );
 
-        info!(target: prefix, "Applying migration: {}", migration.version());
+        info!("Applying migration: {}", migration.version());
 
-        let tx = conn.build_transaction().start().await?;
+        let tx = connection.build_transaction().start().await?;
 
         migration.migrate(&tx).await?;
 
-        let stmt = tx
-            .prepare("UPDATE geoengine SET database_version = $1")
-            .await?;
-
-        tx.execute(&stmt, &[&migration.version()]).await?;
+        tx.execute(
+            "UPDATE geoengine SET database_version = $1",
+            &[&migration.version()],
+        )
+        .await?;
 
         tx.commit().await?;
 
         current_version = Some(migration.version());
     }
 
-    let current_version = determine_current_database_version(conn)
+    let current_version = determine_current_database_version(connection)
         .await?
         .expect("after migration, there should be a current version.");
 
@@ -149,23 +151,23 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
-    use geoengine_datatypes::test_data;
-    use tokio_postgres::NoTls;
-
+    use super::*;
     use crate::{
         contexts::{
-            migrations::{all_migrations, migration_0000_initial::Migration0000Initial},
+            migrations::{
+                all_migrations, migration_0000_initial::Migration0000Initial,
+                CurrentSchemaMigration,
+            },
             PostgresDb,
         },
         projects::{ProjectDb, ProjectListOptions},
         util::config::get_config_element,
         workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
     };
-
-    use super::*;
+    use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
+    use geoengine_datatypes::test_data;
+    use std::str::FromStr;
+    use tokio_postgres::NoTls;
 
     #[tokio::test]
     async fn it_migrates() -> Result<()> {
@@ -252,6 +254,25 @@ mod tests {
         let mut conn = pool.get().await?;
 
         migrate_database(&mut conn, &all_migrations(), None).await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_uses_the_current_schema_if_the_database_is_empty() -> Result<()> {
+        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+
+        let pool = Pool::builder().build(pg_mgr).await?;
+
+        let mut conn = pool.get().await?;
+
+        migrate_database(
+            &mut conn,
+            &all_migrations(),
+            Some(Box::new(CurrentSchemaMigration)),
+        )
+        .await?;
 
         Ok(())
     }
