@@ -1175,9 +1175,10 @@ x;y
             "operator": {
                 "type": "RasterVectorJoin",
                 "params": {
-                    "names": [
-                        "NDVI"
-                    ],
+                    "names": {
+                        "type": "names",
+                        "values": ["NDVI"]
+                    },
                     "featureAggregation": "first",
                     "temporalAggregation": "first"
                 },
