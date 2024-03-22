@@ -306,7 +306,7 @@ mod tests {
             TimeInstance, TimeInterval,
         },
         raster::{
-            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation,
+            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, RenameBands, TileInformation,
             TilesEqualIgnoringCacheHint, TilingSpecification,
         },
         spatial_reference::SpatialReference,
@@ -817,7 +817,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::Default,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![make_raster(), make_raster(), make_raster()],
                     },

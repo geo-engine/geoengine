@@ -11,8 +11,8 @@ use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
 use crate::engine::{
-    QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
-    VectorQueryProcessor, VectorResultDescriptor,
+    QueryContext, QueryProcessor, RasterQueryProcessor, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::processing::raster_vector_join::aggregator::{
     Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
@@ -24,14 +24,12 @@ use async_trait::async_trait;
 use geoengine_datatypes::primitives::{BoundingBox2D, Geometry, VectorQueryRectangle};
 
 use super::util::{CoveredPixels, FeatureTimeSpanIter, PixelCoverCreator};
-use super::{create_feature_aggregator, FeatureAggregationMethod};
+use super::{create_feature_aggregator, FeatureAggregationMethod, RasterInput};
 
 pub struct RasterVectorAggregateJoinProcessor<G> {
     collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     result_descriptor: VectorResultDescriptor,
-    raster_processors: Vec<TypedRasterQueryProcessor>,
-    raster_bands: Vec<u32>,
-    column_names: Vec<String>,
+    raster_inputs: Vec<RasterInput>,
     feature_aggregation: FeatureAggregationMethod,
     feature_aggregation_ignore_no_data: bool,
     temporal_aggregation: TemporalAggregationMethod,
@@ -47,9 +45,7 @@ where
     pub fn new(
         collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
         result_descriptor: VectorResultDescriptor,
-        raster_processors: Vec<TypedRasterQueryProcessor>,
-        raster_bands: Vec<u32>,
-        column_names: Vec<String>,
+        raster_inputs: Vec<RasterInput>,
         feature_aggregation: FeatureAggregationMethod,
         feature_aggregation_ignore_no_data: bool,
         temporal_aggregation: TemporalAggregationMethod,
@@ -58,9 +54,7 @@ where
         Self {
             collection,
             result_descriptor,
-            raster_processors,
-            raster_bands,
-            column_names,
+            raster_inputs,
             feature_aggregation,
             feature_aggregation_ignore_no_data,
             temporal_aggregation,
@@ -72,8 +66,7 @@ where
     async fn extract_raster_values<P: Pixel>(
         collection: &FeatureCollection<G>,
         raster_processor: &dyn RasterQueryProcessor<RasterType = P>,
-        num_bands: u32,
-        new_column_name: &str,
+        column_names: &[String],
         feature_aggreation: FeatureAggregationMethod,
         feature_aggregation_ignore_no_data: bool,
         temporal_aggregation: TemporalAggregationMethod,
@@ -81,7 +74,7 @@ where
         query: VectorQueryRectangle,
         ctx: &dyn QueryContext,
     ) -> Result<FeatureCollection<G>> {
-        let mut temporal_band_aggregators = (0..num_bands)
+        let mut temporal_band_aggregators = (0..column_names.len())
             .map(|_| {
                 Self::create_aggregator::<P>(
                     collection.len(),
@@ -116,7 +109,7 @@ where
 
             // TODO: optimize geo access (only specific tiles, etc.)
 
-            let mut feature_band_aggregators = (0..num_bands)
+            let mut feature_band_aggregators = (0..column_names.len())
                 .map(|_| {
                     create_feature_aggregator::<P>(
                         collection.len(),
@@ -192,26 +185,16 @@ where
                 )?;
             }
 
-            if (0..num_bands).all(|band| temporal_band_aggregators[band as usize].is_satisfied()) {
+            if (0..column_names.len()).all(|band| temporal_band_aggregators[band].is_satisfied()) {
                 break;
             }
         }
-
-        let new_column_names_vec = (0..num_bands)
-            .map(|i| {
-                if i == 0 {
-                    new_column_name.to_owned()
-                } else {
-                    format!("{new_column_name}_{i}")
-                }
-            })
-            .collect::<Vec<_>>();
 
         let feature_data = temporal_band_aggregators
             .into_iter()
             .map(TypedAggregator::into_data);
 
-        let columns = new_column_names_vec
+        let columns = column_names
             .iter()
             .map(String::as_str)
             .zip(feature_data)
@@ -280,18 +263,12 @@ where
             .and_then(move |mut collection| {
                 let query = query.clone();
                 async move {
-                    for ((raster, new_column_name), bands) in self
-                        .raster_processors
-                        .iter()
-                        .zip(&self.column_names)
-                        .zip(&self.raster_bands)
-                    {
-                        collection = call_on_generic_raster_processor!(raster, raster => {
+                    for raster_input in &self.raster_inputs {
+                        collection = call_on_generic_raster_processor!(&raster_input.processor, raster => {
                             Self::extract_raster_values(
                                 &collection,
                                 raster,
-                                *bands,
-                                new_column_name,
+                                &raster_input.column_names,
                                 self.feature_aggregation,
                                 self.feature_aggregation_ignore_no_data,
                                 self.temporal_aggregation,
@@ -397,8 +374,7 @@ mod tests {
         let result = RasterVectorAggregateJoinProcessor::extract_raster_values(
             &points,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
-            1,
-            "foo",
+            &["foo".to_string()],
             FeatureAggregationMethod::First,
             false,
             TemporalAggregationMethod::First,
@@ -494,8 +470,7 @@ mod tests {
         let result = RasterVectorAggregateJoinProcessor::extract_raster_values(
             &points,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
-            1,
-            "foo",
+            &["foo".to_string()],
             FeatureAggregationMethod::First,
             false,
             TemporalAggregationMethod::Mean,
@@ -618,8 +593,7 @@ mod tests {
         let result = RasterVectorAggregateJoinProcessor::extract_raster_values(
             &points,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
-            1,
-            "foo",
+            &["foo".to_string()],
             FeatureAggregationMethod::Mean,
             false,
             TemporalAggregationMethod::Mean,
@@ -776,8 +750,7 @@ mod tests {
         let result = RasterVectorAggregateJoinProcessor::extract_raster_values(
             &polygons,
             &raster_source.query_processor().unwrap().get_u8().unwrap(),
-            1,
-            "foo",
+            &["foo".to_string()],
             FeatureAggregationMethod::Mean,
             false,
             TemporalAggregationMethod::Mean,
@@ -1053,9 +1026,10 @@ mod tests {
                 time: None,
                 bbox: None,
             },
-            vec![raster],
-            vec![2],
-            vec!["foo".to_owned()],
+            vec![RasterInput {
+                processor: raster,
+                column_names: vec!["foo".to_owned(), "foo_1".to_owned()],
+            }],
             FeatureAggregationMethod::Mean,
             false,
             TemporalAggregationMethod::Mean,

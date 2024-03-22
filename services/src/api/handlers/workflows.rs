@@ -1324,9 +1324,11 @@ mod tests {
                     "y": 0.1
                 },
                 "bands": [{
-                        "name": "band",
+                        "name": "ndvi",
                         "measurement": {
-                            "type": "unitless"
+                            "type": "continuous",
+                            "measurement": "vegetation",
+                            "unit": null
                         }
                     }]
             })
