@@ -43,7 +43,7 @@ impl RenameBands {
                 ensure!(
                     names.len() == names_per_input.iter().sum::<usize>(),
                     InvalidNumberOfNewNames {
-                        expected: num_inputs,
+                        expected: names_per_input.iter().sum::<usize>(),
                         found: names.len()
                     }
                 );

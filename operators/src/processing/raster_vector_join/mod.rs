@@ -5,9 +5,9 @@ mod util;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
-    Operator, OperatorName, SingleVectorMultipleRasterSources, TypedVectorQueryProcessor,
-    VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
-    WorkflowOperatorPath,
+    Operator, OperatorName, SingleVectorMultipleRasterSources, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error::{self, ColumnNameConflict, Error};
 use crate::processing::raster_vector_join::non_aggregated::RasterVectorJoinProcessor;
@@ -171,7 +171,7 @@ impl VectorOperator for RasterVectorJoin {
 
         let raster_sources_bands = source_descriptors
             .iter()
-            .map(|rd| rd.bands.count())
+            .map(|rd| rd.bands.count() as usize)
             .collect::<Vec<_>>();
 
         let rename_bands: RenameBands = self.params.names.clone().into();
@@ -245,12 +245,17 @@ impl VectorOperator for RasterVectorJoin {
     span_fn!(RasterVectorJoin);
 }
 
+pub struct RasterInput {
+    pub processor: TypedRasterQueryProcessor,
+    pub column_names: Vec<String>,
+}
+
 pub struct InitializedRasterVectorJoin {
     name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
-    raster_sources_bands: Vec<u32>,
+    raster_sources_bands: Vec<usize>,
     state: RasterVectorJoinParams,
     new_column_names: Vec<String>,
 }
@@ -261,11 +266,22 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
     }
 
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        let typed_raster_processors = self
+        let mut raster_inputs = vec![];
+
+        let mut names = self.new_column_names.clone();
+        for (raster_source, num_bands) in self
             .raster_sources
             .iter()
-            .map(InitializedRasterOperator::query_processor)
-            .collect::<Result<Vec<_>>>()?;
+            .zip(self.raster_sources_bands.iter())
+        {
+            let processor = raster_source.query_processor()?;
+            let column_names = names.drain(0..*num_bands).collect::<Vec<_>>();
+
+            raster_inputs.push(RasterInput {
+                processor,
+                column_names,
+            });
+        }
 
         Ok(match self.vector_source.query_processor()? {
             TypedVectorQueryProcessor::Data(_) => unreachable!(),
@@ -274,9 +290,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
                         points,
                         self.result_descriptor.clone(),
-                        typed_raster_processors,
-                        self.raster_sources_bands.clone(),
-                        self.new_column_names.clone(),
+                        raster_inputs,
                         self.state.feature_aggregation,
                         self.state.feature_aggregation_ignore_no_data,
                     )
@@ -285,9 +299,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                         RasterVectorAggregateJoinProcessor::new(
                             points,
                             self.result_descriptor.clone(),
-                            typed_raster_processors,
-                            self.raster_sources_bands.clone(),
-                            self.new_column_names.clone(),
+                            raster_inputs,
                             self.state.feature_aggregation,
                             self.state.feature_aggregation_ignore_no_data,
                             self.state.temporal_aggregation,
@@ -302,9 +314,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     TemporalAggregationMethod::None => RasterVectorJoinProcessor::new(
                         polygons,
                         self.result_descriptor.clone(),
-                        typed_raster_processors,
-                        self.raster_sources_bands.clone(),
-                        self.new_column_names.clone(),
+                        raster_inputs,
                         self.state.feature_aggregation,
                         self.state.feature_aggregation_ignore_no_data,
                     )
@@ -313,9 +323,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                         RasterVectorAggregateJoinProcessor::new(
                             polygons,
                             self.result_descriptor.clone(),
-                            typed_raster_processors,
-                            self.raster_sources_bands.clone(),
-                            self.new_column_names.clone(),
+                            raster_inputs,
                             self.state.feature_aggregation,
                             self.state.feature_aggregation_ignore_no_data,
                             self.state.temporal_aggregation,
@@ -390,7 +398,7 @@ mod tests {
     fn serialization() {
         let raster_vector_join = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: ColumnNames::Default,
+                names: ColumnNames::Names(vec!["foo".to_string(), "bar".to_string()]),
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
@@ -405,7 +413,10 @@ mod tests {
         let serialized = json!({
             "type": "RasterVectorJoin",
             "params": {
-                "names": ["foo", "bar"],
+                "names": {
+                    "type": "names",
+                    "values": ["foo", "bar"],
+                },
                 "featureAggregation": "first",
                 "temporalAggregation": "mean",
             },
@@ -789,7 +800,7 @@ mod tests {
 
         let join = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: ColumnNames::Names(vec!["s0".to_string(), "s1".to_string()]),
+                names: ColumnNames::Default,
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::None,
@@ -812,35 +823,35 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 columns: [
                     (
-                        "s0".to_string(),
+                        "band_0".to_string(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Int,
                             measurement: Measurement::Unitless
                         }
                     ),
                     (
-                        "s0_1".to_string(),
+                        "band_1".to_string(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Int,
                             measurement: Measurement::Unitless
                         }
                     ),
                     (
-                        "s1".to_string(),
+                        "band_0 (1)".to_string(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Int,
                             measurement: Measurement::Unitless
                         }
                     ),
                     (
-                        "s1_1".to_string(),
+                        "band_1 (1)".to_string(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Int,
                             measurement: Measurement::Unitless
                         }
                     ),
                     (
-                        "s1_2".to_string(),
+                        "band_2".to_string(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Int,
                             measurement: Measurement::Unitless
