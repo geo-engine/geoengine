@@ -1480,10 +1480,8 @@ mod tests {
     }
 
     fn default_dataset_relations() -> Vec<InternalRelation> {
-        let meta =
-            create_belonging_resource_relation(META_OBJECT_ID, ResourceVariant::Object);
-        let data =
-            create_belonging_resource_relation(DATA_OBJECT_ID, ResourceVariant::Object);
+        let meta = create_belonging_resource_relation(META_OBJECT_ID, ResourceVariant::Object);
+        let data = create_belonging_resource_relation(DATA_OBJECT_ID, ResourceVariant::Object);
 
         vec![meta, data]
     }
@@ -1768,8 +1766,7 @@ mod tests {
 
     #[tokio::test]
     async fn extract_aruna_ids_no_data_object() {
-        let relation =
-            create_belonging_resource_relation(META_OBJECT_ID, ResourceVariant::Object);
+        let relation = create_belonging_resource_relation(META_OBJECT_ID, ResourceVariant::Object);
         let dataset = Some(default_dataset(true, true, vec![relation]));
         let aruna_mock_server = mock_server(
             None,
