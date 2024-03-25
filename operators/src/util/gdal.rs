@@ -12,9 +12,9 @@ use geoengine_datatypes::{
     dataset::{DataId, DatasetId, NamedData},
     hashmap,
     primitives::{
-        BoundingBox2D, CacheTtlSeconds, DateTimeParseFormat, FeatureDataType, Measurement,
-        SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
-        TimeStep, VectorQueryRectangle,
+        BoundingBox2D, CacheTtlSeconds, ContinuousMeasurement, DateTimeParseFormat,
+        FeatureDataType, Measurement, SpatialPartition2D, SpatialResolution, TimeGranularity,
+        TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle,
     },
     raster::{GeoTransform, RasterDataType},
     spatial_reference::SpatialReference,
@@ -97,7 +97,15 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
                 (180., -90.).into(),
             )),
             resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
-            bands: RasterBandDescriptors::new_single_band(),
+            bands: vec![RasterBandDescriptor {
+                name: "ndvi".to_string(),
+                measurement: Measurement::Continuous(ContinuousMeasurement {
+                    measurement: "vegetation".to_string(),
+                    unit: None,
+                }),
+            }]
+            .try_into()
+            .expect("it should only be used in tests"),
         },
         cache_ttl,
     }

@@ -420,10 +420,8 @@ where
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, Measurement, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
-        raster::{RasterDataType, TilesEqualIgnoringCacheHint},
+        primitives::{BandSelection, SpatialPartition2D, SpatialResolution, TimeInterval},
+        raster::{RasterDataType, RenameBands, TilesEqualIgnoringCacheHint},
         util::test::TestDefault,
     };
 
@@ -525,7 +523,9 @@ mod tests {
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
 
         let operator = RasterStacker {
-            params: RasterStackerParams {},
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
             sources: MultipleRasterSources {
                 rasters: vec![
                     GdalSource {
@@ -538,7 +538,7 @@ mod tests {
                         params: ExpressionParams {
                             expression: "2 * A".to_string(),
                             output_type: RasterDataType::U8,
-                            output_measurement: Some(Measurement::Unitless),
+                            output_band: None,
                             map_no_data: false,
                         },
                         sources: SingleRasterSource {

@@ -446,9 +446,9 @@ where
 mod tests {
     use futures::stream::StreamExt;
     use geoengine_datatypes::{
-        primitives::{CacheHint, Measurement, SpatialResolution, TimeInterval},
+        primitives::{CacheHint, SpatialResolution, TimeInterval},
         raster::{
-            EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterDataType,
+            EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterDataType, RenameBands,
             TileInformation, TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
@@ -1996,7 +1996,7 @@ mod tests {
                     params: ExpressionParams {
                         expression: "20 * A".to_string(),
                         output_type: RasterDataType::U8,
-                        output_measurement: Some(Measurement::Unitless),
+                        output_band: None,
                         map_no_data: true,
                     },
                     sources: SingleRasterSource {
@@ -2736,7 +2736,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::Default,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![
                             MockRasterSource {

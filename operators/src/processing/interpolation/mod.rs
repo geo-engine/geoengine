@@ -460,7 +460,8 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
-            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, RenameBands, TileInformation,
+            TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -678,6 +679,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_interpolates_multiple_bands() -> Result<()> {
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
             (0., 0.).into(),
@@ -691,7 +693,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::Default,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![
                             make_raster(CacheHint::max_duration()),

@@ -7,6 +7,7 @@ pub use crate::contexts::migrations::{
     migration_0005_gbif_column_selection::Migration0005GbifColumnSelection,
     migration_0006_ebv_provider::Migration0006EbvProvider,
     migration_0007_owner_role::Migration0007OwnerRole,
+    migration_0008_band_names::Migration0008BandNames,
 };
 pub use database_migration::{migrate_database, DatabaseVersion, Migration, MigrationResult};
 
@@ -19,6 +20,12 @@ pub mod migration_0004_dataset_listing_provider_prio;
 pub mod migration_0005_gbif_column_selection;
 mod migration_0006_ebv_provider;
 pub mod migration_0007_owner_role;
+pub mod migration_0008_band_names;
+
+#[cfg(test)]
+mod schema_info;
+#[cfg(test)]
+pub(crate) use schema_info::{assert_migration_schema_eq, AssertSchemaEqPopulationConfig};
 
 /// All migrations that are available. The migrations are applied in the order they are defined here, starting from the current version of the database.
 ///
@@ -34,5 +41,25 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0005GbifColumnSelection),
         Box::new(Migration0006EbvProvider),
         Box::new(Migration0007OwnerRole),
+        Box::new(Migration0008BandNames),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn migrations_lead_to_ground_truth_schema() {
+        assert_migration_schema_eq(
+            &all_migrations(),
+            include_str!("current_schema.sql"),
+            AssertSchemaEqPopulationConfig {
+                has_views: false,
+                has_parameters: false,
+                ..Default::default()
+            },
+        )
+        .await;
+    }
 }
