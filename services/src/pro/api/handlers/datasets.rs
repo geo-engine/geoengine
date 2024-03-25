@@ -4,7 +4,8 @@ use crate::{
             adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
             delete_dataset_handler, get_dataset_handler, get_loading_info_handler,
             list_datasets_handler, list_volumes_handler, suggest_meta_data_handler,
-            update_dataset_handler, update_dataset_symbology_handler,
+            update_dataset_handler, update_dataset_provenance_handler,
+            update_dataset_symbology_handler,
         },
         model::{
             responses::datasets::{errors::*, DatasetNameResponse},
@@ -45,6 +46,10 @@ where
             .service(
                 web::resource("/{dataset}/symbology")
                     .route(web::put().to(update_dataset_symbology_handler::<C>)),
+            )
+            .service(
+                web::resource("/{dataset}/provenance")
+                    .route(web::put().to(update_dataset_provenance_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}")
