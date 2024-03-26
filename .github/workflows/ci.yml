@@ -52,6 +52,12 @@ jobs:
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
+      - name: Install protobuf-compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
+          sudo apt-get clean
+        if: ${{ matrix.features == '--all-features' }}
       - name: Install Rustup
         run: |
           curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL "https://sh.rustup.rs" | sh -s -- --profile minimal --default-toolchain none -y
@@ -120,6 +126,12 @@ jobs:
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
           sudo ldconfig
+      - name: Install protobuf-compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
+          sudo apt-get clean
+        if: ${{ matrix.features == '--all-features' }}
       - name: Install Rustup
         run: |
           curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL "https://sh.rustup.rs" | sh -s -- --profile minimal --default-toolchain none -y
