@@ -1,8 +1,9 @@
+#[cfg(feature = "aruna")]
+use crate::datasets::external::aruna::ArunaDataProviderDefinition;
 use crate::{
     datasets::{
         dataset_listing_provider::DatasetLayerListingProviderDefinition,
         external::{
-            aruna::ArunaDataProviderDefinition,
             edr::{EdrDataProviderDefinition, EdrVectorSpec},
             gbif::GbifDataProviderDefinition,
             gfbio_abcd::GfbioAbcdDataProviderDefinition,
@@ -641,6 +642,7 @@ impl TryFrom<EdrDataProviderDefinitionDbType> for EdrDataProviderDefinition {
 #[postgres(name = "DataProviderDefinition")]
 #[allow(clippy::struct_field_names)] // same postfix because of postgres mapping
 pub struct TypedDataProviderDefinitionDbType {
+    #[cfg(feature = "aruna")]
     aruna_data_provider_definition: Option<ArunaDataProviderDefinition>,
     dataset_layer_listing_provider_definition: Option<DatasetLayerListingProviderDefinition>,
     gbif_data_provider_definition: Option<GbifDataProviderDefinition>,
@@ -656,6 +658,7 @@ pub struct TypedDataProviderDefinitionDbType {
 impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
     fn from(other: &TypedDataProviderDefinition) -> Self {
         match other {
+            #[cfg(feature = "aruna")]
             TypedDataProviderDefinition::ArunaDataProviderDefinition(data_provider_definition) => {
                 Self {
                     aruna_data_provider_definition: Some(data_provider_definition.clone()),
@@ -672,6 +675,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
                 data_provider_definition,
             ) => Self {
+                #[cfg(feature = "aruna")]
                 aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: Some(data_provider_definition.clone()),
                 gbif_data_provider_definition: None,
@@ -684,6 +688,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             },
             TypedDataProviderDefinition::GbifDataProviderDefinition(data_provider_definition) => {
                 Self {
+                    #[cfg(feature = "aruna")]
                     aruna_data_provider_definition: None,
                     dataset_layer_listing_provider_definition: None,
                     gbif_data_provider_definition: Some(data_provider_definition.clone()),
@@ -698,6 +703,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(
                 data_provider_definition,
             ) => Self {
+                #[cfg(feature = "aruna")]
                 aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
@@ -711,6 +717,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(
                 data_provider_definition,
             ) => Self {
+                #[cfg(feature = "aruna")]
                 aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
@@ -724,6 +731,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(
                 data_provider_definition,
             ) => Self {
+                #[cfg(feature = "aruna")]
                 aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
@@ -737,6 +745,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(
                 data_provider_definition,
             ) => Self {
+                #[cfg(feature = "aruna")]
                 aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
@@ -750,6 +759,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(
                 data_provider_definition,
             ) => Self {
+                #[cfg(feature = "aruna")]
                 aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
@@ -762,6 +772,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             },
             TypedDataProviderDefinition::EdrDataProviderDefinition(data_provider_definition) => {
                 Self {
+                    #[cfg(feature = "aruna")]
                     aruna_data_provider_definition: None,
                     dataset_layer_listing_provider_definition: None,
                     gbif_data_provider_definition: None,
@@ -783,6 +794,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
     #[allow(clippy::too_many_lines)]
     fn try_from(result_descriptor: TypedDataProviderDefinitionDbType) -> Result<Self, Self::Error> {
         match result_descriptor {
+            #[cfg(feature = "aruna")]
             TypedDataProviderDefinitionDbType {
                 aruna_data_provider_definition: Some(data_provider_definition),
                 dataset_layer_listing_provider_definition: None,
@@ -797,7 +809,8 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 data_provider_definition,
             )),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
+                #[cfg(feature = "aruna")]
+                    aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: Some(data_provider_definition),
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -812,7 +825,8 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 ),
             ),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
+                #[cfg(feature = "aruna")]
+                    aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: Some(data_provider_definition),
                 gfbio_abcd_data_provider_definition: None,
@@ -825,7 +839,8 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 data_provider_definition,
             )),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
+                #[cfg(feature = "aruna")]
+                    aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: Some(data_provider_definition),
@@ -840,7 +855,8 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 ),
             ),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
+                #[cfg(feature = "aruna")]
+                    aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -855,7 +871,8 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 ),
             ),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
+                #[cfg(feature = "aruna")]
+                    aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -870,7 +887,8 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 ),
             ),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
+                #[cfg(feature = "aruna")]
+                    aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -883,7 +901,8 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 data_provider_definition,
             )),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
+                #[cfg(feature = "aruna")]
+                    aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -896,7 +915,8 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 data_provider_definition,
             )),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
+                #[cfg(feature = "aruna")]
+                    aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,

@@ -67,7 +67,7 @@ geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 httptest = "0.15.5"
 ndarray = "0.15"
 tracing-subscriber = { version = "0.3", features = ["json"] }
-rand = "0.8"
+rand = { version = "0.8", features = ["small_rng"] }
 
 [[bench]]
 name = "bands"

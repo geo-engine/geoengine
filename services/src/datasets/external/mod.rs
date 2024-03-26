@@ -1,3 +1,4 @@
+#[cfg(feature = "aruna")]
 pub mod aruna;
 pub mod edr;
 pub mod gbif;

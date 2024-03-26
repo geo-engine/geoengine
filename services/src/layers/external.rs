@@ -1,6 +1,7 @@
 use super::listing::LayerCollectionProvider;
 use crate::contexts::GeoEngineDb;
 use crate::datasets::dataset_listing_provider::DatasetLayerListingProviderDefinition;
+#[cfg(feature = "aruna")]
 use crate::datasets::external::aruna::ArunaDataProviderDefinition;
 use crate::datasets::external::edr::EdrDataProviderDefinition;
 use crate::datasets::external::gbif::GbifDataProviderDefinition;
@@ -67,6 +68,7 @@ pub trait DataProvider: LayerCollectionProvider
 #[serde(tag = "type")] // TODO: rename_all = "camelCase"
 #[allow(clippy::enum_variant_names)] // TODO: think about better names
 pub enum TypedDataProviderDefinition {
+    #[cfg(feature = "aruna")]
     ArunaDataProviderDefinition(ArunaDataProviderDefinition),
     DatasetLayerListingProviderDefinition(DatasetLayerListingProviderDefinition),
     GbifDataProviderDefinition(GbifDataProviderDefinition),
@@ -78,6 +80,7 @@ pub enum TypedDataProviderDefinition {
     EdrDataProviderDefinition(EdrDataProviderDefinition),
 }
 
+#[cfg(feature = "aruna")]
 impl From<ArunaDataProviderDefinition> for TypedDataProviderDefinition {
     fn from(def: ArunaDataProviderDefinition) -> Self {
         Self::ArunaDataProviderDefinition(def)
@@ -135,6 +138,7 @@ impl From<DatasetLayerListingProviderDefinition> for TypedDataProviderDefinition
 impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderDefinition<D>> {
     fn from(typed: TypedDataProviderDefinition) -> Self {
         match typed {
+            #[cfg(feature = "aruna")]
             TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => Box::new(def),
             TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => {
                 Box::new(def)
@@ -155,6 +159,7 @@ impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderD
 impl<D: GeoEngineDb> AsRef<dyn DataProviderDefinition<D>> for TypedDataProviderDefinition {
     fn as_ref(&self) -> &(dyn DataProviderDefinition<D> + 'static) {
         match self {
+            #[cfg(feature = "aruna")]
             TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => def,
             TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => def,
             TypedDataProviderDefinition::GbifDataProviderDefinition(def) => def,
@@ -172,6 +177,7 @@ impl<D: GeoEngineDb> AsRef<dyn DataProviderDefinition<D>> for TypedDataProviderD
 impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
     async fn initialize(self: Box<Self>, db: D) -> Result<Box<dyn DataProvider>> {
         match *self {
+            #[cfg(feature = "aruna")]
             TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
                 Box::new(def).initialize(db).await
             }
@@ -204,6 +210,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
 
     fn type_name(&self) -> &'static str {
         match self {
+            #[cfg(feature = "aruna")]
             TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::type_name(def)
             }
@@ -236,6 +243,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
 
     fn name(&self) -> String {
         match self {
+            #[cfg(feature = "aruna")]
             TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::name(def)
             }
@@ -268,6 +276,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
 
     fn id(&self) -> DataProviderId {
         match self {
+            #[cfg(feature = "aruna")]
             TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::id(def)
             }
@@ -300,6 +309,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
 
     fn priority(&self) -> i16 {
         match self {
+            #[cfg(feature = "aruna")]
             TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::priority(def)
             }
