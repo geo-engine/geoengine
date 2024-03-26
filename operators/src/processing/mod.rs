@@ -43,7 +43,8 @@ pub use raster_type_conversion::{
     RasterTypeConversion, RasterTypeConversionParams, RasterTypeConversionQueryProcessor,
 };
 pub use raster_vector_join::{
-    FeatureAggregationMethod, RasterVectorJoin, RasterVectorJoinParams, TemporalAggregationMethod,
+    ColumnNames, FeatureAggregationMethod, RasterVectorJoin, RasterVectorJoinParams,
+    TemporalAggregationMethod,
 };
 pub use reprojection::{
     InitializedRasterReprojection, InitializedVectorReprojection, Reprojection, ReprojectionParams,

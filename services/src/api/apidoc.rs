@@ -34,11 +34,11 @@ use crate::api::model::responses::{
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
-    UpdateDataset,
+    Provenance, ProvenanceOutput, Provenances, UpdateDataset,
 };
 use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
 use crate::contexts::{SessionId, SimpleSession};
-use crate::datasets::listing::{DatasetListing, OrderBy, Provenance, ProvenanceOutput};
+use crate::datasets::listing::{DatasetListing, OrderBy};
 use crate::datasets::storage::{AutoCreateDataset, Dataset};
 use crate::datasets::upload::{UploadId, Volume, VolumeName};
 use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
@@ -116,6 +116,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::suggest_meta_data_handler,
         handlers::datasets::get_loading_info_handler,
         handlers::datasets::update_dataset_symbology_handler,
+        handlers::datasets::update_dataset_provenance_handler,
         handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::plots::get_plot_handler,
         handlers::projects::list_projects_handler,
@@ -184,6 +185,7 @@ use utoipa::{Modify, OpenApi};
             ProvenanceEntry,
             ProvenanceOutput,
             Provenance,
+            Provenances,
 
             VectorDataType,
             FeatureDataType,

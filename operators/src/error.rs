@@ -294,6 +294,11 @@ pub enum Error {
 
     DuplicateOutputColumns,
 
+    #[snafu(display("Column name conflict: {} already exists", name))]
+    ColumnNameConflict {
+        name: String,
+    },
+
     #[snafu(display("Input column `{:}` is missing", name))]
     MissingInputColumn {
         name: String,

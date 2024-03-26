@@ -2,12 +2,15 @@ use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, MockMetaData,
     OgrMetaData,
 };
-use crate::datasets::listing::Provenance;
+use crate::datasets::storage::validate_tags;
 use crate::datasets::upload::{UploadId, VolumeName};
 use crate::datasets::DatasetName;
 use crate::projects::Symbology;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use validator::{Validate, ValidationErrors};
+
+use super::datatypes::DataId;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]
@@ -88,7 +91,9 @@ impl From<AddDataset> for crate::datasets::storage::AddDataset {
             description: value.description,
             source_operator: value.source_operator,
             symbology: value.symbology,
-            provenance: value.provenance,
+            provenance: value
+                .provenance
+                .map(|v| v.into_iter().map(Into::into).collect()),
             tags: value.tags,
         }
     }
@@ -102,7 +107,9 @@ impl From<crate::datasets::storage::AddDataset> for AddDataset {
             description: value.description,
             source_operator: value.source_operator,
             symbology: value.symbology,
-            provenance: value.provenance,
+            provenance: value
+                .provenance
+                .map(|v| v.into_iter().map(Into::into).collect()),
             tags: value.tags,
         }
     }
@@ -129,9 +136,62 @@ pub enum DataPath {
     Upload(UploadId),
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema, Validate)]
 pub struct UpdateDataset {
     pub name: DatasetName,
+    #[validate(length(min = 1))]
     pub display_name: String,
     pub description: String,
+    #[validate(custom = "validate_tags")]
+    pub tags: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, ToSchema, Validate)]
+pub struct Provenance {
+    #[validate(length(min = 1))]
+    pub citation: String,
+    #[validate(length(min = 1))]
+    pub license: String,
+    #[validate(length(min = 1))]
+    pub uri: String,
+}
+
+impl From<Provenance> for crate::datasets::listing::Provenance {
+    fn from(value: Provenance) -> Self {
+        Self {
+            citation: value.citation,
+            license: value.license,
+            uri: value.uri,
+        }
+    }
+}
+
+impl From<crate::datasets::listing::Provenance> for Provenance {
+    fn from(value: crate::datasets::listing::Provenance) -> Self {
+        Self {
+            citation: value.citation,
+            license: value.license,
+            uri: value.uri,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+pub struct Provenances {
+    pub provenances: Vec<Provenance>,
+}
+
+impl Validate for Provenances {
+    fn validate(&self) -> Result<(), ValidationErrors> {
+        for provenance in &self.provenances {
+            provenance.validate()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub struct ProvenanceOutput {
+    pub data: DataId,
+    pub provenance: Option<Vec<Provenance>>,
 }

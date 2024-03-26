@@ -41,7 +41,7 @@ use geoengine_operators::{
         },
     },
     processing::{
-        AggregateFunctionParams, FeatureAggregationMethod, NeighborhoodAggregate,
+        AggregateFunctionParams, ColumnNames, FeatureAggregationMethod, NeighborhoodAggregate,
         NeighborhoodAggregateParams, NeighborhoodParams, RasterVectorJoin, RasterVectorJoinParams,
         TemporalAggregationMethod,
     },
@@ -120,7 +120,7 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
             name: "raster_vector_join".to_string(),
             operator: RasterVectorJoin {
                 params: RasterVectorJoinParams {
-                    names: vec!["ndvi".to_string()],
+                    names: ColumnNames::Names(vec!["ndvi".to_string()]),
                     feature_aggregation: FeatureAggregationMethod::Mean,
                     feature_aggregation_ignore_no_data: true,
                     temporal_aggregation: TemporalAggregationMethod::Mean,
