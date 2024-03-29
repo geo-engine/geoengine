@@ -347,19 +347,21 @@ impl ArunaDataProvider {
         crs: SpatialReferenceOption,
         info: &RasterInfo,
     ) -> geoengine_operators::util::Result<RasterResultDescriptor> {
+        let shape = GridBoundingBox2D::new_min_max(0, 0, info.width as isize, info.height as isize)
+            .unwrap();
+
+        let geo_transform = GeoTransform::try_from(info.geo_transform) // TODO: convert into tiling based bounds?
+            .expect("GeoTransform should be valid"); // TODO: check if that can be false
+
+        let tiling_geo_transform = geo_transform.nearest_pixel_to_zero_based(); // TODO use tiling origin hint not always 0.0
+        let tiling_bounds = geo_transform.shape_to_nearest_to_zero_based(&shape);
+
         Ok(RasterResultDescriptor {
             data_type: info.data_type,
             spatial_reference: crs,
             time: Some(info.time_interval),
-            geo_transform: GeoTransform::try_from(info.geo_transform)
-                .expect("GeoTransform should be valid"), // TODO: check if that can be false
-            pixel_bounds: GridBoundingBox2D::new_min_max(
-                0,
-                0,
-                info.width as isize,
-                info.height as isize,
-            )
-            .unwrap(),
+            geo_transform_x: tiling_geo_transform,
+            pixel_bounds_x: tiling_bounds,
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "band".into(),
                 info.measurement
@@ -739,12 +741,12 @@ impl LayerCollectionProvider for ArunaDataProvider {
             ),
             DataType::SingleRasterFile(_) => TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters {
-                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                    params: GdalSourceParameters::new(
+                        geoengine_datatypes::dataset::NamedData::with_system_provider(
                             self.id.to_string(),
                             id.to_string(),
                         ),
-                    },
+                    ),
                 }
                 .boxed(),
             ),
@@ -939,8 +941,7 @@ mod tests {
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, CacheTtlSeconds, ColumnSelection, SpatialResolution, TimeInterval,
-        VectorQueryRectangle,
+        BoundingBox2D, CacheTtlSeconds, ColumnSelection, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
@@ -1821,10 +1822,9 @@ mod tests {
 
         let ctx = MockQueryContext::test_default();
 
-        let qr = VectorQueryRectangle::with_bounds_and_resolution(
+        let qr = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
 

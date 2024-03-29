@@ -1126,9 +1126,7 @@ mod tests {
     use geoengine_datatypes::collections::{
         GeometryCollection, MultiPointCollection, VectorDataType,
     };
-    use geoengine_datatypes::primitives::{
-        BoundingBox2D, ColumnSelection, SpatialQueryRectangle, SpatialResolution,
-    };
+    use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection, SpatialQueryRectangle};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_operators::engine::{
@@ -1441,7 +1439,6 @@ mod tests {
 
     fn ctx_tiling_spec_600x600() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
         }
     }
@@ -1482,7 +1479,6 @@ mod tests {
                             (1.85, 50.88).into(),
                             (4.82, 52.95).into(),
                         )?,
-                        spatial_resolution: SpatialResolution::new(1., 1.)?,
                     },
                     time_interval: Default::default(),
                     attributes: ColumnSelection::all(),

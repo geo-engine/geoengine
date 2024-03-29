@@ -204,10 +204,7 @@ mod tests {
     use geoengine_datatypes::primitives::ColumnSelection;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
-        primitives::{
-            BoundingBox2D, CacheHint, DateTime, FeatureData, MultiPoint, SpatialResolution,
-            TimeInterval,
-        },
+        primitives::{BoundingBox2D, CacheHint, DateTime, FeatureData, MultiPoint, TimeInterval},
         util::arrow::arrow_ipc_file_to_record_batches,
     };
     use geoengine_operators::engine::ChunkByteSize;
@@ -274,11 +271,10 @@ mod tests {
             ),
         };
 
-        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        let query_rectangle = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new_upper_left_lower_right((-180., 90.).into(), (180., -90.).into())
                 .unwrap(),
             TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
-            SpatialResolution::one(),
             ColumnSelection::all(),
         );
 

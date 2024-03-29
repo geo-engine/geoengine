@@ -292,7 +292,7 @@ mod tests {
     use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, NoGeometry, PlotQueryRectangle, PlotSeriesSelection,
-        SpatialResolution, TimeInterval,
+        TimeInterval,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{collections::DataCollection, primitives::MultiPoint};
@@ -382,10 +382,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds_and_resolution(
+                PlotQueryRectangle::with_bounds(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
-                    SpatialResolution::one(),
                     PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
@@ -459,10 +458,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds_and_resolution(
+                PlotQueryRectangle::with_bounds(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
-                    SpatialResolution::one(),
                     PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
@@ -644,10 +642,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds_and_resolution(
+                PlotQueryRectangle::with_bounds(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
-                    SpatialResolution::one(),
                     PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
@@ -697,10 +694,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds_and_resolution(
+                PlotQueryRectangle::with_bounds(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
-                    SpatialResolution::one(),
                     PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
@@ -752,10 +748,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds_and_resolution(
+                PlotQueryRectangle::with_bounds(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
-                    SpatialResolution::one(),
                     PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
@@ -833,10 +828,9 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds_and_resolution(
+                PlotQueryRectangle::with_bounds(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
-                    SpatialResolution::one(),
                     PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),

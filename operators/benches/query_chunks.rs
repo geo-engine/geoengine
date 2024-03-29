@@ -19,10 +19,10 @@ use csv::WriterBuilder;
 use futures::StreamExt;
 use geoengine_datatypes::{
     primitives::{
-        BandSelection, BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
-        SpatialResolution, TimeInterval, VectorQueryRectangle,
+        BandSelection, BoundingBox2D, ColumnSelection, RasterQueryRectangle, TimeInterval,
+        VectorQueryRectangle,
     },
-    raster::Pixel,
+    raster::{GridBoundingBox2D, Pixel},
     util::{test::TestDefault, Identifier},
 };
 use geoengine_operators::{
@@ -96,18 +96,14 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                 },
                 sources: SingleRasterSource {
                     raster: GdalSource {
-                        params: GdalSourceParameters {
-                            data: ndvi_id.clone(),
-                        },
+                        params: GdalSourceParameters::new(ndvi_id.clone()),
                     }
                     .boxed(),
                 },
             }
             .boxed(),
-            query_rectangle: RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                SpatialPartition2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
-                SpatialResolution::zero_point_one(),
-                (0., 0.).into(),
+            query_rectangle: RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([-1800, -900], [1799, 899]).unwrap(),
                 TimeInterval::default(),
                 BandSelection::first(),
             ),
@@ -132,16 +128,15 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                     }
                     .boxed(),
                     rasters: vec![GdalSource {
-                        params: GdalSourceParameters { data: ndvi_id },
+                        params: GdalSourceParameters::new(ndvi_id),
                     }
                     .boxed()],
                 },
             }
             .boxed(),
-            query_rectangle: VectorQueryRectangle::with_bounds_and_resolution(
+            query_rectangle: VectorQueryRectangle::with_bounds(
                 BoundingBox2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
                 TimeInterval::default(),
-                SpatialResolution::zero_point_one(),
                 ColumnSelection::all(),
             ),
         },

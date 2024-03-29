@@ -163,7 +163,7 @@ where
     let workflow = Workflow {
         operator: TypedOperator::Raster(
             GdalSource {
-                params: GdalSourceParameters { data: dataset },
+                params: GdalSourceParameters::new(dataset),
             }
             .boxed(),
         ),

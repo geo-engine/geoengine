@@ -844,10 +844,9 @@ impl CacheQueryMatch for RasterQueryRectangle {
         let cache_spatial_query = self.spatial_query();
         let query_spatial_query = query.spatial_query();
 
-        cache_spatial_query.geo_transform == query_spatial_query.geo_transform // TODO: once there are dataset spesific origins we might need more logic here
-            && cache_spatial_query
-                .grid_bounds
-                .contains(&query_spatial_query.grid_bounds)
+        cache_spatial_query
+            .grid_bounds()
+            .contains(&query_spatial_query.grid_bounds())
             && self.time_interval.contains(&query.time_interval)
     }
 }
@@ -860,8 +859,8 @@ impl CacheQueryMatch for VectorQueryRectangle {
         cache_spatial_query
             .spatial_bounds
             .contains_bbox(&query_spatial_query.spatial_bounds)
-            && cache_spatial_query.spatial_resolution == query_spatial_query.spatial_resolution
             && self.time_interval.contains(&query.time_interval)
+            && self.attributes == query.attributes
     }
 }
 
@@ -1017,10 +1016,8 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, CacheHint, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
-        raster::{Grid, RasterProperties, RasterTile2D},
+        primitives::{BandSelection, CacheHint, DateTime, TimeInterval},
+        raster::{Grid, GridBoundingBox2D, RasterProperties, RasterTile2D},
     };
     use serde_json::json;
     use std::sync::Arc;
@@ -1100,10 +1097,8 @@ mod tests {
     }
 
     fn query_rect() -> RasterQueryRectangle {
-        RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
-            SpatialResolution::one(),
-            (0., 0.).into(),
+        RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
             TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
             BandSelection::first(),
         )

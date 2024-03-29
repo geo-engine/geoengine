@@ -120,8 +120,8 @@ impl RasterOperator for XgboostOperator {
             data_type: RasterOut,
             spatial_reference,
             time: None,
-            geo_transform: in_descriptors[0].geo_transform.clone(),
-            pixel_bounds: in_descriptors[0].pixel_bounds.clone(),
+            geo_transform_x: in_descriptors[0].tiling_geo_transform(),
+            pixel_bounds_x: in_descriptors[0].tiling_pixel_bounds(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -385,9 +385,7 @@ mod tests {
 
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-    use geoengine_datatypes::primitives::{
-        RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-    };
+    use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
 
     use geoengine_datatypes::raster::{
         Grid2D, GridBoundingBox2D, GridShape, GridSize, MaskedGrid2D, RasterDataType, RasterTile2D,
@@ -503,12 +501,10 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform: TestDefault::test_default(),
-                    pixel_bounds: GridBoundingBox2D::new_min_max(
-                        -1 * tile_size_in_pixels.axis_size_y() as isize,
-                        0,
-                        0,
-                        (n_tiles * tile_size_in_pixels.axis_size_x()) as isize,
+                    geo_transform_x: TestDefault::test_default(),
+                    pixel_bounds_x: GridBoundingBox2D::new(
+                        [-1 * tile_size_in_pixels.axis_size_y() as isize, 0],
+                        [0, (n_tiles * tile_size_in_pixels.axis_size_x()) as isize],
                     )
                     .unwrap(),
                     bands: RasterBandDescriptors::new_single_band(),
@@ -640,10 +636,8 @@ mod tests {
             sources: MultipleRasterSources { rasters: srcs },
         };
 
-        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [5, 5].into(),
-        ));
+        let mut exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([5, 5].into()));
 
         mock_ml_model_persistance(&mut exe_ctx, model_uuid_path)
             .expect("The model file should be available.");
@@ -655,10 +649,8 @@ mod tests {
 
         let processor = op.query_processor().unwrap().get_f32().unwrap();
 
-        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
-            SpatialResolution::one(),
-            exe_ctx.tiling_specification.origin_coordinate,
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-5, 0], [-1, 9]).unwrap(),
             TimeInterval::new_unchecked(0, 1),
             BandSelection::first(), // TODO
         );
@@ -983,10 +975,8 @@ mod tests {
             sources: MultipleRasterSources { rasters: srcs },
         };
 
-        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [5, 5].into(),
-        ));
+        let mut exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([5, 5].into()));
 
         mock_ml_model_persistance(&mut exe_ctx, model_uuid_path)
             .expect("The model file should be available.");
@@ -998,10 +988,8 @@ mod tests {
 
         let processor = op.query_processor().unwrap().get_f32().unwrap();
 
-        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new((0., 5.).into(), (5., 0.).into()).unwrap(),
-            SpatialResolution::one(),
-            exe_ctx.tiling_specification.origin_coordinate,
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-5, 0], [-1, 4]).unwrap(),
             TimeInterval::new_unchecked(0, 1),
             BandSelection::first(),
         );

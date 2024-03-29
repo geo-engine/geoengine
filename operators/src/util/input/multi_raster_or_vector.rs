@@ -67,9 +67,7 @@ mod tests {
     #[test]
     fn it_serializes() {
         let operator = MultiRasterOrVectorOperator::Raster(vec![GdalSource {
-            params: GdalSourceParameters {
-                data: NamedData::with_namespaced_name("foo", "bar"),
-            },
+            params: GdalSourceParameters::new(NamedData::with_namespaced_name("foo", "bar")),
         }
         .boxed()]);
 
@@ -78,7 +76,8 @@ mod tests {
             serde_json::json!([{
                 "type": "GdalSource",
                 "params": {
-                    "data": "foo:bar"
+                    "data": "foo:bar",
+                    "overviewLevel": null,
                 }
             }])
         );

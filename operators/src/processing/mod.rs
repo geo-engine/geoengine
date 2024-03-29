@@ -41,7 +41,8 @@ pub use raster_vector_join::{
     FeatureAggregationMethod, RasterVectorJoin, RasterVectorJoinParams, TemporalAggregationMethod,
 };
 pub use reprojection::{
-    InitializedRasterReprojection, InitializedVectorReprojection, Reprojection, ReprojectionParams,
+    DeriveOutRasterSpecsSource, InitializedRasterReprojection, InitializedVectorReprojection,
+    Reprojection, ReprojectionParams,
 };
 pub use rgb::{Rgb, RgbOperatorError, RgbParams, RgbSources};
 pub use temporal_raster_aggregation::{

@@ -11,8 +11,8 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::plots::{AreaLineChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    BandSelection, Coordinate2D, Measurement, PlotQueryRectangle, RasterQueryRectangle,
-    TimeInstance, TimeInterval,
+    BandSelection, Measurement, PlotQueryRectangle, RasterQueryRectangle, TimeInstance,
+    TimeInterval,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
@@ -142,10 +142,11 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
         query: PlotQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
-        let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_grid_origin(
-            query.spatial_query,
-            Coordinate2D::default(), // FIXME: this is the default tiling specification origin. The actual origin is not known here. It should be derived from the input result descriptor!
-            query.time_interval,
+        let rd = self.raster.result_descriptor();
+
+        let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_geo_transform(
+            &query,
+            rd.tiling_geo_transform(),
             BandSelection::first(),
         );
 
@@ -271,7 +272,7 @@ mod tests {
         source::GdalSourceParameters,
     };
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, CacheHint, Measurement, PlotSeriesSelection, SpatialResolution, TimeInterval,
+        BoundingBox2D, CacheHint, Coordinate2D, Measurement, PlotSeriesSelection, TimeInterval,
     };
     use geoengine_datatypes::raster::GeoTransform;
     use geoengine_datatypes::{
@@ -296,9 +297,7 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
-                    params: GdalSourceParameters {
-                        data: NamedData::with_system_name("test"),
-                    },
+                    params: GdalSourceParameters::new(NamedData::with_system_name("test")),
                 }
                 .boxed(),
             },
@@ -334,7 +333,6 @@ mod tests {
     async fn single_raster() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
@@ -370,10 +368,9 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds_and_resolution(
+                PlotQueryRectangle::with_bounds(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
-                    SpatialResolution::one(),
                     PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
@@ -446,8 +443,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                    pixel_bounds: GridShape2D::new_2d(3, 2).bounding_box(),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds_x: GridShape2D::new_2d(3, 2).bounding_box(),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -459,7 +456,6 @@ mod tests {
     async fn raster_series() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
@@ -512,10 +508,9 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds_and_resolution(
+                PlotQueryRectangle::with_bounds(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
-                    SpatialResolution::one(),
                     PlotSeriesSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),

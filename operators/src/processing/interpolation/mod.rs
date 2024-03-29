@@ -14,15 +14,15 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, Coordinate2D, RasterQueryRectangle, RasterSpatialQueryRectangle,
-    SpatialPartition2D, SpatialPartitioned, SpatialResolution, TimeInstance, TimeInterval,
-};
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use geoengine_datatypes::primitives::{
+    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialResolution, TimeInstance,
+    TimeInterval,
+};
 use geoengine_datatypes::raster::{
-    Bilinear, Blit, EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridOrEmpty, GridSize,
+    Bilinear, ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridOrEmpty,
     InterpolationAlgorithm, NearestNeighbor, Pixel, RasterTile2D, TileInformation,
-    TilingSpecification, TilingStrategy,
+    TilingSpecification,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -32,14 +32,14 @@ use snafu::{ensure, Snafu};
 #[serde(rename_all = "camelCase")]
 pub struct InterpolationParams {
     pub interpolation: InterpolationMethod,
-    pub input_resolution: InputResolution,
+    pub output_resolution: InputResolution,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum InputResolution {
-    Value(SpatialResolution),
-    Source, // FIXME: Should be a fraction value?
+    Resolution(SpatialResolution),
+    Fraction(f64), // FIXME: Must be > 1
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -56,6 +56,13 @@ pub enum InterpolationError {
         "The input resolution was defined as `source` but the source resolution is unknown.",
     ))]
     UnknownInputResolution,
+    #[snafu(display("The fraction used to interpolate must be >= 1, was {f}."))]
+    FractionMustBeOneOrLarger { f: f64 },
+    #[snafu(display("The output resolution must be higher than the input resolution."))]
+    OutputMustBeHigherResolutionThanInput {
+        input: SpatialResolution,
+        output: SpatialResolution,
+    },
 }
 
 pub type Interpolation = Operator<InterpolationParams, SingleRasterSource>;
@@ -86,46 +93,72 @@ impl RasterOperator for Interpolation {
             }
         );
 
-        let input_resolution = if let InputResolution::Value(res) = self.params.input_resolution {
-            res
-        } else {
-            in_descriptor.geo_transform.spatial_resolution() // TODO: should use fraction?
+        let in_geo_transform = in_descriptor.tiling_geo_transform();
+        let in_pixel_bounds = in_descriptor.tiling_pixel_bounds();
+
+        let output_resolution = match self.params.output_resolution {
+            InputResolution::Resolution(res) => {
+                ensure!(
+                    res.x.abs() <= in_geo_transform.x_pixel_size().abs(),
+                    error::OutputMustBeHigherResolutionThanInput {
+                        input: in_geo_transform.spatial_resolution(),
+                        output: res
+                    }
+                );
+                ensure!(
+                    res.y.abs() <= in_geo_transform.y_pixel_size().abs(),
+                    error::OutputMustBeHigherResolutionThanInput {
+                        input: in_geo_transform.spatial_resolution(),
+                        output: res
+                    }
+                );
+                res
+            }
+
+            InputResolution::Fraction(f) => {
+                ensure!(f >= 1.0, error::FractionMustBeOneOrLarger { f });
+
+                SpatialResolution::new(
+                    in_geo_transform.x_pixel_size() / f,
+                    in_geo_transform.y_pixel_size().abs() / f,
+                )
+                .expect("the input resolution is valid")
+            }
         };
 
-        let geo_transform = GeoTransform::new(
-            in_descriptor.geo_transform.origin_coordinate,
-            input_resolution.x,
-            -input_resolution.y,
+        let output_geo_transform = GeoTransform::new(
+            in_geo_transform.origin_coordinate,
+            output_resolution.x,
+            -output_resolution.y,
         );
 
         let y_fract =
-            geo_transform.y_pixel_size() as f64 / in_descriptor.geo_transform.y_pixel_size() as f64;
+            output_geo_transform.y_pixel_size() as f64 / in_geo_transform.y_pixel_size() as f64;
         let x_fract =
-            geo_transform.x_pixel_size() as f64 / in_descriptor.geo_transform.x_pixel_size() as f64;
+            output_geo_transform.x_pixel_size() as f64 / in_geo_transform.x_pixel_size() as f64;
 
-        let pixel_bounds = GridBoundingBox2D::new_min_max(
+        let out_pixel_bounds = GridBoundingBox2D::new_min_max(
             // TODO: maybe dont use floor and ceil?
-            (in_descriptor.pixel_bounds.y_min() as f64 * y_fract).floor() as isize,
-            (in_descriptor.pixel_bounds.y_max() as f64 * y_fract).floor() as isize,
-            (in_descriptor.pixel_bounds.x_min() as f64 * x_fract).floor() as isize,
-            (in_descriptor.pixel_bounds.x_max() as f64 * x_fract).floor() as isize,
+            (in_pixel_bounds.y_min() as f64 * y_fract).floor() as isize,
+            (in_pixel_bounds.y_max() as f64 * y_fract).floor() as isize,
+            (in_pixel_bounds.x_min() as f64 * x_fract).floor() as isize,
+            (in_pixel_bounds.x_max() as f64 * x_fract).floor() as isize,
         )?;
 
         let out_descriptor = RasterResultDescriptor {
             spatial_reference: in_descriptor.spatial_reference,
             data_type: in_descriptor.data_type,
             time: in_descriptor.time,
-            geo_transform,
-            pixel_bounds,
+            geo_transform_x: output_geo_transform,
+            pixel_bounds_x: out_pixel_bounds,
             bands: in_descriptor.bands.clone(),
         };
 
         let initialized_operator = InitializedInterpolation {
             name,
-            result_descriptor: out_descriptor,
+            output_result_descriptor: out_descriptor,
             raster_source,
             interpolation_method: self.params.interpolation,
-            input_resolution,
             tiling_specification: context.tiling_specification(),
         };
 
@@ -137,10 +170,9 @@ impl RasterOperator for Interpolation {
 
 pub struct InitializedInterpolation {
     name: CanonicOperatorName,
-    result_descriptor: RasterResultDescriptor,
+    output_result_descriptor: RasterResultDescriptor,
     raster_source: Box<dyn InitializedRasterOperator>,
     interpolation_method: InterpolationMethod,
-    input_resolution: SpatialResolution,
     tiling_specification: TilingSpecification,
 }
 
@@ -152,15 +184,13 @@ impl InitializedRasterOperator for InitializedInterpolation {
             source_processor, p => match self.interpolation_method  {
                 InterpolationMethod::NearestNeighbor => InterploationProcessor::<_,_, NearestNeighbor>::new(
                         p,
-                        self.result_descriptor.clone(),
-                        self.input_resolution,
+                        self.output_result_descriptor.clone(),
                         self.tiling_specification,
                     ).boxed()
                     .into(),
                 InterpolationMethod::BiLinear =>InterploationProcessor::<_,_, Bilinear>::new(
                         p,
-                        self.result_descriptor.clone(),
-                        self.input_resolution,
+                        self.output_result_descriptor.clone(),
                         self.tiling_specification,
                     ).boxed()
                     .into(),
@@ -171,7 +201,7 @@ impl InitializedRasterOperator for InitializedInterpolation {
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
+        &self.output_result_descriptor
     }
 
     fn canonic_name(&self) -> CanonicOperatorName {
@@ -183,11 +213,10 @@ pub struct InterploationProcessor<Q, P, I>
 where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
-    I: InterpolationAlgorithm<P>,
+    I: InterpolationAlgorithm<GridBoundingBox2D, P>,
 {
     source: Q,
-    result_descriptor: RasterResultDescriptor,
-    input_resolution: SpatialResolution,
+    out_result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
     interpolation: PhantomData<I>,
 }
@@ -196,18 +225,16 @@ impl<Q, P, I> InterploationProcessor<Q, P, I>
 where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
-    I: InterpolationAlgorithm<P>,
+    I: InterpolationAlgorithm<GridBoundingBox2D, P>,
 {
     pub fn new(
         source: Q,
-        result_descriptor: RasterResultDescriptor,
-        input_resolution: SpatialResolution,
+        out_result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
             source,
-            result_descriptor,
-            input_resolution,
+            out_result_descriptor,
             tiling_specification,
             interpolation: PhantomData,
         }
@@ -224,7 +251,7 @@ where
         ResultDescription = RasterResultDescriptor,
     >,
     P: Pixel,
-    I: InterpolationAlgorithm<P>,
+    I: InterpolationAlgorithm<GridBoundingBox2D, P>,
 {
     type Output = RasterTile2D<P>;
     type SpatialQuery = RasterSpatialQueryRectangle;
@@ -237,16 +264,36 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // do not interpolate if the source resolution is already fine enough
-        let query_resolution = query.spatial_query().spatial_resolution();
-        if query_resolution.x >= self.input_resolution.x
-            && query_resolution.y >= self.input_resolution.y
-        {
-            // TODO: should we use the query or the input resolution here?
+
+        let out_geo_transform = self.out_result_descriptor.tiling_geo_transform();
+        let in_geo_transform = self.source.result_descriptor().tiling_geo_transform();
+
+        // TODO: This should not be necessary since we already checked this in the initialization
+        ensure!(
+            out_geo_transform.x_pixel_size().abs() <= in_geo_transform.x_pixel_size().abs(),
+            error::OutputMustBeHigherResolutionThanInput {
+                input: in_geo_transform.spatial_resolution(),
+                output: out_geo_transform.spatial_resolution(),
+            },
+        );
+        ensure!(
+            out_geo_transform.y_pixel_size().abs() <= in_geo_transform.y_pixel_size().abs(),
+            error::OutputMustBeHigherResolutionThanInput {
+                input: in_geo_transform.spatial_resolution(),
+                output: out_geo_transform.spatial_resolution(),
+            },
+        );
+
+        // if the output resolution is the same as the input resolution, we can just forward the query
+        if out_geo_transform.spatial_resolution() == in_geo_transform.spatial_resolution() {
             return self.source.query(query, ctx).await;
         }
 
+        let tiling_strategy = self.tiling_specification.strategy(out_geo_transform);
+
         let sub_query = InterpolationSubQuery::<_, P, I> {
-            input_resolution: self.input_resolution,
+            input_geo_transform: in_geo_transform,
+            output_geo_transform: out_geo_transform,
             fold_fn: fold_future,
             tiling_specification: self.tiling_specification,
             phantom: PhantomData,
@@ -256,7 +303,7 @@ where
         Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
             &self.source,
             query,
-            self.tiling_specification,
+            tiling_strategy,
             ctx,
             sub_query,
         )
@@ -266,13 +313,14 @@ where
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
+        &self.out_result_descriptor
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct InterpolationSubQuery<F, T, I> {
-    input_resolution: SpatialResolution,
+    input_geo_transform: GeoTransform,
+    output_geo_transform: GeoTransform, // TODO remove because in adapter?
     fold_fn: F,
     tiling_specification: TilingSpecification,
     phantom: PhantomData<I>,
@@ -284,7 +332,7 @@ where
     T: Pixel,
     FoldM: Send + Sync + 'a + Clone + Fn(InterpolationAccu<T, I>, RasterTile2D<T>) -> FoldF,
     FoldF: Send + TryFuture<Ok = InterpolationAccu<T, I>, Error = crate::error::Error>,
-    I: InterpolationAlgorithm<T>,
+    I: InterpolationAlgorithm<GridBoundingBox2D, T>,
 {
     type FoldFuture = FoldF;
 
@@ -300,6 +348,8 @@ where
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
         create_accu(
+            self.input_geo_transform,
+            self.output_geo_transform,
             tile_info,
             &query_rect,
             pool.clone(),
@@ -316,22 +366,19 @@ where
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         // enlarge the spatial bounds in order to have the neighbor pixels for the interpolation
-        let spatial_bounds = tile_info.spatial_partition();
-        let enlarge: Coordinate2D = (self.input_resolution.x, -self.input_resolution.y).into();
-        let spatial_bounds = SpatialPartition2D::new(
-            spatial_bounds.upper_left(),
-            spatial_bounds.lower_right() + enlarge,
+        let pixel_bound = tile_info.global_pixel_bounds();
+        let enlarged = GridBoundingBox2D::new_min_max(
+            pixel_bound.y_min(),
+            pixel_bound.y_max() + 1,
+            pixel_bound.x_min(),
+            pixel_bound.x_max() + 1,
         )?;
 
-        Ok(Some(
-            RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                spatial_bounds,
-                self.input_resolution,
-                self.tiling_specification.origin_coordinate,
-                TimeInterval::new_instant(start_time)?,
-                band_idx.into(),
-            ),
-        ))
+        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+            enlarged,
+            TimeInterval::new_instant(start_time)?,
+            BandSelection::new_single(band_idx),
+        )))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {
@@ -340,21 +387,30 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct InterpolationAccu<T: Pixel, I: InterpolationAlgorithm<T>> {
+pub struct InterpolationAccu<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>> {
     pub output_info: TileInformation,
-    pub input_tile: RasterTile2D<T>,
+    pub input_tile: GridOrEmpty<GridBoundingBox2D, T>,
+    pub input_geo_transform: GeoTransform,
+    pub time: TimeInterval,
+    pub cache_hint: CacheHint,
     pub pool: Arc<ThreadPool>,
     phantom: PhantomData<I>,
 }
 
-impl<T: Pixel, I: InterpolationAlgorithm<T>> InterpolationAccu<T, I> {
+impl<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>> InterpolationAccu<T, I> {
     pub fn new(
-        input_tile: RasterTile2D<T>,
+        input_tile: GridOrEmpty<GridBoundingBox2D, T>,
+        input_geo_transform: GeoTransform,
+        time: TimeInterval,
+        cache_hint: CacheHint,
         output_info: TileInformation,
         pool: Arc<ThreadPool>,
     ) -> Self {
         InterpolationAccu {
             input_tile,
+            input_geo_transform,
+            time,
+            cache_hint,
             output_info,
             pool,
             phantom: Default::default(),
@@ -363,16 +419,31 @@ impl<T: Pixel, I: InterpolationAlgorithm<T>> InterpolationAccu<T, I> {
 }
 
 #[async_trait]
-impl<T: Pixel, I: InterpolationAlgorithm<T>> FoldTileAccu for InterpolationAccu<T, I> {
+impl<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>> FoldTileAccu
+    for InterpolationAccu<T, I>
+{
     type RasterType = T;
 
     async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
         // now that we collected all the input tile pixels we perform the actual interpolation
 
         let output_tile = crate::util::spawn_blocking_with_thread_pool(self.pool, move || {
-            I::interpolate(&self.input_tile, &self.output_info)
+            I::interpolate(
+                self.input_geo_transform,
+                &self.input_tile,
+                self.output_info.global_geo_transform,
+                self.output_info.global_pixel_bounds(),
+            )
         })
         .await??;
+
+        let output_tile = RasterTile2D::new_with_tile_info(
+            self.time,
+            self.output_info,
+            0,
+            output_tile.unbounded(),
+            self.cache_hint,
+        );
 
         Ok(output_tile)
     }
@@ -382,71 +453,47 @@ impl<T: Pixel, I: InterpolationAlgorithm<T>> FoldTileAccu for InterpolationAccu<
     }
 }
 
-impl<T: Pixel, I: InterpolationAlgorithm<T>> FoldTileAccuMut for InterpolationAccu<T, I> {
-    fn tile_mut(&mut self) -> &mut RasterTile2D<T> {
-        &mut self.input_tile
+impl<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>> FoldTileAccuMut
+    for InterpolationAccu<T, I>
+{
+    fn set_time(&mut self, time: TimeInterval) {
+        self.time = time;
+    }
+
+    fn set_cache_hint(&mut self, cache_hint: CacheHint) {
+        self.cache_hint = cache_hint;
     }
 }
 
-pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
+pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>>(
+    input_geo_transform: GeoTransform,
+    output_geo_transform: GeoTransform,
     tile_info: TileInformation,
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
-    tiling_specification: TilingSpecification,
+    _tiling_specification: TilingSpecification,
 ) -> impl Future<Output = Result<InterpolationAccu<T, I>>> {
-    // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
-    assert_eq!(
-        query_rect.spatial_query().geo_transform.origin_coordinate(),
-        tiling_specification.origin_coordinate,
-        "The query origin coordinate must match the tiling strategy's origin for now."
-    );
-
     let query_rect = query_rect.clone();
 
     // create an accumulator as a single tile that fits all the input tiles
-    let spatial_bounds = query_rect.spatial_partition();
     let time_interval = query_rect.time_interval;
 
     crate::util::spawn_blocking(move || {
-        let tiling = TilingStrategy::new(
-            tiling_specification.tile_size_in_pixels,
-            query_rect.spatial_query().geo_transform,
-        );
-
-        // TODO: use tile grid bounds not the spatial bounds
-        let origin_coordinate = tiling
-            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds)
-            .next()
-            .expect("a query contains at least one tile")
-            .spatial_partition()
-            .upper_left();
-
-        let geo_transform = GeoTransform::new(
-            origin_coordinate,
-            query_rect.spatial_query().geo_transform.x_pixel_size(),
-            query_rect.spatial_query().geo_transform.y_pixel_size(),
-        );
-
-        let bbox = tiling.tile_grid_box(spatial_bounds);
-
-        let shape = [
-            bbox.axis_size_y() * tiling.tile_size_in_pixels.axis_size_y(),
-            bbox.axis_size_x() * tiling.tile_size_in_pixels.axis_size_x(),
-        ];
+        let tile_pixel_bounds = tile_info.global_pixel_bounds();
+        let tile_spatial_bounds = output_geo_transform.grid_to_spatial_bounds(&tile_pixel_bounds);
+        let input_pixel_bounds = input_geo_transform.spatial_to_grid_bounds(&tile_spatial_bounds);
 
         // create a non-aligned (w.r.t. the tiling specification) grid by setting the origin to the top-left of the tile and the tile-index to [0, 0]
-        let grid = EmptyGrid2D::new(shape.into());
+        let grid = GridOrEmpty::new_empty(input_pixel_bounds);
 
-        let input_tile = RasterTile2D::new(
+        InterpolationAccu::new(
+            grid,
+            input_geo_transform,
             time_interval,
-            [0, 0].into(),
-            0,
-            geo_transform,
-            GridOrEmpty::from(grid),
             CacheHint::max_duration(),
-        );
-
-        InterpolationAccu::new(input_tile, tile_info, pool)
+            tile_info,
+            pool,
+        )
     })
     .map_err(From::from)
 }
@@ -457,7 +504,7 @@ pub fn fold_future<T, I>(
 ) -> impl Future<Output = Result<InterpolationAccu<T, I>>>
 where
     T: Pixel,
-    I: InterpolationAlgorithm<T>,
+    I: InterpolationAlgorithm<GridBoundingBox2D, T>,
 {
     crate::util::spawn_blocking(|| fold_impl(accu, tile)).then(|x| async move {
         match x {
@@ -473,22 +520,18 @@ pub fn fold_impl<T, I>(
 ) -> Result<InterpolationAccu<T, I>>
 where
     T: Pixel,
-    I: InterpolationAlgorithm<T>,
+    I: InterpolationAlgorithm<GridBoundingBox2D, T>,
 {
     // get the time now because it is not known when the accu was created
-    accu.input_tile.time = tile.time;
+    accu.time = tile.time;
 
     // TODO: add a skip if both tiles are empty?
 
     // copy all input tiles into the accu to have all data for interpolation
-    let mut accu_input_tile = accu.input_tile.into_materialized_tile();
-    accu_input_tile.blit(tile)?;
+    accu.input_tile
+        .grid_blit_from(&tile.into_inner_positioned_grid());
 
-    Ok(InterpolationAccu::new(
-        accu_input_tile.into(),
-        accu.output_info,
-        accu.pool,
-    ))
+    Ok(accu)
 }
 
 #[cfg(test)]
@@ -496,7 +539,7 @@ mod tests {
     use super::*;
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{Coordinate2D, RasterQueryRectangle, SpatialResolution, TimeInterval},
         raster::{
             Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
         },
@@ -514,30 +557,29 @@ mod tests {
 
     #[tokio::test]
     async fn nearest_neighbor_operator() -> Result<()> {
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [2, 2].into(),
-        ));
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
 
         let raster = make_raster(CacheHint::max_duration());
 
-        let operator = Interpolation {
-            params: InterpolationParams {
-                interpolation: InterpolationMethod::NearestNeighbor,
-                input_resolution: InputResolution::Value(SpatialResolution::one()),
-            },
-            sources: SingleRasterSource { raster },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-        .await?;
+        let operator =
+            Interpolation {
+                params: InterpolationParams {
+                    interpolation: InterpolationMethod::NearestNeighbor,
+                    output_resolution: InputResolution::Resolution(
+                        SpatialResolution::zero_point_five(),
+                    ),
+                },
+                sources: SingleRasterSource { raster },
+            }
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await?;
 
         let processor = operator.query_processor()?.get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((0., 2.).into(), (4., 0.).into()),
-            SpatialResolution::zero_point_five(),
-            exe_ctx.tiling_specification.origin_coordinate,
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(0, 1, 0, 3).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
@@ -662,8 +704,8 @@ mod tests {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1.0, -1.0),
-                    pixel_bounds: GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1.0, -1.0),
+                    pixel_bounds_x: GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -673,31 +715,30 @@ mod tests {
 
     #[tokio::test]
     async fn it_attaches_cache_hint() -> Result<()> {
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [2, 2].into(),
-        ));
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
 
         let cache_hint = CacheHint::seconds(1234);
         let raster = make_raster(cache_hint);
 
-        let operator = Interpolation {
-            params: InterpolationParams {
-                interpolation: InterpolationMethod::NearestNeighbor,
-                input_resolution: InputResolution::Value(SpatialResolution::one()),
-            },
-            sources: SingleRasterSource { raster },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-        .await?;
+        let operator =
+            Interpolation {
+                params: InterpolationParams {
+                    interpolation: InterpolationMethod::NearestNeighbor,
+                    output_resolution: InputResolution::Resolution(
+                        SpatialResolution::zero_point_five(),
+                    ),
+                },
+                sources: SingleRasterSource { raster },
+            }
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await?;
 
         let processor = operator.query_processor()?.get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new((0., 2.).into(), (4., 0.).into()).unwrap(),
-            SpatialResolution::zero_point_five(),
-            exe_ctx.tiling_specification.origin_coordinate,
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(0, 1, 0, 3).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );

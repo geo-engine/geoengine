@@ -6,10 +6,9 @@ use super::shared_cache::{
     RasterLandingQueryEntry,
 };
 use crate::util::Result;
-use geoengine_datatypes::primitives::SpatialPartitioned;
 use geoengine_datatypes::raster::{
-    BaseTile, EmptyGrid, Grid, GridBoundingBoxExt, GridOrEmpty, GridShape2D, GridSize,
-    GridSpaceToLinearSpace, MaskedGrid, RasterTile,
+    BaseTile, EmptyGrid, Grid, GridBoundingBoxExt, GridIntersection, GridOrEmpty, GridShape2D,
+    GridSize, GridSpaceToLinearSpace, MaskedGrid, RasterTile,
 };
 use geoengine_datatypes::{
     primitives::RasterQueryRectangle,
@@ -199,13 +198,8 @@ where
     fn update_stored_query(&self, query: &mut Self::Query) -> Result<(), CacheError> {
         let stored_spatial_query_mut = query.spatial_query_mut();
 
-        debug_assert_eq!(
-            stored_spatial_query_mut.geo_transform,
-            self.global_geo_transform
-        );
-
         stored_spatial_query_mut
-            .grid_bounds
+            .grid_bounds()
             .extend(&self.tile_information().global_pixel_bounds());
 
         query.time_interval = query
@@ -216,8 +210,9 @@ where
     }
 
     fn intersects_query(&self, query: &Self::Query) -> bool {
-        self.spatial_partition()
-            .intersects(&query.spatial_query.spatial_partition())
+        self.tile_information()
+            .global_pixel_bounds()
+            .intersects(&query.spatial_query.grid_bounds())
             && self.time.intersects(&query.time_interval)
     }
 }
@@ -623,11 +618,8 @@ mod tests {
         },
     };
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
-            SpatialResolution,
-        },
-        raster::GeoTransform,
+        primitives::{BandSelection, RasterQueryRectangle},
+        raster::{GeoTransform, GridBoundingBox2D},
         util::test::TestDefault,
     };
 
@@ -676,10 +668,8 @@ mod tests {
     #[test]
     fn landing_zone_to_cache_entry() {
         let tile = create_test_tile();
-        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
-            SpatialResolution::zero_point_one(),
-            Coordinate2D::new(0., 0.),
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             Default::default(),
             BandSelection::first(),
         );
@@ -697,30 +687,24 @@ mod tests {
         let tile = create_test_tile();
 
         // tile is fully contained
-        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
-            SpatialResolution::one(),
-            Coordinate2D::new(0., 0.),
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             Default::default(),
             BandSelection::first(),
         );
         assert!(tile.intersects_query(&query));
 
         // tile is partially contained
-        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((0.5, -0.5).into(), (1.5, -1.5).into()),
-            SpatialResolution::one(),
-            Coordinate2D::new(0., 0.),
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-1, -1], [0, 0]).unwrap(),
             Default::default(),
             BandSelection::first(),
         );
         assert!(tile.intersects_query(&query));
 
         // tile is not contained
-        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((10., -10.).into(), (11., -11.).into()),
-            SpatialResolution::one(),
-            Coordinate2D::new(0., 0.),
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([10, 10], [11, 11]).unwrap(),
             Default::default(),
             BandSelection::first(),
         );
@@ -729,10 +713,8 @@ mod tests {
 
     #[test]
     fn cache_entry_matches() {
-        let cache_entry_bounds = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
-            SpatialResolution::one(),
-            Coordinate2D::new(0., 0.),
+        let cache_entry_bounds = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([0, 0], [10, 10]).unwrap(),
             Default::default(),
             BandSelection::first(),
         );
@@ -746,20 +728,16 @@ mod tests {
         assert!(cache_query_entry.query().is_match(&query));
 
         // query is fully contained
-        let query2 = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((0.1, -0.1).into(), (0.9, -0.9).into()),
-            SpatialResolution::one(),
-            Coordinate2D::new(0., 0.),
+        let query2 = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([1, 1], [9, 9]).unwrap(),
             Default::default(),
             BandSelection::first(),
         );
         assert!(cache_query_entry.query().is_match(&query2));
 
         // query is exceeds cached bounds
-        let query3 = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((-0.1, 0.1).into(), (1.1, -1.1).into()),
-            SpatialResolution::one(),
-            Coordinate2D::new(0., 0.),
+        let query3 = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([0, 0], [11, 11]).unwrap(),
             Default::default(),
             BandSelection::first(),
         );

@@ -19,7 +19,7 @@ use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::engine::{CanonicOperatorName, ExecutionContext, WorkflowOperatorPath};
 use geoengine_operators::engine::{ResultDescriptor, SingleRasterOrVectorSource};
 use geoengine_operators::processing::{
-    InitializedRasterReprojection, Reprojection, ReprojectionParams,
+    DeriveOutRasterSpecsSource, InitializedRasterReprojection, Reprojection, ReprojectionParams,
 };
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use geoengine_operators::util::raster_stream_to_geotiff::{
@@ -391,6 +391,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
 
         let reprojection_params = ReprojectionParams {
             target_spatial_reference: request_spatial_ref,
+            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
         };
 
         // create the reprojection operator in order to get the canonic operator name
@@ -419,18 +420,21 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         if let Some(spatial_resolution) = request.spatial_resolution() {
             spatial_resolution?
         } else {
-            // TODO: proper default resolution
-            SpatialResolution {
-                x: request_partition.size_x() / 256.,
-                y: request_partition.size_y() / 256.,
-            }
+            //
+            processor
+                .result_descriptor()
+                .tiling_geo_transform()
+                .spatial_resolution()
         };
 
-    // FIXME: we query with a grid that is snapped to the grid origin. We COULD also query with the origin of the query OR the native origin of the workflow.
-    let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-        request_partition,
-        spatial_resolution,
-        execution_context.tiling_specification().origin_coordinate,
+    // FIXME: do something with the resolution
+
+    let query_pixel_bounds = processor
+        .result_descriptor()
+        .tiling_geo_transform()
+        .spatial_to_grid_bounds(&request_partition);
+    let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        query_pixel_bounds,
         request.time.unwrap_or_else(default_time_from_config).into(),
         BandSelection::first(),
     );
@@ -657,7 +661,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn get_coverage_with_nodatavalue() {
         let exe_ctx_tiling_spec = TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
         };
 
@@ -712,7 +715,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_sets_cache_control_header() {
         let exe_ctx_tiling_spec = TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
         };
 

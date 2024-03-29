@@ -528,6 +528,21 @@ impl TypedRasterQueryProcessor {
             Self::F64(r) => r,
         }
     }
+
+    pub fn result_descriptor(&self) -> &RasterResultDescriptor {
+        match self {
+            Self::U8(r) => r.raster_result_descriptor(),
+            Self::U16(r) => r.raster_result_descriptor(),
+            Self::U32(r) => r.raster_result_descriptor(),
+            Self::U64(r) => r.raster_result_descriptor(),
+            Self::I8(r) => r.raster_result_descriptor(),
+            Self::I16(r) => r.raster_result_descriptor(),
+            Self::I32(r) => r.raster_result_descriptor(),
+            Self::I64(r) => r.raster_result_descriptor(),
+            Self::F32(r) => r.raster_result_descriptor(),
+            Self::F64(r) => r.raster_result_descriptor(),
+        }
+    }
 }
 
 impl From<Box<dyn RasterQueryProcessor<RasterType = u8>>> for TypedRasterQueryProcessor {

@@ -442,13 +442,10 @@ struct ParsedRow {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Seek, SeekFrom, Write};
-
-    use geoengine_datatypes::primitives::SpatialResolution;
-
     use super::*;
     use crate::engine::MockQueryContext;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, ToGeoJson};
+    use std::io::{Seek, SeekFrom, Write};
 
     #[tokio::test]
     async fn read_points() {
@@ -591,10 +588,9 @@ x,y
             },
         };
 
-        let query = VectorQueryRectangle::with_bounds_and_resolution(
+        let query = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new_unchecked(Coordinate2D::new(0., 0.), Coordinate2D::new(3., 3.)),
             TimeInterval::new_unchecked(0, 1),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new((10 * 8 * 2).into());

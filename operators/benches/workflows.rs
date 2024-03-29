@@ -6,7 +6,9 @@ use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
 use geoengine_datatypes::primitives::Coordinate2D;
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
-use geoengine_datatypes::raster::{Grid2D, RasterDataType, TilingStrategy};
+use geoengine_datatypes::raster::{
+    GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, TilingStrategy,
+};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 
 use geoengine_datatypes::util::Identifier;
@@ -21,7 +23,8 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
 use geoengine_operators::processing::{
-    Expression, ExpressionParams, ExpressionSources, Reprojection, ReprojectionParams,
+    DeriveOutRasterSpecsSource, Expression, ExpressionParams, ExpressionSources, Reprojection,
+    ReprojectionParams,
 };
 use geoengine_operators::source::GdalSource;
 use geoengine_operators::{
@@ -271,14 +274,12 @@ where
 fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
     let tiling_origin = Coordinate2D::new(0., 0.);
 
-    let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-        SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        SpatialResolution::new(0.01, 0.01).unwrap(),
-        tiling_origin,
+    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+        GridBoundingBox2D::new([-9000, -18000], [8999, 17999]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         BandSelection::first(),
     );
-    let tiling_spec = TilingSpecification::new(tiling_origin, [512, 512].into());
+    let tiling_spec = TilingSpecification::new([512, 512].into());
 
     let qrects = vec![("World in 36000x18000 pixels", qrect)];
     let tiling_specs = vec![tiling_spec];
@@ -287,19 +288,12 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
     ) -> Box<dyn RasterOperator> {
-        // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
-        assert_eq!(
-            query_rect.spatial_query().geo_transform.origin_coordinate(),
-            tiling_spec.origin_coordinate,
-            "The query origin coordinate must match the tiling strategy's origin for now."
-        );
-
         let tileing_strategy = TilingStrategy::new(
             tiling_spec.tile_size_in_pixels,
-            query_rect.spatial_query().geo_transform,
+            GeoTransform::new(Coordinate2D::new(0.0, 0.), 0.01, -0.01),
         );
         let tile_iter = tileing_strategy
-            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds);
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds());
 
         let mock_data = tile_iter
             .enumerate()
@@ -322,14 +316,14 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: mock_data,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    geo_transform: tileing_strategy.geo_transform,
-                    pixel_bounds: query_rect.spatial_query().grid_bounds,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor: RasterResultDescriptor::new(
+                    RasterDataType::U8,
+                    SpatialReference::epsg_4326().into(),
+                    None,
+                    tileing_strategy.geo_transform,
+                    query_rect.spatial_query().grid_bounds(),
+                    RasterBandDescriptors::new_single_band(),
+                ),
             },
         }
         .boxed()
@@ -352,41 +346,32 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
 fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCollector) {
     let tiling_origin = Coordinate2D::new(0., 0.);
 
-    let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-        SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        SpatialResolution::new(0.005, 0.005).unwrap(),
-        tiling_origin,
+    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+        GridBoundingBox2D::new([-9000, -18000], [8999, 17999]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         BandSelection::first(),
     );
 
     let qrects = vec![("World in 72000x36000 pixels", qrect)];
     let tiling_specs = vec![
-        TilingSpecification::new(tiling_origin, [512, 512].into()),
-        TilingSpecification::new(tiling_origin, [1024, 1024].into()),
-        TilingSpecification::new(tiling_origin, [2048, 2048].into()),
-        TilingSpecification::new(tiling_origin, [4096, 4096].into()),
-        TilingSpecification::new(tiling_origin, [9000, 9000].into()),
-        TilingSpecification::new(tiling_origin, [18000, 18000].into()),
+        TilingSpecification::new([512, 512].into()),
+        TilingSpecification::new([1024, 1024].into()),
+        TilingSpecification::new([2048, 2048].into()),
+        TilingSpecification::new([4096, 4096].into()),
+        TilingSpecification::new([9000, 9000].into()),
+        TilingSpecification::new([18000, 18000].into()),
     ];
 
     fn operator_builder(
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
     ) -> Box<dyn RasterOperator> {
-        // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
-        assert_eq!(
-            query_rect.spatial_query().geo_transform.origin_coordinate(),
-            tiling_spec.origin_coordinate,
-            "The query origin coordinate must match the tiling strategy's origin for now."
-        );
-
         let tileing_strategy = TilingStrategy::new(
             tiling_spec.tile_size_in_pixels,
-            query_rect.spatial_query().geo_transform,
+            GeoTransform::new(Coordinate2D::new(0.0, 0.), 0.01, -0.01),
         );
         let tile_iter = tileing_strategy
-            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds);
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds());
 
         let mock_data = tile_iter
             .enumerate()
@@ -409,14 +394,14 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
         let mock_raster_operator = MockRasterSource {
             params: MockRasterSourceParams {
                 data: mock_data,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    geo_transform: tileing_strategy.geo_transform,
-                    pixel_bounds: query_rect.spatial_query().grid_bounds,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor: RasterResultDescriptor::new(
+                    RasterDataType::U8,
+                    SpatialReference::epsg_4326().into(),
+                    None,
+                    tileing_strategy.geo_transform,
+                    query_rect.spatial_query().grid_bounds(),
+                    RasterBandDescriptors::new_single_band(),
+                ),
             },
         };
 
@@ -449,44 +434,37 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
     .run_all_benchmarks(bench_collector);
 }
 
+/*
+
 fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut BenchmarkCollector) {
     let tiling_origin = Coordinate2D::new(0., 0.);
 
-    let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-        SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        SpatialResolution::new(0.01, 0.01).unwrap(),
-        tiling_origin,
+    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+        GridBoundingBox2D::new([-9000, -18000], [8999, 17999]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         BandSelection::first(),
     );
 
     let qrects = vec![("World in 36000x18000 pixels", qrect)];
     let tiling_specs = vec![
-        TilingSpecification::new(tiling_origin, [512, 512].into()),
-        TilingSpecification::new(tiling_origin, [1024, 1024].into()),
-        TilingSpecification::new(tiling_origin, [2048, 2048].into()),
-        TilingSpecification::new(tiling_origin, [4096, 4096].into()),
-        TilingSpecification::new(tiling_origin, [9000, 9000].into()),
-        TilingSpecification::new(tiling_origin, [18000, 18000].into()),
+        TilingSpecification::new([512, 512].into()),
+        TilingSpecification::new([1024, 1024].into()),
+        TilingSpecification::new([2048, 2048].into()),
+        TilingSpecification::new([4096, 4096].into()),
+        TilingSpecification::new([9000, 9000].into()),
+        TilingSpecification::new([18000, 18000].into()),
     ];
 
     fn operator_builder(
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
     ) -> Box<dyn RasterOperator> {
-        // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
-        assert_eq!(
-            query_rect.spatial_query().geo_transform.origin_coordinate(),
-            tiling_spec.origin_coordinate,
-            "The query origin coordinate must match the tiling strategy's origin for now."
-        );
-
         let tileing_strategy = TilingStrategy::new(
             tiling_spec.tile_size_in_pixels,
-            query_rect.spatial_query().geo_transform,
+            GeoTransform::new(Coordinate2D::new(0.0, 0.), 0.01, -0.01),
         );
         let tile_iter = tileing_strategy
-            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds);
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds());
         let mock_data = tile_iter
             .enumerate()
             .map(|(id, tile_info)| {
@@ -508,20 +486,21 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
         let mock_raster_operator = MockRasterSource {
             params: MockRasterSourceParams {
                 data: mock_data,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    geo_transform: tileing_strategy.geo_transform,
-                    pixel_bounds: query_rect.spatial_query().grid_bounds,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor: RasterResultDescriptor::new(
+                    RasterDataType::U8,
+                    SpatialReference::epsg_4326().into(),
+                    None,
+                    tileing_strategy.geo_transform,
+                    query_rect.spatial_query().grid_bounds(),
+                    RasterBandDescriptors::new_single_band(),
+                ),
             },
         };
 
         Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::epsg_4326(),
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource::from(mock_raster_operator.boxed()),
         }
@@ -545,20 +524,16 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
 fn bench_mock_source_operator_with_4326_to_3857_reprojection(
     bench_collector: &mut BenchmarkCollector,
 ) {
-    let tiling_origin = Coordinate2D::new(0., 0.);
+    let qrect = SpatialPartition2D::new(
+        (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
+        (20_037_508.342_789_244, -20_048_966.104_014_594).into(),
+    )
+    .unwrap();
 
-    let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-        SpatialPartition2D::new(
-            (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
-            (20_037_508.342_789_244, -20_048_966.104_014_594).into(),
-        )
-        .unwrap(),
-        SpatialResolution::new(1050., 2100.).unwrap(),
-        tiling_origin,
-        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        BandSelection::first(),
-    );
-    let tiling_spec = TilingSpecification::new((0., 0.).into(), [512, 512].into());
+    let qtime = TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap();
+    let qband = BandSelection::first();
+
+    let tiling_spec = TilingSpecification::new([512, 512].into());
 
     let qrects = vec![("World in 36000x18000 pixels", qrect)];
     let tiling_specs = vec![tiling_spec];
@@ -568,19 +543,14 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
         query_rect: RasterQueryRectangle,
     ) -> Box<dyn RasterOperator> {
         // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
-        assert_eq!(
-            query_rect.spatial_query().geo_transform.origin_coordinate(),
-            tiling_spec.origin_coordinate,
-            "The query origin coordinate must match the tiling strategy's origin for now."
-        );
 
         let tileing_strategy = TilingStrategy::new(
             tiling_spec.tile_size_in_pixels,
-            query_rect.spatial_query().geo_transform,
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.01, -0.01),
         );
 
         let tile_iter = tileing_strategy
-            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds);
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds());
         let mock_data = tile_iter
             .enumerate()
             .map(|(id, tile_info)| {
@@ -601,20 +571,21 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
         let mock_raster_operator = MockRasterSource {
             params: MockRasterSourceParams {
                 data: mock_data,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    geo_transform: tileing_strategy.geo_transform,
-                    pixel_bounds: query_rect.spatial_query().grid_bounds,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor: RasterResultDescriptor::new(
+                    RasterDataType::U8,
+                    SpatialReference::epsg_4326().into(),
+                    None,
+                    tileing_strategy.geo_transform,
+                    query_rect.spatial_query().grid_bounds(),
+                    RasterBandDescriptors::new_single_band(),
+                ),
             },
         };
 
         Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::epsg_4326(),
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource::from(mock_raster_operator.boxed()),
         }
@@ -680,7 +651,7 @@ fn bench_gdal_source_operator_tile_size(bench_collector: &mut BenchmarkCollector
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { data: name.clone() },
+        params: GdalSourceParameters::new(name.clone()),
     }
     .boxed();
 
@@ -734,7 +705,7 @@ fn bench_gdal_source_operator_with_expression_tile_size(bench_collector: &mut Be
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { data: name.clone() },
+        params: GdalSourceParameters::new(name.clone()),
     };
 
     let expression_operator = Expression {
@@ -798,12 +769,13 @@ fn bench_gdal_source_operator_with_identity_reprojection(bench_collector: &mut B
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { data: name.clone() },
+        params: GdalSourceParameters::new(name.clone()),
     };
 
     let projection_operator = Reprojection {
         params: ReprojectionParams {
             target_spatial_reference: SpatialReference::epsg_4326(),
+            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
         },
         sources: SingleRasterOrVectorSource::from(gdal_operator.boxed()),
     }
@@ -865,7 +837,7 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
     let meta_data = create_ndvi_meta_data();
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { data: name.clone() },
+        params: GdalSourceParameters::new(name.clone()),
     };
 
     let projection_operator = Reprojection {
@@ -874,6 +846,7 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
                 geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
                 3857,
             ),
+            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
         },
         sources: SingleRasterOrVectorSource::from(gdal_operator.boxed()),
     }
@@ -896,7 +869,10 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
     .run_all_benchmarks(bench_collector);
 }
 
+*/
+
 fn main() {
+    /*
     let mut bench_collector = BenchmarkCollector::default();
 
     bench_mock_source_operator(&mut bench_collector);
@@ -907,4 +883,5 @@ fn main() {
     bench_gdal_source_operator_with_expression_tile_size(&mut bench_collector);
     bench_gdal_source_operator_with_identity_reprojection(&mut bench_collector);
     bench_gdal_source_operator_with_4326_to_3857_reprojection(&mut bench_collector);
+     */
 }

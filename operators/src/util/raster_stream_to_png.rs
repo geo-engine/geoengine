@@ -1,10 +1,8 @@
 use futures::{future::BoxFuture, StreamExt};
 use geoengine_datatypes::{
     operations::image::{Colorizer, RgbaColor, ToPng},
-    primitives::{
-        AxisAlignedRectangle, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInterval,
-    },
-    raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
+    primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
+    raster::{ChangeGridBounds, GridBlit, GridBoundingBox2D, GridOrEmpty, Pixel},
 };
 use num_traits::AsPrimitive;
 use snafu::ensure;
@@ -23,7 +21,7 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
     mut query_ctx: C,
     width: u32,
     height: u32,
-    time: Option<TimeInterval>,
+    _time: Option<TimeInterval>,
     colorizer: Option<Colorizer>,
     conn_closed: BoxFuture<'_, ()>,
 ) -> Result<(Vec<u8>, CacheHint)>
@@ -43,36 +41,31 @@ where
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
+    // the tile stream will allways produce tiles aligned to the tiling origin
     let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
 
-    // build png
-    let dim = [height as usize, width as usize];
-    let query_geo_transform = query_rect.spatial_query().geo_transform;
-
-    let output_geo_transform = GeoTransform::new(
-        query_rect.spatial_query().spatial_partition().upper_left(),
-        query_geo_transform.x_pixel_size(),
-        query_geo_transform.y_pixel_size(),
-    );
-
-    let output_tile = Ok(RasterTile2D::new_without_offset(
-        time.unwrap_or_default(),
-        output_geo_transform,
-        GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
-        CacheHint::max_duration(),
+    let output_grid = Ok(GridOrEmpty::<GridBoundingBox2D, T>::new_empty(
+        query_rect.spatial_query.grid_bounds(),
     ));
 
-    let output_tile: BoxFuture<Result<RasterTile2D<T>>> =
-        Box::pin(tile_stream.fold(output_tile, |raster2d, tile| {
-            let result: Result<RasterTile2D<T>> = match (raster2d, tile) {
-                (Ok(mut raster2d), Ok(tile)) if tile.is_empty() => {
-                    raster2d.cache_hint.merge_with(&tile.cache_hint);
+    println!("output_grid: {:?}", output_grid);
+
+    let output_tile: BoxFuture<Result<GridOrEmpty<GridBoundingBox2D, T>>> =
+        Box::pin(tile_stream.fold(output_grid, |raster2d, tile| {
+            if let Ok(ref tile) = tile {
+                println!(
+                    "tile: {:?}, empty: {:?}",
+                    tile.tile_information(),
+                    tile.is_empty()
+                );
+            }
+
+            let result: Result<GridOrEmpty<GridBoundingBox2D, T>> = match (raster2d, tile) {
+                (Ok(raster2d), Ok(tile)) if tile.is_empty() => Ok(raster2d),
+                (Ok(mut raster2d), Ok(tile)) => {
+                    raster2d.grid_blit_from(&tile.into_inner_positioned_grid());
                     Ok(raster2d)
                 }
-                (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
-                    Ok(()) => Ok(raster2d),
-                    Err(error) => Err(error.into()),
-                },
                 (Err(error), _) | (_, Err(error)) => Err(error),
             };
 
@@ -86,8 +79,8 @@ where
 
     let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
     Ok((
-        result.grid_array.to_png(width, height, &colorizer)?,
-        result.cache_hint,
+        result.unbounded().to_png(width, height, &colorizer)?,
+        CacheHint::default(), // TODO: cache hint needed?
     ))
 }
 
@@ -120,7 +113,7 @@ mod tests {
         engine::MockQueryContext, source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data,
     };
     use geoengine_datatypes::{
-        primitives::{BandSelection, Coordinate2D, SpatialPartition2D, SpatialResolution},
+        primitives::{BandSelection, DateTime, TimeInstance},
         raster::TilingSpecification,
         util::test::TestDefault,
     };
@@ -130,30 +123,27 @@ mod tests {
     #[tokio::test]
     async fn png_from_stream() {
         let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+        let tiling_specification = TilingSpecification::new([600, 600].into());
 
         let meta_data = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
             result_descriptor: meta_data.result_descriptor.clone(),
             tiling_specification,
+            overview_level: 0,
             meta_data: Box::new(meta_data),
             _phantom_data: PhantomData,
         };
 
-        let query_partition =
-            SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(200, 799, -100, 499).unwrap(),
+            TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
+            BandSelection::first(),
+        );
 
         let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                query_partition,
-                SpatialResolution::zero_point_one(),
-                Coordinate2D::new(0., 0.), // FIXME: check if this is correct here.
-                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-                BandSelection::first(),
-            ),
+            query,
             ctx,
             600,
             600,

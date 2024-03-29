@@ -191,9 +191,8 @@ mod tests {
     use geoengine_datatypes::collections::{
         ChunksEqualIgnoringCacheHint, FeatureCollectionModifications, MultiPointCollection,
     };
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
+        BoundingBox2D, CacheHint, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
     };
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -284,10 +283,9 @@ mod tests {
             panic!();
         };
 
-        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        let query_rectangle = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
 

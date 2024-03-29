@@ -957,7 +957,7 @@ mod tests {
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::primitives::ColumnSelection;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, CacheHint, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
+        BoundingBox2D, CacheHint, FeatureData, MultiPoint, TimeInterval,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
@@ -1623,10 +1623,9 @@ mod tests {
                 }
 
                 let mut loading_info = meta
-                    .loading_info(VectorQueryRectangle::with_bounds_and_resolution(
+                    .loading_info(VectorQueryRectangle::with_bounds(
                         BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                         TimeInterval::default(),
-                        SpatialResolution::zero_point_one(),
                         ColumnSelection::all(),
                     ))
                     .await
@@ -1766,14 +1765,13 @@ mod tests {
                     vec![],
                 );
 
-                let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+                let query_rectangle = VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new(
                         (-61.065_22, 14.775_33).into(),
                         (-61.065_22, 14.775_33).into(),
                     )
                     .unwrap(),
                     TimeInterval::default(),
-                    SpatialResolution::zero_point_one(),
                     ColumnSelection::all(),
                 );
                 let ctx = MockQueryContext::test_default();

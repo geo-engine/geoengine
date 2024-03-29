@@ -6,9 +6,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::TryFuture;
 use geoengine_datatypes::{
-    primitives::{
-        CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInstance, TimeInterval, TimeStep,
-    },
+    primitives::{CacheHint, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep},
     raster::{
         EmptyGrid2D, GeoTransform, GridIdx2D, GridIndexAccess, GridOrEmpty, GridOrEmpty2D,
         GridShapeAccess, Pixel, RasterTile2D, TileInformation, UpdateIndexedElementsParallel,
@@ -181,20 +179,16 @@ where
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: RasterQueryRectangle,
+        _query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         let snapped_start_time = self.step.snap_relative(self.step_reference, start_time)?;
-        Ok(Some(
-            RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                tile_info.spatial_partition(),
-                query_rect.spatial_query().spatial_resolution(),
-                query_rect.spatial_query().origin_coordinate(),
-                TimeInterval::new(snapped_start_time, (snapped_start_time + self.step)?)?,
-                band_idx.into(),
-            ),
-        ))
+        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+            tile_info.global_pixel_bounds(),
+            TimeInterval::new(snapped_start_time, (snapped_start_time + self.step)?)?,
+            band_idx.into(),
+        )))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {

@@ -1,10 +1,7 @@
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
-    primitives::{
-        BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-        TimeStep,
-    },
-    raster::{RasterDataType, RasterTile2D},
+    primitives::{BandSelection, RasterQueryRectangle, TimeInterval, TimeStep},
+    raster::{GridBoundingBox2D, RasterDataType, RasterTile2D},
     util::test::TestDefault,
 };
 use geoengine_operators::{
@@ -49,13 +46,13 @@ fn ndvi_source(execution_context: &mut MockExecutionContext) -> Box<dyn RasterOp
     let ndvi_id = add_ndvi_dataset(execution_context);
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { data: ndvi_id },
+        params: GdalSourceParameters::new(ndvi_id),
     };
 
     gdal_operator.boxed()
 }
 
-async fn one_band_at_a_time(runs: usize, bands: u32, resolution: SpatialResolution) {
+async fn one_band_at_a_time(runs: usize, bands: u32) {
     let mut execution_context = MockExecutionContext::test_default();
     let query_context = MockQueryContext::test_default();
 
@@ -72,10 +69,8 @@ async fn one_band_at_a_time(runs: usize, bands: u32, resolution: SpatialResoluti
         .get_u64()
         .unwrap();
 
-    let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-        SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        resolution,
-        execution_context.tiling_specification.origin_coordinate,
+    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+        GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         BandSelection::first(),
     );
@@ -114,7 +109,7 @@ async fn one_band_at_a_time(runs: usize, bands: u32, resolution: SpatialResoluti
     .unwrap();
 }
 
-async fn all_bands_at_once(runs: usize, bands: u32, resolution: SpatialResolution) {
+async fn all_bands_at_once(runs: usize, bands: u32) {
     let mut execution_context = MockExecutionContext::test_default();
     let query_context = MockQueryContext::test_default();
 
@@ -139,10 +134,8 @@ async fn all_bands_at_once(runs: usize, bands: u32, resolution: SpatialResolutio
         .get_u64()
         .unwrap();
 
-    let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-        SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        resolution,
-        execution_context.tiling_specification.origin_coordinate,
+    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+        GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         (0..bands).collect::<Vec<_>>().try_into().unwrap(),
     );
@@ -181,25 +174,14 @@ async fn all_bands_at_once(runs: usize, bands: u32, resolution: SpatialResolutio
 async fn main() {
     const RUNS: usize = 5;
     const BANDS: u32 = 8;
-    const RESOLUTION: f64 = 0.1;
 
     println!("one band at a time");
 
-    one_band_at_a_time(
-        RUNS,
-        BANDS,
-        SpatialResolution::new(RESOLUTION, RESOLUTION).unwrap(),
-    )
-    .await;
+    one_band_at_a_time(RUNS, BANDS).await;
 
     println!("all bands at once");
 
-    all_bands_at_once(
-        RUNS,
-        BANDS,
-        SpatialResolution::new(RESOLUTION, RESOLUTION).unwrap(),
-    )
-    .await;
+    all_bands_at_once(RUNS, BANDS).await;
 }
 
 async fn time_it<F, Fut>(f: F) -> (f64, Vec<RasterTile2D<u64>>)

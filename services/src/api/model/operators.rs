@@ -115,7 +115,7 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
             spatial_reference: value.spatial_reference.into(),
             time: value.time.map(Into::into),
             bbox: Some(value.spatial_bounds().into()), // TODO: maybe change the field to GeoTransform and pixel bounds
-            resolution: Some(value.geo_transform.spatial_resolution().into()),
+            resolution: Some(value.tiling_geo_transform().spatial_resolution().into()),
             bands: value.bands.into(),
         }
     }
@@ -148,12 +148,15 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
         )
         .expect("creating pixel bounds with 0., 0. start should work");
 
+        let tiling_bounds = geo_transform.shape_to_nearest_to_zero_based(&pixel_bounds);
+        let tiling_geo_transform = geo_transform.nearest_pixel_to_zero_based();
+
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
             time: value.time.map(Into::into),
-            geo_transform,
-            pixel_bounds,
+            geo_transform_x: tiling_geo_transform,
+            pixel_bounds_x: tiling_bounds,
             bands: value.bands.into(),
         }
     }

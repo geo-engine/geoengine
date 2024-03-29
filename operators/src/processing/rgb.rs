@@ -184,36 +184,17 @@ impl RasterOperator for Rgb {
         );
 
         let spatial_reference = sources.red.result_descriptor().spatial_reference;
-        let red_geo_transform = sources.red.result_descriptor().geo_transform;
 
-        let (geo_transform, bounds) = if sources
+        let geo_transform = first_result_descriptor.tiling_geo_transform();
+        let bounds = sources
             .iter()
-            .all(|source| source.result_descriptor().geo_transform == red_geo_transform)
-        {
-            // if all sources have the same geo transform, we can keep that and compute the bounds
-            let bounds = sources
-                .iter()
-                .map(|op| op.result_descriptor().pixel_bounds)
-                .reduce(|a, b| a.extended(&b));
-
-            (
-                red_geo_transform,
-                bounds.expect("all sources must have bounds"),
-            )
-        } else {
-            // if not all sources have the same geo transform, we need to use the the tiling
-            let geo_transform = red_geo_transform.nearest_pixel_to_zero_based(); // Fixme: generate this from the result descriptor?
-            let bounds = sources
-                .iter()
-                .map(|op| {
-                    op.result_descriptor()
-                        .geo_transform
-                        .shape_to_nearest_to_zero_based(&op.result_descriptor().pixel_bounds)
-                })
-                .reduce(|a, b| a.extended(&b));
-
-            (geo_transform, bounds.expect("all sources must have bounds"))
-        };
+            .map(|op| {
+                op.result_descriptor()
+                    .tiling_geo_transform()
+                    .shape_to_nearest_to_zero_based(&op.result_descriptor().tiling_pixel_bounds())
+            })
+            .reduce(|a, b| a.extended(&b))
+            .expect("There should be data..."); // Fixme
 
         ensure!(
             sources
@@ -234,8 +215,8 @@ impl RasterOperator for Rgb {
             data_type: RasterDataType::U32,
             spatial_reference,
             time,
-            geo_transform,
-            pixel_bounds: bounds,
+            geo_transform_x: geo_transform,
+            pixel_bounds_x: bounds,
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -451,8 +432,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::{
-        CacheHint, Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-        TimeInterval,
+        CacheHint, Coordinate2D, RasterQueryRectangle, TimeInterval,
     };
     use geoengine_datatypes::raster::{
         GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, MapElements, MaskedGrid2D,
@@ -524,7 +504,6 @@ mod tests {
     async fn computation() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -558,10 +537,8 @@ mod tests {
         let ctx = MockQueryContext::new(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                    SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
-                    SpatialResolution::one(),
-                    ectx.tiling_specification.origin_coordinate,
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
                     Default::default(),
                     BandSelection::first(),
                 ),
@@ -659,8 +636,8 @@ mod tests {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                    pixel_bounds: GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds_x: GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },

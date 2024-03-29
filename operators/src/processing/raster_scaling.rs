@@ -111,8 +111,8 @@ impl RasterOperator for RasterScaling {
             spatial_reference: in_desc.spatial_reference,
             data_type: in_desc.data_type,
             time: in_desc.time,
-            geo_transform: in_desc.geo_transform,
-            pixel_bounds: in_desc.pixel_bounds,
+            geo_transform_x: in_desc.tiling_geo_transform(),
+            pixel_bounds_x: in_desc.tiling_pixel_bounds(),
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 in_desc.bands[0].name.clone(),
                 self.params
@@ -277,13 +277,11 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
     };
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, CacheHint, Coordinate2D, SpatialPartition2D, SpatialResolution,
-            TimeInterval,
-        },
+        primitives::{BandSelection, CacheHint, Coordinate2D, TimeInterval},
         raster::{
-            BoundedGrid, GeoTransform, Grid2D, GridOrEmpty2D, GridShape, GridShape2D, MaskedGrid2D,
-            RasterDataType, RasterProperties, TileInformation,
+            BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty2D, GridShape,
+            GridShape2D, MaskedGrid2D, RasterDataType, RasterProperties, TileInformation,
+            TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -298,12 +296,12 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds: tile_size_in_pixels.bounding_box(),
+            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds_x: tile_size_in_pixels.bounding_box(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
         let raster =
             MaskedGrid2D::from(Grid2D::new(tile_size_in_pixels, vec![7_u8, 7, 7, 6]).unwrap());
 
@@ -365,10 +363,8 @@ mod tests {
 
         let query_processor = initialized_op.query_processor().unwrap();
 
-        let query = geoengine_datatypes::primitives::RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
-            SpatialResolution::one(),
-            ctx.tiling_specification().origin_coordinate,
+        let query = geoengine_datatypes::primitives::RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             TimeInterval::default(),
             BandSelection::first(),
         );
@@ -409,12 +405,12 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds: tile_size_in_pixels.bounding_box(),
+            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds_x: tile_size_in_pixels.bounding_box(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
 
         let raster =
             MaskedGrid2D::from(Grid2D::new(tile_size_in_pixels, vec![15_u8, 15, 15, 13]).unwrap());
@@ -479,10 +475,8 @@ mod tests {
 
         let query_processor = initialized_op.query_processor().unwrap();
 
-        let query = geoengine_datatypes::primitives::RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
-            SpatialResolution::one(),
-            ctx.tiling_specification().origin_coordinate,
+        let query = geoengine_datatypes::primitives::RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             TimeInterval::default(),
             BandSelection::first(),
         );

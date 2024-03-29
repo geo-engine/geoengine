@@ -187,7 +187,7 @@ mod tests {
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
-    use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection, SpatialResolution};
+    use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
 
@@ -220,10 +220,9 @@ mod tests {
             panic!()
         };
 
-        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        let query_rectangle = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());

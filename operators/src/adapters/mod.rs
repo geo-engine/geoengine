@@ -10,7 +10,7 @@ pub use feature_collection_merger::FeatureCollectionChunkMerger;
 pub use raster_stacker::{RasterStackerAdapter, RasterStackerSource};
 pub use raster_subquery::{
     fold_by_coordinate_lookup_future, FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter,
-    SubQueryTileAggregator, TileReprojectionSubQuery,
+    SubQueryTileAggregator, TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo,
 };
 pub use raster_time::{QueryWrapper, Queryable, RasterArrayTimeAdapter, RasterTimeAdapter};
 pub use simple_raster_stacker::{SimpleRasterStackerAdapter, SimpleRasterStackerSource};

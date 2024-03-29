@@ -499,8 +499,8 @@ mod tests {
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         primitives::{
-            BoundingBox2D, CacheHint, ColumnSelection, FeatureData, MultiPoint, SpatialResolution,
-            TimeInterval, VectorQueryRectangle,
+            BoundingBox2D, CacheHint, ColumnSelection, FeatureData, MultiPoint, TimeInterval,
+            VectorQueryRectangle,
         },
     };
     use std::{collections::HashMap, sync::Arc};
@@ -564,10 +564,9 @@ mod tests {
     #[test]
     fn landing_zone_to_cache_entry() {
         let cols = create_test_collection();
-        let query = VectorQueryRectangle::with_bounds_and_resolution(
+        let query = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
             Default::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
         let mut lq = VectorLandingQueryEntry::create_empty::<CompressedFeatureCollection<MultiPoint>>(
@@ -587,10 +586,9 @@ mod tests {
         let cols = create_test_collection();
 
         // elemtes are all fully contained
-        let query = VectorQueryRectangle::with_bounds_and_resolution(
+        let query = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new_unchecked((0., 0.).into(), (12., 12.).into()),
             Default::default(),
-            SpatialResolution::one(),
             ColumnSelection::all(),
         );
 
@@ -599,10 +597,9 @@ mod tests {
         }
 
         // first element is not contained
-        let query = VectorQueryRectangle::with_bounds_and_resolution(
+        let query = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
             Default::default(),
-            SpatialResolution::one(),
             ColumnSelection::all(),
         );
         assert!(!cols[0].intersects_query(&query));
@@ -611,10 +608,9 @@ mod tests {
         }
 
         // all elements are not contained
-        let query = VectorQueryRectangle::with_bounds_and_resolution(
+        let query = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new_unchecked((13., 13.).into(), (26., 26.).into()),
             Default::default(),
-            SpatialResolution::one(),
             ColumnSelection::all(),
         );
         for col in &cols {
@@ -626,10 +622,9 @@ mod tests {
     fn cache_entry_matches() {
         let cols = create_test_collection();
 
-        let cache_entry_bounds = VectorQueryRectangle::with_bounds_and_resolution(
+        let cache_entry_bounds = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new_unchecked((1., 1.).into(), (11., 11.).into()),
             Default::default(),
-            SpatialResolution::one(),
             ColumnSelection::all(),
         );
 
@@ -643,19 +638,17 @@ mod tests {
         assert!(cache_query_entry.query().is_match(&query));
 
         // query is fully contained
-        let query2 = VectorQueryRectangle::with_bounds_and_resolution(
+        let query2 = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
             Default::default(),
-            SpatialResolution::one(),
             ColumnSelection::all(),
         );
         assert!(cache_query_entry.query().is_match(&query2));
 
         // query is exceeds cached bounds
-        let query3 = VectorQueryRectangle::with_bounds_and_resolution(
+        let query3 = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new_unchecked((0., 0.).into(), (8., 8.).into()),
             Default::default(),
-            SpatialResolution::one(),
             ColumnSelection::all(),
         );
         assert!(!cache_query_entry.query().is_match(&query3));

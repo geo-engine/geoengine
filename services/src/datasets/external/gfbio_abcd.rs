@@ -465,25 +465,22 @@ impl
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::layers::layer::ProviderLayerCollectionId;
+    use crate::test_data;
+    use crate::util::config;
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
     use geoengine_datatypes::dataset::ExternalDataId;
-    use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
-    };
+    use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, MultiPoint, TimeInterval};
     use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
     use rand::RngCore;
-    use tokio_postgres::Config;
-
-    use super::*;
-    use crate::layers::layer::ProviderLayerCollectionId;
-    use crate::test_data;
-    use crate::util::config;
     use std::{fs::File, io::Read, path::PathBuf};
+    use tokio_postgres::Config;
 
     /// Create a schema with test tables and return the schema name
     async fn create_test_data(db_config: &config::Postgres) -> String {
@@ -672,10 +669,9 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle::with_bounds_and_resolution(
+                .loading_info(VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
-                    SpatialResolution::zero_point_one(),
                     ColumnSelection::all(),
                 ))
                 .await
@@ -843,10 +839,9 @@ mod tests {
                     bbox: None,
             },meta, vec![]);
 
-            let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+            let query_rectangle = VectorQueryRectangle::with_bounds(
                 BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
                 TimeInterval::default(),
-                SpatialResolution::zero_point_one(),
                 ColumnSelection::all(),
             );
             let ctx = MockQueryContext::test_default();

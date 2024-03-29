@@ -62,32 +62,30 @@ impl RasterDatasetFromWorkflowParams {
     ) -> error::Result<Self> {
         let query = request.query;
 
-        // FIXME: handle resolutions
+        // FIXME: handle resolutions --> use pixel bounds in query?
         ensure!(
             approx_eq!(
                 f64,
-                result_descriptor.geo_transform.x_pixel_size(),
+                result_descriptor.geo_transform_x.x_pixel_size(),
                 query.spatial_resolution.x
             ) && approx_eq!(
                 f64,
-                result_descriptor.geo_transform.y_pixel_size(),
+                result_descriptor.geo_transform_x.y_pixel_size(),
                 query.spatial_resolution.y
             ),
             error::ResolutionMissmatch,
         );
 
         let grid_bounds = result_descriptor
-            .geo_transform
+            .tiling_geo_transform()
             .spatial_to_grid_bounds(&query.spatial_bounds.into()); // TODO: somehow clean up api and inner structs
 
-        let raster_query = geoengine_datatypes::primitives::RasterQueryRectangle {
-            spatial_query: geoengine_datatypes::primitives::SpatialGridQueryRectangle {
+        let raster_query =
+            geoengine_datatypes::primitives::RasterQueryRectangle::new_with_grid_bounds(
                 grid_bounds,
-                geo_transform: result_descriptor.geo_transform,
-            },
-            time_interval: query.time_interval.into(),
-            attributes: BandSelection::first_n(result_descriptor.bands.len() as u32 + 1), // FIXME: what to do here?
-        };
+                query.time_interval.into(),
+                BandSelection::first_n(result_descriptor.bands.len() as u32 + 1), // FIXME: what to do here?
+            );
 
         Ok(Self {
             name: request.name,
@@ -174,7 +172,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             },
             tile_limit,
             Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
-            execution_context.tiling_specification(),
+            execution_context.tiling_specification().strategy(result_descriptor.tiling_geo_transform()),
         ).await)?
             .map_err(crate::error::Error::from)?;
 
@@ -308,10 +306,10 @@ async fn create_dataset<C: SessionContext>(
         data_type: origin_result_descriptor.data_type,
         spatial_reference: origin_result_descriptor.spatial_reference,
         time: Some(result_time_interval),
-        geo_transform: origin_result_descriptor.geo_transform,
-        pixel_bounds: origin_result_descriptor
-            .pixel_bounds
-            .intersection(&query_rectangle.spatial_query.grid_bounds)
+        geo_transform_x: origin_result_descriptor.tiling_geo_transform(),
+        pixel_bounds_x: origin_result_descriptor
+            .tiling_pixel_bounds()
+            .intersection(&query_rectangle.spatial_query.grid_bounds())
             .unwrap_or(
                 GridBoundingBox2D::new_min_max(0, 0, 1, 1).expect("is a valid static value"),
             ), // FIXME: to something if intersection is empty

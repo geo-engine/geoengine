@@ -262,6 +262,13 @@ impl SpatialReferenceOption {
     pub fn is_unreferenced(self) -> bool {
         !self.is_spatial_ref()
     }
+
+    pub fn as_option(self) -> Option<SpatialReference> {
+        match self {
+            SpatialReferenceOption::SpatialReference(s) => Some(s),
+            SpatialReferenceOption::Unreferenced => None,
+        }
+    }
 }
 
 impl ToSql for SpatialReferenceOption {

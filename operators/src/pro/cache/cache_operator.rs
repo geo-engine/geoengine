@@ -429,11 +429,8 @@ where
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-            TimeInterval,
-        },
-        raster::TilesEqualIgnoringCacheHint,
+        primitives::{BandSelection, RasterQueryRectangle, TimeInterval},
+        raster::{GridBoundingBox2D, TilesEqualIgnoringCacheHint},
         util::test::TestDefault,
     };
 
@@ -455,7 +452,7 @@ mod tests {
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
 
         let operator = GdalSource {
-            params: GdalSourceParameters { data: ndvi_id },
+            params: GdalSourceParameters::new(ndvi_id),
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -477,10 +474,8 @@ mod tests {
 
         let stream = processor
             .query(
-                RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                    SpatialPartition2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
-                    SpatialResolution::zero_point_one(),
-                    exe_ctx.tiling_specification.origin_coordinate,
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
                     TimeInterval::default(),
                     BandSelection::first(),
                 ),
@@ -497,10 +492,8 @@ mod tests {
 
         let stream_from_cache = processor
             .query(
-                RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                    SpatialPartition2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
-                    SpatialResolution::zero_point_one(),
-                    exe_ctx.tiling_specification.origin_coordinate,
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
                     TimeInterval::default(),
                     BandSelection::first(),
                 ),

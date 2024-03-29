@@ -963,20 +963,21 @@ pub struct QueryRectangle<SpatialBounds> {
 }
 
 // TODO: figure out if we keep it that way
+/*
 impl From<geoengine_datatypes::primitives::RasterQueryRectangle> for RasterQueryRectangle {
     fn from(value: geoengine_datatypes::primitives::RasterQueryRectangle) -> Self {
         Self {
             spatial_bounds: value
                 .spatial_query
-                .geo_transform
-                .grid_to_spatial_bounds(&value.spatial_query.grid_bounds)
+                .geo_transform()
+                .grid_to_spatial_bounds(&value.spatial_query.grid_bounds())
                 .into(),
             time_interval: value.time_interval.into(),
             spatial_resolution: value.spatial_query.spatial_resolution().into(),
         }
     }
 }
-
+*/
 /*
 impl From<QueryRectangle<SpatialPartition2D>>
     for geoengine_datatypes::primitives::RasterQueryRectangle

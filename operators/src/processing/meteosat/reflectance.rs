@@ -120,8 +120,8 @@ impl RasterOperator for Reflectance {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
             time: in_desc.time,
-            geo_transform: in_desc.geo_transform,
-            pixel_bounds: in_desc.pixel_bounds,
+            geo_transform_x: in_desc.tiling_geo_transform(),
+            pixel_bounds_x: in_desc.tiling_pixel_bounds(),
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 in_desc.bands[0].name.clone(),
                 Measurement::Continuous(ContinuousMeasurement {
@@ -335,7 +335,6 @@ mod tests {
     ) -> Result<RasterTile2D<f32>> {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 

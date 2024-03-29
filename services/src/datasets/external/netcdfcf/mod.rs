@@ -35,7 +35,7 @@ use geoengine_datatypes::primitives::{
     DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle, TimeGranularity,
     TimeInstance, TimeInterval, TimeStep, TimeStepIter, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{GdalGeoTransform, GridBoundingBox2D, RasterDataType};
+use geoengine_datatypes::raster::{GdalGeoTransform, GeoTransform, GridShape2D, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::util::gdal::ResamplingMethod;
@@ -499,6 +499,12 @@ impl NetCdfCfDataProvider {
             retry: None,
         };
 
+        let pixel_shape = GridShape2D::new_2d(params.height as usize, params.width as usize);
+        let geo_transform =
+            GeoTransform::try_from(params.geo_transform).expect("GeoTransform must be valid"); // TODO: check how the axis in netcfd are stored;
+        let tiling_geo_transform = geo_transform.nearest_pixel_to_zero_based();
+        let tiling_pixel_bounds = geo_transform.shape_to_nearest_to_zero_based(&pixel_shape);
+
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::from_gdal_data_type(
                 data_array
@@ -514,14 +520,8 @@ impl NetCdfCfDataProvider {
             .context(error::CannotParseCrs)?
             .into(),
             time: None,
-            geo_transform: geo_transform.try_into().expect("GeoTransform must be valid"), // TODO: check how the axis in netcfd are stored
-            pixel_bounds: GridBoundingBox2D::new_min_max(
-                0,
-                0,
-                params.width as isize,
-                params.height as isize,
-            )
-            .expect("With or Hight cant be smaller than 0"),
+            geo_transform_x: tiling_geo_transform,
+            pixel_bounds_x: tiling_pixel_bounds,
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "band".into(),
                 derive_measurement(data_array.unit()),
@@ -1231,8 +1231,8 @@ pub fn layer_from_netcdf_overview(
         workflow: Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters {
-                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                    params: GdalSourceParameters::new(
+                        geoengine_datatypes::dataset::NamedData::with_system_provider(
                             provider_id.to_string(),
                             json!({
                                 "fileName": overview.file_name,
@@ -1241,7 +1241,7 @@ pub fn layer_from_netcdf_overview(
                             })
                             .to_string(),
                         ),
-                    },
+                    ),
                 }
                 .boxed(),
             ),
@@ -1548,13 +1548,11 @@ mod tests {
     use super::*;
     use crate::tasks::util::NopTaskContext;
     use geoengine_datatypes::dataset::ExternalDataId;
-    use geoengine_datatypes::primitives::BandSelection;
-    use geoengine_datatypes::raster::GeoTransform;
+    use geoengine_datatypes::primitives::{BandSelection, Coordinate2D};
+    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D};
     use geoengine_datatypes::{
-        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
-        spatial_reference::SpatialReferenceAuthority,
-        test_data,
-        util::{gdal::hide_gdal_errors, test::TestDefault},
+        primitives::TimeInterval, spatial_reference::SpatialReferenceAuthority, test_data,
+        util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::engine::RasterBandDescriptors;
     use geoengine_operators::source::{
@@ -1949,30 +1947,38 @@ mod tests {
             .await
             .unwrap();
 
+        let result_descriptor = metadata.result_descriptor().await.unwrap();
+
+        let expected_geo_transform = GeoTransform::new(
+            Coordinate2D::new(3_580_000.0, 2_370_000.0), // TODO: it could be that the provider only creates the origin as tiling origin near zero
+            1000.0,
+            -1000.0,
+        );
+        let expected_bounds = GridBoundingBox2D::new([0, 9], [0, 9]).unwrap();
+        let expected_tiling_geo_transform = expected_geo_transform.nearest_pixel_to_zero_based();
+        let expected_tiling_bounds =
+            expected_geo_transform.shape_to_nearest_to_zero_based(&expected_bounds);
+
         assert_eq!(
-            metadata.result_descriptor().await.unwrap(),
+            result_descriptor,
             RasterResultDescriptor {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
                 time: None,
-                geo_transform: GeoTransform::test_default(),
-                pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 12, 12).unwrap(), // FIXME: findout the correct values
+                geo_transform_x: expected_tiling_geo_transform,
+                pixel_bounds_x: expected_tiling_bounds,
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );
 
+        let native_grid_bounds = GridBoundingBox2D::new_min_max(0, 9, 0, 9).unwrap();
+        let tiling_grid_bounds =
+            expected_geo_transform.shape_to_nearest_to_zero_based(&native_grid_bounds);
+
         let loading_info = metadata
-            .loading_info(RasterQueryRectangle::with_partition_and_resolution(
-                SpatialPartition2D::new(
-                    (43.945_312_5, 0.791_015_625_25).into(),
-                    (44.033_203_125, 0.703_125_25).into(),
-                )
-                .unwrap(),
-                SpatialResolution::new_unchecked(
-                    0.000_343_322_7, // 256 pixel
-                    0.000_343_322_7, // 256 pixel
-                ),
+            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                tiling_grid_bounds,
                 TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
                 BandSelection::first(),
             ))
@@ -2074,30 +2080,32 @@ mod tests {
             .await
             .unwrap();
 
+        let result_descriptor = metadata.result_descriptor().await.unwrap();
+        let native_geo_transform = GeoTransform::new(
+            Coordinate2D::new(3_580_000.0, 2_370_000.0), // TODO: it could be that the provider only creates the origin as tiling origin near zero
+            1000.0,
+            -1000.0,
+        );
+        let native_grid_bounds = GridBoundingBox2D::new_min_max(0, 9, 0, 9).unwrap();
+        let tiling_grid_bounds =
+            native_geo_transform.shape_to_nearest_to_zero_based(&native_grid_bounds);
+
         assert_eq!(
-            metadata.result_descriptor().await.unwrap(),
+            result_descriptor,
             RasterResultDescriptor {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
                 time: None,
-                geo_transform: GeoTransform::test_default(),
-                pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 12, 12).unwrap(), // FIXME: findout the correct values
+                geo_transform_x: native_geo_transform.nearest_pixel_to_zero_based(),
+                pixel_bounds_x: tiling_grid_bounds,
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );
 
         let loading_info = metadata
-            .loading_info(RasterQueryRectangle::with_partition_and_resolution(
-                SpatialPartition2D::new(
-                    (43.945_312_5, 0.791_015_625_25).into(),
-                    (44.033_203_125, 0.703_125_25).into(),
-                )
-                .unwrap(),
-                SpatialResolution::new_unchecked(
-                    0.000_343_322_7, // 256 pixel
-                    0.000_343_322_7, // 256 pixel
-                ),
+            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                tiling_grid_bounds,
                 TimeInstance::from(DateTime::new_utc(2001, 4, 1, 0, 0, 0)).into(),
                 BandSelection::first(),
             ))

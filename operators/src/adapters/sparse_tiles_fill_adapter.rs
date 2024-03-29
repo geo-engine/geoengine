@@ -4,7 +4,7 @@ use geoengine_datatypes::{
     primitives::{CacheExpiration, CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
-        Pixel, RasterTile2D, TilingSpecification, TilingStrategy,
+        Pixel, RasterTile2D, TilingStrategy,
     },
 };
 use pin_project::pin_project;
@@ -241,24 +241,9 @@ where
     pub fn new_like_subquery(
         stream: S,
         query_rect_to_answer: &RasterQueryRectangle,
-        tiling_spec: TilingSpecification,
+        tiling_strat: TilingStrategy,
         cache_expiration: FillerTileCacheExpirationStrategy,
     ) -> Self {
-        assert_eq!(
-            query_rect_to_answer
-                .spatial_query()
-                .geo_transform
-                .origin_coordinate,
-            tiling_spec.origin_coordinate,
-            "we currently only support tiling specifications with the same origin coordinate as the query rectangle"
-        );
-
-        // FIXME: we should not need to create a new tiling strategy here
-        let tiling_strat = TilingStrategy::new(
-            tiling_spec.tile_size_in_pixels,
-            query_rect_to_answer.spatial_query().geo_transform,
-        );
-
         let grid_bounds = tiling_strat
             .raster_spatial_query_to_tiling_grid_box(&query_rect_to_answer.spatial_query());
         Self::new(
@@ -266,7 +251,7 @@ where
             grid_bounds,
             query_rect_to_answer.attributes.count(),
             tiling_strat.geo_transform,
-            tiling_spec.tile_size_in_pixels,
+            tiling_strat.tile_size_in_pixels,
             cache_expiration,
         )
     }

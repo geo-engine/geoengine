@@ -360,7 +360,7 @@ mod tests {
     use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, ColumnSelection, DataRef, DateTime, FeatureDataRef, MultiPoint,
-        SpatialResolution, TimeInterval, VectorQueryRectangle,
+        TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheHint, Measurement};
     use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterTile2D};
@@ -412,7 +412,7 @@ mod tests {
 
     fn ndvi_source(name: NamedData) -> Box<dyn RasterOperator> {
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { data: name },
+            params: GdalSourceParameters::new(name),
         };
 
         gdal_source.boxed()
@@ -471,10 +471,9 @@ mod tests {
 
         let result = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
-                    SpatialResolution::new(0.1, 0.1).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
@@ -549,10 +548,9 @@ mod tests {
 
         let result = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
-                    SpatialResolution::new(0.1, 0.1).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
@@ -630,10 +628,9 @@ mod tests {
 
         let result = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
-                    SpatialResolution::new(0.1, 0.1).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
@@ -732,8 +729,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform: GeoTransform::test_default(),
-                    pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
+                    geo_transform_x: GeoTransform::test_default(),
+                    pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
                         RasterBandDescriptor::new_unitless("band_1".into()),
@@ -751,8 +748,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform: GeoTransform::test_default(),
-                    pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
+                    geo_transform_x: GeoTransform::test_default(),
+                    pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
                         RasterBandDescriptor::new_unitless("band_1".into()),

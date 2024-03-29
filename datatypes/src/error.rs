@@ -329,6 +329,9 @@ pub enum Error {
 
     DuplicateBandInQueryBandSelection,
     QueryBandSelectionMustNotBeEmpty,
+
+    TilingGeoTransformOriginCoordinateMismatch,
+    TilingGeoTransformResolutionMissmatch,
 }
 
 impl From<arrow::error::ArrowError> for Error {

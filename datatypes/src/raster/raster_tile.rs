@@ -4,7 +4,9 @@ use super::{
     GridIndexAccess, GridShape, GridShape2D, GridShape3D, GridShapeAccess, GridSize, Raster,
     TileInformation,
 };
-use super::{GridIndexAccessMut, RasterProperties};
+use super::{
+    BoundedGrid, ChangeGridBounds, GridBoundingBox2D, GridIndexAccessMut, RasterProperties,
+};
 use crate::primitives::CacheHint;
 use crate::primitives::{
     SpatialBounded, SpatialPartition2D, SpatialPartitioned, SpatialResolution, TemporalBounded,
@@ -141,11 +143,14 @@ impl<G: PartialEq, const N: usize> IterableBaseTile<G> for [BaseTile<G>; N] {
     }
 }
 
-impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I {
+impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I
+where
+    G: GridSize,
+{
     fn tiles_equal_ignoring_cache_hint(&self, other: &dyn IterableBaseTile<G>) -> bool {
         let mut iter_self = self.iter_tiles();
         let mut iter_other = other.iter_tiles();
-
+        let mut i = 0;
         loop {
             match (iter_self.next(), iter_other.next()) {
                 (Some(a), Some(b)) => {
@@ -156,6 +161,12 @@ impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I 
                         || a.grid_array != b.grid_array
                         || a.properties != b.properties
                     {
+                        println!(
+                            "i: {}, a: {:?}, b: {:?}",
+                            i,
+                            a.tile_information(),
+                            b.tile_information(),
+                        );
                         return false;
                     }
                 }
@@ -164,6 +175,7 @@ impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I 
                 // one iterator is exhausted, the other is not, so they are not equal
                 _ => return false,
             }
+            i += 1;
         }
     }
 }
@@ -336,6 +348,38 @@ where
                     .into();
             }
         }
+    }
+}
+
+impl<T> RasterTile2D<T>
+where
+    T: Pixel,
+{
+    pub fn into_inner_positioned_grid(self) -> GridOrEmpty<GridBoundingBox2D, T> {
+        let b = self.bounding_box();
+        let g = self.grid_array;
+        g.set_grid_bounds(b).expect("tile was valid before")
+    }
+}
+
+impl<T> BoundedGrid for RasterTile2D<T>
+where
+    T: Pixel,
+{
+    type IndexArray = [isize; 2];
+
+    fn bounding_box(&self) -> GridBoundingBox2D {
+        let shape = self.grid_array.shape_ref();
+        let offset =
+            self.tile_position * [shape.axis_size_y() as isize, shape.axis_size_x() as isize];
+        GridBoundingBox2D::new_unchecked(
+            offset,
+            offset
+                + [
+                    shape.axis_size_y() as isize - 1,
+                    shape.axis_size_x() as isize - 1,
+                ],
+        )
     }
 }
 

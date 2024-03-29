@@ -609,10 +609,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let result_descriptor = raster_operator.result_descriptor();
 
-    let sqr = SpatialGridQueryRectangle::new(
-        result_descriptor.geo_transform,
-        result_descriptor.pixel_bounds,
-    );
+    let sqr = SpatialGridQueryRectangle::new(result_descriptor.tiling_pixel_bounds());
 
     let qr = geoengine_datatypes::primitives::RasterQueryRectangle::new(
         sqr,
@@ -903,9 +900,7 @@ mod tests {
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::primitives::CacheHint;
-    use geoengine_datatypes::primitives::{
-        RasterQueryRectangle, SpatialPartition2D, TimeGranularity, TimeInterval,
-    };
+    use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeGranularity, TimeInterval};
     use geoengine_datatypes::raster::{
         GeoTransform, Grid, GridBoundingBox2D, GridShape, RasterDataType, RasterTile2D,
         TilingSpecification,
@@ -1316,8 +1311,8 @@ mod tests {
                 } else {
                     None
                 },
-                pixel_bounds: GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
-                geo_transform: GeoTransform::test_default(),
+                pixel_bounds_x: GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
+                geo_transform_x: GeoTransform::test_default(),
                 bands: RasterBandDescriptors::new_single_band(),
             };
 
@@ -1348,14 +1343,11 @@ mod tests {
             };
 
             let tiling_specification = TilingSpecification {
-                origin_coordinate: (0., 0.).into(),
                 tile_size_in_pixels: GridShape::new([2, 2]),
             };
 
-            let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
-                GeoTransform::test_default().spatial_resolution(),
-                GeoTransform::test_default().origin_coordinate,
+            let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new_min_max(-2, -1, 0, 1).unwrap(),
                 TimeInterval::new_unchecked(
                     1_671_868_800_000 + i64::from(time_shift_millis),
                     1_672_041_600_000 + i64::from(time_shift_millis),
@@ -1478,6 +1470,12 @@ mod tests {
             .get_u8()
             .unwrap();
 
+        let tiling_strat = exe_ctx.tiling_specification().strategy(
+            query_processor
+                .raster_result_descriptor()
+                .tiling_geo_transform(),
+        );
+
         raster_stream_to_geotiff_bytes(
             query_processor,
             query_rectangle,
@@ -1495,7 +1493,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            exe_ctx.tiling_specification(),
+            tiling_strat,
         )
         .await
     }
@@ -1528,9 +1526,7 @@ mod tests {
 
         // query the newly created dataset
         let dataset_operator = GdalSource {
-            params: GdalSourceParameters {
-                data: response.dataset.into(),
-            },
+            params: GdalSourceParameters::new(response.dataset.into()),
         }
         .boxed();
         let dataset_result = raster_operator_to_geotiff_bytes(
@@ -1614,10 +1610,5 @@ mod tests {
             "Result Descriptor field 'bbox' is None",
         )
         .await;
-    }
-
-    fn test_raster_layer_to_dataset_no_spatial_resolution_tiling_spec() -> TilingSpecification {
-        let mock_source = MockRasterWorkflowLayerDescription::new(false, 0);
-        mock_source.tiling_specification
     }
 }

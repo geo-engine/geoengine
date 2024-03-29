@@ -1903,7 +1903,7 @@ mod tests {
     use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, Measurement, SpatialResolution, TimeGranularity,
+        BoundingBox2D, FeatureData, Measurement, TimeGranularity,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
@@ -2089,10 +2089,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -2144,10 +2143,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into()).unwrap(),
                     Default::default(),
-                    SpatialResolution::new(1., 1.).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -2193,10 +2191,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (5., 5.).into()).unwrap(),
                     Default::default(),
-                    SpatialResolution::new(1., 1.).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -2247,10 +2244,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -2333,10 +2329,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -2433,10 +2428,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -2536,10 +2530,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -2690,10 +2683,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -2865,10 +2857,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -4051,10 +4042,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -4173,10 +4163,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 2.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -4383,10 +4372,9 @@ mod tests {
         let context1 = MockQueryContext::new(ChunkByteSize::MIN);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     query_bbox,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context1,
@@ -4418,10 +4406,9 @@ mod tests {
         let context = MockQueryContext::new((1_650).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     query_bbox,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -4536,10 +4523,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MIN);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     query_bbox,
                     Default::default(),
-                    SpatialResolution::new(1., 1.).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -4626,10 +4612,9 @@ mod tests {
         let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     query_bbox,
                     Default::default(),
-                    SpatialResolution::new(1., 1.).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -4747,10 +4732,9 @@ mod tests {
         let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     query_bbox,
                     Default::default(),
-                    SpatialResolution::new(1., 1.).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -4875,10 +4859,9 @@ mod tests {
         let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     query_bbox,
                     Default::default(),
-                    SpatialResolution::new(1., 1.).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -5001,10 +4984,9 @@ mod tests {
         let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     query_bbox,
                     Default::default(),
-                    SpatialResolution::new(1., 1.).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -5127,10 +5109,9 @@ mod tests {
         let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     query_bbox,
                     Default::default(),
-                    SpatialResolution::new(1., 1.).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -5249,10 +5230,9 @@ mod tests {
         let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     query_bbox,
                     Default::default(),
-                    SpatialResolution::new(1., 1.).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -5384,10 +5364,9 @@ mod tests {
         let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     query_bbox,
                     Default::default(),
-                    SpatialResolution::new(1., 1.).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -5505,10 +5484,9 @@ mod tests {
         let context = MockQueryContext::new((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     query_bbox,
                     Default::default(),
-                    SpatialResolution::new(1., 1.).unwrap(),
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -5619,10 +5597,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -5749,10 +5726,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -5868,10 +5844,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -5987,10 +5962,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -6110,10 +6084,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -6232,10 +6205,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -6369,10 +6341,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -6488,10 +6459,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -6599,10 +6569,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -6696,10 +6665,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -6790,10 +6758,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -6884,10 +6851,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,
@@ -6978,10 +6944,9 @@ mod tests {
         let context = MockQueryContext::new(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &context,

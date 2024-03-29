@@ -366,7 +366,7 @@ mod tests {
 
     use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
+        BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, TimeInterval,
     };
     use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -474,10 +474,9 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        let query_rectangle = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
@@ -532,10 +531,9 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        let query_rectangle = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
@@ -601,10 +599,9 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        let query_rectangle = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
@@ -691,10 +688,9 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        let query_rectangle = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
 
@@ -775,10 +771,9 @@ mod tests {
         .await
         .unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        let query_rectangle = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((-10., -10.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
 

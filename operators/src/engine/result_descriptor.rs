@@ -7,9 +7,7 @@ use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, PlotSeriesSelection, QueryAttributeSelection, QueryRectangle,
     SpatialGridQueryRectangle, SpatialPartition2D, TimeInterval, VectorSpatialQueryRectangle,
 };
-use geoengine_datatypes::raster::{
-    GeoTransform, GridBoundingBox2D, GridShape2D, TilingSpecification, TilingStrategy,
-};
+use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, GridShape2D, TilingStrategy};
 use geoengine_datatypes::util::ByteSize;
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
@@ -78,8 +76,8 @@ pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
     pub time: Option<TimeInterval>,
-    pub geo_transform: GeoTransform,
-    pub pixel_bounds: GridBoundingBox2D,
+    pub geo_transform_x: GeoTransform,
+    pub pixel_bounds_x: GridBoundingBox2D,
     pub bands: RasterBandDescriptors,
 }
 
@@ -147,55 +145,60 @@ impl ResultDescriptor for RasterResultDescriptor {
 }
 
 impl RasterResultDescriptor {
+    /// create a new `RasterResultDescriptor`
+    pub fn new(
+        data_type: RasterDataType,
+        spatial_reference: SpatialReferenceOption,
+        time: Option<TimeInterval>,
+        geo_transform: GeoTransform,
+        pixel_bounds: GridBoundingBox2D,
+        bands: RasterBandDescriptors,
+    ) -> Self {
+        Self {
+            data_type,
+            spatial_reference,
+            time,
+            geo_transform_x: geo_transform,
+            pixel_bounds_x: pixel_bounds,
+            bands,
+        }
+    }
+
     /// Returns the geo transform of the data, i.e. the transformation from pixel coordinates to world coordinates.
-    pub fn geo_transform(&self) -> GeoTransform {
-        self.geo_transform
+    pub fn not_normalized_geo_transform(&self) -> GeoTransform {
+        self.geo_transform_x
     }
 
     /// Returns the tiling origin of the data, i.e. the upper left corner of the pixel nearest to zero.
     pub fn tiling_origin(&self) -> Coordinate2D {
-        self.geo_transform
-            .grid_idx_to_pixel_upper_left_coordinate_2d(self.geo_transform.nearest_pixel_to_zero())
+        self.tiling_geo_transform().origin_coordinate
     }
 
     pub fn tiling_pixel_bounds(&self) -> GridBoundingBox2D {
-        self.geo_transform
-            .shape_to_nearest_to_zero_based(&self.pixel_bounds)
+        self.geo_transform_x
+            .shape_to_nearest_to_zero_based(&self.pixel_bounds_x)
     }
 
     pub fn tiling_geo_transform(&self) -> GeoTransform {
-        self.geo_transform.nearest_pixel_to_zero_based()
-    }
-
-    /// Returns the data tiling specification for the given tile size in pixels.
-    pub fn generate_data_tiling_spec(
-        &self,
-        tile_size_in_pixels: GridShape2D,
-    ) -> TilingSpecification {
-        let tiling_origin = self.tiling_origin();
-
-        TilingSpecification {
-            origin_coordinate: tiling_origin,
-            tile_size_in_pixels,
-        }
+        self.geo_transform_x.nearest_pixel_to_zero_based()
     }
 
     /// Returns the data tiling strategy for the given tile size in pixels.
-    pub fn generate_data_tiling_strategy(
+    pub fn generate_data_tiling_strategy<X: Into<GridShape2D>>(
         &self,
-        tile_size_in_pixels: GridShape2D,
+        tile_size_in_pixels: X,
     ) -> TilingStrategy {
         TilingStrategy {
-            geo_transform: self.geo_transform.nearest_pixel_to_zero_based(),
-            tile_size_in_pixels,
+            geo_transform: self.geo_transform_x.nearest_pixel_to_zero_based(),
+            tile_size_in_pixels: tile_size_in_pixels.into(),
         }
     }
 
     pub fn spatial_tiling_equals(&self, other: &Self) -> bool {
         self.spatial_reference == other.spatial_reference
             && self.tiling_origin() == other.tiling_origin()
-            && self.geo_transform.x_pixel_size() == other.geo_transform.x_pixel_size()
-            && self.geo_transform.y_pixel_size() == other.geo_transform.y_pixel_size()
+            && self.geo_transform_x.x_pixel_size() == other.geo_transform_x.x_pixel_size()
+            && self.geo_transform_x.y_pixel_size() == other.geo_transform_x.y_pixel_size()
     }
 
     /// Returns `true` if the spatial reference, tiling origin and resolution are the same.
@@ -204,8 +207,8 @@ impl RasterResultDescriptor {
     }
 
     pub fn spatial_bounds(&self) -> SpatialPartition2D {
-        self.geo_transform
-            .grid_to_spatial_bounds(&self.pixel_bounds)
+        self.geo_transform_x
+            .grid_to_spatial_bounds(&self.pixel_bounds_x)
     }
 
     pub fn with_datatype_and_num_bands(
@@ -218,8 +221,8 @@ impl RasterResultDescriptor {
             data_type,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: None,
-            geo_transform,
-            pixel_bounds,
+            geo_transform_x: geo_transform,
+            pixel_bounds_x: pixel_bounds,
             bands: RasterBandDescriptors::new(
                 (0..num_bands)
                     .map(|n| RasterBandDescriptor::new(format!("{n}"), Measurement::Unitless))
@@ -812,8 +815,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: None,
-            geo_transform: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.3, -0.3),
-            pixel_bounds: GridShape2D::new([36, 30]).bounding_box(),
+            geo_transform_x: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.3, -0.3),
+            pixel_bounds_x: GridShape2D::new([36, 30]).bounding_box(),
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "foo".into(),
                 Measurement::Unitless,
@@ -833,8 +836,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: None,
-            geo_transform: GeoTransform::new(Coordinate2D::new(-15., 15.), 0.5, -0.5),
-            pixel_bounds: GridShape2D::new([50, 50]).bounding_box(),
+            geo_transform_x: GeoTransform::new(Coordinate2D::new(-15., 15.), 0.5, -0.5),
+            pixel_bounds_x: GridShape2D::new([50, 50]).bounding_box(),
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "foo".into(),
                 Measurement::Unitless,
@@ -846,8 +849,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: None,
-            geo_transform: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.5, -0.5),
-            pixel_bounds: GridShape2D::new([9, 11]).bounding_box(),
+            geo_transform_x: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.5, -0.5),
+            pixel_bounds_x: GridShape2D::new([9, 11]).bounding_box(),
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "foo".into(),
                 Measurement::Unitless,
@@ -856,20 +859,22 @@ mod tests {
         };
 
         assert!(descriptor.spatial_tiling_equals(&descriptor2));
-        fn it_checks_duplicate_bands() {
-            assert!(RasterBandDescriptors::new(vec![
-                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
-                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
-            ])
-            .is_ok());
+    }
 
-            assert!(RasterBandDescriptors::new(vec![
-                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
-                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
-                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
-            ])
-            .is_err());
-        }
+    #[test]
+    fn it_checks_duplicate_bands() {
+        assert!(RasterBandDescriptors::new(vec![
+            RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+            RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+        ])
+        .is_ok());
+
+        assert!(RasterBandDescriptors::new(vec![
+            RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+            RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+            RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+        ])
+        .is_err());
     }
 
     #[test]

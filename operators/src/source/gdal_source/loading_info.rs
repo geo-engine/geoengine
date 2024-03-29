@@ -498,11 +498,8 @@ pub struct GdalLoadingInfoTemporalSlice {
 mod tests {
     use geoengine_datatypes::{
         hashmap,
-        primitives::{
-            BandSelection, Coordinate2D, DateTime, DateTimeParseFormat, SpatialPartition2D,
-            SpatialResolution, TimeGranularity,
-        },
-        raster::{BoundedGrid, GeoTransform, GridShape2D, RasterDataType},
+        primitives::{BandSelection, DateTime, DateTimeParseFormat, TimeGranularity},
+        raster::{BoundedGrid, GeoTransform, GridBoundingBox2D, GridShape2D, RasterDataType},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
@@ -522,8 +519,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
-                pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
+                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -568,8 +565,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
-                pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
+                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );
@@ -581,9 +578,8 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::with_partition_and_resolution(
-                    SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
-                    SpatialResolution::one(),
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::new_unchecked(0, 30),
                     BandSelection::first()
                 ))
@@ -621,9 +617,8 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::with_partition_and_resolution(
-                    SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
-                    SpatialResolution::one(),
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::default(),
                     BandSelection::first()
                 ))
@@ -663,9 +658,8 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::with_partition_and_resolution(
-                    SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
-                    SpatialResolution::one(),
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::new_unchecked(-10, -5),
                     BandSelection::first()
                 ))
@@ -690,9 +684,8 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::with_partition_and_resolution(
-                    SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
-                    SpatialResolution::one(),
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::new_unchecked(50, 55),
                     BandSelection::first()
                 ))
@@ -717,9 +710,8 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::with_partition_and_resolution(
-                    SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
-                    SpatialResolution::one(),
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::new_unchecked(0, 22),
                     BandSelection::first()
                 ))
@@ -753,9 +745,8 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::with_partition_and_resolution(
-                    SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
-                    SpatialResolution::one(),
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::new_unchecked(0, 20),
                     BandSelection::first()
                 ))
@@ -793,8 +784,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
-                pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
+                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: vec![
@@ -861,17 +852,16 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
-                pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
+                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band()
             }
         );
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::with_partition_and_resolution(
-                    SpatialPartition2D::new_unchecked((0., 1.).into(), (1., 0.).into()),
-                    SpatialResolution::one(),
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::new_unchecked(0, 3),
                     BandSelection::first()
                 ))
@@ -905,8 +895,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform: GeoTransform::new((0., 0.).into(), 1., -1.),
-                pixel_bounds: GridShape2D::new_2d(128, 128).bounding_box(),
+                geo_transform_x: GeoTransform::new((0., 0.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(128, 128).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -934,10 +924,8 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
-            SpatialResolution::one(),
-            Coordinate2D::new(0., 0.), // FIXME: is this correct here?
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-128, 0], [-1, 127]).unwrap(),
             TimeInterval::new(time_start, time_end).unwrap(),
             BandSelection::first(),
         );
@@ -974,8 +962,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
-                pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
+                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -1003,9 +991,8 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let query = RasterQueryRectangle::with_partition_and_resolution(
-            SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
-            SpatialResolution::one(),
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-128, 0], [-1, 127]).unwrap(),
             TimeInterval::new(time_start, time_end).unwrap(),
             BandSelection::first(),
         );
@@ -1042,8 +1029,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform: GeoTransform::new((-180., -90.).into(), 1., -1.),
-                pixel_bounds: GridShape2D::new_2d(180, 360).bounding_box(),
+                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -1071,10 +1058,8 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
-            SpatialResolution::one(),
-            Coordinate2D::new(0., 0.), // FIXME: is this correct here?
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-128, 0], [-1, 127]).unwrap(),
             TimeInterval::new_unchecked(
                 TimeInstance::from(DateTime::new_utc(2009, 7, 1, 0, 0, 0)),
                 TimeInstance::from(DateTime::new_utc(2013, 3, 1, 0, 0, 0)),

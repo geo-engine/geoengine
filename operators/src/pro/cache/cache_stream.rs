@@ -165,11 +165,10 @@ mod tests {
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         primitives::{
-            BandSelection, BoundingBox2D, CacheHint, ColumnSelection, Coordinate2D, FeatureData,
-            MultiPoint, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-            VectorQueryRectangle,
+            BandSelection, BoundingBox2D, CacheHint, ColumnSelection, FeatureData, MultiPoint,
+            RasterQueryRectangle, TimeInterval, VectorQueryRectangle,
         },
-        raster::{GeoTransform, Grid2D, GridIdx2D, RasterTile2D},
+        raster::{GeoTransform, Grid2D, GridBoundingBox2D, GridIdx2D, RasterTile2D},
     };
 
     fn create_test_raster_data() -> Vec<CompressedRasterTile2D<u8>> {
@@ -224,10 +223,8 @@ mod tests {
     #[test]
     fn test_cache_stream_inner_raster() {
         let data = Arc::new(create_test_raster_data());
-        let query = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((2., -2.).into(), (8., -8.).into()),
-            SpatialResolution::zero_point_five(),
-            Coordinate2D::new(0., 0.),
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([4, 4], [15, 15]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
         );
@@ -246,10 +243,9 @@ mod tests {
     #[test]
     fn test_cache_stream_inner_vector() {
         let data = Arc::new(create_test_vecor_data());
-        let query = VectorQueryRectangle::with_bounds_and_resolution(
+        let query = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new_unchecked((2.1, 2.1).into(), (7.9, 7.9).into()),
             TimeInterval::new_unchecked(0, 10),
-            SpatialResolution::zero_point_five(),
             ColumnSelection::all(),
         );
 

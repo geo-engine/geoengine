@@ -498,7 +498,7 @@ where
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
         let (time_interval, state) = self.shift.shift(query.time_interval)?;
         let query =
-            RasterQueryRectangle::new(query.spatial_query, time_interval, BandSelection::first());
+            RasterQueryRectangle::new(query.spatial_query, time_interval, BandSelection::first()); // TODO: use grid bounds?
         let stream = self.processor.raster_query(query, ctx).await?;
 
         let stream = stream.map(move |raster| {
@@ -534,12 +534,11 @@ mod tests {
         collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection},
         dataset::NamedData,
         primitives::{
-            BoundingBox2D, CacheHint, Coordinate2D, DateTime, MultiPoint, SpatialPartition2D,
-            SpatialResolution, TimeGranularity,
+            BoundingBox2D, CacheHint, Coordinate2D, DateTime, MultiPoint, TimeGranularity,
         },
         raster::{
-            BoundedGrid, EmptyGrid2D, GeoTransform, GridOrEmpty, GridShape2D, RasterDataType,
-            TileInformation,
+            BoundedGrid, EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridOrEmpty, GridShape2D,
+            RasterDataType, TileInformation, TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -551,9 +550,9 @@ mod tests {
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Raster(
                     GdalSource {
-                        params: GdalSourceParameters {
-                            data: NamedData::with_system_name("test-raster"),
-                        },
+                        params: GdalSourceParameters::new(NamedData::with_system_name(
+                            "test-raster",
+                        )),
                     }
                     .boxed(),
                 ),
@@ -582,7 +581,8 @@ mod tests {
                     "source": {
                         "type": "GdalSource",
                         "params": {
-                            "data": "test-raster"
+                            "data": "test-raster",
+                            "overviewLevel": null
                         }
                     }
                 }
@@ -600,9 +600,9 @@ mod tests {
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Raster(
                     GdalSource {
-                        params: GdalSourceParameters {
-                            data: NamedData::with_system_name("test-raster"),
-                        },
+                        params: GdalSourceParameters::new(NamedData::with_system_name(
+                            "test-raster",
+                        )),
                     }
                     .boxed(),
                 ),
@@ -627,7 +627,8 @@ mod tests {
                     "source": {
                         "type": "GdalSource",
                         "params": {
-                            "data": "test-raster"
+                            "data": "test-raster",
+                            "overviewLevel": null
                         }
                     }
                 }
@@ -694,14 +695,13 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2009, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2012, 1, 1, 0, 0, 0),
                     )
                     .unwrap(),
-                    SpatialResolution::one(),
                     ColumnSelection::all(),
                 ),
                 &query_context,
@@ -783,14 +783,13 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2011, 1, 1, 0, 0, 0),
                     )
                     .unwrap(),
-                    SpatialResolution::one(),
                     ColumnSelection::all(),
                 ),
                 &query_context,
@@ -835,11 +834,11 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
-            pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
+            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
+            pixel_bounds_x: GridShape2D::new_2d(3, 4).bounding_box(),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
 
         let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size_in_pixels));
         let raster_tiles = vec![
@@ -964,10 +963,8 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                    SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-                    SpatialResolution::one(),
-                    execution_context.tiling_specification.origin_coordinate,
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2011, 1, 1, 0, 0, 0),
@@ -1011,11 +1008,11 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
-            pixel_bounds: GridShape2D::new_2d(3, 4).bounding_box(),
+            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds_x: GridShape2D::new_2d(3, 4).bounding_box(),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = result_descriptor.generate_data_tiling_spec(tile_size_in_pixels);
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
 
         let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size_in_pixels));
         let raster_tiles = vec![
@@ -1137,10 +1134,8 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                    SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-                    SpatialResolution::one(),
-                    execution_context.tiling_specification.origin_coordinate,
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new_min_max(-30, -1, 0, 39).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2011, 1, 1, 0, 0, 0),
@@ -1181,9 +1176,7 @@ mod tests {
         let mut execution_context = MockExecutionContext::test_default();
 
         let ndvi_source = GdalSource {
-            params: GdalSourceParameters {
-                data: add_ndvi_dataset(&mut execution_context),
-            },
+            params: GdalSourceParameters::new(add_ndvi_dataset(&mut execution_context)),
         }
         .boxed();
 
@@ -1221,10 +1214,8 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                    SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
-                    SpatialResolution::one(),
-                    execution_context.tiling_specification.origin_coordinate,
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(), // Note: this is not the actual bounding box of the NDVI dataset. The pixel size is 0.1!
                     TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
                     BandSelection::first(),
                 ),
@@ -1254,9 +1245,7 @@ mod tests {
         let mut execution_context = MockExecutionContext::test_default();
 
         let ndvi_source = GdalSource {
-            params: GdalSourceParameters {
-                data: add_ndvi_dataset(&mut execution_context),
-            },
+            params: GdalSourceParameters::new(add_ndvi_dataset(&mut execution_context)),
         }
         .boxed();
 
@@ -1283,10 +1272,8 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                    SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
-                    SpatialResolution::one(),
-                    execution_context.tiling_specification.origin_coordinate,
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(), // Note: this is not the actual bounding box of the NDVI dataset. The pixel size is 0.1!
                     TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
                     BandSelection::first(),
                 ),

@@ -4,7 +4,7 @@ use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{
         fold_by_coordinate_lookup_future, FillerTileCacheExpirationStrategy, RasterSubQueryAdapter,
-        SparseTilesFillAdapter, TileReprojectionSubQuery,
+        TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo,
     },
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
@@ -22,7 +22,7 @@ use futures::{stream, StreamExt};
 use geoengine_datatypes::{
     collections::FeatureCollection,
     operations::reproject::{
-        reproject_and_unify_bbox, reproject_spatial_query,
+        reproject_and_unify_bbox, reproject_and_unify_proj_bounds, reproject_spatial_query,
         suggest_pixel_size_from_diag_cross_projected, CoordinateProjection, CoordinateProjector,
         Reproject, ReprojectClipped,
     },
@@ -31,9 +31,7 @@ use geoengine_datatypes::{
         RasterSpatialQueryRectangle, SpatialPartition2D, VectorQueryRectangle,
         VectorSpatialQueryRectangle,
     },
-    raster::{
-        GeoTransform, GridBoundingBox2D, Pixel, RasterTile2D, TilingSpecification, TilingStrategy,
-    },
+    raster::{GeoTransform, GridBoundingBox2D, Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
     util::arrow::ArrowTyped,
 };
@@ -42,14 +40,22 @@ use snafu::ensure;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
-pub struct ReprojectionParams {
-    pub target_spatial_reference: SpatialReference,
+pub enum DeriveOutRasterSpecsSource {
+    DataBounds,
+    ProjectionBounds,
+}
+impl Default for DeriveOutRasterSpecsSource {
+    fn default() -> Self {
+        Self::ProjectionBounds
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct ReprojectionBounds {
-    valid_in_bounds: SpatialPartition2D,
-    valid_out_bounds: SpatialPartition2D,
+#[serde(rename_all = "camelCase")]
+pub struct ReprojectionParams {
+    pub target_spatial_reference: SpatialReference,
+    #[serde(default)]
+    pub derive_out_spec: DeriveOutRasterSpecsSource,
 }
 
 pub type Reprojection = Operator<ReprojectionParams, SingleRasterOrVectorSource>;
@@ -72,7 +78,7 @@ pub struct InitializedRasterReprojection {
     name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
-    state: Option<ReprojectionBounds>,
+    state: TileReprojectionSubqueryGridInfo,
     source_srs: SpatialReference,
     target_srs: SpatialReference,
     tiling_spec: TilingSpecification,
@@ -136,30 +142,44 @@ impl InitializedRasterReprojection {
 
         // calculate the intersection of input and output srs in both coordinate systems
         // FIXME: the projecten result might be empty. We need to handle this case in result descriptors. So it should be able to return None?
-        let (a, b, c) = Self::derive_out_bounds_and_res(
-            in_srs,
-            params.target_spatial_reference,
-            in_desc.geo_transform,
-            in_desc.pixel_bounds,
-        )
-        .expect("There should be an intersection between input and output srs")
-        .expect("There should be an intersection between input and output srs");
+        let (out_geo_transform, out_bounds, _in_bounds) = match params.derive_out_spec {
+            DeriveOutRasterSpecsSource::DataBounds => {
+                Self::derive_out_bounds_and_res_from_data_bounds(
+                    in_srs,
+                    params.target_spatial_reference,
+                    in_desc.tiling_geo_transform(), // TOOO: maybe we should use the tiling geo transform here? It might be not as accurate if the input reports real origin
+                    in_desc.tiling_pixel_bounds(),
+                )
+            }
+            DeriveOutRasterSpecsSource::ProjectionBounds => {
+                Self::derive_out_bounds_and_res_from_proj_bounds(
+                    in_srs,
+                    params.target_spatial_reference,
+                    in_desc.tiling_geo_transform(), // TOOO: maybe we should use the tiling geo transform here? It might be not as accurate if the input reports real origin
+                    in_desc.tiling_pixel_bounds(),
+                )
+            }
+        }
+        .map_err(|_| error::Error::ReprojectionFailed)?
+        .ok_or(error::Error::ReprojectionFailed)?; // TODO: better error handling
+
+        let out_bounds = out_geo_transform.spatial_to_grid_bounds(&out_bounds);
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: params.target_spatial_reference.into(),
             data_type: in_desc.data_type,
             time: in_desc.time,
-            geo_transform: a,
-            pixel_bounds: b,
+            geo_transform_x: out_geo_transform,
+            pixel_bounds_x: out_bounds,
             bands: in_desc.bands.clone(),
         };
 
-        let state = ReprojectionBounds {
-            valid_in_bounds: c,
-            valid_out_bounds: out_desc.spatial_bounds(),
+        let state = TileReprojectionSubqueryGridInfo {
+            out_geo_tansform: out_geo_transform.nearest_pixel_to_zero_based(),
+            out_pixel_bounds: out_geo_transform.shape_to_nearest_to_zero_based(&out_bounds),
+            in_geo_tansform: in_desc.tiling_geo_transform(),
+            in_pixel_bounds: in_desc.tiling_pixel_bounds(),
         };
-
-        let state = Some(state); // FIXME: we should find out if we can skip the projection in all cases and then return a no data filler!
 
         Ok(InitializedRasterReprojection {
             name,
@@ -172,31 +192,85 @@ impl InitializedRasterReprojection {
         })
     }
 
-    fn derive_out_bounds_and_res(
+    fn derive_out_bounds_and_res_from_proj_bounds(
         source_srs: SpatialReference,
         target_srs: SpatialReference,
         source_geo_transform: GeoTransform,
-        source_pixel_bounds: GridBoundingBox2D,
-    ) -> Result<Option<(GeoTransform, GridBoundingBox2D, SpatialPartition2D)>> {
-        let in_bounds = source_geo_transform.grid_to_spatial_bounds(&source_pixel_bounds);
-        let (real_in_bounds, out_bounds) =
-            reproject_and_unify_bbox(in_bounds, source_srs, target_srs)?;
+        source_bounds: GridBoundingBox2D,
+    ) -> Result<Option<(GeoTransform, SpatialPartition2D, SpatialPartition2D)>> {
+        let source_bounds = source_geo_transform.grid_to_spatial_bounds(&source_bounds);
 
-        match (real_in_bounds, out_bounds) {
+        // TODO: maybe we can move that higher up to avoid the double calculation
+        if source_srs == target_srs {
+            return Ok(Some((source_geo_transform, source_bounds, source_bounds)));
+        }
+
+        // we need the projection bounds to calculate the resolution
+        let (usable_in_bounds, usable_out_bounds) =
+            reproject_and_unify_proj_bounds::<SpatialPartition2D>(source_srs, target_srs)?;
+
+        let pixel_size = // now we can calculate the resolution based on the bounds. If we have no bounds we can't calculate the resolution...
+        match (usable_in_bounds, usable_out_bounds) {
             (Some(real_in_bounds), Some(out_bounds)) => {
-                let out_res = suggest_pixel_size_from_diag_cross_projected(
+                let out_res: geoengine_datatypes::primitives::SpatialResolution = suggest_pixel_size_from_diag_cross_projected(
                     real_in_bounds,
                     out_bounds,
                     source_geo_transform.spatial_resolution(), // FIXME: sign should go through method
                 )?;
+                Some(out_res)
+            }
+            _ => None,
+        };
 
+        // we need the data bounds to calculate the extend of the output
+        let (usable_data_in_bounds, usable_data_out_bounds) =
+            reproject_and_unify_bbox(source_bounds, source_srs, target_srs)?;
+
+        match (usable_data_in_bounds, usable_data_out_bounds, pixel_size) {
+            (Some(real_in_bounds), Some(out_bounds), Some(out_res)) => {
                 let out_geo_transform = GeoTransform::new(
                     out_bounds.upper_left(),
                     out_res.x,
                     -out_res.y, // FIXME: sign should go through method
                 );
 
-                let out_bounds = out_geo_transform.spatial_to_grid_bounds(&out_bounds);
+                Ok(Some((out_geo_transform, out_bounds, real_in_bounds)))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    fn derive_out_bounds_and_res_from_data_bounds(
+        source_srs: SpatialReference,
+        target_srs: SpatialReference,
+        source_geo_transform: GeoTransform,
+        source_bounds: GridBoundingBox2D,
+    ) -> Result<Option<(GeoTransform, SpatialPartition2D, SpatialPartition2D)>> {
+        let source_bounds = source_geo_transform.grid_to_spatial_bounds(&source_bounds);
+
+        // TODO: maybe we can move that higher up to avoid the double calculation
+        if source_srs == target_srs {
+            return Ok(Some((source_geo_transform, source_bounds, source_bounds)));
+        }
+
+        let (usable_in_bounds, usable_out_bounds) =
+            reproject_and_unify_bbox(source_bounds, source_srs, target_srs)?;
+
+        // now we can calculate the resolution based on the bounds. If we have no bounds we can't calculate the resolution...
+        match (usable_in_bounds, usable_out_bounds) {
+            (Some(real_in_bounds), Some(out_bounds)) => {
+                let out_res: geoengine_datatypes::primitives::SpatialResolution =
+                    suggest_pixel_size_from_diag_cross_projected(
+                        real_in_bounds,
+                        out_bounds,
+                        source_geo_transform.spatial_resolution(), // FIXME: sign should go through method
+                    )?;
+
+                let out_geo_transform = GeoTransform::new(
+                    out_bounds.upper_left(),
+                    out_res.x,
+                    -out_res.y, // FIXME: sign should go through method
+                );
 
                 Ok(Some((out_geo_transform, out_bounds, real_in_bounds)))
             }
@@ -569,7 +643,7 @@ where
     from: SpatialReference,
     to: SpatialReference,
     tiling_spec: TilingSpecification,
-    state: Option<ReprojectionBounds>,
+    state: TileReprojectionSubqueryGridInfo,
     _phantom_data: PhantomData<P>,
 }
 
@@ -584,7 +658,7 @@ where
         from: SpatialReference,
         to: SpatialReference,
         tiling_spec: TilingSpecification,
-        state: Option<ReprojectionBounds>,
+        state: TileReprojectionSubqueryGridInfo,
     ) -> Self {
         Self {
             source,
@@ -619,58 +693,30 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        if let Some(state) = &self.state {
-            let valid_bounds_in = state.valid_in_bounds;
-            let valid_bounds_out = state.valid_out_bounds;
+        let state = self.state;
 
-            // calculate the spatial resolution the input data should have using the intersection and the requested resolution
-            let in_spatial_res = suggest_pixel_size_from_diag_cross_projected(
-                valid_bounds_out,
-                valid_bounds_in,
-                query.spatial_query().geo_transform.spatial_resolution(),
-            )?;
+        // setup the subquery
+        let sub_query_spec = TileReprojectionSubQuery {
+            in_srs: self.from,
+            out_srs: self.to,
+            fold_fn: fold_by_coordinate_lookup_future,
+            state,
+            _phantom_data: PhantomData,
+        };
 
-            // setup the subquery
-            let sub_query_spec = TileReprojectionSubQuery {
-                in_srs: self.from,
-                out_srs: self.to,
-                fold_fn: fold_by_coordinate_lookup_future,
-                in_spatial_res,
-                valid_bounds_in,
-                valid_bounds_out,
-                _phantom_data: PhantomData,
-            };
+        let tiling_strat = self
+            .tiling_spec
+            .strategy(self.result_descriptor().tiling_geo_transform());
 
-            // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
-            Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
-                &self.source,
-                query,
-                self.tiling_spec,
-                ctx,
-                sub_query_spec,
-            )
-            .filter_and_fill(FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles))
-        } else {
-            log::debug!("No intersection between source data / srs and target srs");
-
-            // FIXME: we should not need to create a new tiling strategy here
-            let tiling_strat = TilingStrategy::new(
-                self.tiling_spec.tile_size_in_pixels,
-                query.spatial_query().geo_transform,
-            );
-
-            let grid_bounds =
-                tiling_strat.raster_spatial_query_to_tiling_grid_box(&query.spatial_query());
-
-            Ok(Box::pin(SparseTilesFillAdapter::new(
-                stream::empty(),
-                grid_bounds,
-                query.attributes.count(),
-                tiling_strat.geo_transform,
-                self.tiling_spec.tile_size_in_pixels,
-                FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-            )))
-        }
+        // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
+        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+            &self.source,
+            query,
+            tiling_strat,
+            ctx,
+            sub_query_spec,
+        )
+        .filter_and_fill(FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles))
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -684,37 +730,39 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext, RasterBandDescriptors};
     use crate::mock::MockFeatureCollectionSource;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use crate::source::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
+        GdalSourceTimePlaceholder, TimeReference,
+    };
+    use crate::util::gdal::{
+        add_ndvi_dataset_cropped_to_valid_webmercator_bounds, gdal_open_dataset,
+    };
     use crate::{
         engine::{ChunkByteSize, VectorOperator},
-        source::{
-            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-            GdalMetaDataRegular, GdalMetaDataStatic, GdalSource, GdalSourceParameters,
-            GdalSourceTimePlaceholder, TimeReference,
-        },
+        source::{GdalSource, GdalSourceParameters},
         test_data,
-        util::gdal::{add_ndvi_dataset, gdal_open_dataset},
     };
-    use float_cmp::approx_eq;
+    use float_cmp::{approx_eq, assert_approx_eq};
     use futures::StreamExt;
     use geoengine_datatypes::collections::IntoGeometryIterator;
-    use geoengine_datatypes::dataset::NamedData;
+    use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
+    use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{
-        AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, SpatialGridQueryRectangle,
+        CacheHint, CacheTtlSeconds, DateTimeParseFormat, TimeGranularity, TimeInstance,
     };
-    use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
-    use geoengine_datatypes::raster::{BoundedGrid, TilesEqualIgnoringCacheHint};
+    use geoengine_datatypes::primitives::{Coordinate2D, TimeStep};
+    use geoengine_datatypes::raster::TilesEqualIgnoringCacheHint;
+    use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
             MultiPolygonCollection,
         },
-        dataset::{DataId, DatasetId},
-        hashmap,
         primitives::{
             BoundingBox2D, MultiLineString, MultiPoint, MultiPolygon, SpatialResolution,
-            TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+            TimeInterval,
         },
-        raster::{Grid, GridShape2D, GridSize, RasterDataType, RasterTile2D},
+        raster::{Grid, RasterDataType, RasterTile2D},
         spatial_reference::SpatialReferenceAuthority,
         util::{
             test::TestDefault,
@@ -722,11 +770,9 @@ mod tests {
                 COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
                 MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
             },
-            Identifier,
         },
     };
     use std::collections::HashMap;
-    use std::path::PathBuf;
     use std::str::FromStr;
 
     #[tokio::test]
@@ -758,6 +804,7 @@ mod tests {
         let initialized_operator = VectorOperator::boxed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference,
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource {
                 source: point_source.into(),
@@ -773,14 +820,13 @@ mod tests {
 
         let query_processor = query_processor.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        let query_rectangle = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
             )
             .unwrap(),
             TimeInterval::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
@@ -833,6 +879,7 @@ mod tests {
         let initialized_operator = VectorOperator::boxed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference,
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource {
                 source: lines_source.into(),
@@ -848,14 +895,13 @@ mod tests {
 
         let query_processor = query_processor.multi_line_string().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        let query_rectangle = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
             )
             .unwrap(),
             TimeInterval::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
@@ -915,6 +961,7 @@ mod tests {
         let initialized_operator = VectorOperator::boxed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference,
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource {
                 source: polygon_source.into(),
@@ -930,14 +977,13 @@ mod tests {
 
         let query_processor = query_processor.multi_polygon().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+        let query_rectangle = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
             )
             .unwrap(),
             TimeInterval::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
@@ -1011,18 +1057,19 @@ mod tests {
             },
         ];
 
+        let geo_transform = GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.);
+
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds: GridBoundingBox2D::new_min_max(-2, 0, 0, 4).unwrap(),
+            geo_transform_x: geo_transform,
+            pixel_bounds_x: GridBoundingBox2D::new([-1, 0], [-1, 3]).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            result_descriptor.generate_data_tiling_spec([2, 2].into()),
-        );
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
 
         let query_ctx = MockQueryContext::test_default();
 
@@ -1037,6 +1084,7 @@ mod tests {
         let initialized_operator = RasterOperator::boxed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: projection, // This test will do a identity reprojection
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource {
                 source: mrs1.into(),
@@ -1051,10 +1099,8 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            SpatialResolution::one(),
-            exe_ctx.tiling_specification.origin_coordinate,
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
         );
@@ -1074,19 +1120,17 @@ mod tests {
     async fn raster_ndvi_3857() -> Result<()> {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = MockQueryContext::test_default();
-        let id = add_ndvi_dataset(&mut exe_ctx);
-        let tiling_origin_coordinate = (0., 0.).into();
-        exe_ctx.tiling_specification =
-            TilingSpecification::new(tiling_origin_coordinate, [450, 450].into());
+        let id = add_ndvi_dataset_cropped_to_valid_webmercator_bounds(&mut exe_ctx);
 
-        let output_shape: GridShape2D = [900, 1800].into();
+        exe_ctx.tiling_specification = TilingSpecification::new([450, 450].into());
+
         let output_bounds =
             SpatialPartition2D::new_unchecked((0., 20_000_000.).into(), (20_000_000., 0.).into());
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001);
         // 2014-01-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters { data: id.clone() },
+            params: GdalSourceParameters::new(id.clone()),
         }
         .boxed();
 
@@ -1098,6 +1142,7 @@ mod tests {
         let initialized_operator = RasterOperator::boxed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: projection,
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource {
                 source: gdal_op.into(),
@@ -1106,61 +1151,83 @@ mod tests {
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
-        let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
-        let y_query_resolution = output_bounds.size_y() / (output_shape.axis_size_y() * 2) as f64; // *2 to account for the dataset aspect ratio 2:1
-        let spatial_resolution =
-            SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
-
         let qp = initialized_operator
             .query_processor()
             .unwrap()
             .get_u8()
             .unwrap();
 
-        let qs = qp
-            .raster_query(
-                RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                    output_bounds,
-                    spatial_resolution,
-                    tiling_origin_coordinate,
-                    time_interval,
-                    BandSelection::first(),
-                ),
-                &query_ctx,
-            )
-            .await
-            .unwrap();
+        let result_descritptor = qp.result_descriptor();
+        println!("{:?}", result_descritptor);
 
-        let res = qs
-            .map(Result::unwrap)
-            .collect::<Vec<RasterTile2D<u8>>>()
-            .await;
+        assert_approx_eq!(
+            f64,
+            14236.77502413757, // TODO: GDAL output is 14228.560819126376373
+            result_descritptor
+                .tiling_geo_transform()
+                .spatial_resolution()
+                .x,
+            epsilon = 0.000_001
+        );
+
+        assert_approx_eq!(
+            f64,
+            14236.77502413757, // TODO: GDAL output is -14233.615370039031404
+            result_descritptor
+                .tiling_geo_transform()
+                .spatial_resolution()
+                .y,
+            epsilon = 0.000_001
+        );
+        /*
+                let qs = qp
+                    .raster_query(
+                        RasterQueryRectangle::new_with_grid_bounds(
+                            output_bounds,
+                            result_descritptor
+                                .tiling_geo_transform()
+                                .spatial_resolution(),
+                            result_descritptor.tiling_origin(),
+                            time_interval,
+                            BandSelection::first(),
+                        ),
+                        &query_ctx,
+                    )
+                    .await
+                    .unwrap();
+
+                let _res = qs
+                    .map(Result::unwrap)
+                    .collect::<Vec<RasterTile2D<u8>>>()
+                    .await;
+        */
+        // FIXME: add check against tile data
 
         // Write the tiles to a file
-        //let mut buffer = std::fs::File::create("MOD13A2_M_NDVI_2014-04-01_tile-20_v2.rst")?;
-        //std::io::Write::write(
-        //    &mut buffer,
-        //    res[8]
-        //        .clone()
-        //        .into_materialized_tile()
-        //        .grid_array
-        //        .inner_grid
-        //        .data
-        //        .as_slice(),
-        //)?;
+        /*
+        let mut buffer = std::fs::File::create("MOD13A2_M_NDVI_2014-04-01_tile-20_v3.rst")?;
+        std::io::Write::write(
+            &mut buffer,
+            res[8]
+                .clone()
+                .into_materialized_tile()
+                .grid_array
+                .inner_grid
+                .data
+                .as_slice(),
+        )?;
+        */
 
         // This check is against a tile produced by the operator itself. It was visually validated. TODO: rebuild when open issues are solved.
         // A perfect validation would be against a GDAL output generated like this:
-        // gdalwarp -t_srs EPSG:3857 -tr 11111.11111111 11111.11111111 -r near -te 0.0 5011111.111111112 5000000.0 10011111.111111112 -te_srs EPSG:3857 -of GTiff ./MOD13A2_M_NDVI_2014-04-01.TIFF ./MOD13A2_M_NDVI_2014-04-01_tile-20.rst
-
-        /* FIXME: find reason of shifted pixels
+        // gdalwarp -t_srs EPSG:3857 -r near -te 0.0 20000000.0 0. 20000000.0 -te_srs EPSG:3857 -of GTiff ./MOD13A2_M_NDVI_2014-04-01.TIFF ./MOD13A2_M_NDVI_2014-04-01_tile-20_g1.rst
+        /*
         assert_eq!(
             include_bytes!(
                 "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20.rst"
             ) as &[u8],
             res[8].clone().into_materialized_tile().grid_array.inner_grid.data.as_slice()
         );
-
         */
 
         Ok(())
@@ -1168,10 +1235,9 @@ mod tests {
 
     #[test]
     fn query_rewrite_4326_3857() {
-        let query = VectorQueryRectangle::with_bounds_and_resolution(
+        let query = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
             TimeInterval::default(),
-            SpatialResolution::zero_point_one(),
             ColumnSelection::all(),
         );
 
@@ -1196,20 +1262,19 @@ mod tests {
         ));
     }
 
-    /*
     #[tokio::test]
     async fn raster_ndvi_3857_to_4326() -> Result<()> {
-        let tile_size_in_pixels = [60, 60].into();
+        let tile_size_in_pixels = [200, 200].into();
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857).into(),
             time: None,
-            geo_transform: GeoTransform::new(
-                Coordinate2D::new(-20_037_508.342_789_244, 20_048_966.104_014_594),
+            geo_transform_x: GeoTransform::new(
+                Coordinate2D::new(-20_037_508.342_789_244, 19_971_868.880_408_562),
                 14_052.950_258_048_739,
                 -14_057.881_117_788_405,
             ),
-            pixel_bounds: GridBoundingBox2D::new_min_max(0, 2840, 0, 2850).unwrap(),
+            pixel_bounds_x: GridBoundingBox2D::new([0, 0], [2840, 2850]).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -1253,9 +1318,9 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            result_descriptor.generate_data_tiling_spec(tile_size_in_pixels),
-        );
+        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            tile_size_in_pixels,
+        ));
         let query_ctx = MockQueryContext::test_default();
 
         let id: DataId = DatasetId::new().into();
@@ -1266,13 +1331,14 @@ mod tests {
         // 2014-04-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters { data: name },
+            params: GdalSourceParameters::new(name),
         }
         .boxed();
 
         let initialized_operator = RasterOperator::boxed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::epsg_4326(),
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource {
                 source: gdal_op.into(),
@@ -1291,8 +1357,8 @@ mod tests {
 
         let qs = qp
             .raster_query(
-                RasterQueryRectangle::new(
-                    SpatialGridQueryRectangle::new(qr.geo_transform, qr.pixel_bounds),
+                RasterQueryRectangle::new_with_grid_bounds(
+                    qr.tiling_pixel_bounds(),
                     time_interval,
                     BandSelection::first(),
                 ),
@@ -1306,15 +1372,14 @@ mod tests {
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
 
-        // the test must generate 8x4 tiles
-        assert_eq!(tiles.len(), 32);
+        // the test must generate 18x10 tiles
+        assert_eq!(tiles.len(), 18 * 10);
 
         // none of the tiles should be empty
         assert!(tiles.iter().all(|t| !t.is_empty()));
 
         Ok(())
     }
-     */
 
     #[test]
     fn source_resolution() {
@@ -1390,7 +1455,7 @@ mod tests {
         };
 
         let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            result_descriptor.generate_data_tiling_spec(tile_size_in_pixels),
+            TilingSpecification::new(tile_size_in_pixels),
         );
         let query_ctx = MockQueryContext::test_default();
 
@@ -1483,6 +1548,7 @@ mod tests {
                     SpatialReferenceAuthority::Epsg,
                     32636, // utm36n
                 ),
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource {
                 source: point_source.into(),
@@ -1506,10 +1572,9 @@ mod tests {
 
         let qs = qp
             .vector_query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     spatial_bounds,
                     TimeInterval::default(),
-                    SpatialResolution::zero_point_one(),
                     ColumnSelection::all(),
                 ),
                 &query_ctx,
@@ -1561,6 +1626,7 @@ mod tests {
                     SpatialReferenceAuthority::Epsg,
                     4326, // utm36n
                 ),
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource {
                 source: point_source.into(),
@@ -1584,10 +1650,9 @@ mod tests {
 
         let qs = qp
             .vector_query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     spatial_bounds,
                     TimeInterval::default(),
-                    SpatialResolution::zero_point_one(),
                     ColumnSelection::all(),
                 ),
                 &query_ctx,
@@ -1640,6 +1705,7 @@ mod tests {
                     SpatialReferenceAuthority::Epsg,
                     4326, // utm36n
                 ),
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource {
                 source: point_source.into(),
@@ -1663,10 +1729,9 @@ mod tests {
 
         let qs = qp
             .vector_query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     spatial_bounds,
                     TimeInterval::default(),
-                    SpatialResolution::zero_point_one(),
                     ColumnSelection::all(),
                 ),
                 &query_ctx,

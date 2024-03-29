@@ -5,15 +5,12 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{FutureExt, TryFutureExt};
 use geoengine_datatypes::primitives::CacheHint;
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
-    Blit, EmptyGrid, EmptyGrid2D, FromIndexFnParallel, GeoTransform, GridIdx, GridIdx2D,
+    Blit, EmptyGrid, EmptyGrid2D, FromIndexFnParallel, GridBoundingBox2D, GridIdx, GridIdx2D,
     GridIndexAccess, GridOrEmpty, GridSize, TilingStrategy,
 };
 use geoengine_datatypes::{
-    primitives::{
-        Coordinate2D, RasterQueryRectangle, SpatialPartition2D, TimeInstance, TimeInterval,
-    },
+    primitives::{RasterQueryRectangle, TimeInstance, TimeInterval},
     raster::{Pixel, RasterTile2D, TileInformation, TilingSpecification},
 };
 use num_traits::AsPrimitive;
@@ -96,32 +93,27 @@ where
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: RasterQueryRectangle,
+        _query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        let spatial_bounds = tile_info.spatial_partition();
+        let pixel_bounds = tile_info.global_pixel_bounds();
 
-        let margin_pixels = Coordinate2D::from((
-            self.neighborhood.x_radius() as f64 * tile_info.global_geo_transform.x_pixel_size(),
-            self.neighborhood.y_radius() as f64 * tile_info.global_geo_transform.y_pixel_size(),
-        ));
+        let margin_y = self.neighborhood.y_radius() as isize;
+        let margin_x = self.neighborhood.x_radius() as isize;
 
-        let enlarged_spatial_bounds = SpatialPartition2D::new(
-            spatial_bounds.upper_left() - margin_pixels,
-            spatial_bounds.lower_right() + margin_pixels,
+        let larger_bounds = GridBoundingBox2D::new_min_max(
+            pixel_bounds.y_min() - margin_y,
+            pixel_bounds.y_max() + margin_y,
+            pixel_bounds.x_min() - margin_x,
+            pixel_bounds.x_max() + margin_x,
         )?;
 
-        Ok(Some(
-            // TODO: use pixel bounds instead of spatial bounds
-            RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                enlarged_spatial_bounds,
-                query_rect.spatial_query().spatial_resolution(),
-                query_rect.spatial_query().origin_coordinate(),
-                TimeInterval::new_instant(start_time)?,
-                band_idx.into(),
-            ),
-        ))
+        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+            larger_bounds,
+            TimeInterval::new_instant(start_time)?,
+            band_idx.into(),
+        )))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {
@@ -252,25 +244,12 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
 ) -> NeighborhoodAggregateAccu<P, A> {
     // create an accumulator as a single tile that fits all the input tiles + some margin for the kernel size
 
-    // FIXME: The query origin must match the tiling strategy's origin for now. Also use grid bounds not spatial bounds.
-    assert_eq!(
-        query_rect.spatial_query().geo_transform.origin_coordinate(),
-        tiling_specification.origin_coordinate,
-        "The query origin coordinate must match the tiling strategy's origin for now."
-    );
-
     let tiling = TilingStrategy::new(
         tiling_specification.tile_size_in_pixels,
-        query_rect.spatial_query().geo_transform,
+        tile_info.global_geo_transform,
     );
 
-    let origin_coordinate = query_rect.spatial_query().spatial_partition().upper_left();
-
-    let geo_transform = GeoTransform::new(
-        origin_coordinate,
-        query_rect.spatial_query().geo_transform.x_pixel_size(),
-        query_rect.spatial_query().geo_transform.y_pixel_size(),
-    );
+    let geo_transform = tile_info.global_geo_transform;
 
     let shape = [
         tiling.tile_size_in_pixels.axis_size_y() + 2 * neighborhood.y_radius(),
@@ -353,8 +332,8 @@ mod tests {
         },
     };
     use geoengine_datatypes::{
-        primitives::{BandSelection, SpatialResolution},
-        raster::{GridBoundingBox2D, TilingStrategy},
+        primitives::BandSelection,
+        raster::{GeoTransform, GridBoundingBox2D, TilingStrategy},
         util::test::TestDefault,
     };
 
@@ -363,11 +342,9 @@ mod tests {
     fn test_create_enlarged_tile() {
         let execution_context = MockExecutionContext::test_default();
 
-        let spatial_resolution = SpatialResolution::one();
         let tiling_strategy = TilingStrategy::new_with_tiling_spec(
             execution_context.tiling_specification,
-            spatial_resolution.x,
-            -spatial_resolution.y,
+            GeoTransform::new_with_coordinate_x_y(0., 1., 0., -1.),
         );
 
         let grid_bounds = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
@@ -376,10 +353,8 @@ mod tests {
             .next()
             .unwrap();
 
-        let qrect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            tile_info.spatial_partition(),
-            spatial_resolution,
-            execution_context.tiling_specification.origin_coordinate,
+        let qrect = RasterQueryRectangle::new_with_grid_bounds(
+            tile_info.global_pixel_bounds(),
             TimeInstance::from_millis(0).unwrap().into(),
             BandSelection::first(),
         );
@@ -397,12 +372,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            tile_info.spatial_partition(),
-            SpatialPartition2D::new((0., 512.).into(), (512., 0.).into()).unwrap()
+            tile_info.global_pixel_bounds(),
+            GridBoundingBox2D::new_min_max(0, 511, 0, 511).unwrap()
         );
+
         assert_eq!(
-            tile_query_rectangle.spatial_query().spatial_partition(),
-            SpatialPartition2D::new((-2., 514.).into(), (514., -2.).into()).unwrap()
+            tile_query_rectangle.spatial_query().grid_bounds(),
+            GridBoundingBox2D::new_min_max(-2, 513, -2, 513).unwrap()
         );
 
         let accu = create_enlarged_tile::<u8, Sum>(

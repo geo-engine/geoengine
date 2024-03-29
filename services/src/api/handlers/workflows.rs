@@ -559,10 +559,21 @@ async fn raster_stream_websocket<C: ApplicationContext>(
 
     let execution_context = ctx.execution_context()?;
 
-    let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-        query.spatial_bounds,
-        query.spatial_resolution,
-        execution_context.tiling_specification().origin_coordinate,
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+    let initialized_operator = operator
+        .initialize(workflow_operator_path_root, &execution_context)
+        .await?;
+
+    let query = query.into_inner();
+
+    // TODO: use pixel bounds in the query
+    let query_bounds = initialized_operator
+        .result_descriptor()
+        .tiling_geo_transform()
+        .spatial_to_grid_bounds(&query.spatial_bounds);
+    let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+        query_bounds,
         query.time_interval.into(),
         BandSelection::first(),
     );
@@ -574,9 +585,8 @@ async fn raster_stream_websocket<C: ApplicationContext>(
     ));
 
     let stream_handler = RasterWebsocketStreamHandler::new::<C::SessionContext>(
-        operator,
+        initialized_operator,
         query_rectangle,
-        execution_context,
         ctx.query_context()?,
     )
     .await?;
@@ -643,10 +653,9 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         .get_vector()
         .boxed_context(error::WorkflowMustBeOfTypeVector)?;
 
-    let query_rectangle = VectorQueryRectangle::with_bounds_and_resolution(
+    let query_rectangle = VectorQueryRectangle::with_bounds(
         query.spatial_bounds,
         query.time_interval.into(),
-        query.spatial_resolution,
         ColumnSelection::all(),
     );
 
@@ -711,10 +720,10 @@ mod tests {
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, FeatureData, Measurement, MultiPoint, RasterQueryRectangle,
-        SpatialPartition2D, SpatialResolution, TimeInterval,
+        TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        GeoTransform, GridShape, RasterDataType, TilingSpecification,
+        GeoTransform, GridBoundingBox2D, GridShape, RasterDataType, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -1031,9 +1040,10 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         time: None,
-                        geo_transform: GeoTransform::test_default(),
-                        pixel_bounds: geoengine_datatypes::raster::GridBoundingBox2D::new_min_max(
-                            0, 0, 1, 1,
+                        geo_transform_x: GeoTransform::test_default(),
+                        pixel_bounds_x: geoengine_datatypes::raster::GridBoundingBox2D::new(
+                            [0, 0],
+                            [1, 1],
                         )
                         .unwrap(), // FIXME: change to somethiing that is tested!
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
@@ -1181,7 +1191,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters { data: dataset },
+                    params: GdalSourceParameters::new(dataset),
                 }
                 .boxed(),
             ),
@@ -1259,7 +1269,6 @@ mod tests {
 
     fn test_download_all_metadata_zip_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape::new([600, 600]),
         }
     }
@@ -1281,9 +1290,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters {
-                        data: dataset_name.clone(),
-                    },
+                    params: GdalSourceParameters::new(dataset_name.clone()),
                 }
                 .boxed(),
             ),
@@ -1381,7 +1388,6 @@ mod tests {
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn dataset_from_workflow_task_success_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape::new([600, 600]),
         }
     }
@@ -1398,7 +1404,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters { data: dataset },
+                    params: GdalSourceParameters::new(dataset),
                 }
                 .boxed(),
             ),
@@ -1467,9 +1473,7 @@ mod tests {
 
         // query the newly created dataset
         let op = GdalSource {
-            params: GdalSourceParameters {
-                data: response.dataset.into(),
-            },
+            params: GdalSourceParameters::new(response.dataset.into()),
         }
         .boxed();
 
@@ -1481,13 +1485,15 @@ mod tests {
             .unwrap();
 
         let query_ctx = ctx.query_context().unwrap();
-        let query_rect = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
-            SpatialResolution::zero_point_one(),
-            exe_ctx.tiling_specification().origin_coordinate,
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-100, 800], [499, 199]).unwrap(),
             TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
             BandSelection::first(),
         );
+
+        let tiling_strategy = exe_ctx
+            .tiling_specification()
+            .strategy(o.result_descriptor().tiling_geo_transform());
 
         let processor = o.query_processor().unwrap().get_u8().unwrap();
 
@@ -1508,7 +1514,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            exe_ctx.tiling_specification(),
+            tiling_strategy,
         )
         .await
         .unwrap();

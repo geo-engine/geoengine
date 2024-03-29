@@ -10,9 +10,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
-    engine::{
-        QueryAbortTrigger, QueryContext, QueryProcessorExt, RasterOperator, WorkflowOperatorPath,
-    },
+    engine::{InitializedRasterOperator, QueryAbortTrigger, QueryContext, QueryProcessorExt},
 };
 
 pub struct RasterWebsocketStreamHandler {
@@ -65,20 +63,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RasterWebsocketSt
 
 impl RasterWebsocketStreamHandler {
     pub async fn new<C: SessionContext>(
-        raster_operator: Box<dyn RasterOperator>,
+        initialized_raster_operator: Box<dyn InitializedRasterOperator>,
         query_rectangle: RasterQueryRectangle,
-        execution_ctx: C::ExecutionContext,
         mut query_ctx: C::QueryContext,
     ) -> Result<Self> {
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let spatial_reference = initialized_raster_operator
+            .result_descriptor()
+            .spatial_reference;
 
-        let initialized_operator = raster_operator
-            .initialize(workflow_operator_path_root, &execution_ctx)
-            .await?;
-
-        let spatial_reference = initialized_operator.result_descriptor().spatial_reference;
-
-        let query_processor = initialized_operator.query_processor()?;
+        let query_processor = initialized_raster_operator.query_processor()?;
 
         let abort_handle = query_ctx.abort_trigger().ok();
 
@@ -181,12 +174,12 @@ mod tests {
     use bytes::{Bytes, BytesMut};
     use futures::channel::mpsc::UnboundedSender;
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
+        primitives::{BandSelection, DateTime, TimeInterval},
+        raster::GridBoundingBox2D,
         util::arrow::arrow_ipc_file_to_record_batches,
     };
-    use geoengine_operators::engine::ExecutionContext;
+
+    use geoengine_operators::engine::WorkflowOperatorPath;
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
@@ -208,21 +201,24 @@ mod tests {
 
         let (workflow, _workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
-        let query_rectangle = RasterQueryRectangle::with_partition_and_resolution_and_origin(
-            SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-            SpatialResolution::one(),
-            ctx.execution_context()
-                .unwrap()
-                .tiling_specification()
-                .origin_coordinate,
+        let workflow_root_path = WorkflowOperatorPath::initialize_root();
+        let initialized_operator = workflow
+            .operator
+            .get_raster()
+            .unwrap()
+            .initialize(workflow_root_path, &ctx.execution_context().unwrap())
+            .await
+            .unwrap();
+
+        let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(-900, 899, -1800, 1799).unwrap(),
             TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
             BandSelection::first(),
         );
 
         let handler = RasterWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(
-            workflow.operator.get_raster().unwrap(),
+            initialized_operator,
             query_rectangle,
-            ctx.execution_context().unwrap(),
             ctx.query_context().unwrap(),
         )
         .await

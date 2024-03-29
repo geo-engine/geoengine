@@ -125,7 +125,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl<A: SimpleApplicationCo
     let workflow = Workflow {
         operator: TypedOperator::Raster(
             GdalSource {
-                params: GdalSourceParameters { data: dataset },
+                params: GdalSourceParameters::new(dataset),
             }
             .boxed(),
         ),
@@ -267,8 +267,8 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
                 time: Some(geoengine_datatypes::primitives::TimeInterval::default()),
-                geo_transform: GeoTransform::new(Coordinate2D::new(-180.,  90.), 0.1, -0.1),
-                pixel_bounds: GridBoundingBox2D::new_min_max(0,0, 3600, 1800).unwrap(),
+                geo_transform_x: GeoTransform::new(Coordinate2D::new(-180.,  90.), 0.1, -0.1), // TODO use tiling geo transform from data geotransform
+                pixel_bounds_x: GridBoundingBox2D::new_min_max(0,0, 3600, 1800).unwrap(),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
                 [
                     (0_u8, "Water Bodies".to_string()),

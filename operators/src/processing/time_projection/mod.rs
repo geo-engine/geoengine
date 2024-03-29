@@ -279,8 +279,7 @@ mod tests {
     use geoengine_datatypes::{
         collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection, VectorDataType},
         primitives::{
-            BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialResolution, TimeGranularity,
-            TimeInterval,
+            BoundingBox2D, CacheHint, DateTime, MultiPoint, TimeGranularity, TimeInterval,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -464,14 +463,13 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 4, 3, 0, 0, 0),
                         DateTime::new_utc(2010, 5, 14, 0, 0, 0),
                     )
                     .unwrap(),
-                    SpatialResolution::one(),
                     ColumnSelection::all(),
                 ),
                 &query_context,
@@ -569,14 +567,13 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 4, 3, 0, 0, 0),
                         DateTime::new_utc(2010, 5, 14, 0, 0, 0),
                     )
                     .unwrap(),
-                    SpatialResolution::one(),
                     ColumnSelection::all(),
                 ),
                 &query_context,

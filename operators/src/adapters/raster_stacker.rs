@@ -3,10 +3,11 @@ use futures::future::JoinAll;
 use futures::stream::{Fuse, FusedStream, Stream};
 use futures::{ready, Future, StreamExt};
 use geoengine_datatypes::primitives::{
-    BandSelection, RasterQueryRectangle, SpatialGridQueryRectangle, SpatialPartition2D,
-    SpatialPartitioned, TimeInterval,
+    BandSelection, RasterQueryRectangle, SpatialGridQueryRectangle, TimeInterval,
 };
-use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy};
+use geoengine_datatypes::raster::{
+    GridBoundingBox2D, GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy,
+};
 use pin_project::pin_project;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -123,17 +124,17 @@ where
         }
     }
 
-    fn number_of_tiles_in_partition(
+    fn number_of_tiles_in_grid_bounds(
         tile_info: &TileInformation,
-        partition: SpatialPartition2D,
+        grid_bounds: GridBoundingBox2D,
     ) -> usize {
-        // TODO: get tiling strategy from stream or execution context instead of creating it here
         let strat = TilingStrategy {
             tile_size_in_pixels: tile_info.tile_size_in_pixels,
             geo_transform: tile_info.global_geo_transform,
         };
-
-        strat.tile_grid_box(partition).number_of_elements()
+        strat
+            .global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds)
+            .number_of_elements()
     }
 }
 
@@ -256,9 +257,9 @@ where
                                 });
                         }
 
-                        *num_spatial_tiles = Some(Self::number_of_tiles_in_partition(
+                        *num_spatial_tiles = Some(Self::number_of_tiles_in_grid_bounds(
                             &ok_tiles[0].tile_information(),
-                            query_rect.spatial_query.spatial_partition(), //TODO: use direct mehtod instead of conversion
+                            query_rect.spatial_query.grid_bounds(), //TODO: use direct mehtod instead of conversion
                         ));
 
                         *stream_state = StreamState::ProducingTimeSlice {
@@ -384,8 +385,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::test_default(),
-            pixel_bounds: GridBoundingBox2D::new_min_max(-2, 0, 0, 4).unwrap(),
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [0, 4]).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -539,8 +540,7 @@ mod tests {
             ],
             PartialQueryRect {
                 spatial_query: SpatialGridQueryRectangle::new(
-                    result_descriptor.geo_transform,
-                    GridBoundingBox2D::new_min_max(-2, -1, 0, 2).unwrap(),
+                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 ),
                 time_interval: TimeInterval::new_unchecked(0, 10),
             },
@@ -568,8 +568,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::test_default(),
-            pixel_bounds: GridBoundingBox2D::new_min_max(-2, 0, 0, 4).unwrap(),
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 4]).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -649,8 +649,7 @@ mod tests {
                 .into()],
             PartialQueryRect {
                 spatial_query: SpatialGridQueryRectangle::new(
-                    result_descriptor.geo_transform,
-                    GridBoundingBox2D::new_min_max(-2, -1, 0, 2).unwrap(),
+                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 ),
                 time_interval: TimeInterval::new_unchecked(0, 10),
             },
@@ -669,8 +668,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::test_default(),
-            pixel_bounds: GridBoundingBox2D::new_min_max(-2, 0, 2, 4).unwrap(),
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             bands: vec![
                 RasterBandDescriptor::new("mrs1 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs1 band2".to_string(), Measurement::Unitless),
@@ -683,8 +682,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::test_default(),
-            pixel_bounds: GridBoundingBox2D::new_min_max(-2, 0, 0, 4).unwrap(),
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             bands: vec![
                 RasterBandDescriptor::new("mrs2 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs2 band2".to_string(), Measurement::Unitless),
@@ -925,8 +924,7 @@ mod tests {
             ],
             PartialQueryRect {
                 spatial_query: SpatialGridQueryRectangle::new(
-                    result_descriptor_1.geo_transform,
-                    GridBoundingBox2D::new_min_max(-2, -1, 0, 2).unwrap(),
+                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 ),
                 time_interval: TimeInterval::new_unchecked(0, 10),
             },
@@ -961,8 +959,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::test_default(),
-            pixel_bounds: GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             bands: vec![
                 RasterBandDescriptor::new("mrs1 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs1 band2".to_string(), Measurement::Unitless),
@@ -975,8 +973,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::test_default(),
-            pixel_bounds: GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             bands: vec![
                 RasterBandDescriptor::new("mrs2 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs2 band2".to_string(), Measurement::Unitless),
@@ -1217,8 +1215,7 @@ mod tests {
             ],
             PartialQueryRect {
                 spatial_query: SpatialGridQueryRectangle::new(
-                    result_descriptor_1.geo_transform,
-                    GridBoundingBox2D::new_min_max(-2, -1, 0, 2).unwrap(),
+                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 ),
                 time_interval: TimeInterval::new_unchecked(0, 10),
             },
@@ -1484,8 +1481,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::test_default(),
-            pixel_bounds: GridBoundingBox2D::new_min_max(-2, 0, 2, 4).unwrap(),
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             bands: vec![
                 RasterBandDescriptor::new("mrs1 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs1 band2".to_string(), Measurement::Unitless),
@@ -1499,8 +1496,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::test_default(),
-            pixel_bounds: GridBoundingBox2D::new_min_max(-2, 0, 0, 4).unwrap(),
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             bands: vec![RasterBandDescriptor::new(
                 "mrs2 band2".to_string(),
                 Measurement::Unitless,
@@ -1513,8 +1510,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform: GeoTransform::test_default(),
-            pixel_bounds: GridBoundingBox2D::new_min_max(-2, 0, 0, 4).unwrap(),
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             bands: vec![
                 RasterBandDescriptor::new("mrs3 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs3 band2".to_string(), Measurement::Unitless),
@@ -1874,8 +1871,7 @@ mod tests {
             ],
             PartialQueryRect {
                 spatial_query: SpatialGridQueryRectangle::new(
-                    result_descriptor_1.geo_transform,
-                    GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 ),
                 time_interval: TimeInterval::new_unchecked(0, 10),
             },

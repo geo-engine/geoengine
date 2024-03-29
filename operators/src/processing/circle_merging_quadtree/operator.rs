@@ -37,6 +37,7 @@ use super::quadtree::CircleMergingQuadtree;
 pub struct VisualPointClusteringParams {
     pub min_radius_px: f64,
     pub delta_px: f64,
+    pub radius_model_scale: Option<f64>, // TODO: discuss if this should be a parameter
     radius_column: String,
     count_column: String,
     column_aggregates: HashMap<String, AttributeAggregateDef>,
@@ -84,6 +85,16 @@ impl VectorOperator for VisualPointClustering {
         ensure!(
             self.params.count_column != self.params.radius_column,
             error::DuplicateOutputColumns
+        );
+
+        let radius_model_scale = self.params.radius_model_scale.unwrap_or(1.0);
+
+        ensure!(
+            radius_model_scale > 0.0,
+            error::InputMustBeGreaterThanZero {
+                scope: "VisualPointClustering",
+                name: "radius_model_scale"
+            }
         );
 
         let name = CanonicOperatorName::from(&self);
@@ -181,6 +192,7 @@ impl VectorOperator for VisualPointClustering {
             },
             vector_source,
             radius_model,
+            radius_model_scale,
             radius_column: self.params.radius_column,
             count_column: self.params.count_column,
             attribute_mapping: self.params.column_aggregates,
@@ -196,6 +208,7 @@ pub struct InitializedVisualPointClustering {
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     radius_model: LogScaledRadius,
+    radius_model_scale: f64,
     radius_column: String,
     count_column: String,
     attribute_mapping: HashMap<String, AttributeAggregateDef>,
@@ -209,6 +222,7 @@ impl InitializedVectorOperator for InitializedVisualPointClustering {
                     VisualPointClusteringProcessor::new(
                         source,
                         self.radius_model,
+                        self.radius_model_scale,
                         self.radius_column.clone(),
                         self.count_column.clone(),
                         self.result_descriptor.clone(),
@@ -244,6 +258,7 @@ impl InitializedVectorOperator for InitializedVisualPointClustering {
 pub struct VisualPointClusteringProcessor {
     source: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
     radius_model: LogScaledRadius,
+    radius_model_scale: f64,
     radius_column: String,
     count_column: String,
     result_descriptor: VectorResultDescriptor,
@@ -254,6 +269,7 @@ impl VisualPointClusteringProcessor {
     fn new(
         source: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
         radius_model: LogScaledRadius,
+        radius_model_scale: f64,
         radius_column: String,
         count_column: String,
         result_descriptor: VectorResultDescriptor,
@@ -262,6 +278,7 @@ impl VisualPointClusteringProcessor {
         Self {
             source,
             radius_model,
+            radius_model_scale,
             radius_column,
             count_column,
             result_descriptor,
@@ -379,12 +396,9 @@ impl QueryProcessor for VisualPointClusteringProcessor {
             .iter()
             .map(|(name, column_info)| (name.clone(), column_info.data_type))
             .collect();
-
-        let joint_resolution = f64::max(
-            query.spatial_query.spatial_resolution.x,
-            query.spatial_query.spatial_resolution.y,
-        );
-        let scaled_radius_model = self.radius_model.with_scaled_radii(joint_resolution)?;
+        let scaled_radius_model = self
+            .radius_model
+            .with_scaled_radii(self.radius_model_scale)?;
 
         let initial_grid_fold_state = Result::<GridFoldState>::Ok(GridFoldState {
             grid: Grid::new(query.spatial_query.spatial_bounds(), scaled_radius_model),
@@ -475,7 +489,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                 cmq.into_iter(),
                 &self.radius_column,
                 &self.count_column,
-                joint_resolution,
+                self.radius_model_scale,
                 &column_schema,
                 cache_hint,
             )
@@ -519,10 +533,14 @@ mod tests {
         )
         .unwrap();
 
+        let resolution = SpatialResolution::new(0.1, 0.1).unwrap();
+        let radius_model_scale = resolution.x.max(resolution.y);
+
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
                 min_radius_px: 8.,
                 delta_px: 1.,
+                radius_model_scale: Some(radius_model_scale),
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: Default::default(),
@@ -548,10 +566,9 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds_and_resolution(
+        let qrect = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::new(0.1, 0.1).unwrap(),
             ColumnSelection::all(),
         );
 
@@ -591,10 +608,14 @@ mod tests {
         )
         .unwrap();
 
+        let resolution = SpatialResolution::new(0.1, 0.1).unwrap();
+        let radius_model_scale = resolution.x.max(resolution.y);
+
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
                 min_radius_px: 8.,
                 delta_px: 1.,
+                radius_model_scale: Some(radius_model_scale),
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -630,10 +651,9 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds_and_resolution(
+        let qrect = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::new(0.1, 0.1).unwrap(),
             ColumnSelection::all(),
         );
 
@@ -674,10 +694,14 @@ mod tests {
         )
         .unwrap();
 
+        let resolution = SpatialResolution::new(0.1, 0.1).unwrap();
+        let radius_model_scale = resolution.x.max(resolution.y);
+
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
                 min_radius_px: 8.,
                 delta_px: 1.,
+                radius_model_scale: Some(radius_model_scale),
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -713,10 +737,9 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds_and_resolution(
+        let qrect = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::new(0.1, 0.1).unwrap(),
             ColumnSelection::all(),
         );
 
@@ -765,10 +788,14 @@ mod tests {
         )
         .unwrap();
 
+        let resolution = SpatialResolution::new(0.1, 0.1).unwrap();
+        let radius_model_scale = resolution.x.max(resolution.y);
+
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
                 min_radius_px: 8.,
                 delta_px: 1.,
+                radius_model_scale: Some(radius_model_scale),
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -804,10 +831,9 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds_and_resolution(
+        let qrect = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::new(0.1, 0.1).unwrap(),
             ColumnSelection::all(),
         );
 
@@ -867,6 +893,9 @@ mod tests {
         )
         .unwrap();
 
+        let resolution = SpatialResolution::new(0.1, 0.1).unwrap();
+        let radius_model_scale = resolution.x.max(resolution.y);
+
         let cache_hint = CacheHint::seconds(1234);
 
         input.cache_hint = cache_hint;
@@ -875,6 +904,7 @@ mod tests {
             params: VisualPointClusteringParams {
                 min_radius_px: 8.,
                 delta_px: 1.,
+                radius_model_scale: Some(radius_model_scale),
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -910,10 +940,9 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds_and_resolution(
+        let qrect = VectorQueryRectangle::with_bounds(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
-            SpatialResolution::new(0.1, 0.1).unwrap(),
             ColumnSelection::all(),
         );
 

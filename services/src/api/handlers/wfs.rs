@@ -13,12 +13,9 @@ use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use futures::future::BoxFuture;
 use futures_util::TryStreamExt;
 use geoengine_datatypes::collections::ToGeoJson;
+use geoengine_datatypes::collections::{FeatureCollection, MultiPointCollection};
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
-use geoengine_datatypes::{
-    collections::{FeatureCollection, MultiPointCollection},
-    primitives::SpatialResolution,
-};
 use geoengine_datatypes::{
     primitives::{FeatureData, Geometry, MultiPoint},
     spatial_reference::SpatialReference,
@@ -29,7 +26,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::engine::{QueryProcessor, WorkflowOperatorPath};
 use geoengine_operators::processing::{
-    InitializedVectorReprojection, Reprojection, ReprojectionParams,
+    DeriveOutRasterSpecsSource, InitializedVectorReprojection, Reprojection, ReprojectionParams,
 };
 use geoengine_operators::util::abortable_query_execution;
 use geoengine_operators::util::input::RasterOrVectorOperator;
@@ -493,6 +490,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
 
         let reprojection_params = ReprojectionParams {
             target_spatial_reference: request_spatial_ref,
+            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
         };
 
         // create the reprojection operator in order to get the canonic operator name
@@ -516,13 +514,9 @@ async fn wfs_feature_handler<C: ApplicationContext>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let query_rect = VectorQueryRectangle::with_bounds_and_resolution(
+    let query_rect = VectorQueryRectangle::with_bounds(
         request.bbox.bounds_naive()?,
         request.time.unwrap_or_else(default_time_from_config).into(),
-        // TODO: find reasonable default
-        request
-            .query_resolution
-            .map_or_else(SpatialResolution::zero_point_one, |r| r.0),
         ColumnSelection::all(),
     );
     let query_ctx = ctx.query_context()?;
@@ -1151,7 +1145,6 @@ x;y
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn raster_vector_join_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
         }
     }

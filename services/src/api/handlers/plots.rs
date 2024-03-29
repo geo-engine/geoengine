@@ -130,10 +130,9 @@ async fn get_plot_handler<C: ApplicationContext>(
     let request_spatial_ref: SpatialReference =
         params.crs.ok_or(error::Error::MissingSpatialReference)?;
 
-    let query_rect = PlotQueryRectangle::with_bounds_and_resolution(
+    let query_rect = PlotQueryRectangle::with_bounds(
         params.bbox,
         params.time.into(),
-        params.spatial_resolution,
         PlotSeriesSelection::all(),
     );
 
@@ -248,8 +247,8 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            geo_transform: GeoTransform::test_default(),
-            pixel_bounds: GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
             time: None,
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -276,7 +275,7 @@ mod tests {
     }
 
     fn json_tiling_spec() -> TilingSpecification {
-        TilingSpecification::new([0.0, 0.0].into(), [3, 2].into())
+        TilingSpecification::new([3, 2].into())
     }
 
     #[ge_context::test(tiling_spec = "json_tiling_spec")]
@@ -340,7 +339,7 @@ mod tests {
     }
 
     fn json_vega_tiling_spec() -> TilingSpecification {
-        TilingSpecification::new([0.0, 0.0].into(), [3, 2].into())
+        TilingSpecification::new([3, 2].into())
     }
 
     #[ge_context::test(tiling_spec = "json_vega_tiling_spec")]

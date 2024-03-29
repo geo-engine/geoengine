@@ -1,10 +1,10 @@
 use crate::{
-    error::{self},
+    error,
     primitives::{
         AxisAlignedRectangle, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
         MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
-        MultiPolygonAccess, MultiPolygonRef,
-        SpatialBounded, SpatialQueryRectangle, SpatialResolution,
+        MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialQueryRectangle,
+        SpatialResolution,
     },
     spatial_reference::SpatialReference,
     util::Result,
@@ -352,6 +352,17 @@ fn diag_distance(ul_coord: Coordinate2D, lr_coord: Coordinate2D) -> f64 {
     (proj_ul_lr_vector.x * proj_ul_lr_vector.x + proj_ul_lr_vector.y * proj_ul_lr_vector.y).sqrt()
 }
 
+pub fn suggest_pixel_size_like_gdal_helper<B: AxisAlignedRectangle>(
+    bbox: B,
+    spatial_resolution: SpatialResolution,
+    source_srs: SpatialReference,
+    target: SpatialReference,
+) -> Result<SpatialResolution> {
+    let projector = CoordinateProjector::from_known_srs(source_srs, target)?;
+
+    suggest_pixel_size_like_gdal(bbox, spatial_resolution, &projector)
+}
+
 /// This method calculates a suggested pixel size for the translation of a raster into a different projection.
 /// The source raster is described using a `BoundingBox2D` and a pixel size as `SpatialResolution`.
 /// A suggested pixel size is calculated using the approach used by GDAL:
@@ -375,6 +386,17 @@ pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection, B: AxisAlignedRecta
     ))
 }
 
+pub fn suggest_pixel_size_from_diag_cross_helper<B: AxisAlignedRectangle>(
+    bbox: B,
+    spatial_resolution: SpatialResolution,
+    source_srs: SpatialReference,
+    target: SpatialReference,
+) -> Result<SpatialResolution> {
+    let projector = CoordinateProjector::from_known_srs(source_srs, target)?;
+
+    suggest_pixel_size_from_diag_cross(bbox, spatial_resolution, &projector)
+}
+
 /// This approach uses the GDAL way to suggest the pixel size. However, we check both diagonals and take the smaller one.
 /// This method fails if the bbox cannot be projected
 pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection, B: AxisAlignedRectangle>(
@@ -387,7 +409,7 @@ pub fn suggest_pixel_size_from_diag_cross<P: CoordinateProjection, B: AxisAligne
     let proj_ul_lr_distance =
         projected_diag_distance(bbox.upper_left(), bbox.lower_right(), projector);
 
-    let proj_ll_ur_distance =
+    let proj_ll_ur_distance: std::prelude::v1::Result<f64, error::Error> =
         projected_diag_distance(bbox.lower_left(), bbox.upper_right(), projector);
 
     let min_dist_r = match (proj_ul_lr_distance, proj_ll_ur_distance) {
@@ -408,7 +430,7 @@ pub fn suggest_pixel_size_from_diag_cross_projected<B: AxisAlignedRectangle>(
     bbox_projected: B,
     spatial_resolution: SpatialResolution,
 ) -> Result<SpatialResolution> {
-    let diag_pixels = euclidian_pixel_distance(bbox, spatial_resolution)?;
+    let diag_pixels = euclidian_pixel_distance(bbox, spatial_resolution)?.ceil();
 
     let proj_ul_lr_distance =
         diag_distance(bbox_projected.upper_left(), bbox_projected.lower_right());
@@ -461,18 +483,10 @@ pub fn reproject_spatial_query<S: AxisAlignedRectangle>(
     source: SpatialReference,
     target: SpatialReference,
 ) -> Result<Option<SpatialQueryRectangle<S>>> {
-    let (Some(s_bbox), Some(p_bbox)) =
-        reproject_and_unify_bbox(query.spatial_bounds, target, source)?
-    else {
-        return Ok(None);
-    };
+    let proj_to_from = CoordinateProjector::from_known_srs(target, source)?;
+    let target_bbox_clipped = query.spatial_bounds.reproject_clipped(&proj_to_from)?;
 
-    let p_spatial_resolution =
-        suggest_pixel_size_from_diag_cross_projected(s_bbox, p_bbox, query.spatial_resolution)?;
-    Ok(Some(SpatialQueryRectangle {
-        spatial_bounds: p_bbox,
-        spatial_resolution: p_spatial_resolution,
-    }))
+    Ok(target_bbox_clipped.map(|b| SpatialQueryRectangle::new(b)))
 }
 
 /// Reproject a bounding box to the `target` projection and return the input and output bounding box
@@ -487,6 +501,26 @@ pub fn reproject_and_unify_bbox<T: AxisAlignedRectangle>(
     let proj_to_from = CoordinateProjector::from_known_srs(target, source)?;
 
     let target_bbox_clipped = source_bbox.reproject_clipped(&proj_from_to)?;
+
+    if let Some(target_b) = target_bbox_clipped {
+        let source_bbox_clipped = target_b.reproject(&proj_to_from)?;
+        Ok((Some(source_bbox_clipped), target_bbox_clipped))
+    } else {
+        Ok((None, None))
+    }
+}
+
+/// Reproject the area of use of the `source` projection to the `target` projection and back. Return the back projected bounds and the area of use in the `target` projection.
+pub fn reproject_and_unify_proj_bounds<T: AxisAlignedRectangle>(
+    source: SpatialReference,
+    target: SpatialReference,
+) -> Result<(Option<T>, Option<T>)> {
+    let proj_from_to = CoordinateProjector::from_known_srs(source, target)?;
+    let proj_to_from = CoordinateProjector::from_known_srs(target, source)?;
+
+    let target_bbox_clipped = source
+        .area_of_use_projected::<T>()?
+        .reproject_clipped(&proj_from_to)?; // TODO: can we intersect areas of use first?
 
     if let Some(target_b) = target_bbox_clipped {
         let source_bbox_clipped = target_b.reproject(&proj_to_from)?;

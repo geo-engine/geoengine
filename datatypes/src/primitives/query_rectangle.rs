@@ -1,9 +1,8 @@
-use crate::raster::{GeoTransform, GridBoundingBox2D, GridBounds};
-
 use super::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialBounded, SpatialPartition2D,
-    SpatialPartitioned, SpatialResolution, TimeInterval,
+    AxisAlignedRectangle, BoundingBox2D, SpatialBounded, SpatialPartition2D, SpatialPartitioned,
+    TimeInterval,
 };
+use crate::raster::{GeoTransform, GridBoundingBox2D};
 use crate::{
     error::{DuplicateBandInQueryBandSelection, QueryBandSelectionMustNotBeEmpty},
     util::Result,
@@ -70,109 +69,56 @@ where
         }
     }
 
-    /// Creates a new `QueryRectangle` from a `BoundingBox2D`, a `TimeInterval`, and a `SpatialResolution`.
-    pub fn with_bounds_and_resolution(
-        spatial_bounds: S,
-        time_interval: TimeInterval,
-        spatial_resolution: SpatialResolution,
-        attributes: A,
-    ) -> Self {
+    /// Creates a new `QueryRectangle` from a `BoundingBox2D`, and a `TimeInterval`
+    pub fn with_bounds(spatial_bounds: S, time_interval: TimeInterval, attributes: A) -> Self {
         Self {
-            spatial_query: SpatialQueryRectangle {
-                spatial_bounds,
-                spatial_resolution,
-            },
+            spatial_query: SpatialQueryRectangle { spatial_bounds },
             time_interval,
             attributes,
         }
+    }
+
+    /// Creates a new `QueryRectangle` with bounds and time from a `RasterQueryRectangle` and supplied attributes.
+    pub fn from_raster_query_and_geo_transform_replace_attributes(
+        raster_query: RasterQueryRectangle,
+        geo_transform: GeoTransform,
+        attributes: A,
+    ) -> QueryRectangle<SpatialQueryRectangle<BoundingBox2D>, A> {
+        let bounds =
+            geo_transform.grid_to_spatial_bounds(&raster_query.spatial_query.grid_bounds());
+        let bounding_box = bounds.as_bbox();
+
+        QueryRectangle::with_bounds(bounding_box, raster_query.time_interval, attributes)
     }
 }
 
 impl RasterQueryRectangle {
     /// Creates a new `QueryRectangle` that describes the requested grid.
-    /// The spatial query is defined by a `SpatialGridQueryRectangle`, which is derived from a `SpatialPartition2D`, a `SpatialResolution` and a origin `Coordinate2D`.
+    /// The spatial query is derived from a vector query rectangle and a `GeoTransform`.
     /// The temporal query is defined by a `TimeInterval`.
     /// NOTE: If the distance between the upper left of the spatial partition and the origin coordinate is not at a multiple of the spatial resolution, the grid bounds will be shifted.
-    pub fn with_partition_and_resolution_and_origin(
-        spatial_partition: SpatialPartition2D,
-        spatial_resolution: SpatialResolution,
-        origin_coordinate: Coordinate2D,
-        time_interval: TimeInterval,
+    pub fn with_spatial_query_and_geo_transform<S: SpatialBounded, A: QueryAttributeSelection>(
+        vector_query: &QueryRectangle<S, A>,
+        geo_transform: GeoTransform,
         attributes: BandSelection,
     ) -> Self {
         Self::new(
-            SpatialGridQueryRectangle::with_partition_and_resolution_and_origin(
-                spatial_partition,
-                spatial_resolution,
-                origin_coordinate,
-            ),
-            time_interval,
-            attributes,
-        )
-    }
-
-    /// Creates a new `QueryRectangle` that describes the requested grid.
-    /// The spatial query is derived from a vector query rectangle and a grid origin.
-    /// The temporal query is defined by a `TimeInterval`.
-    /// NOTE: If the distance between the upper left of the spatial partition and the origin coordinate is not at a multiple of the spatial resolution, the grid bounds will be shifted.
-    pub fn with_vector_query_and_grid_origin(
-        vector_query: VectorQueryRectangle,
-        grid_origin: Coordinate2D,
-        attributes: BandSelection,
-    ) -> Self {
-        Self::new(
-            SpatialGridQueryRectangle::with_vector_query_and_grid_origin(
-                vector_query.spatial_query(),
-                grid_origin,
+            SpatialGridQueryRectangle::with_bounding_box_and_geo_transform(
+                vector_query.spatial_query.spatial_bounds(),
+                geo_transform,
             ),
             vector_query.time_interval,
             attributes,
         )
     }
 
-    pub fn with_spatial_query_and_grid_origin(
-        spatial_query: SpatialQueryRectangle<BoundingBox2D>,
-        grid_origin: Coordinate2D,
-        time_interval: TimeInterval,
-        attributes: BandSelection,
-    ) -> Self {
-        Self::new(
-            SpatialGridQueryRectangle::with_vector_query_and_grid_origin(
-                spatial_query,
-                grid_origin,
-            ),
-            time_interval,
-            attributes,
-        )
-    }
-
-    /// Creates a new `QueryRectangle` that describes the requested grid.
-    /// The spatial query is defined by a `SpatialGridQueryRectangle`, which is derived from a `SpatialPartition2D` and a `SpatialResolution`.
-    /// The temporal query is defined by a `TimeInterval`.
-    pub fn with_partition_and_resolution(
-        spatial_partition: SpatialPartition2D,
-        spatial_resolution: SpatialResolution,
-        time_interval: TimeInterval,
-        attributes: BandSelection,
-    ) -> Self {
-        Self::new(
-            SpatialGridQueryRectangle::_with_partition_and_resolution(
-                spatial_partition,
-                spatial_resolution,
-            ),
-            time_interval,
-            attributes,
-        )
-    }
-
-    pub fn with_grid_bounds_and_resolution(
+    pub fn new_with_grid_bounds(
         grid_bounds: GridBoundingBox2D,
-        geo_transform: GeoTransform,
         time_interval: TimeInterval,
         attributes: BandSelection,
     ) -> Self {
         Self::new(
-            SpatialGridQueryRectangle::new(geo_transform, grid_bounds),
+            SpatialGridQueryRectangle::new(grid_bounds),
             time_interval,
             attributes,
         )
@@ -191,16 +137,17 @@ impl RasterQueryRectangle {
         }
     }
 
-    pub fn from_qrect_and_bands<A: QueryAttributeSelection>(
+    pub fn from_qrect_and_geo_transform<A: QueryAttributeSelection>(
         query: &QueryRectangle<SpatialQueryRectangle<BoundingBox2D>, A>,
         bands: BandSelection,
+        geo_transform: GeoTransform,
     ) -> Self {
         Self::new(
-            SpatialGridQueryRectangle::_with_partition_and_resolution(
-                query.spatial_query.spatial_partition(),
-                query.spatial_query.spatial_resolution,
-            ), // TODO: can we always do this into?
-            query.temporal_query(),
+            SpatialGridQueryRectangle::with_bounding_box_and_geo_transform(
+                query.spatial_query.spatial_bounds,
+                geo_transform,
+            ),
+            query.time_interval,
             bands,
         )
     }
@@ -214,7 +161,12 @@ pub type PlotSpatialQueryRectangle = SpatialQueryRectangle<BoundingBox2D>;
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SpatialQueryRectangle<SpatialBounds> {
     pub spatial_bounds: SpatialBounds,
-    pub spatial_resolution: SpatialResolution,
+}
+
+impl<S> SpatialQueryRectangle<S> {
+    pub fn new(spatial_bounds: S) -> Self {
+        Self { spatial_bounds }
+    }
 }
 
 impl SpatialBounded for SpatialQueryRectangle<BoundingBox2D> {
@@ -223,11 +175,6 @@ impl SpatialBounded for SpatialQueryRectangle<BoundingBox2D> {
     }
 }
 
-impl SpatialPartitioned for SpatialQueryRectangle<BoundingBox2D> {
-    fn spatial_partition(&self) -> SpatialPartition2D {
-        SpatialPartition2D::with_bbox_and_resolution(self.spatial_bounds, self.spatial_resolution)
-    }
-}
 pub trait QueryAttributeSelection: Clone + Send + Sync {}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -322,38 +269,9 @@ impl PlotSeriesSelection {
 
 impl QueryAttributeSelection for PlotSeriesSelection {}
 
-impl SpatialPartitioned for VectorQueryRectangle {
-    fn spatial_partition(&self) -> SpatialPartition2D {
-        self.spatial_query.spatial_partition()
-    }
-}
-
 impl SpatialPartitioned for SpatialQueryRectangle<SpatialPartition2D> {
     fn spatial_partition(&self) -> SpatialPartition2D {
         self.spatial_bounds
-    }
-}
-
-impl SpatialPartitioned for PlotQueryRectangle {
-    fn spatial_partition(&self) -> SpatialPartition2D {
-        self.spatial_query.spatial_partition()
-    }
-}
-
-impl SpatialPartitioned for RasterQueryRectangle {
-    fn spatial_partition(&self) -> SpatialPartition2D {
-        self.spatial_query.spatial_partition()
-    }
-}
-
-impl From<RasterQueryRectangle> for VectorQueryRectangle {
-    fn from(value: RasterQueryRectangle) -> Self {
-        Self::with_bounds_and_resolution(
-            value.spatial_query().spatial_bounds(),
-            value.time_interval,
-            value.spatial_query().geo_transform.spatial_resolution(),
-            ColumnSelection::all(), // TODO: this will propably stop working once the selection can do more then "all"
-        )
     }
 }
 
@@ -378,107 +296,48 @@ impl From<QueryRectangle<BoundingBox2D, ColumnSelection>>
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpatialGridQueryRectangle {
-    pub geo_transform: GeoTransform,
-    pub grid_bounds: GridBoundingBox2D,
-}
-
-impl SpatialPartitioned for SpatialGridQueryRectangle {
-    fn spatial_partition(&self) -> SpatialPartition2D {
-        self.geo_transform.grid_to_spatial_bounds(&self.grid_bounds)
-    }
-}
-
-impl SpatialBounded for SpatialGridQueryRectangle {
-    fn spatial_bounds(&self) -> BoundingBox2D {
-        self.spatial_partition().as_bbox()
-    }
+    grid_bounds: GridBoundingBox2D,
 }
 
 impl SpatialGridQueryRectangle {
-    pub fn new(geo_transform: GeoTransform, grid_bounds: GridBoundingBox2D) -> Self {
+    /// Creates a new `SpatialGridQueryRectangle` from a geo transform and a grid bounds.
+    pub fn new(grid_bounds: GridBoundingBox2D) -> Self {
         Self {
-            geo_transform,
-            grid_bounds,
+            grid_bounds: grid_bounds,
         }
     }
 
-    pub fn spatial_resolution(&self) -> SpatialResolution {
-        self.geo_transform.spatial_resolution()
+    pub fn grid_bounds(&self) -> GridBoundingBox2D {
+        self.grid_bounds
     }
 
-    pub fn origin_coordinate(&self) -> Coordinate2D {
-        self.geo_transform.origin_coordinate()
-    }
-
-    /// Creates a new `SpatialGridQueryRectangle` from a spatial partition and a spatial resolution.
-    /// The origin of the grid is set to the upper left corner of the spatial partition.
-    /// TODO: we may need to replace this with a version that supports positive and negative (pixel) resolutions.
-    fn _with_partition_and_resolution(
+    /// Creates a new `SpatialGridQueryRectangle` from a spatial partition and a geo transform.
+    pub fn with_partition_and_geo_transform(
         spatial_partition: SpatialPartition2D,
-        spatial_resolution: SpatialResolution,
+        geo_transform: GeoTransform,
     ) -> Self {
-        // we need to create a geo transform here. There might be a better way to do this.
-        debug_assert!(spatial_resolution.x > 0.0);
-        debug_assert!(spatial_resolution.y > 0.0);
-
-        let geo_transform = GeoTransform::new(
-            spatial_partition.upper_left(),
-            spatial_resolution.x,
-            spatial_resolution.y.abs() * -1.0,
-        );
-
-        // Once we have the geo transform, we can calculate the grid bounds.
         let grid_bounds = geo_transform.spatial_to_grid_bounds(&spatial_partition);
 
-        Self {
-            geo_transform,
-            grid_bounds,
-        }
+        Self::new(grid_bounds)
     }
 
-    /// Creates a new `SpatialGridQueryRectangle` from a spatial partition and a spatial resolution.
-    /// The origin of the grid is set to the provided origin coordinate.
-    /// NOTE: If the distance between the upper left of the spatial partition and the origin coordinate is not at a multiple of the spatial resolution, the grid bounds will be shifted.
-    pub fn with_partition_and_resolution_and_origin(
-        spatial_partition: SpatialPartition2D,
-        spatial_resolution: SpatialResolution,
-        origin_coordinate: Coordinate2D,
+    /// Creates a new `SpatialGridQueryRectangle` from a spatial bounding box and a geo transform.
+    pub fn with_bounding_box_and_geo_transform(
+        spatial_bounds: BoundingBox2D,
+        geo_transform: GeoTransform,
     ) -> Self {
-        let SpatialGridQueryRectangle {
-            geo_transform,
-            grid_bounds,
-        } = Self::_with_partition_and_resolution(spatial_partition, spatial_resolution);
+        let grid_bounds = geo_transform.bounding_box_2d_to_grid_bounds(&spatial_bounds);
 
-        let offset = geo_transform.coordinate_to_grid_idx_2d(origin_coordinate);
-
-        let shifted_grid_bounds = GridBoundingBox2D::new(
-            grid_bounds.min_index() - offset,
-            grid_bounds.max_index() - offset,
-        )
-        .expect(
-            "shifting the grid bounds must not fail since the offset is identical for min and max",
-        );
-
-        let shifted_geo_transform = GeoTransform::new(
-            origin_coordinate,
-            geo_transform.x_pixel_size(),
-            geo_transform.y_pixel_size(),
-        );
-
-        Self {
-            geo_transform: shifted_geo_transform,
-            grid_bounds: shifted_grid_bounds,
-        }
+        Self::new(grid_bounds)
     }
 
-    pub fn with_vector_query_and_grid_origin(
+    pub fn with_vector_query_geo_transform(
         vector_spatial_query: VectorSpatialQueryRectangle,
-        origin_coordinate: Coordinate2D,
+        geo_transform: GeoTransform,
     ) -> Self {
-        Self::with_partition_and_resolution_and_origin(
-            vector_spatial_query.spatial_partition(),
-            vector_spatial_query.spatial_resolution,
-            origin_coordinate,
-        )
+        let pixel_bounds =
+            geo_transform.bounding_box_2d_to_grid_bounds(&vector_spatial_query.spatial_bounds());
+
+        Self::new(pixel_bounds)
     }
 }

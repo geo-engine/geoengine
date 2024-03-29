@@ -465,6 +465,8 @@ pub enum Error {
     BandDoesNotExist {
         band_idx: u32,
     },
+
+    ReprojectionFailed,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

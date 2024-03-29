@@ -895,10 +895,9 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(VectorQueryRectangle::with_bounds_and_resolution(
+                .loading_info(VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
-                    SpatialResolution::zero_point_one(),
                     ColumnSelection::all()
                 ))
                 .await
@@ -998,8 +997,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: None,
-            geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
+            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -2745,8 +2744,8 @@ mod tests {
                     SpatialReference::epsg_4326(),
                 ),
                 time: Some(TimeInterval::default()),
-                geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
+                geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                 bands: RasterBandDescriptors::new_single_band(),
             }],
         )
@@ -2784,8 +2783,8 @@ mod tests {
                         SpatialReference::epsg_4326(),
                     ),
                     time: Some(TimeInterval::default()),
-                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                    pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                     bands: RasterBandDescriptors::new_single_band(),
                 }),
                 TypedResultDescriptor::Plot(PlotResultDescriptor {
@@ -3259,8 +3258,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeInterval::new_unchecked(0, 1).into(),
-                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                    pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         Measurement::Continuous(ContinuousMeasurement {
@@ -3325,8 +3324,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeInterval::new_unchecked(0, 1).into(),
-                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                    pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         Measurement::Continuous(ContinuousMeasurement {
@@ -3377,8 +3376,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeInterval::new_unchecked(0, 1).into(),
-                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                    pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         Measurement::Continuous(ContinuousMeasurement {
@@ -3436,8 +3435,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeInterval::new_unchecked(0, 1).into(),
-                    geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                    pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         Measurement::Continuous(ContinuousMeasurement {
@@ -3595,8 +3594,8 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         time: TimeInterval::new_unchecked(0, 1).into(),
-                        geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                        pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
+                        geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
@@ -3655,8 +3654,8 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         time: TimeInterval::new_unchecked(0, 1).into(),
-                        geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                        pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
+                        geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
@@ -3701,8 +3700,8 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         time: TimeInterval::new_unchecked(0, 1).into(),
-                        geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                        pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
+                        geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
@@ -3754,8 +3753,8 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         time: TimeInterval::new_unchecked(0, 1).into(),
-                        geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                        pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
+                        geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {

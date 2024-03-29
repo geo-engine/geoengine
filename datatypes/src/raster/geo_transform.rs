@@ -1,5 +1,7 @@
 use crate::{
-    primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialResolution},
+    primitives::{
+        AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialPartition2D, SpatialResolution,
+    },
     util::test::TestDefault,
 };
 use postgres_types::{FromSql, ToSql};
@@ -189,6 +191,18 @@ impl GeoTransform {
             .into();
 
         self.coordinate_to_grid_idx_2d(lower_right)
+    }
+
+    /// Transform a `BoundingBox2D` into a `GridBoundingBox2D`.
+    #[inline]
+    pub fn bounding_box_2d_to_grid_bounds(
+        &self,
+        bounding_box: &BoundingBox2D,
+    ) -> GridBoundingBox2D {
+        let upper_left = self.coordinate_to_grid_idx_2d(bounding_box.upper_left());
+        let lower_right = self.coordinate_to_grid_idx_2d(bounding_box.lower_right());
+
+        GridBoundingBox2D::new_unchecked(upper_left, lower_right)
     }
 
     /// Transform a `SpatialPartition2D` into a `GridBoundingBox`

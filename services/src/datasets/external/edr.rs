@@ -14,9 +14,8 @@ use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::hashmap;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds, ContinuousMeasurement, Coordinate2D,
-    FeatureDataType, Measurement, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
-    TimeInterval, VectorQueryRectangle,
+    BoundingBox2D, CacheTtlSeconds, ContinuousMeasurement, Coordinate2D, FeatureDataType,
+    Measurement, RasterQueryRectangle, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{BoundedGrid, GeoTransform, GridShape2D, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -675,15 +674,13 @@ impl EdrCollectionMetaData {
         geo_transform: GeoTransform,
         grid_shape: GridShape2D,
     ) -> Result<RasterResultDescriptor, geoengine_operators::error::Error> {
-        let bbox = self.get_bounding_box()?;
-        let bbox = SpatialPartition2D::new_unchecked(bbox.upper_left(), bbox.lower_right());
-
+        // TODO: add explicit conversion to tiling based
         Ok(RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: Some(self.get_time_interval()?),
-            geo_transform,
-            pixel_bounds: grid_shape.bounding_box(),
+            geo_transform_x: geo_transform,
+            pixel_bounds_x: grid_shape.bounding_box(),
             bands: RasterBandDescriptors::new_single_band(),
         })
     }
@@ -957,12 +954,12 @@ impl LayerCollectionProvider for EdrDataProvider {
         let operator = if collection.is_raster_file()? {
             TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters {
-                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                    params: GdalSourceParameters::new(
+                        geoengine_datatypes::dataset::NamedData::with_system_provider(
                             self.id.to_string(),
                             id.to_string(),
                         ),
-                    },
+                    ),
                 }
                 .boxed(),
             )
@@ -1187,9 +1184,7 @@ mod tests {
     use super::*;
     use geoengine_datatypes::{
         dataset::ExternalDataId,
-        primitives::{
-            BandSelection, ColumnSelection, SpatialGridQueryRectangle, SpatialResolution,
-        },
+        primitives::{BandSelection, ColumnSelection},
         raster::GridBoundingBox2D,
         util::gdal::hide_gdal_errors,
     };
@@ -1548,10 +1543,9 @@ mod tests {
         )
         .await;
         let loading_info = meta
-            .loading_info(VectorQueryRectangle::with_bounds_and_resolution(
+            .loading_info(VectorQueryRectangle::with_bounds(
                 BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                 TimeInterval::default(),
-                SpatialResolution::zero_point_one(),
                 ColumnSelection::all(),
             ))
             .await
@@ -1647,14 +1641,11 @@ mod tests {
         .await;
 
         let loading_info_parts = meta
-            .loading_info(RasterQueryRectangle {
-                spatial_query: SpatialGridQueryRectangle {
-                    geo_transform: GeoTransform::new((0., -90.).into(), 1., -1.),
-                    grid_bounds: GridBoundingBox2D::new_min_max(0, 0, 180, 180).unwrap(),
-                },
-                time_interval: TimeInterval::new_unchecked(1_692_144_000_000, 1_692_500_400_000),
-                attributes: BandSelection::first(),
-            })
+            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([0, 0], [361, 720]).unwrap(),
+                TimeInterval::new_unchecked(1_692_144_000_000, 1_692_500_400_000),
+                BandSelection::first(),
+            ))
             .await
             .unwrap()
             .info
@@ -1730,12 +1721,12 @@ mod tests {
                     1_692_144_000_000,
                     1_692_500_400_000
                 )),
-                geo_transform: GeoTransform::new(
+                geo_transform_x: GeoTransform::new(
                     (0., -90.).into(),
                     0.499_305_555_555_555_6,
                     -0.498_614_958_448_753_5
                 ),
-                pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 720, 361).unwrap(),
+                pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 720, 361).unwrap(),
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );

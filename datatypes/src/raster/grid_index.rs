@@ -349,6 +349,10 @@ impl GridIdx1D {
         let [a] = self.0;
         GridIdx([a, 0, 0])
     }
+
+    pub fn new_x(x: isize) -> Self {
+        GridIdx([x])
+    }
 }
 
 impl GridIdx2D {
@@ -366,6 +370,10 @@ impl GridIdx2D {
         let [a, b] = self.0;
         GridIdx([a, b, 0])
     }
+
+    pub fn new_y_x(y: isize, x: isize) -> Self {
+        GridIdx([y, x])
+    }
 }
 
 impl GridIdx3D {
@@ -382,5 +390,9 @@ impl GridIdx3D {
     pub fn z(&self) -> isize {
         let [z, _, _] = self.0;
         z
+    }
+
+    pub fn new_z_y_x(z: isize, y: isize, x: isize) -> Self {
+        GridIdx([z, y, x])
     }
 }

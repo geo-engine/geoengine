@@ -536,8 +536,8 @@ mod tests {
     use geoengine_datatypes::dataset::{DataProviderId, LayerId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
-        RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
-        TimeStep, VectorQueryRectangle,
+        RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+        VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheTtlSeconds, ColumnSelection};
     use geoengine_datatypes::pro::MlModelId;
@@ -1157,10 +1157,9 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(VectorQueryRectangle::with_bounds_and_resolution(
+                .loading_info(VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
-                    SpatialResolution::zero_point_one(),
                     ColumnSelection::all()
                 ))
                 .await
@@ -1582,8 +1581,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: None,
-            geo_transform: GeoTransform::test_default(),
-            pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 

@@ -790,7 +790,7 @@ mod tests {
     use bb8_postgres::bb8::ManageConnection;
     use geoengine_datatypes::{
         dataset::ExternalDataId,
-        primitives::{BoundingBox2D, ColumnSelection, SpatialResolution, TimeInterval},
+        primitives::{BoundingBox2D, ColumnSelection, TimeInterval},
         test_data,
     };
     use httptest::{
@@ -1086,10 +1086,9 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle::with_bounds_and_resolution(
+                .loading_info(VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
-                    SpatialResolution::zero_point_one(),
                     ColumnSelection::all(),
                 ))
                 .await

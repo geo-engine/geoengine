@@ -15,7 +15,7 @@ use geoengine_datatypes::{
         BoundingBox2D, CacheTtlSeconds, DateTimeParseFormat, FeatureDataType, Measurement,
         TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle,
     },
-    raster::{BoundedGrid, GeoTransform, GridShape2D, RasterDataType},
+    raster::{BoundedGrid, GeoTransform, GridBoundingBox2D, GridShape2D, RasterDataType},
     spatial_reference::SpatialReference,
     util::Identifier,
 };
@@ -41,6 +41,10 @@ use crate::{
 
 // TODO: move test helper somewhere else?
 pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
+    create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::default())
+}
+
+pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds() -> GdalMetaDataRegular {
     create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::default())
 }
 
@@ -87,8 +91,61 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
                 TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
             )),
-            geo_transform: GeoTransform::new((-180., 90.0).into(), 0.1, -0.1),
-            pixel_bounds: GridShape2D::new([1800, 3600]).bounding_box(),
+            geo_transform_x: GeoTransform::new((0., 0.).into(), 0.1, -0.1),
+            pixel_bounds_x: GridBoundingBox2D::new_min_max(-900, 899, -1800, 1799).unwrap(),
+            bands: RasterBandDescriptors::new_single_band(),
+        },
+        cache_ttl,
+    }
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds_with_cache_ttl(
+    cache_ttl: CacheTtlSeconds,
+) -> GdalMetaDataRegular {
+    let no_data_value = Some(0.); // TODO: is it really 0?
+    GdalMetaDataRegular {
+        data_time: TimeInterval::new_unchecked(
+            TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+            TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+        ),
+        step: TimeStep {
+            granularity: TimeGranularity::Months,
+            step: 1,
+        },
+        time_placeholders: hashmap! {
+            "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
+                format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
+                reference: TimeReference::Start,
+            },
+        },
+        params: GdalDatasetParameters {
+            file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF").into(),
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (-180., 85.).into(),
+                x_pixel_size: 0.1,
+                y_pixel_size: -0.1,
+            },
+            width: 3600,
+            height: 1700,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        },
+        result_descriptor: RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: Some(TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+                TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+            )),
+            geo_transform_x: GeoTransform::new((-180., 85.0).into(), 0.1, -0.1),
+            pixel_bounds_x: GridShape2D::new([1700, 3600]).bounding_box(),
             bands: RasterBandDescriptors::new_single_band(),
         },
         cache_ttl,
@@ -100,6 +157,19 @@ pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> NamedData {
     let id: DataId = DatasetId::new().into();
     let name = NamedData::with_system_name("ndvi");
     ctx.add_meta_data(id, name.clone(), Box::new(create_ndvi_meta_data()));
+    name
+}
+
+pub fn add_ndvi_dataset_cropped_to_valid_webmercator_bounds(
+    ctx: &mut MockExecutionContext,
+) -> NamedData {
+    let id: DataId = DatasetId::new().into();
+    let name = NamedData::with_system_name("ndvi_crop_y_85");
+    ctx.add_meta_data(
+        id,
+        name.clone(),
+        Box::new(create_ndvi_meta_data_cropped_to_valid_webmercator_bounds()),
+    );
     name
 }
 
@@ -234,8 +304,8 @@ pub fn raster_descriptor_from_dataset(
         data_type,
         spatial_reference: spatial_ref.into(),
         time: None,
-        geo_transform: data_geo_transfrom,
-        pixel_bounds: data_shape.bounding_box(),
+        geo_transform_x: data_geo_transfrom,
+        pixel_bounds_x: data_shape.bounding_box(),
         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO: derive better name?
             measurement_from_rasterband(dataset, band)?,
@@ -261,8 +331,8 @@ pub fn raster_descriptor_from_dataset_and_sref(
         data_type,
         spatial_reference: spatial_ref.into(),
         time: None,
-        geo_transform: data_geo_transfrom,
-        pixel_bounds: data_shape.bounding_box(),
+        geo_transform_x: data_geo_transfrom,
+        pixel_bounds_x: data_shape.bounding_box(),
         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO derive better name?
             measurement_from_rasterband(dataset, band)?,

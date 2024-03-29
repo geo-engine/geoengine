@@ -153,7 +153,7 @@ mod tests {
     use geoengine_datatypes::primitives::ColumnSelection;
     use geoengine_datatypes::{
         collections::{GeometryCollection, MultiPointCollection},
-        primitives::{BoundingBox2D, SpatialResolution, VectorQueryRectangle},
+        primitives::{BoundingBox2D, VectorQueryRectangle},
         raster::{GridShape2D, TilingSpecification},
         test_data,
     };
@@ -308,7 +308,6 @@ mod tests {
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn create_dataset_tiling_specification() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
         }
     }
@@ -336,10 +335,9 @@ mod tests {
 
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds_and_resolution(
+                VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
-                    SpatialResolution::new(1., 1.)?,
                     ColumnSelection::all(),
                 ),
                 &query_ctx,
