@@ -1,7 +1,6 @@
 use crate::error::{Result, UnexpectedDatabaseVersionDuringMigration};
 use async_trait::async_trait;
 use bb8_postgres::{bb8::PooledConnection, PostgresConnectionManager};
-use itertools::Either;
 use log::info;
 use snafu::ensure;
 use tokio_postgres::{
@@ -65,6 +64,54 @@ pub enum MigrationResult {
     AlreadyUpToDate,
 }
 
+/// Initialize the database.
+/// If the database is empty, the [`migration_if_uninitialized`] is applied.
+/// Otherwise, the [`migrations`] are applied.
+pub async fn initialize_database<Tls>(
+    connection: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    migration_if_uninitialized: Box<dyn Migration>,
+    migrations: &[Box<dyn Migration>],
+) -> Result<MigrationResult>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    if determine_current_database_version(connection)
+        .await?
+        .is_none()
+    {
+        create_database_schema(connection, migration_if_uninitialized).await?;
+
+        Ok(MigrationResult::CreatedDatabase)
+    } else {
+        migrate_database(connection, migrations).await
+    }
+}
+
+/// Create the database schema.
+async fn create_database_schema<Tls>(
+    connection: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    create_schema: Box<dyn Migration>,
+) -> Result<()>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let tx = connection.build_transaction().start().await?;
+
+    create_schema.migrate(&tx).await?;
+
+    tx.commit().await?;
+
+    info!("Created schema. Version is: {}", create_schema.version());
+
+    Ok(())
+}
+
 /// Migrate the database to the latest version. If the database is empty, the initial migration is applied.
 ///
 /// # Panics
@@ -74,7 +121,6 @@ pub enum MigrationResult {
 pub async fn migrate_database<Tls>(
     connection: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
     migrations: &[Box<dyn Migration>],
-    migration_if_uninitialized: Option<Box<dyn Migration>>,
 ) -> Result<MigrationResult>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
@@ -85,17 +131,10 @@ where
     let pre_migration_version = determine_current_database_version(connection).await?;
     info!("Current database version: {:?}", pre_migration_version);
 
-    let applicable_migrations =
-        if let (None, Some(migration)) = (&pre_migration_version, &migration_if_uninitialized) {
-            // just use the [`CurrentSchemaMigration`] if the database is empty
-            Either::Left(std::iter::once(migration))
-        } else {
-            // start with the first migration after the current version
-            let applicable_migrations = migrations
-                .iter()
-                .skip_while(|m| m.prev_version() != pre_migration_version);
-            Either::Right(applicable_migrations)
-        };
+    // start with the first migration after the current version
+    let applicable_migrations = migrations
+        .iter()
+        .skip_while(|m| m.prev_version() != pre_migration_version);
 
     let mut current_version = pre_migration_version.clone();
 
@@ -229,7 +268,7 @@ mod tests {
 
         let mut conn = pool.get().await?;
 
-        migrate_database(&mut conn, &migrations, None).await?;
+        migrate_database(&mut conn, &migrations).await?;
 
         let stmt = conn.prepare("SELECT * FROM mock;").await?;
 
@@ -253,7 +292,7 @@ mod tests {
 
         let mut conn = pool.get().await?;
 
-        migrate_database(&mut conn, &all_migrations(), None).await?;
+        migrate_database(&mut conn, &all_migrations()).await?;
 
         Ok(())
     }
@@ -267,10 +306,10 @@ mod tests {
 
         let mut conn = pool.get().await?;
 
-        migrate_database(
+        initialize_database(
             &mut conn,
+            Box::new(CurrentSchemaMigration),
             &all_migrations(),
-            Some(Box::new(CurrentSchemaMigration)),
         )
         .await?;
 
@@ -291,14 +330,14 @@ mod tests {
         let mut conn = pool.get().await?;
 
         // initial schema
-        migrate_database(&mut conn, &[Box::new(Migration0000Initial)], None).await?;
+        migrate_database(&mut conn, &[Box::new(Migration0000Initial)]).await?;
 
         // insert test data on initial schema
         let test_data_sql = std::fs::read_to_string(test_data!("migrations/test_data.sql"))?;
         conn.batch_execute(&test_data_sql).await?;
 
         // migrate to latest schema
-        migrate_database(&mut conn, &all_migrations(), None).await?;
+        migrate_database(&mut conn, &all_migrations()).await?;
 
         // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
         drop(conn);

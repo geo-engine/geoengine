@@ -98,7 +98,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::contexts::{CurrentSchemaMigration, Migration0000Initial};
+    use crate::contexts::{initialize_database, CurrentSchemaMigration, Migration0000Initial};
     use crate::pro::permissions::RoleId;
     use crate::pro::users::UserDb;
     use crate::projects::{ProjectDb, ProjectListOptions};
@@ -129,7 +129,7 @@ mod tests {
 
         let mut conn = pool.get().await?;
 
-        migrate_database(&mut conn, &pro_migrations(), None).await?;
+        migrate_database(&mut conn, &pro_migrations()).await?;
 
         Ok(())
     }
@@ -143,10 +143,10 @@ mod tests {
 
         let mut conn = pool.get().await?;
 
-        migrate_database(
+        initialize_database(
             &mut conn,
+            Box::new(ProMigrationImpl::from(CurrentSchemaMigration)),
             &pro_migrations(),
-            Some(Box::new(ProMigrationImpl::from(CurrentSchemaMigration))),
         )
         .await?;
 
@@ -170,7 +170,6 @@ mod tests {
         migrate_database(
             &mut conn,
             &[Box::new(ProMigrationImpl::from(Migration0000Initial))],
-            None,
         )
         .await?;
 
@@ -182,7 +181,7 @@ mod tests {
         conn.batch_execute(&test_data_sql).await?;
 
         // migrate to latest schema
-        migrate_database(&mut conn, &pro_migrations(), None).await?;
+        migrate_database(&mut conn, &pro_migrations()).await?;
 
         // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
         drop(conn);

@@ -9,7 +9,9 @@ pub use crate::contexts::migrations::{
     migration_0007_owner_role::Migration0007OwnerRole,
     migration_0008_band_names::Migration0008BandNames,
 };
-pub use database_migration::{migrate_database, DatabaseVersion, Migration, MigrationResult};
+pub use database_migration::{
+    initialize_database, migrate_database, DatabaseVersion, Migration, MigrationResult,
+};
 
 mod current_schema;
 mod database_migration;
@@ -62,5 +64,22 @@ mod tests {
             },
         )
         .await;
+    }
+
+    #[test]
+    fn versions_follow_schema() {
+        for migration in all_migrations() {
+            let version = migration.version();
+            let (version_number, _version_name) = version.split_once('_').unwrap();
+            assert_eq!(
+                version_number.len(),
+                4,
+                "Version number {version_number} has to be 4 digits"
+            );
+            assert!(
+                version_number.chars().all(char::is_numeric),
+                "Version number {version_number} has to be numeric"
+            );
+        }
     }
 }

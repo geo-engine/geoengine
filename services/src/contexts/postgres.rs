@@ -1,7 +1,5 @@
-use super::migrations::{
-    all_migrations, migrate_database, CurrentSchemaMigration, MigrationResult,
-};
-use super::{ExecutionContextImpl, Session, SimpleApplicationContext};
+use super::migrations::{all_migrations, CurrentSchemaMigration, MigrationResult};
+use super::{initialize_database, ExecutionContextImpl, Session, SimpleApplicationContext};
 use crate::api::cli::{add_datasets_from_directory, add_providers_from_directory};
 use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId, SimpleSession};
 use crate::contexts::{GeoEngineDb, SessionContext};
@@ -207,10 +205,10 @@ where
     ) -> Result<bool> {
         Self::maybe_clear_database(&conn).await?;
 
-        let migration = migrate_database(
+        let migration = initialize_database(
             &mut conn,
+            Box::new(CurrentSchemaMigration),
             &all_migrations(),
-            Some(Box::new(CurrentSchemaMigration)),
         )
         .await?;
 

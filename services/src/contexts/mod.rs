@@ -24,11 +24,11 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub use migrations::{
-    migrate_database, migration_0000_initial::Migration0000Initial, CurrentSchemaMigration,
-    DatabaseVersion, Migration, Migration0001RasterStacks, Migration0002DatasetListingProvider,
-    Migration0003GbifConfig, Migration0004DatasetListingProviderPrio,
-    Migration0005GbifColumnSelection, Migration0006EbvProvider, Migration0007OwnerRole,
-    Migration0008BandNames, MigrationResult,
+    initialize_database, migrate_database, migration_0000_initial::Migration0000Initial,
+    CurrentSchemaMigration, DatabaseVersion, Migration, Migration0001RasterStacks,
+    Migration0002DatasetListingProvider, Migration0003GbifConfig,
+    Migration0004DatasetListingProviderPrio, Migration0005GbifColumnSelection,
+    Migration0006EbvProvider, Migration0007OwnerRole, Migration0008BandNames, MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
