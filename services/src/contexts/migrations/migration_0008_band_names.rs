@@ -18,7 +18,7 @@ impl Migration for Migration0008BandNames {
     }
 
     fn version(&self) -> DatabaseVersion {
-        "0008_band_names".into()
+        "008_band_names".into()
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
