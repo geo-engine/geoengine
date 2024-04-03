@@ -6,7 +6,7 @@ use geoengine_datatypes::{
         BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
         TimeStep,
     },
-    raster::{RasterDataType, RasterTile2D},
+    raster::{RasterDataType, RasterTile2D, RenameBands},
     util::test::TestDefault,
 };
 use geoengine_operators::{
@@ -120,7 +120,9 @@ async fn all_bands_at_once(runs: usize, bands: u32, resolution: SpatialResolutio
     let query_context = MockQueryContext::test_default();
 
     let stacker = RasterStacker {
-        params: RasterStackerParams {},
+        params: RasterStackerParams {
+            rename_bands: RenameBands::Default,
+        },
         sources: MultipleRasterSources {
             rasters: (0..bands)
                 .map(|_| ndvi_source(&mut execution_context))

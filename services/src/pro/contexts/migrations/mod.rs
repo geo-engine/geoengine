@@ -3,6 +3,7 @@ use crate::contexts::{
     Migration0000Initial, Migration0001RasterStacks, Migration0002DatasetListingProvider,
     Migration0003GbifConfig, Migration0004DatasetListingProviderPrio,
     Migration0005GbifColumnSelection, Migration0006EbvProvider, Migration0007OwnerRole,
+    Migration0008BandNames,
 };
 use crate::pro::contexts::migrations::database_migration::NoProMigrationImpl;
 
@@ -31,6 +32,7 @@ where
         Box::new(NoProMigrationImpl::from(Migration0005GbifColumnSelection)),
         Box::new(NoProMigrationImpl::from(Migration0006EbvProvider)),
         Box::new(NoProMigrationImpl::from(Migration0007OwnerRole)),
+        Box::new(NoProMigrationImpl::from(Migration0008BandNames)),
     ]
 }
 

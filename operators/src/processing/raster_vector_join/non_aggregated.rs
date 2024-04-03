@@ -29,14 +29,12 @@ use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 
 use super::aggregator::TypedAggregator;
-use super::FeatureAggregationMethod;
+use super::{FeatureAggregationMethod, RasterInput};
 
 pub struct RasterVectorJoinProcessor<G> {
     collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
     result_descriptor: VectorResultDescriptor,
-    raster_processors: Vec<TypedRasterQueryProcessor>,
-    raster_bands: Vec<u32>, // TODO: store result descriptors instead? could drive column names from measurement, once there is one measurement for each band
-    column_names: Vec<String>,
+    raster_inputs: Vec<RasterInput>,
     aggregation_method: FeatureAggregationMethod,
     ignore_no_data: bool,
 }
@@ -49,18 +47,14 @@ where
     pub fn new(
         collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
         result_descriptor: VectorResultDescriptor,
-        raster_processors: Vec<TypedRasterQueryProcessor>,
-        raster_bands: Vec<u32>,
-        column_names: Vec<String>,
+        raster_inputs: Vec<RasterInput>,
         aggregation_method: FeatureAggregationMethod,
         ignore_no_data: bool,
     ) -> Self {
         Self {
             collection,
             result_descriptor,
-            raster_processors,
-            raster_bands,
-            column_names,
+            raster_inputs,
             aggregation_method,
             ignore_no_data,
         }
@@ -70,8 +64,7 @@ where
     fn process_collections<'a>(
         collection: BoxStream<'a, Result<FeatureCollection<G>>>,
         raster_processor: &'a TypedRasterQueryProcessor,
-        num_bands: u32,
-        new_column_name: &'a str,
+        column_names: &'a [String],
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
         aggregation_method: FeatureAggregationMethod,
@@ -81,8 +74,7 @@ where
             Self::process_collection_chunk(
                 collection,
                 raster_processor,
-                num_bands,
-                new_column_name,
+                column_names,
                 query.clone(),
                 ctx,
                 aggregation_method,
@@ -100,23 +92,12 @@ where
     async fn process_collection_chunk<'a>(
         collection: FeatureCollection<G>,
         raster_processor: &'a TypedRasterQueryProcessor,
-        num_bands: u32,
-        new_column_name: &'a str,
+        column_names: &'a [String],
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
         aggregation_method: FeatureAggregationMethod,
         ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
-        let new_column_names_vec = (0..num_bands)
-            .map(|i| {
-                if i == 0 {
-                    new_column_name.to_owned()
-                } else {
-                    format!("{new_column_name}_{i}")
-                }
-            })
-            .collect::<Vec<_>>();
-
         if collection.is_empty() {
             log::debug!(
                 "input collection is empty, returning empty collection, skipping raster query"
@@ -124,8 +105,7 @@ where
 
             return Self::collection_with_new_null_columns(
                 &collection,
-                num_bands,
-                &new_column_names_vec,
+                column_names,
                 raster_processor.raster_data_type().into(),
             );
         }
@@ -147,21 +127,21 @@ where
 
             return Self::collection_with_new_null_columns(
                 &collection,
-                num_bands,
-                &new_column_names_vec,
+                column_names,
                 raster_processor.raster_data_type().into(),
             );
         };
 
-        let query =
-            RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first_n(num_bands));
+        let query = RasterQueryRectangle::from_qrect_and_bands(
+            &query,
+            BandSelection::first_n(column_names.len() as u32),
+        );
 
         call_on_generic_raster_processor!(raster_processor, raster_processor => {
             Self::process_typed_collection_chunk(
                 collection,
                 raster_processor,
-                num_bands,
-                new_column_names_vec,
+                column_names,
                 query,
                 ctx,
                 aggregation_method,
@@ -173,15 +153,14 @@ where
 
     fn collection_with_new_null_columns<'a>(
         collection: &FeatureCollection<G>,
-        num_bands: u32,
-        new_column_names: &[String],
+        column_names: &'a [String],
         feature_data_type: FeatureDataType,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
-        let feature_data = (0..num_bands)
+        let feature_data = (0..column_names.len())
             .map(|_| feature_data_type.null_feature_data(collection.len()))
             .collect::<Vec<_>>();
 
-        let columns = new_column_names
+        let columns = column_names
             .iter()
             .map(String::as_str)
             .zip(feature_data)
@@ -197,8 +176,7 @@ where
     async fn process_typed_collection_chunk<'a, P: Pixel>(
         collection: FeatureCollection<G>,
         raster_processor: &'a dyn RasterQueryProcessor<RasterType = P>,
-        num_bands: u32,
-        new_column_names: Vec<String>,
+        column_names: &'a [String],
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
         aggregation_method: FeatureAggregationMethod,
@@ -212,7 +190,7 @@ where
             .time_multi_fold(
                 move || {
                     Ok(VectorRasterJoiner::new(
-                        num_bands,
+                        column_names.len() as u32,
                         aggregation_method,
                         ignore_no_data,
                     ))
@@ -226,7 +204,7 @@ where
                     }
                 },
             )
-            .map(move |accum| accum?.into_collection(&new_column_names));
+            .map(move |accum| accum?.into_collection(column_names));
 
         return Ok(collection_stream.boxed());
     }
@@ -418,19 +396,16 @@ where
         let mut stream = self.collection.query(query.clone(), ctx).await?;
 
         // TODO: adjust raster bands to the vector attribute selection in the query once we support it
-        for ((raster_processor, new_column_name), bands) in self
-            .raster_processors
-            .iter()
-            .zip(&self.column_names)
-            .zip(&self.raster_bands)
-        {
-            log::debug!("processing raster for new column {:?}", new_column_name);
+        for raster_input in &self.raster_inputs {
+            log::debug!(
+                "processing raster for new columns {:?}",
+                raster_input.column_names
+            );
             // TODO: spawn task
             stream = Self::process_collections(
                 stream,
-                raster_processor,
-                *bands,
-                new_column_name,
+                &raster_input.processor,
+                &raster_input.column_names,
                 query.clone(),
                 ctx,
                 self.aggregation_method,
@@ -536,9 +511,10 @@ mod tests {
                 time: None,
                 bbox: None,
             },
-            vec![rasters],
-            vec![1],
-            vec!["ndvi".to_owned()],
+            vec![RasterInput {
+                processor: rasters,
+                column_names: vec!["ndvi".to_owned()],
+            }],
             FeatureAggregationMethod::First,
             false,
         );
@@ -643,9 +619,10 @@ mod tests {
                 time: None,
                 bbox: None,
             },
-            vec![rasters],
-            vec![1],
-            vec!["ndvi".to_owned()],
+            vec![RasterInput {
+                processor: rasters,
+                column_names: vec!["ndvi".to_owned()],
+            }],
             FeatureAggregationMethod::First,
             false,
         );
@@ -761,9 +738,10 @@ mod tests {
                 time: None,
                 bbox: None,
             },
-            vec![rasters],
-            vec![1],
-            vec!["ndvi".to_owned()],
+            vec![RasterInput {
+                processor: rasters,
+                column_names: vec!["ndvi".to_owned()],
+            }],
             FeatureAggregationMethod::First,
             false,
         );
@@ -882,9 +860,10 @@ mod tests {
                 time: None,
                 bbox: None,
             },
-            vec![rasters],
-            vec![1],
-            vec!["ndvi".to_owned()],
+            vec![RasterInput {
+                processor: rasters,
+                column_names: vec!["ndvi".to_owned()],
+            }],
             FeatureAggregationMethod::First,
             false,
         );
@@ -1076,9 +1055,10 @@ mod tests {
                 time: None,
                 bbox: None,
             },
-            vec![raster],
-            vec![1],
-            vec!["foo".to_owned()],
+            vec![RasterInput {
+                processor: raster,
+                column_names: vec!["ndvi".to_owned()],
+            }],
             FeatureAggregationMethod::Mean,
             false,
         );
@@ -1118,7 +1098,7 @@ mod tests {
                 .unwrap(),
                 &[t1, t1, t2, t2],
                 &[(
-                    "foo",
+                    "ndvi",
                     FeatureData::Float(vec![
                         (6. + 60.) / 2.,
                         (5. + 50.) / 2.,
@@ -1290,9 +1270,10 @@ mod tests {
                 time: None,
                 bbox: None,
             },
-            vec![raster],
-            vec![1],
-            vec!["foo".to_owned()],
+            vec![RasterInput {
+                processor: raster,
+                column_names: vec!["ndvi".to_owned()],
+            }],
             FeatureAggregationMethod::Mean,
             false,
         );
@@ -1341,7 +1322,7 @@ mod tests {
                 ],
                 &[t1, t2],
                 &[(
-                    "foo",
+                    "ndvi",
                     FeatureData::Float(vec![
                         (3. + 1. + 40. + 30. + 400.) / 5.,
                         (4. + 6. + 30. + 40. + 300.) / 5.
@@ -1602,9 +1583,10 @@ mod tests {
                 time: None,
                 bbox: None,
             },
-            vec![raster],
-            vec![2],
-            vec!["foo".to_owned()],
+            vec![RasterInput {
+                processor: raster,
+                column_names: vec!["foo".to_owned(), "foo_1".to_owned()],
+            }],
             FeatureAggregationMethod::Mean,
             false,
         );

@@ -1,4 +1,5 @@
 use crate::api::model::services::UpdateDataset;
+use crate::datasets::listing::Provenance;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::listing::{OrderBy, ProvenanceOutput};
 use crate::datasets::postgres::resolve_dataset_name_to_id;
@@ -658,12 +659,13 @@ where
             .boxed_context(crate::error::PermissionDb)?;
 
         tx.execute(
-            "UPDATE datasets SET name = $2, display_name = $3, description = $4 WHERE id = $1;",
+            "UPDATE datasets SET name = $2, display_name = $3, description = $4, tags = $5 WHERE id = $1;",
             &[
                 &dataset,
                 &update.name,
                 &update.display_name,
                 &update.description,
+                &update.tags,
             ],
         )
         .await?;
@@ -689,6 +691,30 @@ where
         tx.execute(
             "UPDATE datasets SET symbology = $2 WHERE id = $1;",
             &[&dataset, &symbology],
+        )
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn update_dataset_provenance(
+        &self,
+        dataset: DatasetId,
+        provenance: &[Provenance],
+    ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        tx.execute(
+            "UPDATE datasets SET provenance = $2 WHERE id = $1;",
+            &[&dataset, &provenance],
         )
         .await?;
 
