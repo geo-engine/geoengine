@@ -1,4 +1,5 @@
 use crate::datasets::external::netcdfcf::NetCdfCfProviderDb;
+use crate::datasets::storage::DatasetDb;
 use crate::datasets::upload::Volume;
 use crate::error::Result;
 use crate::layers::listing::LayerCollectionProvider;
@@ -6,22 +7,8 @@ use crate::layers::storage::{LayerDb, LayerProviderDb};
 use crate::tasks::{TaskContext, TaskManager};
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
-use rayon::ThreadPool;
-use std::str::FromStr;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-
-mod db_types;
-pub(crate) mod migrations;
-mod postgres;
-mod session;
-mod simple_context;
-
-use crate::datasets::storage::DatasetDb;
-
 use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId, NamedData};
-
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
     ChunkByteSize, CreateSpan, ExecutionContext, ExecutionContextExtensions,
@@ -31,20 +18,27 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
+use rayon::ThreadPool;
+use std::str::FromStr;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 pub use migrations::{
-    migrate_database, migration_0000_initial::Migration0000Initial,
-    migration_0001_raster_stacks::Migration0001RasterStacks,
-    migration_0002_dataset_listing_provider::Migration0002DatasetListingProvider,
-    migration_0003_gbif_config::Migration0003GbifConfig,
-    migration_0004_dataset_listing_provider_prio::Migration0004DatasetListingProviderPrio,
-    migration_0005_gbif_column_selection::Migration0005GbifColumnSelection,
-    migration_0007_owner_role::Migration0007OwnerRole,
-    migration_0008_band_names::Migration0008BandNames, DatabaseVersion, Migration, MigrationResult,
+    initialize_database, migrate_database, migration_0000_initial::Migration0000Initial,
+    CurrentSchemaMigration, DatabaseVersion, Migration, Migration0001RasterStacks,
+    Migration0002DatasetListingProvider, Migration0003GbifConfig,
+    Migration0004DatasetListingProviderPrio, Migration0005GbifColumnSelection,
+    Migration0006EbvProvider, Migration0007OwnerRole, Migration0008BandNames, MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
 pub use simple_context::SimpleApplicationContext;
+
+mod db_types;
+pub(crate) mod migrations;
+mod postgres;
+mod session;
+mod simple_context;
 
 pub type Db<T> = Arc<RwLock<T>>;
 
