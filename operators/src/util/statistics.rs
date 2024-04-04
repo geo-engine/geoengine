@@ -1,3 +1,4 @@
+use num::Integer;
 use num_traits::AsPrimitive;
 use snafu::Snafu;
 use std::marker::PhantomData;
@@ -29,7 +30,7 @@ pub enum StatisticsError {
 /// Volume 28 (October), Number 10, 1985, p. 1076-1085.
 /// <https://www.cse.wustl.edu/~jain/papers/ftp/psqr.pdf>
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct PSquareQuantileEstimator<T>
 where
     T: AsPrimitive<f64>,
@@ -252,6 +253,104 @@ where
         let right =
             (pos_next - pos - delta) * ((self.markers[i] - self.markers[i - 1]) / (pos - pos_prev));
         self.markers[i] + base * (left + right) //* pos
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum SafePSquareQuantileEstimator<T: AsPrimitive<f64>> {
+    Values {
+        quantile: f64,
+        samples: [T; 5],
+        num_samples: usize,
+    },
+    Estimator(PSquareQuantileEstimator<T>),
+}
+
+impl<T: AsPrimitive<f64>> SafePSquareQuantileEstimator<T> {
+    /// Creates a new estimator for the given quantile.
+    ///
+    /// Uses all values for up to 5 samples.
+    /// Then, it uses the P^2 algorithm to estimate the quantile.
+    ///
+    /// # Errors
+    ///  - If the given quantile is not within the interval (0,1).
+    ///  - If the `initial_sample` is not finite.
+    ///
+    pub fn new(quantile: f64, initial_sample: T) -> Result<Self, StatisticsError> {
+        if quantile <= 0.0 || quantile >= 1.0 {
+            return Err(StatisticsError::Initialization {
+                reason: "The desired quantile must be in the interval (0,1)".into(),
+            });
+        };
+        if !f64::is_finite(initial_sample.as_()) {
+            return Err(StatisticsError::Initialization {
+                reason: "The initial sample must be finite".into(),
+            });
+        };
+
+        Ok(Self::Values {
+            quantile,
+            samples: [initial_sample; 5],
+            num_samples: 1,
+        })
+    }
+
+    /// Returns the quantile to estimate
+    ///
+    pub fn quantile_estimate(&self) -> f64 {
+        match self {
+            Self::Values {
+                quantile,
+                samples,
+                num_samples,
+            } => {
+                // let adjusted_n = *num_samples + usize::from(num_samples.is_odd());
+
+                // let position = usize::min(
+                //     *num_samples - 1, // prevent out of bounds
+                //     f64::round((adjusted_n as f64) * quantile) as usize,
+                // );
+                // samples[position].as_()
+
+                let num_samples = *num_samples as f64 - f64::from(num_samples.is_even());
+                let position = f64::floor(num_samples * quantile) as usize;
+                dbg!(num_samples, quantile, position);
+                samples[position].as_()
+            }
+            Self::Estimator(estimator) => estimator.quantile_estimate(),
+        }
+    }
+
+    /// Updates the estimator with the given sample.
+    ///
+    /// # Note
+    /// A `sample` that does not satisfy `f64::is_finite` is silently ignored.
+    ///
+    pub fn update(&mut self, sample: T) {
+        match self {
+            Self::Values {
+                quantile,
+                samples,
+                num_samples,
+            } => {
+                if !f64::is_finite(sample.as_()) {
+                    return;
+                }
+
+                samples[*num_samples] = sample;
+                *num_samples += 1;
+
+                if *num_samples < 5 {
+                    return;
+                }
+
+                let estimator = PSquareQuantileEstimator::new(*quantile, samples.as_slice())
+                    .expect("at least 5 valid samples");
+
+                *self = Self::Estimator(estimator);
+            }
+            Self::Estimator(estimator) => estimator.update(sample),
+        }
     }
 }
 
@@ -487,7 +586,7 @@ impl PSquareHistogramBucket {
 
 #[cfg(test)]
 mod tests {
-    use crate::util::statistics::{PSquareHistogram, PSquareQuantileEstimator};
+    use super::*;
     use rand::seq::SliceRandom;
 
     #[test]
@@ -734,5 +833,32 @@ mod tests {
         estimator.update(42.0);
 
         assert_eq!(samples + 1, estimator.sample_count());
+    }
+
+    #[test]
+    fn it_can_be_safely_with_1_to_4_values() {
+        let mut medians = Vec::new();
+        for i in 0..=6 {
+            let mut estimator = SafePSquareQuantileEstimator::new(0.5, 0).unwrap();
+
+            for v in 1..=i {
+                estimator.update(v);
+            }
+
+            medians.push(estimator.quantile_estimate());
+        }
+
+        assert_eq!(
+            medians,
+            vec![
+                0.0, // 0
+                0.0, // 0,1
+                1.0, // 0,1,2
+                1.0, // 0,1,2,3
+                2.0, // 0,1,2,3,4
+                2.0, // 0,1,2,3,4,5
+                3.0, // 0,1,2,3,4,5,6
+            ]
+        );
     }
 }
