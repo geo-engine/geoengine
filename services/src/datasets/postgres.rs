@@ -25,6 +25,7 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use postgres_types::{FromSql, ToSql};
+use snafu::ensure;
 
 impl<Tls> DatasetDb for PostgresDb<Tls>
 where
@@ -507,13 +508,21 @@ where
 
         let typed_meta_data = meta_data.to_typed_metadata();
 
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
 
-        // unique constraint on `id` checks if dataset with same id exists
+        let tx = conn.build_transaction().start().await?;
 
-        let stmt = conn
-            .prepare(
-                "
+        let existing_dataset = tx
+            .query_opt(
+                "SELECT TRUE FROM datasets WHERE name = $1::\"DatasetName\";",
+                &[&name],
+            )
+            .await?;
+
+        ensure!(existing_dataset.is_none(), error::InvalidDatasetName);
+
+        tx.execute(
+            "
                 INSERT INTO datasets (
                     id,
                     name,
@@ -527,11 +536,6 @@ where
                     tags
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[])",
-            )
-            .await?;
-
-        conn.execute(
-            &stmt,
             &[
                 &id,
                 &name,
@@ -546,6 +550,8 @@ where
             ],
         )
         .await?;
+
+        tx.commit().await?;
 
         Ok(DatasetIdAndName { id, name })
     }

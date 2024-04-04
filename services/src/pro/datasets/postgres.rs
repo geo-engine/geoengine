@@ -27,6 +27,7 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use postgres_types::{FromSql, ToSql};
+use snafu::ensure;
 
 impl<Tls> DatasetDb for ProPostgresDb<Tls>
 where
@@ -588,7 +589,14 @@ where
 
         let tx = conn.build_transaction().start().await?;
 
-        // unique constraint on `id` checks if dataset with same id exists
+        let existing_dataset = tx
+            .query_opt(
+                "SELECT TRUE FROM datasets WHERE name = $1::\"DatasetName\";",
+                &[&name],
+            )
+            .await?;
+
+        ensure!(existing_dataset.is_none(), error::InvalidDatasetName);
 
         let stmt = tx
             .prepare(
