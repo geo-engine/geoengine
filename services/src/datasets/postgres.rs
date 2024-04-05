@@ -9,6 +9,7 @@ use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error::{self, Result};
 use crate::projects::Symbology;
+use crate::util::postgres::PostgresErrorExt;
 use async_trait::async_trait;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
@@ -25,7 +26,6 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use postgres_types::{FromSql, ToSql};
-use snafu::ensure;
 
 impl<Tls> DatasetDb for PostgresDb<Tls>
 where
@@ -512,15 +512,6 @@ where
 
         let tx = conn.build_transaction().start().await?;
 
-        let existing_dataset = tx
-            .query_opt(
-                "SELECT TRUE FROM datasets WHERE name = $1::\"DatasetName\";",
-                &[&name],
-            )
-            .await?;
-
-        ensure!(existing_dataset.is_none(), error::InvalidDatasetName);
-
         tx.execute(
             "
                 INSERT INTO datasets (
@@ -549,7 +540,8 @@ where
                 &dataset.tags,
             ],
         )
-        .await?;
+        .await
+        .map_unique_violation("datasets", "name", || error::Error::InvalidDatasetName)?;
 
         tx.commit().await?;
 

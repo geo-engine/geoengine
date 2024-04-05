@@ -12,6 +12,7 @@ use crate::pro::contexts::ProPostgresDb;
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Permission, RoleId};
 use crate::projects::Symbology;
+use crate::util::postgres::PostgresErrorExt;
 use async_trait::async_trait;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
@@ -27,7 +28,6 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use postgres_types::{FromSql, ToSql};
-use snafu::ensure;
 
 impl<Tls> DatasetDb for ProPostgresDb<Tls>
 where
@@ -589,18 +589,8 @@ where
 
         let tx = conn.build_transaction().start().await?;
 
-        let existing_dataset = tx
-            .query_opt(
-                "SELECT TRUE FROM datasets WHERE name = $1::\"DatasetName\";",
-                &[&name],
-            )
-            .await?;
-
-        ensure!(existing_dataset.is_none(), error::InvalidDatasetName);
-
-        let stmt = tx
-            .prepare(
-                "
+        tx.execute(
+            "
                 INSERT INTO datasets (
                     id,
                     name,
@@ -613,12 +603,7 @@ where
                     provenance,
                     tags
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::\"Provenance\"[], $10::text[])",
-            )
-            .await?;
-
-        tx.execute(
-            &stmt,
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[])",
             &[
                 &id,
                 &name,
@@ -632,7 +617,8 @@ where
                 &dataset.tags,
             ],
         )
-        .await?;
+        .await
+        .map_unique_violation("datasets", "name", || error::Error::InvalidDatasetName)?;
 
         let stmt = tx
             .prepare(
