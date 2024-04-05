@@ -1564,6 +1564,7 @@ mod tests {
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
     use geoengine_datatypes::primitives::{BandSelection, PlotSeriesSelection};
+    use geoengine_datatypes::raster::RenameBands;
     use geoengine_datatypes::{
         primitives::{
             BoundingBox2D, PlotQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
@@ -2249,12 +2250,14 @@ mod tests {
                 params: ExpressionParams {
                     expression: "A".to_string(),
                     output_type: RasterDataType::F64,
-                    output_measurement: None,
+                    output_band: None,
                     map_no_data: false,
                 },
                 sources: SingleRasterSource {
                     raster: RasterStacker {
-                        params: RasterStackerParams {},
+                        params: RasterStackerParams {
+                            rename_bands: RenameBands::Default,
+                        },
                         sources: MultipleRasterSources {
                             rasters: vec![
                                 GdalSource {

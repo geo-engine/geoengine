@@ -524,7 +524,10 @@ mod tests {
             BandSelection, BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialPartition2D,
             SpatialResolution, TimeGranularity,
         },
-        raster::{EmptyGrid2D, GridOrEmpty, RasterDataType, TileInformation, TilingSpecification},
+        raster::{
+            EmptyGrid2D, GridOrEmpty, RasterDataType, RenameBands, TileInformation,
+            TilingSpecification,
+        },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
@@ -1184,12 +1187,14 @@ mod tests {
             params: ExpressionParams {
                 expression: "A - B".to_string(),
                 output_type: RasterDataType::F64,
-                output_measurement: None,
+                output_band: None,
                 map_no_data: false,
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::Default,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![ndvi_source, shifted_ndvi_source],
                     },

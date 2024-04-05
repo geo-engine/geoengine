@@ -329,6 +329,25 @@ pub enum Error {
 
     DuplicateBandInQueryBandSelection,
     QueryBandSelectionMustNotBeEmpty,
+
+    #[snafu(display("Invalid number of suffixes, expected {} found {}", expected, found))]
+    InvalidNumberOfSuffixes {
+        expected: usize,
+        found: usize,
+    },
+    #[snafu(display("Insufficient number of suffixes"))]
+    InsufficientNumberOfSuffixes,
+    #[snafu(display("Duplicate suffixes are not allowed"))]
+    DuplicateSuffixesNotAllowed,
+    #[snafu(display("Empty name is not allowed"))]
+    EmptyNameNotAllowed,
+    #[snafu(display("Duplicate name is not allowed"))]
+    DuplicateNameNotAllowed,
+    #[snafu(display("Invalid number of new names, expected{} found {}", expected, found))]
+    InvalidNumberOfNewNames {
+        expected: usize,
+        found: usize,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {
