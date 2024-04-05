@@ -20,7 +20,7 @@ pub trait TemporalRasterPixelAggregator<P: Pixel>: Send + Clone {
 }
 
 pub trait GlobalStateTemporalRasterPixelAggregator<P: Pixel>: Send + Sync + Clone {
-    type PixelState: Send + Sync + Copy + Clone;
+    type PixelState: Send + Sync + Copy + Clone + /* required by [`MapIndexElements`] */ Default;
 
     /// Tell whether the aggregator ignores incoming no data values
     const IGNORE_NO_DATA: bool;
@@ -36,7 +36,7 @@ pub trait GlobalStateTemporalRasterPixelAggregator<P: Pixel>: Send + Sync + Clon
     ) -> Option<Self::PixelState>;
 
     /// Produce a tile from the state container
-    fn into_grid(&self, state: GridOrEmpty2D<Self::PixelState>) -> Result<GridOrEmpty2D<P>>;
+    fn to_grid(&self, state: GridOrEmpty2D<Self::PixelState>) -> Result<GridOrEmpty2D<P>>;
 }
 
 /// A method to process to pixel values inside the aggregator.
@@ -246,12 +246,13 @@ impl<const IGNORE_NO_DATA: bool> PercentileEstimateAggregator<IGNORE_NO_DATA> {
 impl<P: Pixel, const IGNORE_NO_DATA: bool> GlobalStateTemporalRasterPixelAggregator<P>
     for PercentileEstimateAggregator<IGNORE_NO_DATA>
 {
-    type PixelState = SafePSquareQuantileEstimator<P>;
+    // we need a default value, so we wrap it again into an `Option`
+    type PixelState = Option<SafePSquareQuantileEstimator<P>>;
 
     const IGNORE_NO_DATA: bool = IGNORE_NO_DATA;
 
     fn initialize(&self, value: Option<P>) -> Option<Self::PixelState> {
-        SafePSquareQuantileEstimator::new(self.percentile, value?).ok()
+        Some(SafePSquareQuantileEstimator::new(self.percentile, value?).ok())
     }
 
     fn aggregate(
@@ -261,9 +262,9 @@ impl<P: Pixel, const IGNORE_NO_DATA: bool> GlobalStateTemporalRasterPixelAggrega
     ) -> Option<Self::PixelState> {
         if IGNORE_NO_DATA {
             match (state, value) {
-                (Some(mut state), Some(value)) => {
+                (Some(Some(mut state)), Some(value)) => {
                     state.update(value);
-                    Some(state)
+                    Some(Some(state))
                 }
                 (Some(state), None) => Some(state),
                 (None, Some(value)) => self.initialize(Some(value)),
@@ -271,18 +272,22 @@ impl<P: Pixel, const IGNORE_NO_DATA: bool> GlobalStateTemporalRasterPixelAggrega
             }
         } else {
             match (state, value) {
-                (Some(mut state), Some(value)) => {
+                (Some(Some(mut state)), Some(value)) => {
                     state.update(value);
-                    Some(state)
+                    Some(Some(state))
                 }
                 _ => None,
             }
         }
     }
 
-    fn into_grid(&self, state: GridOrEmpty2D<Self::PixelState>) -> Result<GridOrEmpty2D<P>> {
-        Ok(state.map_indexed_elements(|_index: usize, estimator| {
-            P::from_(estimator.quantile_estimate())
-        }))
+    fn to_grid(&self, state: GridOrEmpty2D<Self::PixelState>) -> Result<GridOrEmpty2D<P>> {
+        Ok(
+            state.map_indexed_elements(|_index: usize, estimator_opt: Option<Self::PixelState>| {
+                let estimator = estimator_opt??;
+                let value = P::from_(estimator.quantile_estimate());
+                Some(value)
+            }),
+        )
     }
 }

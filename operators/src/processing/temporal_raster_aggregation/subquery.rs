@@ -11,8 +11,7 @@ use geoengine_datatypes::{
     },
     raster::{
         EmptyGrid2D, GeoTransform, GridIdx2D, GridIndexAccess, GridOrEmpty, GridOrEmpty2D,
-        GridShape, GridShapeAccess, MapIndexedElementsParallel, Pixel, RasterTile2D,
-        TileInformation, UpdateIndexedElementsParallel,
+        GridShapeAccess, Pixel, RasterTile2D, TileInformation, UpdateIndexedElementsParallel,
     },
 };
 use rayon::ThreadPool;
@@ -164,7 +163,7 @@ where
                 // every pixel is nodata we will keep it like this forever
             }
 
-            GridOrEmpty::Empty(e) => {
+            GridOrEmpty::Empty(_) => {
                 // TODO: handle case where this could stay empty
 
                 let aggregator = self.aggregator.clone();
@@ -175,13 +174,7 @@ where
                     aggregator.initialize(new_value_option)
                 };
 
-                // self.state_grid.update_indexed_elements_parallel(map_fn);
-                // <GridOrEmpty<GridShape<[usize; 2]>, F::PixelState> as UpdateIndexedElementsParallel::<usize, Option<F::PixelState>, _>>::update_indexed_elements_parallel(
-                //     &mut self.state_grid,
-                //     map_fn,
-                // );
-
-                e.clone().map_indexed_elements_parallel(map_fn);
+                self.state_grid.update_indexed_elements_parallel(map_fn);
             }
 
             GridOrEmpty::Grid(g) => {
@@ -259,7 +252,7 @@ where
             tile_position,
             0,
             global_geo_transform,
-            aggregator.into_grid(state_grid)?,
+            aggregator.to_grid(state_grid)?,
             cache_hint,
         ))
     }

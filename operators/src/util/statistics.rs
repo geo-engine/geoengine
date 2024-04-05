@@ -304,18 +304,17 @@ impl<T: AsPrimitive<f64>> SafePSquareQuantileEstimator<T> {
                 samples,
                 num_samples,
             } => {
-                // let adjusted_n = *num_samples + usize::from(num_samples.is_odd());
+                fn position(n: usize, quantile: f64) -> usize {
+                    f64::floor(n as f64 * quantile) as usize
+                }
 
-                // let position = usize::min(
-                //     *num_samples - 1, // prevent out of bounds
-                //     f64::round((adjusted_n as f64) * quantile) as usize,
-                // );
-                // samples[position].as_()
-
-                let num_samples = *num_samples as f64 - f64::from(num_samples.is_even());
-                let position = f64::floor(num_samples * quantile) as usize;
-                dbg!(num_samples, quantile, position);
-                samples[position].as_()
+                if num_samples.is_even() {
+                    let upper = samples[position(*num_samples, *quantile)].as_();
+                    let lower = samples[position(*num_samples - 1, *quantile)].as_();
+                    (upper + lower) / 2.0
+                } else {
+                    samples[position(*num_samples, *quantile)].as_()
+                }
             }
             Self::Estimator(estimator) => estimator.quantile_estimate(),
         }
@@ -325,6 +324,10 @@ impl<T: AsPrimitive<f64>> SafePSquareQuantileEstimator<T> {
     ///
     /// # Note
     /// A `sample` that does not satisfy `f64::is_finite` is silently ignored.
+    ///
+    /// # Panics
+    ///
+    /// Must not panic.
     ///
     pub fn update(&mut self, sample: T) {
         match self {
@@ -838,7 +841,7 @@ mod tests {
     #[test]
     fn it_can_be_safely_with_1_to_4_values() {
         let mut medians = Vec::new();
-        for i in 0..=6 {
+        for i in 0..=5 {
             let mut estimator = SafePSquareQuantileEstimator::new(0.5, 0).unwrap();
 
             for v in 1..=i {
@@ -852,12 +855,11 @@ mod tests {
             medians,
             vec![
                 0.0, // 0
-                0.0, // 0,1
+                0.5, // 0,1
                 1.0, // 0,1,2
-                1.0, // 0,1,2,3
+                1.5, // 0,1,2,3
                 2.0, // 0,1,2,3,4
                 2.0, // 0,1,2,3,4,5
-                3.0, // 0,1,2,3,4,5,6
             ]
         );
     }

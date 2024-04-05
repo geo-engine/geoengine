@@ -2954,4 +2954,77 @@ mod tests {
             )
         ]));
     }
+
+    #[tokio::test]
+    async fn it_estimates_a_median() {
+        let raster_tiles = make_raster();
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: raster_tiles,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .boxed();
+
+        let agg = TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: Aggregation::PercentileEstimate {
+                    percentile: 0.5,
+                    ignore_no_data: false,
+                },
+                window: TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
+                    step: 40,
+                },
+                window_reference: None,
+                output_type: None,
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 40),
+            spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        let qp = agg
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let result = qp
+            .query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(result.len(), 2);
+
+        assert_eq!(
+            result[0].grid_array,
+            GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 6, 6, 6, 6, 6]).unwrap())
+        );
+    }
 }
