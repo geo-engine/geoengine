@@ -44,10 +44,10 @@ jobs:
           large-packages: true
           docker-images: true
           swap-storage: true
-      - name: Install lld & GDAL
+      - name: Install lld & GDAL & Protobuf
         run: |
           sudo apt-get update
-          sudo apt-get install lld libgdal-dev gdal-bin build-essential clang curl
+          sudo apt-get install lld libgdal-dev gdal-bin build-essential clang curl protobuf-compiler
           sudo apt-get clean
           export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
           export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
