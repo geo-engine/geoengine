@@ -2,7 +2,6 @@ use crate::api::model::datatypes::{
     DataProviderId, DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance,
 };
 use crate::api::model::responses::ErrorResponse;
-#[cfg(feature = "aruna")]
 use crate::datasets::external::aruna::error::ArunaProviderError;
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
@@ -340,7 +339,6 @@ pub enum Error {
         type_names: WorkflowId,
     },
 
-    #[cfg(feature = "aruna")]
     #[snafu(context(false))]
     ArunaProvider {
         source: ArunaProviderError,
