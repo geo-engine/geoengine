@@ -9,6 +9,7 @@ use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::error::{self, Result};
 use crate::projects::Symbology;
+use crate::util::postgres::PostgresErrorExt;
 use async_trait::async_trait;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
@@ -507,13 +508,12 @@ where
 
         let typed_meta_data = meta_data.to_typed_metadata();
 
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
 
-        // unique constraint on `id` checks if dataset with same id exists
+        let tx = conn.build_transaction().start().await?;
 
-        let stmt = conn
-            .prepare(
-                "
+        tx.execute(
+            "
                 INSERT INTO datasets (
                     id,
                     name,
@@ -527,11 +527,6 @@ where
                     tags
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[])",
-            )
-            .await?;
-
-        conn.execute(
-            &stmt,
             &[
                 &id,
                 &name,
@@ -545,7 +540,10 @@ where
                 &dataset.tags,
             ],
         )
-        .await?;
+        .await
+        .map_unique_violation("datasets", "name", || error::Error::InvalidDatasetName)?;
+
+        tx.commit().await?;
 
         Ok(DatasetIdAndName { id, name })
     }

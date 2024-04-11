@@ -9,13 +9,27 @@ use strum::IntoStaticStr;
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum CreateDatasetError {
-    UploadNotFound { source: error::Error },
+    UploadNotFound {
+        source: error::Error,
+    },
     OnlyAdminsCanCreateDatasetFromVolume,
     AdminsCannotCreateDatasetFromUpload,
-    CannotResolveUploadFilePath { source: error::Error },
-    JsonValidationFailed { source: error::Error },
-    DatabaseAccessError { source: error::Error },
-    CannotAccessConfig { source: error::Error },
+    CannotResolveUploadFilePath {
+        source: error::Error,
+    },
+    #[snafu(display("Cannot create dataset: {source}"))]
+    CannotCreateDataset {
+        source: error::Error,
+    },
+    JsonValidationFailed {
+        source: error::Error,
+    },
+    DatabaseAccessError {
+        source: error::Error,
+    },
+    CannotAccessConfig {
+        source: error::Error,
+    },
     UnknownVolume,
 }
 

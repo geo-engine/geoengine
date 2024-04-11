@@ -11,6 +11,7 @@ use crate::pro::users::{
     User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
 };
 use crate::projects::{ProjectId, STRectangle};
+use crate::util::postgres::PostgresErrorExt;
 use crate::util::Identifier;
 use crate::{error, pro::contexts::ProPostgresContext};
 use async_trait::async_trait;
@@ -47,16 +48,11 @@ where
         let stmt = tx
             .prepare("INSERT INTO roles (id, name) VALUES ($1, $2);")
             .await?;
-        let res = tx.execute(&stmt, &[&user.id, &user.email]).await;
-
-        if let Err(e) = res {
-            if e.code() == Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION) {
-                return Err(error::Error::Duplicate {
-                    reason: "E-mail already exists".to_string(),
-                });
-            }
-            return Err(e.into());
-        }
+        tx.execute(&stmt, &[&user.id, &user.email])
+            .await
+            .map_unique_violation("roles", "name", || error::Error::Duplicate {
+                reason: "E-mail already exists".to_string(),
+            })?;
 
         let stmt = tx
             .prepare(
