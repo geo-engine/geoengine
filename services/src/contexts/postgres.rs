@@ -452,7 +452,6 @@ impl TryFrom<config::Postgres> for Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "aruna")]
     use crate::datasets::external::aruna::ArunaDataProviderDefinition;
     use crate::datasets::external::gbif::{GbifDataProvider, GbifDataProviderDefinition};
     use crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition;
@@ -4535,7 +4534,6 @@ mod tests {
     async fn test_data_provider_definition_types(
         pool: &PooledConnection<'_, PostgresConnectionManager<tokio_postgres::NoTls>>,
     ) {
-        #[cfg(feature = "aruna")]
         assert_sql_type(
             pool,
             "ArunaDataProviderDefinition",
@@ -4666,7 +4664,6 @@ mod tests {
             pool,
             "DataProviderDefinition",
             [
-                #[cfg(feature = "aruna")]
                 TypedDataProviderDefinition::ArunaDataProviderDefinition(
                     ArunaDataProviderDefinition {
                         id: DataProviderId::from_str("86a7f7ce-1bab-4ce9-a32b-172c0f958ee0")
