@@ -42,7 +42,7 @@ use crate::api::model::services::{
 use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
 use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy};
-use crate::datasets::storage::{AutoCreateDataset, Dataset};
+use crate::datasets::storage::{AutoCreateDataset, Dataset, SuggestMetaData};
 use crate::datasets::upload::{UploadId, Volume, VolumeName};
 use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
@@ -324,6 +324,7 @@ use utoipa::{Modify, OpenApi};
             CreateDataset,
             UpdateDataset,
             AutoCreateDataset,
+            SuggestMetaData,
             OrderBy,
             DatasetListing,
             MetaDataSuggestion,

@@ -36,7 +36,9 @@ where
 {
     cfg.service(
         web::scope("/dataset")
-            .service(web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)))
+            .service(
+                web::resource("/suggest").route(web::post().to(suggest_meta_data_handler::<C>)),
+            )
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
