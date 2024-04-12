@@ -1,16 +1,15 @@
-use crate::api::model::datatypes::LayerId;
+use crate::api::model::datatypes::{DatasetId, LayerId};
 use crate::contexts::{ApplicationContext, SessionContext};
-use crate::datasets::storage::DatasetDb;
-use crate::datasets::DatasetName;
 use crate::error::Result;
 use crate::layers::listing::LayerCollectionId;
 use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
-use crate::pro::permissions::Permission;
+use crate::pro::permissions::{Permission, PermissionListing};
 use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
 use crate::projects::ProjectId;
 use actix_web::{web, FromRequest, HttpResponse};
+use geoengine_datatypes::error::BoxedResultExt;
 use serde::Deserialize;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -19,11 +18,16 @@ where
     C::Session: FromRequest,
 {
     cfg.service(
-        web::scope("/permissions").service(
-            web::resource("")
-                .route(web::put().to(add_permission_handler::<C>))
-                .route(web::delete().to(remove_permission_handler::<C>)),
-        ),
+        web::scope("/permissions")
+            .service(
+                web::resource("")
+                    .route(web::put().to(add_permission_handler::<C>))
+                    .route(web::delete().to(remove_permission_handler::<C>)),
+            )
+            .service(
+                web::resource("/resources/{resource_type}/{resource_id}")
+                    .route(web::get().to(get_resource_permissions_handler::<C>)),
+            ),
     );
 }
 
@@ -43,26 +47,64 @@ pub enum Resource {
     Layer(LayerId),
     LayerCollection(LayerCollectionId),
     Project(ProjectId),
-    Dataset(DatasetName),
+    Dataset(DatasetId),
 }
 
-impl Resource {
-    pub async fn into_resource_id<D: DatasetDb>(self, db: &D) -> Result<ResourceId> {
-        Ok(match self {
+impl From<Resource> for ResourceId {
+    fn from(resource: Resource) -> Self {
+        match resource {
             Resource::Layer(layer_id) => ResourceId::Layer(layer_id.into()),
             Resource::LayerCollection(layer_collection_id) => {
                 ResourceId::LayerCollection(layer_collection_id)
             }
             Resource::Project(project_id) => ResourceId::Project(project_id),
-            Resource::Dataset(dataset_name) => {
-                ResourceId::DatasetId(db.resolve_dataset_name_to_id(&dataset_name).await?.ok_or(
-                    crate::error::Error::UnknownDatasetName {
-                        dataset_name: dataset_name.to_string(),
-                    },
-                )?)
-            }
-        })
+            Resource::Dataset(dataset_id) => ResourceId::DatasetId(dataset_id.into()),
+        }
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Deserialize, Clone, IntoParams, ToSchema)]
+pub struct PermissionListOptions {
+    pub limit: u32,
+    pub offset: u32,
+}
+
+/// Lists permission for a given resource.
+#[utoipa::path(
+    tag = "Permissions",
+    get,
+    path = "/permissions/resources/{resource_type}/{resource_id}",
+    responses(
+        (status = 200, description = "List of permission", body = Vec<PermissionListing>),        
+    ),
+    params(
+        ("resource_type" = String, description = "Resource Type"),
+        ("resource_id" = String, description = "Resource Id"),
+        PermissionListOptions,
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn get_resource_permissions_handler<C: ProApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    resource_id: web::Path<(String, String)>,
+    options: web::Query<PermissionListOptions>,
+) -> Result<web::Json<Vec<PermissionListing>>>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let resource_id = ResourceId::try_from(resource_id.into_inner())?;
+    let options = options.into_inner();
+
+    let db = app_ctx.session_context(session).db();
+    let permissions = db
+        .list_permissions(resource_id, options.offset, options.limit)
+        .await
+        .boxed_context(crate::error::PermissionDb)?;
+
+    Ok(web::Json(permissions))
 }
 
 /// Adds a new permission.
@@ -98,12 +140,13 @@ where
     let permission = permission.into_inner();
 
     let db = app_ctx.session_context(session).db();
-    db.add_permission(
+    db.add_permission::<ResourceId>(
         permission.role_id,
-        permission.resource.into_resource_id(&db).await?,
+        permission.resource.into(),
         permission.permission,
     )
-    .await?;
+    .await
+    .boxed_context(crate::error::PermissionDb)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -141,12 +184,13 @@ where
     let permission = permission.into_inner();
 
     let db = app_ctx.session_context(session).db();
-    db.remove_permission(
+    db.remove_permission::<ResourceId>(
         permission.role_id,
-        permission.resource.into_resource_id(&db).await?,
+        permission.resource.into(),
         permission.permission,
     )
-    .await?;
+    .await
+    .boxed_context(crate::error::PermissionDb)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -155,16 +199,24 @@ where
 mod tests {
 
     use super::*;
-    use crate::pro::{
-        contexts::ProPostgresContext,
-        ge_context,
-        users::{UserAuth, UserCredentials, UserRegistration},
-        util::tests::{add_ndvi_to_datasets, add_ports_to_datasets, admin_login},
+    use crate::{
+        pro::{
+            contexts::ProPostgresContext,
+            ge_context,
+            users::{UserAuth, UserCredentials, UserRegistration},
+            util::tests::{
+                add_ndvi_to_datasets, add_ports_to_datasets, admin_login, send_pro_test_request,
+            },
+        },
+        util::tests::read_body_string,
     };
+    use actix_http::header;
+    use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_operators::{
         engine::{RasterOperator, VectorOperator, WorkflowOperatorPath},
         source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
     };
+    use serde_json::{json, Value};
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
@@ -259,5 +311,66 @@ mod tests {
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .is_ok());
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_lists_permissions(app_ctx: ProPostgresContext<NoTls>) {
+        let admin_session = admin_login(&app_ctx).await;
+
+        let (gdal_dataset_id, _) = add_ndvi_to_datasets(&app_ctx, true, true).await;
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/permissions/resources/dataset/{gdal_dataset_id}?offset=0&limit=10",
+            ))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, app_ctx).await;
+
+        let res_status = res.status();
+        let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
+        assert_eq!(res_status, 200, "{res_body}");
+
+        assert_eq!(
+            res_body,
+            json!([{
+                   "permission":"Owner",
+                   "resourceId":  {
+                       "id": gdal_dataset_id.to_string(),
+                       "type": "DatasetId"
+                   },
+                   "role": {
+                       "id": "d5328854-6190-4af9-ad69-4e74b0961ac9",
+                       "name":
+                       "admin"
+                   }
+               }, {
+                   "permission": "Read",
+                   "resourceId": {
+                       "id": gdal_dataset_id.to_string(),
+                       "type": "DatasetId"
+                   },
+                   "role": {
+                       "id": "fd8e87bf-515c-4f36-8da6-1a53702ff102",
+                       "name": "anonymous"
+                   }
+               }, {
+                   "permission": "Read",
+                   "resourceId": {
+                       "id": gdal_dataset_id.to_string(),
+                       "type": "DatasetId"
+                   },
+                   "role": {
+                       "id": "4e8081b6-8aa6-4275-af0c-2fa2da557d28",
+                       "name":
+                       "user"
+                   }
+               }]
+            )
+        );
     }
 }

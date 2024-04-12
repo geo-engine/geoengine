@@ -1,12 +1,16 @@
 use crate::{
-    api::handlers::datasets::{
-        adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
-        delete_dataset_handler, get_dataset_handler, list_datasets_handler, list_volumes_handler,
-        suggest_meta_data_handler,
-    },
-    api::model::{
-        responses::datasets::{errors::*, DatasetNameResponse},
-        services::{CreateDataset, DataPath, DatasetDefinition},
+    api::{
+        handlers::datasets::{
+            adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
+            delete_dataset_handler, get_dataset_handler, get_loading_info_handler,
+            list_datasets_handler, list_volumes_handler, suggest_meta_data_handler,
+            update_dataset_handler, update_dataset_provenance_handler,
+            update_dataset_symbology_handler,
+        },
+        model::{
+            responses::datasets::{errors::*, DatasetNameResponse},
+            services::{CreateDataset, DataPath, DatasetDefinition},
+        },
     },
     contexts::{ApplicationContext, SessionContext},
     datasets::{
@@ -21,6 +25,7 @@ use crate::{
     util::config::{get_config_element, Data},
 };
 use actix_web::{web, FromRequest};
+use geoengine_datatypes::error::BoxedResultExt;
 use snafu::ResultExt;
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
@@ -35,8 +40,21 @@ where
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
+                web::resource("/{dataset}/loadingInfo")
+                    .route(web::get().to(get_loading_info_handler::<C>)),
+            )
+            .service(
+                web::resource("/{dataset}/symbology")
+                    .route(web::put().to(update_dataset_symbology_handler::<C>)),
+            )
+            .service(
+                web::resource("/{dataset}/provenance")
+                    .route(web::put().to(update_dataset_provenance_handler::<C>)),
+            )
+            .service(
                 web::resource("/{dataset}")
                     .route(web::get().to(get_dataset_handler::<C>))
+                    .route(web::post().to(update_dataset_handler::<C>))
                     .route(web::delete().to(delete_dataset_handler::<C>)),
             )
             .service(web::resource("").route(web::post().to(create_dataset_handler::<C>))), // must come last to not match other routes
@@ -104,10 +122,9 @@ where
         .context(CannotResolveUploadFilePath)?;
 
     let db = app_ctx.session_context(session).db();
-    let meta_data = db.wrap_meta_data(definition.meta_data.into());
 
     let dataset = db
-        .add_dataset(definition.properties.into(), meta_data)
+        .add_dataset(definition.properties.into(), definition.meta_data.into())
         .await
         .context(DatabaseAccess)?;
 
@@ -117,10 +134,12 @@ where
         Permission::Read,
     )
     .await
+    .boxed_context(crate::error::PermissionDb)
     .context(DatabaseAccess)?;
 
     db.add_permission(Role::anonymous_role_id(), dataset.id, Permission::Read)
         .await
+        .boxed_context(crate::error::PermissionDb)
         .context(DatabaseAccess)?;
 
     Ok(web::Json(dataset.name.into()))

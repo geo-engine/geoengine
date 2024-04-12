@@ -1,8 +1,5 @@
-use std::{marker::PhantomData, sync::Arc};
-
-use super::compiled::LinkedExpression;
+use super::RasterExpressionError;
 use crate::{
-    adapters::{QueryWrapper, RasterArrayTimeAdapter, RasterTimeAdapter},
     engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterResultDescriptor},
     util::Result,
 };
@@ -18,8 +15,14 @@ use geoengine_datatypes::{
         RasterTile2D,
     },
 };
+use geoengine_expression::LinkedExpression;
 use libloading::Symbol;
 use num_traits::AsPrimitive;
+use std::{marker::PhantomData, sync::Arc};
+
+pub struct ExpressionInput<const N: usize> {
+    pub raster: BoxRasterQueryProcessor<f64>,
+}
 
 pub struct ExpressionQueryProcessor<TO, Sources>
 where
@@ -68,41 +71,48 @@ where
         query: RasterQueryRectangle,
         ctx: &'b dyn QueryContext,
     ) -> Result<BoxStream<'b, Result<Self::Output>>> {
-        let stream = self
-            .sources
-            .queries(query, ctx)
-            .await?
-            .and_then(move |rasters| async move {
-                if Tuple::all_empty(&rasters) {
-                    return Ok(Tuple::empty_raster(&rasters));
-                }
+        // rewrite query to request all input bands from the source. They are all combined in the single output band by means of the expression.
+        let source_query = RasterQueryRectangle {
+            spatial_query: query.spatial_query,
+            time_interval: query.time_interval,
+            attributes: BandSelection::first_n(Tuple::num_bands()),
+        };
 
-                let (
-                    out_time,
-                    out_tile_position,
-                    out_global_geo_transform,
-                    _output_grid_shape,
-                    cache_hint,
-                ) = Tuple::metadata(&rasters);
+        let stream =
+            self.sources
+                .zip_bands(source_query, ctx)
+                .await?
+                .and_then(move |rasters| async move {
+                    if Tuple::all_empty(&rasters) {
+                        return Ok(Tuple::empty_raster(&rasters));
+                    }
 
-                let program = self.program.clone();
-                let map_no_data = self.map_no_data;
+                    let (
+                        out_time,
+                        out_tile_position,
+                        out_global_geo_transform,
+                        _output_grid_shape,
+                        cache_hint,
+                    ) = Tuple::metadata(&rasters);
 
-                let out = crate::util::spawn_blocking_with_thread_pool(
-                    ctx.thread_pool().clone(),
-                    move || Tuple::compute_expression(rasters, &program, map_no_data),
-                )
-                .await??;
+                    let program = self.program.clone();
+                    let map_no_data = self.map_no_data;
 
-                Ok(RasterTile2D::new(
-                    out_time,
-                    out_tile_position,
-                    0,
-                    out_global_geo_transform,
-                    out,
-                    cache_hint,
-                ))
-            });
+                    let out = crate::util::spawn_blocking_with_thread_pool(
+                        ctx.thread_pool().clone(),
+                        move || Tuple::compute_expression(rasters, &program, map_no_data),
+                    )
+                    .await??;
+
+                    Ok(RasterTile2D::new(
+                        out_time,
+                        out_tile_position,
+                        0,
+                        out_global_geo_transform,
+                        out,
+                        cache_hint,
+                    ))
+                });
 
         Ok(stream.boxed())
     }
@@ -116,7 +126,7 @@ where
 trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
     type Tuple: Send + 'static;
 
-    async fn queries<'a>(
+    async fn zip_bands<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -141,25 +151,25 @@ trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
         program: &LinkedExpression,
         map_no_data: bool,
     ) -> Result<GridOrEmpty2D<TO>>;
+
+    fn num_bands() -> u32;
 }
 
 #[async_trait]
-impl<TO, T1> ExpressionTupleProcessor<TO> for BoxRasterQueryProcessor<T1>
+impl<TO> ExpressionTupleProcessor<TO> for ExpressionInput<1>
 where
     TO: Pixel,
-    T1: Pixel + AsPrimitive<TO>,
+    f64: AsPrimitive<TO>,
 {
-    type Tuple = RasterTile2D<T1>;
+    type Tuple = RasterTile2D<f64>;
 
     #[inline]
-    async fn queries<'a>(
+    async fn zip_bands<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Tuple>>> {
-        let stream = self.query(query, ctx).await?;
-
-        Ok(stream.boxed())
+        self.raster.query(query, ctx).await
     }
 
     #[inline]
@@ -201,16 +211,18 @@ where
     ) -> Result<GridOrEmpty2D<TO>> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
-            program.function_1::<Option<f64>>()?
+            program
+                .function_1::<Option<f64>>()
+                .map_err(RasterExpressionError::from)?
         };
 
-        let map_fn = |in_value: Option<T1>| {
+        let map_fn = |in_value: Option<f64>| {
             // TODO: could be a |in_value: T1| if map no data is false!
             if !map_no_data && in_value.is_none() {
                 return None;
             }
 
-            let result = expression(in_value.map(AsPrimitive::as_));
+            let result = expression(in_value);
 
             result.map(TO::from_)
         };
@@ -219,30 +231,48 @@ where
 
         Result::Ok(res)
     }
+
+    fn num_bands() -> u32 {
+        1
+    }
 }
 
 // TODO: implement this via macro for 2-8 sources
 #[async_trait]
-impl<TO, T1, T2> ExpressionTupleProcessor<TO>
-    for (BoxRasterQueryProcessor<T1>, BoxRasterQueryProcessor<T2>)
+impl<TO> ExpressionTupleProcessor<TO> for ExpressionInput<2>
 where
     TO: Pixel,
-    T1: Pixel + AsPrimitive<TO>,
-    T2: Pixel,
+    f64: AsPrimitive<TO>,
 {
-    type Tuple = (RasterTile2D<T1>, RasterTile2D<T2>);
+    type Tuple = (RasterTile2D<f64>, RasterTile2D<f64>);
 
     #[inline]
-    async fn queries<'a>(
+    async fn zip_bands<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Tuple>>> {
-        let source_a = QueryWrapper { p: &self.0, ctx };
+        // chunk up the stream to get all bands for a spatial tile at once
+        let stream = self.raster.query(query, ctx).await?.chunks(2).map(|chunk| {
+            if chunk.len() != 2 {
+                // if there are not exactly two tiles, it should mean the last tile was an error and the chunker ended prematurely
+                if let Some(Err(e)) = chunk.into_iter().last() {
+                    return Err(e);
+                }
+                // if there is no error, the source did not produce all bands, which likely means a bug in an operator
+                unreachable!("the source did not produce all bands");
+            }
 
-        let source_b = QueryWrapper { p: &self.1, ctx };
+            let [a, b]: [Result<RasterTile2D<f64>>; 2] = chunk
+                .try_into()
+                .expect("all chunks should be of length 2 because it was checked above");
+            match (a, b) {
+                (Ok(t0), Ok(t1)) => Ok((t0, t1)),
+                (Err(e), _) | (_, Err(e)) => Err(e),
+            }
+        });
 
-        Ok(Box::pin(RasterTimeAdapter::new(source_a, source_b, query)))
+        Ok(stream.boxed())
     }
 
     #[inline]
@@ -284,7 +314,9 @@ where
     ) -> Result<GridOrEmpty2D<TO>> {
         let expression = unsafe {
             // we have to "trust" that the function has the signature we expect
-            program.function_2::<Option<f64>, Option<f64>>()?
+            program
+                .function_2::<Option<f64>, Option<f64>>()
+                .map_err(RasterExpressionError::from)?
         };
 
         let map_fn = |lin_idx: usize| {
@@ -295,10 +327,7 @@ where
                 return None;
             }
 
-            let result = expression(
-                t0_value.map(AsPrimitive::as_),
-                t1_value.map(AsPrimitive::as_),
-            );
+            let result = expression(t0_value, t1_value);
 
             result.map(TO::from_)
         };
@@ -307,6 +336,10 @@ where
         let out = GridOrEmpty::from_index_fn_parallel(&grid_shape, map_fn);
 
         Result::Ok(out)
+    }
+
+    fn num_bands() -> u32 {
+        2
     }
 }
 
@@ -356,22 +389,47 @@ macro_rules! impl_expression_tuple_processor {
     // We have `0, 1, 2, …` and `T0, T1, T2, …`
     (@inner $N:tt | $( $I:tt ),+ | $( $PIXEL:tt ),+ | $( $IS_NODATA:tt ),+ | $FN_T:ty ) => {
         #[async_trait]
-        impl<TO, T1> ExpressionTupleProcessor<TO> for [BoxRasterQueryProcessor<T1>; $N]
+        impl<TO> ExpressionTupleProcessor<TO> for ExpressionInput<$N>
         where
             TO: Pixel,
-            T1 : Pixel + AsPrimitive<TO>
+            f64: AsPrimitive<TO>,
         {
-            type Tuple = [RasterTile2D<T1>; $N];
+            type Tuple = [RasterTile2D<f64>; $N];
 
             #[inline]
-            async fn queries<'a>(
+            async fn zip_bands<'a>(
                 &'a self,
                 query: RasterQueryRectangle,
                 ctx: &'a dyn QueryContext,
             ) -> Result<BoxStream<'a, Result<Self::Tuple>>> {
-                let sources = [$( QueryWrapper { p: &self[$I], ctx } ),*];
+                // chunk up the stream to get all bands for a spatial tile at once
+                let stream = self.raster.query(query, ctx).await?.chunks($N).map(|chunk| {
+                    if chunk.len() != $N {
+                        // if there are not exactly N tiles, it should mean the last tile was an error and the chunker ended prematurely
+                        if let Some(Err(e)) = chunk.into_iter().last() {
+                            return Err(e);
+                        }
+                        // if there is no error, the source did not produce all bands, which likely means a bug in an operator
+                        unreachable!("the source did not produce all bands");
+                    }
 
-                Ok(Box::pin(RasterArrayTimeAdapter::new(sources, query)))
+                    let mut ok_tiles = Vec::with_capacity($N);
+
+                    for tile in chunk {
+                        match tile {
+                            Ok(tile) => ok_tiles.push(tile),
+                            Err(e) => return Err(e),
+                        }
+                    }
+
+                    let tuple: [RasterTile2D<f64>; $N] = ok_tiles
+                        .try_into()
+                        .expect("all chunks should be of the expected langth because it was checked above");
+
+                    Ok(tuple)
+                });
+
+                Ok(stream.boxed())
             }
 
             #[inline]
@@ -404,7 +462,7 @@ macro_rules! impl_expression_tuple_processor {
             ) -> Result<GridOrEmpty2D<TO>> {
                 let expression: Symbol<$FN_T> = unsafe {
                     // we have to "trust" that the function has the signature we expect
-                    program.function_nary()?
+                    program.function_nary().map_err(RasterExpressionError::from)?
                 };
 
                 let map_fn = |lin_idx: usize| {
@@ -419,7 +477,7 @@ macro_rules! impl_expression_tuple_processor {
 
                     let result = expression(
                         $(
-                            $PIXEL.map(AsPrimitive::as_)
+                            $PIXEL
                         ),*
                     );
 
@@ -430,6 +488,10 @@ macro_rules! impl_expression_tuple_processor {
                 let out = GridOrEmpty::from_index_fn_parallel(&grid_shape, map_fn);
 
                 Result::Ok(out)
+            }
+
+            fn num_bands() -> u32 {
+                $N
             }
         }
     };

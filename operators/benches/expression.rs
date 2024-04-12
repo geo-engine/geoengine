@@ -1,12 +1,18 @@
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
+
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
-    primitives::{BandSelection, Measurement, RasterQueryRectangle, TimeInterval},
+    primitives::{BandSelection, RasterQueryRectangle, TimeInterval},
+    raster::RenameBands,
     raster::{GridBoundingBox2D, RasterDataType, RasterTile2D},
     util::test::TestDefault,
 };
 use geoengine_operators::{
-    engine::{MockExecutionContext, MockQueryContext, RasterOperator, WorkflowOperatorPath},
-    processing::{Expression, ExpressionParams, ExpressionSources},
+    engine::{
+        MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterOperator,
+        SingleRasterSource, WorkflowOperatorPath,
+    },
+    processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
     source::{GdalSource, GdalSourceParameters},
     util::{gdal::add_ndvi_dataset, number_statistics::NumberStatistics, Result},
 };
@@ -26,10 +32,20 @@ fn expression_on_sources(
         params: ExpressionParams {
             expression: "(A - B) / (A + B)".to_string(),
             output_type: RasterDataType::F64,
-            output_measurement: Some(Measurement::Unitless),
+            output_band: None,
             map_no_data: false,
         },
-        sources: ExpressionSources::new_a_b(a, b),
+        sources: SingleRasterSource {
+            raster: RasterStacker {
+                params: RasterStackerParams {
+                    rename_bands: RenameBands::Default,
+                },
+                sources: MultipleRasterSources {
+                    rasters: vec![a, b],
+                },
+            }
+            .boxed(),
+        },
     }
     .boxed()
 }
@@ -109,7 +125,7 @@ where
     let start = std::time::Instant::now();
     let result = f().await;
     let end = start.elapsed();
-    let secs = end.as_secs() as f64 + end.subsec_nanos() as f64 / 1_000_000_000.0;
+    let secs = end.as_secs() as f64 + f64::from(end.subsec_nanos()) / 1_000_000_000.0;
 
     // println!("{} took {} seconds", name, secs);
 

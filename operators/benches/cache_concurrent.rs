@@ -1,6 +1,4 @@
-use std::hint::black_box;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
 
 use futures::future::join_all;
 use geoengine_datatypes::primitives::DateTime;
@@ -18,6 +16,9 @@ use geoengine_operators::{
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde_json::json;
+use std::hint::black_box;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 static WRITTEN_ELEMENTS: AtomicUsize = AtomicUsize::new(0);
 
@@ -30,6 +31,7 @@ struct ReadMeasurement {
     read_query_ms: u128,
 }
 
+#[allow(clippy::struct_field_names)] // used for serialization
 struct WriteMeasurement {
     insert_query_ms: u128,
     insert_tile_ms: u128,
@@ -240,10 +242,10 @@ async fn main() {
     let repititions = 1;
 
     println!("queries,writes_per_read,operation,duration");
-    for simultaneous_queries in simultaneous_queries.iter() {
-        for writes_per_read in writes_per_reads.iter() {
+    for simultaneous_queries in simultaneous_queries {
+        for writes_per_read in writes_per_reads {
             for _ in 0..repititions {
-                run_bench(*simultaneous_queries, *writes_per_read).await;
+                run_bench(simultaneous_queries, writes_per_read).await;
             }
         }
     }

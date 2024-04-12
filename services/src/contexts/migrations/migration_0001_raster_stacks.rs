@@ -168,14 +168,14 @@ mod tests {
         let mut conn = pool.get().await?;
 
         // initial schema
-        migrate_database(&mut conn, &[Box::new(Migration0000Initial)]).await?;
+        migrate_database(&mut conn, &[Box::new(Migration0000Initial)], None).await?;
 
         // insert test data on initial schema
         let test_data_sql = std::fs::read_to_string(test_data!("migrations/test_data.sql"))?;
         conn.batch_execute(&test_data_sql).await?;
 
         // perform current migration
-        migrate_database(&mut conn, &[Box::new(Migration0001RasterStacks)]).await?;
+        migrate_database(&mut conn, &[Box::new(Migration0001RasterStacks)], None).await?;
 
         // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
         drop(conn);

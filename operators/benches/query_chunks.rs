@@ -14,6 +14,8 @@
 //! ```
 //!
 
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
+
 use async_trait::async_trait;
 use csv::WriterBuilder;
 use futures::StreamExt;
@@ -39,7 +41,7 @@ use geoengine_operators::{
         },
     },
     processing::{
-        AggregateFunctionParams, FeatureAggregationMethod, NeighborhoodAggregate,
+        AggregateFunctionParams, ColumnNames, FeatureAggregationMethod, NeighborhoodAggregate,
         NeighborhoodAggregateParams, NeighborhoodParams, RasterVectorJoin, RasterVectorJoinParams,
         TemporalAggregationMethod,
     },
@@ -61,9 +63,9 @@ fn main() {
 
     let benchmarks = setup_benchmarks(&mut exe_ctx);
 
-    let (results, element_headers) = run_benchmarks(benchmarks, exe_ctx, query_ctx);
+    let (results, element_headers) = run_benchmarks(benchmarks, &exe_ctx, &query_ctx);
 
-    let csv = write_csv(element_headers, results);
+    let csv = write_csv(&element_headers, results);
 
     println!("{csv}");
 }
@@ -112,7 +114,7 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
             name: "raster_vector_join".to_string(),
             operator: RasterVectorJoin {
                 params: RasterVectorJoinParams {
-                    names: vec!["ndvi".to_string()],
+                    names: ColumnNames::Names(vec!["ndvi".to_string()]),
                     feature_aggregation: FeatureAggregationMethod::Mean,
                     feature_aggregation_ignore_no_data: true,
                     temporal_aggregation: TemporalAggregationMethod::Mean,
@@ -145,8 +147,8 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
 
 fn run_benchmarks(
     benchmarks: Vec<Benchmark>,
-    exe_ctx: StatisticsWrappingMockExecutionContext,
-    query_ctx: MockQueryContext,
+    exe_ctx: &StatisticsWrappingMockExecutionContext,
+    query_ctx: &MockQueryContext,
 ) -> (Vec<(String, BenchmarkElementCounts)>, BTreeSet<String>) {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -161,8 +163,8 @@ fn run_benchmarks(
         let name = benchmark.name().to_string();
         let result = run_benchmark(
             &runtime,
-            &exe_ctx,
-            &query_ctx,
+            exe_ctx,
+            query_ctx,
             benchmark,
             &mut poll_next_receiver,
         );
@@ -178,20 +180,20 @@ fn run_benchmarks(
 }
 
 fn write_csv(
-    element_headers: BTreeSet<String>,
+    element_headers: &BTreeSet<String>,
     results: Vec<(String, HashMap<String, u64>)>,
 ) -> String {
     let mut csv = WriterBuilder::new().has_headers(true).from_writer(vec![]);
 
     csv.write_field("name").unwrap();
-    for header in &element_headers {
+    for header in element_headers {
         csv.write_field(header).unwrap();
     }
     csv.write_record(None::<&[u8]>).unwrap();
 
     for (name, result) in results {
         csv.write_field(name).unwrap();
-        for header in &element_headers {
+        for header in element_headers {
             csv.write_field(result.get(header).unwrap_or(&0).to_string())
                 .unwrap();
         }
@@ -245,34 +247,34 @@ fn run_benchmark(
 
             match processor {
                 TypedRasterQueryProcessor::U8(processor) => {
-                    collect_raster_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_raster_query(runtime, query_ctx, &processor, query_rectangle);
                 }
                 TypedRasterQueryProcessor::U16(processor) => {
-                    collect_raster_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_raster_query(runtime, query_ctx, &processor, query_rectangle);
                 }
                 TypedRasterQueryProcessor::U32(processor) => {
-                    collect_raster_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_raster_query(runtime, query_ctx, &processor, query_rectangle);
                 }
                 TypedRasterQueryProcessor::U64(processor) => {
-                    collect_raster_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_raster_query(runtime, query_ctx, &processor, query_rectangle);
                 }
                 TypedRasterQueryProcessor::I8(processor) => {
-                    collect_raster_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_raster_query(runtime, query_ctx, &processor, query_rectangle);
                 }
                 TypedRasterQueryProcessor::I16(processor) => {
-                    collect_raster_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_raster_query(runtime, query_ctx, &processor, query_rectangle);
                 }
                 TypedRasterQueryProcessor::I32(processor) => {
-                    collect_raster_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_raster_query(runtime, query_ctx, &processor, query_rectangle);
                 }
                 TypedRasterQueryProcessor::I64(processor) => {
-                    collect_raster_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_raster_query(runtime, query_ctx, &processor, query_rectangle);
                 }
                 TypedRasterQueryProcessor::F32(processor) => {
-                    collect_raster_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_raster_query(runtime, query_ctx, &processor, query_rectangle);
                 }
                 TypedRasterQueryProcessor::F64(processor) => {
-                    collect_raster_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_raster_query(runtime, query_ctx, &processor, query_rectangle);
                 }
             }
         }
@@ -292,16 +294,16 @@ fn run_benchmark(
 
             match processor {
                 geoengine_operators::engine::TypedVectorQueryProcessor::Data(processor) => {
-                    collect_vector_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_vector_query(runtime, query_ctx, &processor, query_rectangle);
                 }
                 geoengine_operators::engine::TypedVectorQueryProcessor::MultiPoint(processor) => {
-                    collect_vector_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_vector_query(runtime, query_ctx, &processor, query_rectangle);
                 }
                 geoengine_operators::engine::TypedVectorQueryProcessor::MultiLineString(
                     processor,
-                ) => collect_vector_query(runtime, query_ctx, processor, query_rectangle),
+                ) => collect_vector_query(runtime, query_ctx, &processor, query_rectangle),
                 geoengine_operators::engine::TypedVectorQueryProcessor::MultiPolygon(processor) => {
-                    collect_vector_query(runtime, query_ctx, processor, query_rectangle)
+                    collect_vector_query(runtime, query_ctx, &processor, query_rectangle);
                 }
             }
         }
@@ -310,10 +312,11 @@ fn run_benchmark(
     gather_poll_nexts(poll_next_receiver)
 }
 
+#[allow(clippy::borrowed_box)] // trait defined on Box
 fn collect_raster_query<P: Pixel>(
     runtime: &tokio::runtime::Runtime,
     query_ctx: &dyn QueryContext,
-    processor: Box<dyn RasterQueryProcessor<RasterType = P>>,
+    processor: &Box<dyn RasterQueryProcessor<RasterType = P>>,
     query_rectangle: RasterQueryRectangle,
 ) {
     let stream =
@@ -322,10 +325,11 @@ fn collect_raster_query<P: Pixel>(
     let _tiles = runtime.block_on(stream.collect::<Vec<_>>());
 }
 
+#[allow(clippy::borrowed_box)] // trait defined on Box
 fn collect_vector_query<G: 'static>(
     runtime: &tokio::runtime::Runtime,
     query_ctx: &dyn QueryContext,
-    processor: Box<dyn VectorQueryProcessor<VectorType = G>>,
+    processor: &Box<dyn VectorQueryProcessor<VectorType = G>>,
     query_rectangle: VectorQueryRectangle,
 ) {
     let stream =
@@ -385,7 +389,7 @@ impl PollNextForwarder {
         Self { sender }
     }
 
-    fn process_input(&mut self, record: serde_json::Value) {
+    fn process_input(&mut self, record: &serde_json::Value) {
         // comment this in for seeing all tracing logs
         // dbg!(&record);
 
@@ -407,7 +411,7 @@ impl PollNextForwarder {
 
 impl Write for PollNextForwarder {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.process_input(serde_json::from_slice(buf).unwrap());
+        self.process_input(&serde_json::from_slice(buf).unwrap());
 
         // just pretend that we read everything
         Ok(buf.len())
@@ -434,8 +438,7 @@ enum Benchmark {
 impl Benchmark {
     fn name(&self) -> &str {
         match self {
-            Benchmark::Raster { name, .. } => name,
-            Benchmark::Vector { name, .. } => name,
+            Benchmark::Raster { name, .. } | Benchmark::Vector { name, .. } => name,
         }
     }
 }

@@ -351,8 +351,9 @@ async fn create_dataset<C: SessionContext>(
     };
 
     let db = ctx.db();
-    let meta = db.wrap_meta_data(dataset_definition.meta_data);
-    let result = db.add_dataset(dataset_definition.properties, meta).await?;
+    let result = db
+        .add_dataset(dataset_definition.properties, dataset_definition.meta_data)
+        .await?;
 
     Ok(result)
 }

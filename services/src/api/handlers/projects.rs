@@ -774,7 +774,7 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn update_layers(app_ctx: PostgresContext<NoTls>) {
-        async fn update_and_load_latest<Tls>(
+        async fn update_and_load_latest<Tls: std::fmt::Debug>(
             app_ctx: &PostgresContext<Tls>,
             session: &SimpleSession,
             project_id: ProjectId,
@@ -931,7 +931,7 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn update_plots(app_ctx: PostgresContext<NoTls>) {
-        async fn update_and_load_latest<Tls>(
+        async fn update_and_load_latest<Tls: std::fmt::Debug>(
             app_ctx: &PostgresContext<Tls>,
             session: &SimpleSession,
             project_id: ProjectId,

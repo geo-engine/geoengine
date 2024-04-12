@@ -1,5 +1,7 @@
+mod netcdfcf;
 mod sentinel_s2_l2a_cogs;
 
+use crate::contexts::GeoEngineDb;
 use crate::error::Result;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use async_trait::async_trait;
@@ -22,7 +24,7 @@ impl From<SentinelS2L2ACogsProviderDefinition> for TypedProDataProviderDefinitio
     }
 }
 
-impl From<TypedProDataProviderDefinition> for Box<dyn DataProviderDefinition> {
+impl<D: GeoEngineDb> From<TypedProDataProviderDefinition> for Box<dyn DataProviderDefinition<D>> {
     fn from(typed: TypedProDataProviderDefinition) -> Self {
         match typed {
             TypedProDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def) => {
@@ -32,8 +34,8 @@ impl From<TypedProDataProviderDefinition> for Box<dyn DataProviderDefinition> {
     }
 }
 
-impl AsRef<dyn DataProviderDefinition> for TypedProDataProviderDefinition {
-    fn as_ref(&self) -> &(dyn DataProviderDefinition + 'static) {
+impl<D: GeoEngineDb> AsRef<dyn DataProviderDefinition<D>> for TypedProDataProviderDefinition {
+    fn as_ref(&self) -> &(dyn DataProviderDefinition<D> + 'static) {
         match self {
             Self::SentinelS2L2ACogsProviderDefinition(def) => def,
         }
@@ -41,10 +43,10 @@ impl AsRef<dyn DataProviderDefinition> for TypedProDataProviderDefinition {
 }
 
 #[async_trait]
-impl DataProviderDefinition for TypedProDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedProDataProviderDefinition {
+    async fn initialize(self: Box<Self>, db: D) -> Result<Box<dyn DataProvider>> {
         match *self {
-            Self::SentinelS2L2ACogsProviderDefinition(def) => Box::new(def).initialize().await,
+            Self::SentinelS2L2ACogsProviderDefinition(def) => Box::new(def).initialize(db).await,
         }
     }
 
@@ -56,13 +58,15 @@ impl DataProviderDefinition for TypedProDataProviderDefinition {
 
     fn name(&self) -> String {
         match self {
-            Self::SentinelS2L2ACogsProviderDefinition(def) => def.name(),
+            Self::SentinelS2L2ACogsProviderDefinition(def) => {
+                DataProviderDefinition::<D>::name(def)
+            }
         }
     }
 
     fn id(&self) -> DataProviderId {
         match self {
-            Self::SentinelS2L2ACogsProviderDefinition(def) => def.id(),
+            Self::SentinelS2L2ACogsProviderDefinition(def) => DataProviderDefinition::<D>::id(def),
         }
     }
 }

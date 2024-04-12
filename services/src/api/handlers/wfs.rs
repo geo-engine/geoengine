@@ -164,10 +164,11 @@ where
         ("session_token" = [])
     )
 )]
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines)] // long xml body
 async fn wfs_capabilities_handler<C>(
     workflow_id: web::Path<WorkflowId>,
-    _request: web::Query<GetCapabilities>,
+    // TODO: react on capabilities
+    // _request: web::Query<GetCapabilities>,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse>
@@ -606,7 +607,6 @@ where
     Ok((output, cache_hint))
 }
 
-#[allow(clippy::unnecessary_wraps)] // TODO: remove line once implemented fully
 fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
     let collection = MultiPointCollection::from_data(
         MultiPoint::many(vec![
@@ -615,8 +615,7 @@ fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
             (2.0, 3.1),
             (3.0, 3.1),
             (4.0, 4.1),
-        ])
-        .unwrap(),
+        ])?,
         vec![geoengine_datatypes::primitives::TimeInterval::new_unchecked(0, 1); 5],
         [(
             "foo".to_string(),
@@ -626,8 +625,7 @@ fn get_feature_mock(_request: &GetFeature) -> Result<HttpResponse> {
         .cloned()
         .collect(),
         CacheHint::default(),
-    )
-    .unwrap();
+    )?;
 
     Ok(HttpResponse::Ok()
         .content_type(mime::APPLICATION_JSON)
@@ -908,8 +906,8 @@ x;y
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }, {
@@ -920,8 +918,8 @@ x;y
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }, {
@@ -932,8 +930,8 @@ x;y
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }]
@@ -1047,8 +1045,8 @@ x;y
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }, {
@@ -1059,8 +1057,8 @@ x;y
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }, {
@@ -1071,8 +1069,8 @@ x;y
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }]
@@ -1119,7 +1117,7 @@ x;y
         .await;
     }
 
-    async fn add_dataset_definition_to_datasets<Tls>(
+    async fn add_dataset_definition_to_datasets<Tls: std::fmt::Debug>(
         app_ctx: &PostgresContext<Tls>,
         dataset_definition_path: &Path,
     ) -> DatasetId
@@ -1135,7 +1133,7 @@ x;y
 
         let db = app_ctx.default_session_context().await.unwrap().db();
 
-        db.add_dataset(def.properties, Box::new(def.meta_data))
+        db.add_dataset(def.properties, def.meta_data)
             .await
             .unwrap()
             .id
@@ -1170,9 +1168,10 @@ x;y
             "operator": {
                 "type": "RasterVectorJoin",
                 "params": {
-                    "names": [
-                        "NDVI"
-                    ],
+                    "names": {
+                        "type": "names",
+                        "values": ["NDVI"]
+                    },
                     "featureAggregation": "first",
                     "temporalAggregation": "first"
                 },

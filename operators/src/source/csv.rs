@@ -29,7 +29,7 @@ use crate::engine::{
 };
 use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
-use crate::util::Result;
+use crate::util::{safe_lock_mutex, Result};
 use async_trait::async_trait;
 use std::sync::atomic::Ordering;
 
@@ -321,9 +321,8 @@ impl Stream for CsvSourceStream {
             return Poll::Pending;
         }
 
-        let mut poll_result = self.poll_result.lock().unwrap();
-        if poll_result.is_some() {
-            let x = poll_result.take().unwrap();
+        let mut poll_result = safe_lock_mutex(&self.poll_result);
+        if let Some(x) = poll_result.take() {
             return Poll::Ready(x);
         }
 
@@ -339,7 +338,7 @@ impl Stream for CsvSourceStream {
         let waker = cx.waker().clone();
 
         crate::util::spawn_blocking(move || {
-            let mut csv_reader = reader_state.lock().unwrap();
+            let mut csv_reader = safe_lock_mutex(&reader_state);
             let computation_result = || -> Result<Option<MultiPointCollection>> {
                 // TODO: is clone necessary?
                 let geometry_specification = parameters.geometry.clone();
@@ -381,7 +380,7 @@ impl Stream for CsvSourceStream {
                 }
             }();
 
-            *poll_result.lock().unwrap() = Some(match computation_result {
+            *safe_lock_mutex(&poll_result) = Some(match computation_result {
                 Ok(Some(collection)) => Some(Ok(collection)),
                 Ok(None) => None,
                 Err(e) => Some(Err(e)),
@@ -612,8 +611,8 @@ x,y
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }, {
@@ -624,8 +623,8 @@ x,y
                     },
                     "properties": {},
                     "when": {
-                        "start": "-262144-01-01T00:00:00+00:00",
-                        "end": "+262143-12-31T23:59:59.999+00:00",
+                        "start": "-262143-01-01T00:00:00+00:00",
+                        "end": "+262142-12-31T23:59:59.999+00:00",
                         "type": "Interval"
                     }
                 }]

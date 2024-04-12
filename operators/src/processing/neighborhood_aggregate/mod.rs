@@ -3,6 +3,7 @@ mod tile_sub_query;
 
 use self::aggregate::{AggregateFunction, Neighborhood, StandardDeviation, Sum};
 use self::tile_sub_query::NeighborhoodAggregateTileNeighborhood;
+use crate::adapters::stack_individual_aligned_raster_bands;
 use crate::adapters::RasterSubQueryAdapter;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
@@ -152,14 +153,6 @@ impl RasterOperator for NeighborhoodAggregate {
         let initialized_source = self.sources.initialize_sources(path, context).await?;
         let raster_source = initialized_source.raster;
 
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            raster_source.result_descriptor().bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: NeighborhoodAggregate::TYPE_NAME
-            }
-        );
-
         let initialized_operator = InitializedNeighborhoodAggregate {
             name,
             result_descriptor: raster_source.result_descriptor().clone(),
@@ -266,23 +259,26 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let sub_query = NeighborhoodAggregateTileNeighborhood::<P, A>::new(
-            self.neighborhood.clone(),
-            self.tiling_specification,
-        );
+        stack_individual_aligned_raster_bands(&query, ctx, |query, ctx| async move {
+            let sub_query = NeighborhoodAggregateTileNeighborhood::<P, A>::new(
+                self.neighborhood.clone(),
+                self.tiling_specification,
+            );
 
-        let geo_transform = self.source.result_descriptor().tiling_geo_transform();
+            let geo_transform = self.source.result_descriptor().tiling_geo_transform();
 
-        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
-            &self.source,
-            query,
-            self.tiling_specification.strategy(geo_transform),
-            ctx,
-            sub_query,
-        )
-        .filter_and_fill(
-            crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-        ))
+            Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+                &self.source,
+                query,
+                self.tiling_specification.strategy(geo_transform),
+                ctx,
+                sub_query,
+            )
+            .filter_and_fill(
+                crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+            ))
+        })
+        .await
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -294,13 +290,13 @@ where
 mod tests {
 
     use super::*;
-
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor,
+            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            RasterOperator, RasterResultDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
+        processing::{RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
         util::{gdal::add_ndvi_dataset, raster_stream_to_png::raster_stream_to_png_bytes},
     };
@@ -314,7 +310,7 @@ mod tests {
         },
         raster::{
             GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, RasterDataType, RasterTile2D,
-            TileInformation, TilesEqualIgnoringCacheHint, TilingSpecification,
+            RenameBands, TileInformation, TilesEqualIgnoringCacheHint, TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -804,5 +800,85 @@ mod tests {
 
         // Use for getting the image to compare against
         // save_test_bytes(&bytes, "sobel_filter.png");
+    }
+
+    #[tokio::test]
+    async fn test_mean_convolution_multi_bands() {
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+
+        let operator = NeighborhoodAggregate {
+            params: NeighborhoodAggregateParams {
+                neighborhood: NeighborhoodParams::WeightsMatrix {
+                    weights: vec![vec![1. / 9.; 3]; 3],
+                },
+                aggregate_function: AggregateFunctionParams::Sum,
+            },
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::Default,
+                    },
+                    sources: MultipleRasterSources {
+                        rasters: vec![make_raster(), make_raster(), make_raster()],
+                    },
+                }
+                .boxed(),
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap();
+
+        let processor = operator.query_processor().unwrap().get_i8().unwrap();
+
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-3, 0], [-1, 5]).unwrap(),
+            TimeInterval::new_unchecked(0, 20),
+            BandSelection::new(vec![0, 2]).unwrap(),
+        );
+        let query_ctx = MockQueryContext::test_default();
+
+        let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
+
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        let mut times: Vec<TimeInterval> = vec![TimeInterval::new_unchecked(0, 10); 4];
+        times.append(&mut vec![TimeInterval::new_unchecked(10, 20); 4]);
+
+        let data = vec![
+            vec![0, 0, 0, 0, 8, 9, 0, 0, 0],
+            vec![0, 0, 0, 10, 11, 0, 0, 0, 0],
+            vec![0, 0, 0, 0, 10, 10, 0, 0, 0],
+            vec![0, 0, 0, 9, 7, 0, 0, 0, 0],
+        ];
+        let data = data
+            .clone()
+            .into_iter()
+            .zip(data)
+            .flat_map(|(a, b)| vec![a, b])
+            .collect::<Vec<_>>();
+
+        let valid = vec![
+            vec![false, false, false, false, true, true, false, false, false],
+            vec![false, false, false, true, true, false, false, false, false],
+            vec![false, false, false, false, true, true, false, false, false],
+            vec![false, false, false, true, true, false, false, false, false],
+        ];
+        let valid = valid
+            .clone()
+            .into_iter()
+            .zip(valid)
+            .flat_map(|(a, b)| vec![a, b])
+            .collect::<Vec<_>>();
+
+        for (i, tile) in result.into_iter().enumerate() {
+            let tile = tile.into_materialized_tile();
+            assert_eq!(tile.time, times[i]);
+            assert_eq!(tile.grid_array.inner_grid.data, data[i]);
+            assert_eq!(tile.grid_array.validity_mask.data, valid[i]);
+        }
     }
 }

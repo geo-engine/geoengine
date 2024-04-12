@@ -161,29 +161,18 @@ impl RasterOperator for Rgb {
 
         let sources = self.sources.initialize_sources(path, context).await?;
 
-        // FIXME: refine checkings: 1. what about bands that have matching overviews but not the same resolution?
-        let first_result_descriptor = sources.red.result_descriptor();
-        for other_source in sources.iter().skip(1) {
-            let other_res_desc = other_source.result_descriptor();
-            ensure!(
-                first_result_descriptor.spatial_tiling_compat(other_res_desc),
-                crate::error::RasterResultsIncompatible {
-                    a: first_result_descriptor.clone(),
-                    b: other_res_desc.clone(),
-                }
-            );
-        }
-        // TODO: implement multi-band functionality and remove this check
+        // This operator only ever outputs a single band
         ensure!(
             sources
                 .iter()
                 .all(|r| r.result_descriptor().bands.len() == 1),
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
+            crate::error::OperatorDoesNotSupportMultiBandsSources {
                 operator: Rgb::TYPE_NAME
             }
         );
 
-        let spatial_reference = sources.red.result_descriptor().spatial_reference;
+        let first_result_descriptor = sources.red.result_descriptor();
+        let spatial_reference = first_result_descriptor.spatial_reference;
 
         let geo_transform = first_result_descriptor.tiling_geo_transform();
         let bounds = sources

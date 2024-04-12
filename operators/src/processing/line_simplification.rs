@@ -256,8 +256,7 @@ impl<P, G, A> LineSimplificationProcessor<P, G, A>
 where
     P: VectorQueryProcessor<VectorType = FeatureCollection<G>>,
     G: Geometry,
-    for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>
-        + GeoFeatureCollectionModifications<G, Output = FeatureCollection<G>>,
+    for<'c> FeatureCollection<G>: IntoGeometryIterator<'c> + GeoFeatureCollectionModifications<G>,
     for<'c> A: LineSimplificationAlgorithmImpl<
         <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
         G,
@@ -288,8 +287,7 @@ where
         ResultDescription = VectorResultDescriptor,
     >,
     G: Geometry + ArrowTyped + 'static,
-    for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>
-        + GeoFeatureCollectionModifications<G, Output = FeatureCollection<G>>,
+    for<'c> FeatureCollection<G>: IntoGeometryIterator<'c> + GeoFeatureCollectionModifications<G>,
     for<'c> A: LineSimplificationAlgorithmImpl<
         <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
         G,

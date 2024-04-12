@@ -178,7 +178,6 @@ impl SpatialBounded for SpatialQueryRectangle<BoundingBox2D> {
 pub trait QueryAttributeSelection: Clone + Send + Sync {}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-
 pub struct BandSelection(Vec<u32>);
 
 impl BandSelection {

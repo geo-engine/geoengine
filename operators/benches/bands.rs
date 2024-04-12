@@ -1,7 +1,12 @@
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
+
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
-    primitives::{BandSelection, RasterQueryRectangle, TimeInterval, TimeStep},
-    raster::{GridBoundingBox2D, RasterDataType, RasterTile2D},
+    raster::{GridBoundingBox2D, RasterDataType, RasterTile2D, RenameBands},
+    primitives::{
+        BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        TimeStep,
+    },
     util::test::TestDefault,
 };
 use geoengine_operators::{
@@ -114,7 +119,9 @@ async fn all_bands_at_once(runs: usize, bands: u32) {
     let query_context = MockQueryContext::test_default();
 
     let stacker = RasterStacker {
-        params: RasterStackerParams {},
+        params: RasterStackerParams {
+            rename_bands: RenameBands::Default,
+        },
         sources: MultipleRasterSources {
             rasters: (0..bands)
                 .map(|_| ndvi_source(&mut execution_context))
@@ -192,7 +199,7 @@ where
     let start = std::time::Instant::now();
     let result = f().await;
     let end = start.elapsed();
-    let secs = end.as_secs() as f64 + end.subsec_nanos() as f64 / 1_000_000_000.0;
+    let secs = end.as_secs() as f64 + f64::from(end.subsec_nanos()) / 1_000_000_000.0;
 
     (secs, result)
 }

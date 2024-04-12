@@ -541,7 +541,8 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{Coordinate2D, RasterQueryRectangle, SpatialResolution, TimeInterval},
         raster::{
-            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, RenameBands, TileInformation,
+            TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -549,10 +550,11 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor,
+            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            RasterOperator, RasterResultDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
+        processing::{RasterStacker, RasterStackerParams},
     };
 
     #[tokio::test]
@@ -752,6 +754,122 @@ mod tests {
         for tile in result {
             // dbg!(tile.time, tile.grid_array);
             assert_eq!(tile.cache_hint.expires(), cache_hint.expires());
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_interpolates_multiple_bands() -> Result<()> {
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let operator =
+            Interpolation {
+                params: InterpolationParams {
+                    interpolation: InterpolationMethod::NearestNeighbor,
+                    output_resolution: InputResolution::Resolution(
+                        SpatialResolution::zero_point_five(),
+                    ),
+                },
+                sources: SingleRasterSource {
+                    raster: RasterStacker {
+                        params: RasterStackerParams {
+                            rename_bands: RenameBands::Default,
+                        },
+                        sources: MultipleRasterSources {
+                            rasters: vec![
+                                make_raster(CacheHint::max_duration()),
+                                make_raster(CacheHint::max_duration()),
+                            ],
+                        },
+                    }
+                    .boxed(),
+                },
+            }
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await?;
+
+        let processor = operator.query_processor()?.get_i8().unwrap();
+
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 20),
+            [0, 1].try_into().unwrap(),
+        );
+        let query_ctx = MockQueryContext::test_default();
+
+        let result_stream = processor.query(query_rect, &query_ctx).await?;
+
+        let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>()?;
+
+        let mut times: Vec<TimeInterval> = vec![TimeInterval::new_unchecked(0, 10); 8];
+        times.append(&mut vec![TimeInterval::new_unchecked(10, 20); 8]);
+
+        let times = times
+            .clone()
+            .into_iter()
+            .zip(times)
+            .flat_map(|(a, b)| vec![a, b])
+            .collect::<Vec<_>>();
+
+        let data = vec![
+            vec![1, 2, 5, 6],
+            vec![2, 3, 6, 7],
+            vec![3, 4, 7, 8],
+            vec![4, 0, 8, 0],
+            vec![5, 6, 0, 0],
+            vec![6, 7, 0, 0],
+            vec![7, 8, 0, 0],
+            vec![8, 0, 0, 0],
+            vec![8, 7, 4, 3],
+            vec![7, 6, 3, 2],
+            vec![6, 5, 2, 1],
+            vec![5, 0, 1, 0],
+            vec![4, 3, 0, 0],
+            vec![3, 2, 0, 0],
+            vec![2, 1, 0, 0],
+            vec![1, 0, 0, 0],
+        ];
+        let data = data
+            .clone()
+            .into_iter()
+            .zip(data)
+            .flat_map(|(a, b)| vec![a, b])
+            .collect::<Vec<_>>();
+
+        let valid = vec![
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true, false, true, false],
+            vec![true, true, false, false],
+            vec![true, true, false, false],
+            vec![true, true, false, false],
+            vec![true, false, false, false],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true, false, true, false],
+            vec![true, true, false, false],
+            vec![true, true, false, false],
+            vec![true, true, false, false],
+            vec![true, false, false, false],
+        ];
+        let valid = valid
+            .clone()
+            .into_iter()
+            .zip(valid)
+            .flat_map(|(a, b)| vec![a, b])
+            .collect::<Vec<_>>();
+
+        for (i, tile) in result.into_iter().enumerate() {
+            let tile = tile.into_materialized_tile();
+            assert_eq!(tile.time, times[i]);
+            assert_eq!(tile.grid_array.inner_grid.data, data[i]);
+            assert_eq!(tile.grid_array.validity_mask.data, valid[i]);
         }
 
         Ok(())

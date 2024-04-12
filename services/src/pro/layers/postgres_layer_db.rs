@@ -1,6 +1,9 @@
 use crate::error;
 use crate::layers::external::TypedDataProviderDefinition;
 use crate::layers::layer::Property;
+use crate::layers::listing::{
+    ProviderCapabilities, SearchCapabilities, SearchParameters, SearchType, SearchTypes,
+};
 use crate::layers::postgres_layer_db::{
     delete_layer_collection, delete_layer_collection_from_parent, delete_layer_from_collection,
     insert_collection_parent, insert_layer, insert_layer_collection_with_id,
@@ -32,6 +35,7 @@ use bb8_postgres::tokio_postgres::{
     Socket,
 };
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
+use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::util::HashMapTextTextDbType;
 use snafu::{ensure, ResultExt};
 use std::str::FromStr;
@@ -40,7 +44,7 @@ use uuid::Uuid;
 #[async_trait]
 impl<Tls> LayerDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -63,11 +67,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let trans = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(collection.clone(), Permission::Owner, &trans)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection.clone().into(), Permission::Owner, &trans)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         let layer_id = insert_layer(&trans, id, layer, collection).await?;
 
@@ -106,11 +108,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(collection.clone(), Permission::Owner, &tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection.clone().into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         let layer_id =
             Uuid::from_str(&layer.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -160,11 +160,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let trans = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(parent.clone(), Permission::Owner, &trans)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(parent.clone().into(), Permission::Owner, &trans)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         let collection_id = insert_layer_collection_with_id(&trans, id, collection, parent).await?;
 
@@ -205,11 +203,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let transaction = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(collection.clone(), Permission::Owner, &transaction)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection.clone().into(), Permission::Owner, &transaction)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         delete_layer_collection(&transaction, collection).await?;
 
@@ -224,11 +220,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let transaction = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(layer.clone(), Permission::Owner, &transaction)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection.clone().into(), Permission::Owner, &transaction)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         delete_layer_from_collection(&transaction, layer, collection).await?;
 
@@ -243,11 +237,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let transaction = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(collection.clone(), Permission::Owner, &transaction)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection.clone().into(), Permission::Owner, &transaction)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         delete_layer_collection_from_parent(&transaction, collection, parent).await?;
 
@@ -255,14 +247,78 @@ where
     }
 }
 
+fn create_search_query(full_info: bool) -> String {
+    format!("
+        WITH RECURSIVE parents AS (
+            SELECT $1::uuid as id
+            UNION ALL SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)
+        )
+        SELECT DISTINCT *
+        FROM (
+            SELECT 
+                {}
+            FROM user_permitted_layer_collections u
+                JOIN layer_collections lc ON (u.layer_collection_id = lc.id)
+                JOIN (SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)) cc ON (id = cc.child)
+            WHERE u.user_id = $4 AND name ILIKE $5
+        ) u UNION (
+            SELECT 
+                {}
+            FROM user_permitted_layers ul
+                JOIN layers uc ON (ul.layer_id = uc.id)
+                JOIN (SELECT DISTINCT layer FROM collection_layers JOIN parents ON (collection = id)) cl ON (id = cl.layer)
+            WHERE ul.user_id = $4 AND name ILIKE $5
+        )
+        ORDER BY {}name ASC
+        LIMIT $2 
+        OFFSET $3;",
+        if full_info {
+            "concat(id, '') AS id,
+        name,
+        description,
+        properties,
+        FALSE AS is_layer"
+        } else { "name" },
+        if full_info {
+            "concat(id, '') AS id,
+        name,
+        description,
+        properties,
+        TRUE AS is_layer"
+        } else { "name" },
+        if full_info { "is_layer ASC," } else { "" })
+}
+
 #[async_trait]
 impl<Tls> LayerCollectionProvider for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities {
+                search_types: SearchTypes {
+                    fulltext: true,
+                    prefix: true,
+                },
+                autocomplete: true,
+                filters: None,
+            },
+        }
+    }
+
+    fn name(&self) -> &str {
+        "Postgres Layer Collection Provider (Pro)"
+    }
+
+    fn description(&self) -> &str {
+        "Layer collection provider for Postgres (Pro)"
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn load_layer_collection(
         &self,
@@ -272,11 +328,10 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(collection_id.clone(), Permission::Read, &tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(collection_id.clone().into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
         let collection = Uuid::from_str(&collection_id.0).map_err(|_| {
             crate::error::Error::IdStringMustBeUuid {
                 found: collection_id.0.clone(),
@@ -286,7 +341,7 @@ where
         let stmt = tx
             .prepare(
                 "
-        SELECT DISTINCT name, description, properties
+        SELECT name, description, properties
         FROM user_permitted_layer_collections p 
             JOIN layer_collections c ON (p.layer_collection_id = c.id) 
         WHERE p.user_id = $1 AND layer_collection_id = $2;",
@@ -391,6 +446,164 @@ where
         })
     }
 
+    #[allow(clippy::too_many_lines)]
+    async fn search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<LayerCollection> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(collection_id.clone().into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        let collection = Uuid::from_str(&collection_id.0).map_err(|_| {
+            crate::error::Error::IdStringMustBeUuid {
+                found: collection_id.0.clone(),
+            }
+        })?;
+
+        let stmt = tx
+            .prepare(
+                "
+        SELECT name, description, properties
+        FROM user_permitted_layer_collections p 
+            JOIN layer_collections c ON (p.layer_collection_id = c.id) 
+        WHERE p.user_id = $1 AND layer_collection_id = $2;",
+            )
+            .await?;
+
+        let row = tx
+            .query_one(&stmt, &[&self.session.user.id, &collection])
+            .await?;
+
+        let name: String = row.get(0);
+        let description: String = row.get(1);
+        let properties: Vec<Property> = row.get(2);
+
+        let pattern = match search.search_type {
+            SearchType::Fulltext => {
+                format!("%{}%", search.search_string)
+            }
+            SearchType::Prefix => {
+                format!("{}%", search.search_string)
+            }
+        };
+
+        let stmt = tx.prepare(&create_search_query(true)).await?;
+
+        let rows = tx
+            .query(
+                &stmt,
+                &[
+                    &collection,
+                    &i64::from(search.limit),
+                    &i64::from(search.offset),
+                    &self.session.user.id,
+                    &pattern,
+                ],
+            )
+            .await?;
+
+        let items = rows
+            .into_iter()
+            .map(|row| {
+                let is_layer: bool = row.get(4);
+
+                if is_layer {
+                    Ok(CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: LayerId(row.get(0)),
+                        },
+                        name: row.get(1),
+                        description: row.get(2),
+                        properties: row.get(3),
+                    }))
+                } else {
+                    Ok(CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(row.get(0)),
+                        },
+                        name: row.get(1),
+                        description: row.get(2),
+                        properties: row.get(3),
+                    }))
+                }
+            })
+            .collect::<Result<Vec<CollectionItem>>>()?;
+
+        tx.commit().await?;
+
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: INTERNAL_PROVIDER_ID,
+                collection_id: collection_id.clone(),
+            },
+            name,
+            description,
+            items,
+            entry_label: None,
+            properties,
+        })
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn autocomplete_search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<Vec<String>> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(collection_id.clone().into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        let collection = Uuid::from_str(&collection_id.0).map_err(|_| {
+            crate::error::Error::IdStringMustBeUuid {
+                found: collection_id.0.clone(),
+            }
+        })?;
+
+        let pattern = match search.search_type {
+            SearchType::Fulltext => {
+                format!("%{}%", search.search_string)
+            }
+            SearchType::Prefix => {
+                format!("{}%", search.search_string)
+            }
+        };
+
+        let stmt = tx.prepare(&create_search_query(false)).await?;
+
+        let rows = tx
+            .query(
+                &stmt,
+                &[
+                    &collection,
+                    &i64::from(search.limit),
+                    &i64::from(search.offset),
+                    &self.session.user.id,
+                    &pattern,
+                ],
+            )
+            .await?;
+
+        let items = rows
+            .into_iter()
+            .map(|row| Ok(row.get::<usize, &str>(0).to_string()))
+            .collect::<Result<Vec<String>>>()?;
+
+        tx.commit().await?;
+
+        Ok(items)
+    }
+
     async fn get_root_layer_collection_id(&self) -> Result<LayerCollectionId> {
         Ok(LayerCollectionId(
             INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
@@ -401,11 +614,9 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        ensure!(
-            self.has_permission_in_tx(id.clone(), Permission::Read, &tx)
-                .await?,
-            error::PermissionDenied
-        );
+        self.ensure_permission_in_tx(id.clone().into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
 
         let layer_id =
             Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
@@ -454,7 +665,7 @@ where
 #[async_trait]
 impl<Tls> LayerProviderDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -467,6 +678,18 @@ where
 
         let conn = self.conn_pool.get().await?;
 
+        let prio = DataProviderDefinition::<Self>::priority(&provider);
+        let clamp_prio = prio.clamp(-1000, 1000);
+
+        if prio != clamp_prio {
+            log::warn!(
+                "The priority of the provider {} is out of range! --> clamped {} to {}",
+                DataProviderDefinition::<Self>::name(&provider),
+                prio,
+                clamp_prio
+            );
+        }
+
         let stmt = conn
             .prepare(
                 "
@@ -474,16 +697,23 @@ where
                   id, 
                   type_name, 
                   name,
-                  definition
+                  definition,
+                  priority
               )
-              VALUES ($1, $2, $3, $4)",
+              VALUES ($1, $2, $3, $4, $5)",
             )
             .await?;
 
-        let id = provider.id();
+        let id = DataProviderDefinition::<Self>::id(&provider);
         conn.execute(
             &stmt,
-            &[&id, &provider.type_name(), &provider.name(), &provider],
+            &[
+                &id,
+                &DataProviderDefinition::<Self>::type_name(&provider),
+                &DataProviderDefinition::<Self>::name(&provider),
+                &provider,
+                &clamp_prio,
+            ],
         )
         .await?;
         Ok(id)
@@ -502,18 +732,24 @@ where
                     SELECT 
                         id, 
                         name,
-                        type_name
+                        type_name,
+                        priority
                     FROM 
                         layer_providers
+                    WHERE
+                        priority > -1000
                     UNION ALL
                     SELECT 
                         id, 
                         name,
-                        type_name
+                        type_name,
+                        priority
                     FROM 
                         pro_layer_providers
+                    WHERE
+                        priority > -1000
                 )
-                ORDER BY name ASC
+                ORDER BY priority desc, name ASC
                 LIMIT $1 
                 OFFSET $2;",
             )
@@ -531,7 +767,7 @@ where
             .map(|row| LayerProviderListing {
                 id: row.get(0),
                 name: row.get(1),
-                description: row.get(2),
+                priority: row.get(3),
             })
             .collect())
     }
@@ -561,11 +797,21 @@ where
         let row = conn.query_one(&stmt, &[&id]).await?;
 
         if let Some(definition) = row.get::<_, Option<TypedDataProviderDefinition>>(0) {
-            return Box::new(definition).initialize().await;
+            return Box::new(definition)
+                .initialize(ProPostgresDb {
+                    conn_pool: self.conn_pool.clone(),
+                    session: self.session.clone(),
+                })
+                .await;
         }
 
         let pro_definition: TypedProDataProviderDefinition = row.get(1);
-        Box::new(pro_definition).initialize().await
+        Box::new(pro_definition)
+            .initialize(ProPostgresDb {
+                conn_pool: self.conn_pool.clone(),
+                session: self.session.clone(),
+            })
+            .await
     }
 }
 
@@ -580,7 +826,7 @@ pub trait ProLayerProviderDb: Send + Sync + 'static {
 #[async_trait]
 impl<Tls> ProLayerProviderDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -593,6 +839,18 @@ where
 
         let conn = self.conn_pool.get().await?;
 
+        let prio = DataProviderDefinition::<Self>::priority(&provider);
+        let clamp_prio = prio.clamp(-1000, 1000);
+
+        if prio != clamp_prio {
+            log::warn!(
+                "The priority of the provider {} is out of range! --> clamped {} to {}",
+                DataProviderDefinition::<Self>::name(&provider),
+                prio,
+                clamp_prio
+            );
+        }
+
         let stmt = conn
             .prepare(
                 "
@@ -600,16 +858,23 @@ where
                   id, 
                   type_name, 
                   name,
-                  definition
+                  definition,
+                  priority
               )
-              VALUES ($1, $2, $3, $4)",
+              VALUES ($1, $2, $3, $4, $5)",
             )
             .await?;
 
-        let id = provider.id();
+        let id = DataProviderDefinition::<Self>::id(&provider);
         conn.execute(
             &stmt,
-            &[&id, &provider.type_name(), &provider.name(), &provider],
+            &[
+                &id,
+                &DataProviderDefinition::<Self>::type_name(&provider),
+                &DataProviderDefinition::<Self>::name(&provider),
+                &provider,
+                &clamp_prio,
+            ],
         )
         .await?;
         Ok(id)

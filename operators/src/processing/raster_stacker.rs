@@ -1,7 +1,7 @@
 use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptors,
+    MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptor,
     RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
     WorkflowOperatorPath,
 };
@@ -9,16 +9,20 @@ use crate::error::{
     InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
 };
 use crate::util::Result;
-
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{time_interval_extent, BandSelection, RasterQueryRectangle};
-use geoengine_datatypes::raster::{DynamicRasterDataType, GridBoundingBoxExt, Pixel, RasterTile2D};
+use geoengine_datatypes::raster::{
+    DynamicRasterDataType, GridBoundingBoxExt, Pixel, RasterTile2D, RenameBands,
+};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RasterStackerParams {}
+#[serde(rename_all = "camelCase")]
+pub struct RasterStackerParams {
+    pub rename_bands: RenameBands,
+}
 
 /// This `QueryProcessor` stacks all of it's inputs into a single raster time-series.
 /// It does so by querying all of it's inputs outputting them by band, space and then time.
@@ -61,7 +65,16 @@ impl RasterOperator for RasterStacker {
             in_descriptors.iter().all(|d| d.spatial_reference
                 == in_descriptors[0].spatial_reference
                 && d.data_type == in_descriptors[0].data_type),
-            RasterInputsMustHaveSameSpatialReferenceAndDatatype
+            RasterInputsMustHaveSameSpatialReferenceAndDatatype {
+                datatypes: in_descriptors
+                    .iter()
+                    .map(|d| d.data_type)
+                    .collect::<Vec<_>>(),
+                spatial_references: in_descriptors
+                    .iter()
+                    .map(|d| d.spatial_reference)
+                    .collect::<Vec<_>>(),
+            }
         );
 
         // FIXME: refine checkings add regridding if necessary
@@ -75,30 +88,44 @@ impl RasterOperator for RasterStacker {
             );
         }
 
+        let tiling_geo_transform = in_descriptors[0].tiling_geo_transform();
+
         let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
 
-        // FIXME: keep bound if same origin
         let bbox = in_descriptors
             .iter()
             .map(|&d| d.tiling_pixel_bounds())
             .reduce(|a, b| a.extended(&b))
             .expect("at least one input");
 
+        let data_type = in_descriptors[0].data_type;
+        let spatial_reference = in_descriptors[0].spatial_reference;
+
         let bands_per_source = in_descriptors
             .iter()
             .map(|d| d.bands.count())
             .collect::<Vec<_>>();
 
-        let output_band_descriptors = RasterBandDescriptors::merge_all_with_suffix(
-            in_descriptors.iter().map(|d| &d.bands),
-            "(duplicate)",
-        )?; // TODO: make renaming of duplicate bands configurable
+        let band_names = self.params.rename_bands.apply(
+            in_descriptors
+                .iter()
+                .map(|d| d.bands.iter().map(|b| b.name.clone()).collect())
+                .collect(),
+        )?;
+
+        let output_band_descriptors = in_descriptors
+            .into_iter()
+            .flat_map(|d| d.bands.iter().cloned())
+            .zip(band_names)
+            .map(|(descriptor, name)| RasterBandDescriptor { name, ..descriptor })
+            .collect::<Vec<_>>()
+            .try_into()?;
 
         let result_descriptor = RasterResultDescriptor {
-            data_type: in_descriptors[0].data_type,
-            spatial_reference: in_descriptors[0].spatial_reference,
+            data_type,
+            spatial_reference,
             time,
-            geo_transform_x: in_descriptors[0].tiling_geo_transform(),
+            geo_transform_x: tiling_geo_transform,
             pixel_bounds_x: bbox,
             bands: output_band_descriptors,
         };
@@ -338,9 +365,10 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
+            SingleRasterSource,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
-        processing::{Expression, ExpressionParams, ExpressionSources},
+        processing::{Expression, ExpressionParams},
         source::{GdalSource, GdalSourceParameters},
         util::gdal::add_ndvi_dataset,
     };
@@ -486,7 +514,9 @@ mod tests {
         .boxed();
 
         let stacker = RasterStacker {
-            params: RasterStackerParams {},
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
             sources: MultipleRasterSources {
                 rasters: vec![mrs1, mrs2],
             },
@@ -736,7 +766,9 @@ mod tests {
         .boxed();
 
         let stacker = RasterStacker {
-            params: RasterStackerParams {},
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
             sources: MultipleRasterSources {
                 rasters: vec![mrs1, mrs2],
             },
@@ -907,7 +939,9 @@ mod tests {
         .boxed();
 
         let stacker = RasterStacker {
-            params: RasterStackerParams {},
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
             sources: MultipleRasterSources {
                 rasters: vec![mrs1, mrs2],
             },
@@ -956,20 +990,25 @@ mod tests {
             params: ExpressionParams {
                 expression: "if A > 100 { A } else { 0 }".into(),
                 output_type: RasterDataType::U8,
-                output_measurement: None,
+                output_band: None,
                 map_no_data: false,
             },
-            sources: ExpressionSources::new_a(
-                GdalSource {
-                    params: GdalSourceParameters::new(ndvi_id.clone()),
+            sources: SingleRasterSource {
+                raster: GdalSource {
+                    params: GdalSourceParameters {
+                        data: ndvi_id.clone(),
+                        overview_level: None,
+                    },
                 }
                 .boxed(),
-            ),
+            },
         }
         .boxed();
 
         let operator = RasterStacker {
-            params: RasterStackerParams {},
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
             sources: MultipleRasterSources {
                 rasters: vec![
                     GdalSource {
@@ -1055,5 +1094,65 @@ mod tests {
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
         assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn it_renames() {
+        let names = vec![
+            vec!["foo".to_string(), "bar".to_string()],
+            vec!["foo".to_string(), "bla".to_string()],
+            vec!["foo".to_string(), "baz".to_string()],
+        ];
+
+        assert_eq!(
+            RenameBands::Default.apply(names.clone()).unwrap(),
+            vec![
+                "foo".to_string(),
+                "bar".to_string(),
+                "foo (1)".to_string(),
+                "bla".to_string(),
+                "foo (2)".to_string(),
+                "baz".to_string()
+            ]
+        );
+
+        assert_eq!(
+            RenameBands::Suffix(vec![
+                String::new(),
+                " second".to_string(),
+                " third".to_string()
+            ])
+            .apply(names.clone())
+            .unwrap(),
+            vec![
+                "foo".to_string(),
+                "bar".to_string(),
+                "foo second".to_string(),
+                "bla second".to_string(),
+                "foo third".to_string(),
+                "baz third".to_string()
+            ]
+        );
+
+        assert_eq!(
+            RenameBands::Rename(vec![
+                "A".to_string(),
+                "B".to_string(),
+                "C".to_string(),
+                "D".to_string(),
+                "E".to_string(),
+                "F".to_string()
+            ])
+            .apply(names.clone())
+            .unwrap(),
+            vec![
+                "A".to_string(),
+                "B".to_string(),
+                "C".to_string(),
+                "D".to_string(),
+                "E".to_string(),
+                "F".to_string()
+            ]
+        );
     }
 }

@@ -73,6 +73,7 @@ pub enum MigrationResult {
 pub async fn migrate_database<Tls>(
     conn: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
     migrations: &[Box<dyn Migration>],
+    prefix: Option<&str>,
 ) -> Result<MigrationResult>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
@@ -80,8 +81,14 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    let prefix = prefix.unwrap_or_default();
+
     let pre_migration_version = determine_current_database_version(conn).await?;
-    info!("Current database version: {:?}", pre_migration_version);
+    info!(
+        target: prefix,
+        "{prefix}Current database version: {:?}",
+        pre_migration_version
+    );
 
     // start with the first migration after the current version
     let applicable_migrations = migrations
@@ -99,7 +106,7 @@ where
             }
         );
 
-        info!("Applying migration: {}", migration.version());
+        info!(target: prefix, "Applying migration: {}", migration.version());
 
         let tx = conn.build_transaction().start().await?;
 
@@ -220,7 +227,7 @@ mod tests {
 
         let mut conn = pool.get().await?;
 
-        migrate_database(&mut conn, &migrations).await?;
+        migrate_database(&mut conn, &migrations, None).await?;
 
         let stmt = conn.prepare("SELECT * FROM mock;").await?;
 
@@ -244,7 +251,7 @@ mod tests {
 
         let mut conn = pool.get().await?;
 
-        migrate_database(&mut conn, &all_migrations()).await?;
+        migrate_database(&mut conn, &all_migrations(), None).await?;
 
         Ok(())
     }
@@ -263,14 +270,14 @@ mod tests {
         let mut conn = pool.get().await?;
 
         // initial schema
-        migrate_database(&mut conn, &[Box::new(Migration0000Initial)]).await?;
+        migrate_database(&mut conn, &[Box::new(Migration0000Initial)], None).await?;
 
         // insert test data on initial schema
         let test_data_sql = std::fs::read_to_string(test_data!("migrations/test_data.sql"))?;
         conn.batch_execute(&test_data_sql).await?;
 
         // migrate to latest schema
-        migrate_database(&mut conn, &all_migrations()).await?;
+        migrate_database(&mut conn, &all_migrations(), None).await?;
 
         // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
         drop(conn);

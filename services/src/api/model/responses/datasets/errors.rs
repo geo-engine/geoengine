@@ -50,3 +50,23 @@ impl ResponseError for GetDatasetError {
         StatusCode::BAD_REQUEST
     }
 }
+
+#[derive(Debug, Snafu, IntoStaticStr)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
+pub enum UpdateDatasetError {
+    #[snafu(display("Cannot load dataset for update"))]
+    CannotLoadDatasetForUpdate { source: error::Error },
+    #[snafu(display("Cannot update dataset"))]
+    CannotUpdateDataset { source: error::Error },
+}
+
+impl ResponseError for UpdateDatasetError {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
+    }
+
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
+    }
+}

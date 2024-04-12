@@ -1,6 +1,7 @@
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in tests
+
 use assert_cmd::prelude::*;
 use geoengine_services::test_data;
-use serial_test::serial;
 use std::{
     io::BufRead,
     process::{Command, Stdio},
@@ -44,7 +45,6 @@ impl DroppingServer {
     }
 }
 
-#[serial]
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn it_starts_without_warnings_and_accepts_connections() {
     use geoengine_services::util::config::get_config_element;
@@ -56,7 +56,7 @@ async fn it_starts_without_warnings_and_accepts_connections() {
 
         // read log output and check for warnings
         let mut startup_succesful = false;
-        for line in server.stderr_lines().take(100) {
+        for line in server.stderr_lines().take(200) {
             // eprintln!("Line: {line}");
 
             assert!(!line.contains("WARN"), "Warning in log output: {line}");
@@ -117,7 +117,7 @@ async fn it_starts_without_warnings_and_accepts_connections() {
 
                 // run server 2nd time on initialized schmea
                 run_server_and_check_warnings().await;
-            })
+            });
         });
     });
 

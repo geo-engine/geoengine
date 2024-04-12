@@ -1,9 +1,10 @@
 use crate::error::{AtLeastOneStreamRequired, Error};
 use crate::util::Result;
-use futures::ready;
-use futures::stream::Stream;
-use geoengine_datatypes::primitives::TimeInterval;
-use geoengine_datatypes::raster::RasterTile2D;
+use futures::future::join_all;
+use futures::stream::{BoxStream, Stream};
+use futures::{ready, Future};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInterval};
+use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::pin_project;
 use snafu::ensure;
 use std::pin::Pin;
@@ -126,6 +127,40 @@ where
 
         Poll::Ready(Some(item))
     }
+}
+
+/// A helper method that computes a function on multiple bands (that are already aligned) individually and then stacks the result into a multi-band raster.
+pub async fn stack_individual_aligned_raster_bands<'a, F, Fut, P>(
+    query: &RasterQueryRectangle,
+    ctx: &'a dyn crate::engine::QueryContext,
+    create_single_bands_stream_fn: F,
+) -> Result<BoxStream<'a, Result<RasterTile2D<P>>>>
+where
+    F: Fn(RasterQueryRectangle, &'a dyn crate::engine::QueryContext) -> Fut,
+    Fut: Future<Output = Result<BoxStream<'a, Result<RasterTile2D<P>>>>>,
+    P: Pixel,
+{
+    if query.attributes.count() == 1 {
+        // special case of single band query requires no tile stacking
+        return create_single_bands_stream_fn(query.clone(), ctx).await;
+    }
+
+    // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
+    let band_streams = join_all(query.attributes.as_slice().iter().map(|band| {
+        let query = query.select_bands(BandSelection::new_single(*band));
+
+        async {
+            Ok(SimpleRasterStackerSource {
+                stream: create_single_bands_stream_fn(query, ctx).await?,
+                num_bands: 1,
+            })
+        }
+    }))
+    .await
+    .into_iter()
+    .collect::<Result<Vec<_>>>()?;
+
+    Ok(Box::pin(SimpleRasterStackerAdapter::new(band_streams)?))
 }
 
 #[cfg(test)]

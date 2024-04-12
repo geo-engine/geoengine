@@ -650,6 +650,85 @@ impl TypedVectorQueryProcessor {
     }
 }
 
+impl TypedVectorQueryProcessor {
+    fn type_str(&self) -> &str {
+        match self {
+            TypedVectorQueryProcessor::Data(_) => "Data",
+            TypedVectorQueryProcessor::MultiPoint(_) => "MultiPoint",
+            TypedVectorQueryProcessor::MultiLineString(_) => "MultiLineString",
+            TypedVectorQueryProcessor::MultiPolygon(_) => "MultiPolygon",
+        }
+    }
+}
+
+impl TryFrom<TypedVectorQueryProcessor>
+    for Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>
+{
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedVectorQueryProcessor) -> Result<Self, Self::Error> {
+        if let TypedVectorQueryProcessor::MultiPoint(p) = value {
+            Ok(p)
+        } else {
+            Err(crate::error::Error::InvalidVectorType {
+                expected: "MultiPointCollection".to_string(),
+                found: value.type_str().to_string(),
+            })
+        }
+    }
+}
+
+impl TryFrom<TypedVectorQueryProcessor>
+    for Box<dyn VectorQueryProcessor<VectorType = MultiLineStringCollection>>
+{
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedVectorQueryProcessor) -> Result<Self, Self::Error> {
+        if let TypedVectorQueryProcessor::MultiLineString(p) = value {
+            Ok(p)
+        } else {
+            Err(crate::error::Error::InvalidVectorType {
+                expected: "MultiLineStringCollection".to_string(),
+                found: value.type_str().to_string(),
+            })
+        }
+    }
+}
+
+impl TryFrom<TypedVectorQueryProcessor>
+    for Box<dyn VectorQueryProcessor<VectorType = MultiPolygonCollection>>
+{
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedVectorQueryProcessor) -> Result<Self, Self::Error> {
+        if let TypedVectorQueryProcessor::MultiPolygon(p) = value {
+            Ok(p)
+        } else {
+            Err(crate::error::Error::InvalidVectorType {
+                expected: "MultiPolygonCollection".to_string(),
+                found: value.type_str().to_string(),
+            })
+        }
+    }
+}
+
+impl TryFrom<TypedVectorQueryProcessor>
+    for Box<dyn VectorQueryProcessor<VectorType = DataCollection>>
+{
+    type Error = crate::error::Error;
+
+    fn try_from(value: TypedVectorQueryProcessor) -> Result<Self, Self::Error> {
+        if let TypedVectorQueryProcessor::Data(p) = value {
+            Ok(p)
+        } else {
+            Err(crate::error::Error::InvalidVectorType {
+                expected: "DataCollection".to_string(),
+                found: value.type_str().to_string(),
+            })
+        }
+    }
+}
+
 impl From<Box<dyn VectorQueryProcessor<VectorType = DataCollection>>>
     for TypedVectorQueryProcessor
 {

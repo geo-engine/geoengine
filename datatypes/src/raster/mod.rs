@@ -1,3 +1,4 @@
+pub use self::band_names::RenameBands;
 pub use self::data_type::{
     DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType, StaticRasterDataType, TypedValue,
 };
@@ -52,6 +53,7 @@ pub use raster_properties::{
 pub use raster_traits::{CoordinatePixelAccess, GeoTransformAccess, Raster};
 
 mod arrow_conversion;
+mod band_names;
 mod data_type;
 mod empty_grid;
 mod geo_transform;

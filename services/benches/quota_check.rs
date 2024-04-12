@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
+
 use std::time::Instant;
 
 use actix_http::header::{self, CONTENT_TYPE};
@@ -106,12 +108,12 @@ async fn bench() {
             Some(&header::HeaderValue::from_static("image/png"))
         );
     })
-    .await
+    .await;
 }
 
 #[tokio::main]
 async fn main() {
-    println!(
+    eprintln!(
         "Starting benchmark, quota check enabled: {}",
         config::get_config_element::<geoengine_services::pro::util::config::Quota>()
             .unwrap()

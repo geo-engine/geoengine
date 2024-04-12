@@ -214,6 +214,7 @@ where
             .global_pixel_bounds()
             .intersects(&query.spatial_query.grid_bounds())
             && self.time.intersects(&query.time_interval)
+            && query.attributes.as_slice().contains(&self.band)
     }
 }
 

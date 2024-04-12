@@ -492,7 +492,7 @@ impl Iterator for TimeStepIter {
             return None;
         }
 
-        let next = (self.reference_time + self.time_step * self.curr).unwrap();
+        let next = (self.reference_time + self.time_step * self.curr).ok()?;
 
         self.curr += 1;
 

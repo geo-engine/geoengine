@@ -8,6 +8,7 @@ use arrow::{
     buffer::Buffer,
 };
 use arrow_array::{Date64Array, Float64Array, Int64Array, Scalar, StringArray};
+use rayon::iter::plumbing::Producer;
 use serde::{Deserialize, Serialize};
 use serde_json::Map;
 use snafu::ensure;
@@ -887,17 +888,18 @@ where
     type Item = FeatureCollectionRow<'a, GeometryRef>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let res = self
-            .time_intervals
-            .next()
-            .map(|time_interval| FeatureCollectionRow {
-                geometry: self.geometries.next().unwrap(),
-                time_interval: *time_interval,
-                data: Rc::clone(&self.data),
-                row_num: self.row_num,
-            });
+        let row_num = self.row_num;
         self.row_num += 1;
-        res
+
+        let time_interval = self.time_intervals.next()?;
+        let geometry = self.geometries.next()?;
+
+        Some(FeatureCollectionRow {
+            geometry,
+            time_interval: *time_interval,
+            data: Rc::clone(&self.data),
+            row_num,
+        })
     }
 }
 
@@ -1338,6 +1340,8 @@ impl<'i, CollectionType> IntoGeometryOptionsIterator<'i> for FeatureCollection<C
 where
     CollectionType: Geometry,
     Self: IntoGeometryIterator<'i>,
+    <Self as IntoGeometryIterator<'i>>::GeometryIterator:
+        ExactSizeIterator + DoubleEndedIterator + Producer,
 {
     type GeometryOptionIterator =
         SomeIter<<Self as IntoGeometryIterator<'i>>::GeometryIterator, Self::GeometryType>;

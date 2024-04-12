@@ -10,7 +10,6 @@ use crate::util::Result;
 use async_trait::async_trait;
 use num_traits::AsPrimitive;
 use rayon::ThreadPool;
-use snafu::ensure;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
@@ -76,44 +75,38 @@ impl RasterOperator for Reflectance {
 
         let in_desc = input.result_descriptor();
 
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            in_desc.bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: Reflectance::TYPE_NAME
+        for band in in_desc.bands.iter() {
+            match &band.measurement {
+                Measurement::Continuous(ContinuousMeasurement {
+                    measurement: m,
+                    unit: _,
+                }) if m != "radiance" => {
+                    return Err(Error::InvalidMeasurement {
+                        expected: "radiance".into(),
+                        found: m.clone(),
+                    })
+                }
+                Measurement::Classification(ClassificationMeasurement {
+                    measurement: m,
+                    classes: _,
+                }) => {
+                    return Err(Error::InvalidMeasurement {
+                        expected: "radiance".into(),
+                        found: m.clone(),
+                    })
+                }
+                Measurement::Unitless => {
+                    return Err(Error::InvalidMeasurement {
+                        expected: "radiance".into(),
+                        found: "unitless".into(),
+                    })
+                }
+                // OK Case
+                Measurement::Continuous(ContinuousMeasurement {
+                    measurement: _,
+                    unit: _,
+                }) => {}
             }
-        );
-
-        match &in_desc.bands[0].measurement {
-            Measurement::Continuous(ContinuousMeasurement {
-                measurement: m,
-                unit: _,
-            }) if m != "radiance" => {
-                return Err(Error::InvalidMeasurement {
-                    expected: "radiance".into(),
-                    found: m.clone(),
-                })
-            }
-            Measurement::Classification(ClassificationMeasurement {
-                measurement: m,
-                classes: _,
-            }) => {
-                return Err(Error::InvalidMeasurement {
-                    expected: "radiance".into(),
-                    found: m.clone(),
-                })
-            }
-            Measurement::Unitless => {
-                return Err(Error::InvalidMeasurement {
-                    expected: "radiance".into(),
-                    found: "unitless".into(),
-                })
-            }
-            // OK Case
-            Measurement::Continuous(ContinuousMeasurement {
-                measurement: _,
-                unit: _,
-            }) => {}
         }
 
         let out_desc = RasterResultDescriptor {
@@ -122,14 +115,19 @@ impl RasterOperator for Reflectance {
             time: in_desc.time,
             geo_transform_x: in_desc.tiling_geo_transform(),
             pixel_bounds_x: in_desc.tiling_pixel_bounds(),
-            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                in_desc.bands[0].name.clone(),
-                Measurement::Continuous(ContinuousMeasurement {
-                    measurement: "reflectance".into(),
-                    unit: Some("fraction".into()),
-                }),
-            )])
-            .unwrap(),
+            bands: RasterBandDescriptors::new(
+                in_desc
+                    .bands
+                    .iter()
+                    .map(|b| RasterBandDescriptor {
+                        name: b.name.clone(),
+                        measurement: Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "reflectance".into(),
+                            unit: Some("fraction".into()),
+                        }),
+                    })
+                    .collect::<Vec<_>>(),
+            )?,
         };
 
         let initialized_operator = InitializedReflectance {

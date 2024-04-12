@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)] // okay in benchmarks
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use geoengine_datatypes::collections::{
     BuilderProvider, FeatureCollectionInfos, FeatureCollectionModifications,
@@ -19,7 +21,7 @@ fn multi_point_collection_benchmarks(c: &mut Criterion) {
                 builder.finish_row();
             }
             black_box(builder.build())
-        })
+        });
     });
 
     group.bench_function("Builder with Number 100", |b| {
@@ -38,7 +40,7 @@ fn multi_point_collection_benchmarks(c: &mut Criterion) {
                 builder.finish_row();
             }
             black_box(builder.build())
-        })
+        });
     });
 
     group.bench_function("Filter multi point chunk", |b| {
@@ -77,7 +79,7 @@ fn multi_point_collection_benchmarks(c: &mut Criterion) {
                     builder.finish_row();
 
                     // from settings-default.toml
-                    if builder.estimate_memory_size() >= 1048576 {
+                    if builder.estimate_memory_size() >= 1_048_576 {
                         break;
                     }
                 }
@@ -100,7 +102,7 @@ fn multi_point_collection_benchmarks(c: &mut Criterion) {
                 black_box(data)
             },
             criterion::BatchSize::SmallInput,
-        )
+        );
     });
 
     group.finish();

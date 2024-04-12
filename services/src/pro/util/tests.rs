@@ -217,7 +217,7 @@ where
     let db = app_ctx.session_context(system_session).db();
 
     let dataset_id = db
-        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
+        .add_dataset(ndvi.properties, ndvi.meta_data)
         .await
         .expect("dataset db access")
         .id;
@@ -277,7 +277,7 @@ where
     let db = app_ctx.session_context(system_session).db();
 
     let dataset_id = db
-        .add_dataset(ndvi.properties, db.wrap_meta_data(ndvi.meta_data))
+        .add_dataset(ndvi.properties, ndvi.meta_data)
         .await
         .expect("dataset db access")
         .id;

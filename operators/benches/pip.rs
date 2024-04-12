@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
+
 use futures::StreamExt;
 use geo_rand::{GeoRand, GeoRandParameters};
 use geoengine_datatypes::collections::{
@@ -102,11 +104,11 @@ async fn main() {
     let mut rng = StdRng::seed_from_u64(1337);
 
     let points = random_points(&mut rng, 10_000_000);
-    dbg!(points.len());
+    points.len();
 
     let polygons = random_multi_polygons(&mut rng, POLYGONS_PER_MULTIPOLYGON, MULTI_POLYGONS);
     let polygons: MultiPolygonCollection = polygons.into();
-    dbg!(polygons.len());
+    polygons.len();
 
     println!("num_threads,time");
     for num_threads in [1, 2, 4] {

@@ -8,7 +8,7 @@ pub type Result<T, E = syn::Error> = std::result::Result<T, E>;
 pub type AttributeArgs = syn::punctuated::Punctuated<syn::Meta, syn::Token![,]>;
 pub type ConfigArgs = HashMap<String, Lit>;
 
-pub fn test(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
+pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream> {
     let input: ItemFn = syn::parse2(item.clone())?;
 
     let mut config_args = parse_config_args(attr)?;
@@ -241,7 +241,7 @@ mod tests {
             }
         };
 
-        let actual = test(attributes, input).unwrap();
+        let actual = test(attributes, &input).unwrap();
 
         assert_eq!(expected.to_string(), actual.to_string());
     }
@@ -276,7 +276,7 @@ mod tests {
             }
         };
 
-        let actual = test(attributes, input).unwrap();
+        let actual = test(attributes, &input).unwrap();
 
         assert_eq!(expected.to_string(), actual.to_string());
     }
@@ -318,7 +318,7 @@ mod tests {
             }
         };
 
-        let actual = test(attributes, input).unwrap();
+        let actual = test(attributes, &input).unwrap();
 
         assert_eq!(expected.to_string(), actual.to_string());
     }

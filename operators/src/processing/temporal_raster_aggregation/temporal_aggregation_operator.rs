@@ -8,7 +8,7 @@ use super::aggregators::{
 use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
-use crate::adapters::{SimpleRasterStackerAdapter, SimpleRasterStackerSource};
+use crate::adapters::stack_individual_aligned_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
     RasterOperator, SingleRasterSource, WorkflowOperatorPath,
@@ -258,17 +258,21 @@ where
     #[allow(clippy::too_many_lines)]
     fn create_subquery_adapter_stream_for_single_band<'a>(
         &'a self,
-        query_rect_to_answer: RasterQueryRectangle,
-        band_idx: u32,
+        query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> futures::stream::BoxStream<'a, Result<RasterTile2D<P>>> {
-        let mut query = query_rect_to_answer;
-        query.attributes = band_idx.into();
+    ) -> Result<futures::stream::BoxStream<'a, Result<RasterTile2D<P>>>> {
+        ensure!(
+            query.attributes.count() == 1,
+            error::InvalidBandCount {
+                expected: 1u32,
+                found: query.attributes.count()
+            }
+        );
 
         let geo_transform = self.result_descriptor.tiling_geo_transform();
         let tiling_strategy = self.tiling_specification.strategy(geo_transform);
 
-        match self.aggregation_type {
+        Ok(match self.aggregation_type {
             Aggregation::Min {
                 ignore_no_data: true,
             } => self
@@ -307,7 +311,6 @@ where
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
                 .expect("no tiles must be skipped in Aggregation::Max"),
-
             Aggregation::First {
                 ignore_no_data: true,
             } => self
@@ -336,14 +339,12 @@ where
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
                 .expect("no tiles must be skipped in Aggregation::Last"),
-
             Aggregation::Last {
                 ignore_no_data: false,
             } => self
                 .create_subquery_last(last_tile_fold_future::<P>)
                 .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
                 .expect("no tiles must be skipped in Aggregation::Last"),
-
             Aggregation::Mean {
                 ignore_no_data: true,
             } => self
@@ -355,7 +356,6 @@ where
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
                 .expect("no tiles must be skipped in Aggregation::Mean"),
-
             Aggregation::Mean {
                 ignore_no_data: false,
             } => self
@@ -364,7 +364,6 @@ where
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
                 .expect("no tiles must be skipped in Aggregation::Mean"),
-
             Aggregation::Sum {
                 ignore_no_data: true,
             } => self
@@ -376,7 +375,6 @@ where
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
                 .expect("no tiles must be skipped in Aggregation::Sum"),
-
             Aggregation::Sum {
                 ignore_no_data: false,
             } => self
@@ -385,7 +383,6 @@ where
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
                 .expect("no tiles must be skipped in Aggregation::Sum"),
-
             Aggregation::Count {
                 ignore_no_data: true,
             } => self
@@ -396,8 +393,7 @@ where
                     >,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Sum"),
-
+                .expect("no tiles must be skipped in Aggregation::Count"),
             Aggregation::Count {
                 ignore_no_data: false,
             } => self
@@ -405,8 +401,8 @@ where
                     super::subquery::subquery_all_tiles_fold_fn::<P, CountPixelAggregator>,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Sum"),
-        }
+                .expect("no tiles must be skipped in Aggregation::Count"),
+        })
     }
 }
 
@@ -431,31 +427,10 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
-        if query.attributes.count() == 1 {
-            // special case of single band query requires no tile stacking
-            return Ok(self.create_subquery_adapter_stream_for_single_band(
-                query.clone(),
-                query.attributes.as_slice()[0],
-                ctx,
-            ));
-        }
-
-        // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
-        let band_streams = query
-            .attributes
-            .as_slice()
-            .iter()
-            .map(|band| SimpleRasterStackerSource {
-                stream: self.create_subquery_adapter_stream_for_single_band(
-                    query.clone(),
-                    *band,
-                    ctx,
-                ),
-                num_bands: 1,
-            })
-            .collect::<Vec<_>>();
-
-        Ok(Box::pin(SimpleRasterStackerAdapter::new(band_streams)?))
+        stack_individual_aligned_raster_bands(&query, ctx, |query, ctx| async {
+            self.create_subquery_adapter_stream_for_single_band(query, ctx)
+        })
+        .await
     }
 
     fn result_descriptor(&self) -> &Self::ResultDescription {
@@ -465,18 +440,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use futures::stream::StreamExt;
-    use geoengine_datatypes::{
-        primitives::{CacheHint, Coordinate2D, Measurement, TimeInterval},
-        raster::{
-            EmptyGrid, EmptyGrid2D, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty,
-            GridShape2D, MaskedGrid2D, RasterDataType, TileInformation,
-            TilesEqualIgnoringCacheHint,
-        },
-        spatial_reference::SpatialReference,
-        util::test::TestDefault,
-    };
-
+    use super::*;
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
@@ -484,11 +448,20 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{
             raster_stacker::{RasterStacker, RasterStackerParams},
-            Expression, ExpressionParams, ExpressionSources,
+            Expression, ExpressionParams,
         },
     };
-
-    use super::*;
+    use futures::stream::StreamExt;
+    use geoengine_datatypes::{
+        primitives::{CacheHint, Coordinate2D, TimeInterval},
+        raster::{
+            EmptyGrid, EmptyGrid2D, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty,
+            GridShape2D, MaskedGrid2D, RasterDataType, RenameBands, TileInformation,
+            TilesEqualIgnoringCacheHint,
+        },
+        spatial_reference::SpatialReference,
+        util::test::TestDefault,
+    };
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -2040,10 +2013,10 @@ mod tests {
                     params: ExpressionParams {
                         expression: "20 * A".to_string(),
                         output_type: RasterDataType::U8,
-                        output_measurement: Some(Measurement::Unitless),
+                        output_band: None,
                         map_no_data: true,
                     },
-                    sources: ExpressionSources::new_a(mrs),
+                    sources: SingleRasterSource { raster: mrs },
                 }
                 .boxed(),
             },
@@ -2773,7 +2746,9 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: RasterStacker {
-                    params: RasterStackerParams {},
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::Default,
+                    },
                     sources: MultipleRasterSources {
                         rasters: vec![
                             MockRasterSource {

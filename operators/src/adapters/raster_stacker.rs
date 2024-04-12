@@ -6,7 +6,7 @@ use geoengine_datatypes::primitives::{
     BandSelection, RasterQueryRectangle, SpatialGridQueryRectangle, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy,
+    GridBoundingBox2D, GridIdx2D, GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy,
 };
 use pin_project::pin_project;
 use std::pin::Pin;
@@ -135,6 +135,21 @@ where
         strat
             .global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds)
             .number_of_elements()
+    }
+
+    fn grid_idx_for_nth_tile(
+        tile_info: &TileInformation,
+        pixel_bounds: GridBoundingBox2D,
+        n: usize,
+    ) -> Option<GridIdx2D> {
+        let strat = TilingStrategy {
+            tile_size_in_pixels: tile_info.tile_size_in_pixels,
+            geo_transform: tile_info.global_geo_transform,
+        };
+
+        strat
+            .tile_idx_iterator_from_grid_bounds(pixel_bounds)
+            .nth(n)
     }
 }
 
@@ -296,6 +311,30 @@ where
                             }
                         };
 
+                        debug_assert_eq!(
+                                tile.band, *current_band as u32,
+                                "RasterStacker got tile with unexpected band index: expected {}, got {} for source {}",
+                                current_band,
+                                tile.band,
+                                current_stream
+                            );
+
+                        debug_assert!(
+                                tile.time.contains(time_slice),
+                                "RasterStacker got tile with unexpected time: time slice [{}, {}) not contained in tile time [{}, {}) for source {}",
+                                time_slice.start().as_datetime_string(),
+                                time_slice.end().as_datetime_string(),
+                                tile.time.start().as_datetime_string(),
+                                tile.time.end().as_datetime_string(),
+                                current_stream
+                            );
+
+                        debug_assert_eq!(
+                                Some(tile.tile_position), Self::grid_idx_for_nth_tile(&tile.tile_information(), query_rect.spatial_query.grid_bounds(), *current_spatial_tile),
+                                "RasteStacker got tile with unexpected tile_position: expected {:?}, got {:?} for source {}",
+                                Self::grid_idx_for_nth_tile(&tile.tile_information(), query_rect.spatial_query.grid_bounds(), *current_spatial_tile), tile.tile_position, current_stream
+                            );
+
                         tile.band = sources
                             .iter()
                             .take(*current_stream)
@@ -313,10 +352,11 @@ where
 
                         if *current_stream >= streams.len() {
                             *current_stream = 0;
+                            *current_band = 0;
                             *current_spatial_tile += 1;
                         }
 
-                        if *current_spatial_tile >= num_spatial_tiles.unwrap() {
+                        if *current_spatial_tile >= num_spatial_tiles.unwrap_or_default() {
                             *current_spatial_tile = 0;
                             *current_band = 0;
                             *current_stream = 0;

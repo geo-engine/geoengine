@@ -1,5 +1,5 @@
 use crate::api::handlers::tasks::TaskResponse;
-use crate::api::model::datatypes::{DataId, TimeInterval};
+use crate::api::model::datatypes::{BandSelection, DataId, TimeInterval};
 use crate::api::model::responses::IdResponse;
 use crate::api::ogc::util::{parse_bbox, parse_time};
 use crate::contexts::{ApplicationContext, SessionContext};
@@ -11,7 +11,9 @@ use crate::datasets::{
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::util::config::get_config_element;
-use crate::util::parsing::{parse_spatial_partition, parse_spatial_resolution};
+use crate::util::parsing::{
+    parse_band_selection, parse_spatial_partition, parse_spatial_resolution,
+};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::workflows::{RasterWebsocketStreamHandler, VectorWebsocketStreamHandler};
@@ -19,8 +21,8 @@ use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    BandSelection, BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
-    SpatialResolution, VectorQueryRectangle,
+    BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+    VectorQueryRectangle,
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
@@ -495,7 +497,7 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
 }
 
 /// The query parameters for `raster_stream_websocket`.
-#[derive(Copy, Clone, Debug, PartialEq, Deserialize, IntoParams)]
+#[derive(Clone, Debug, PartialEq, Deserialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_spatial_partition")]
@@ -505,6 +507,9 @@ pub struct RasterStreamWebsocketQuery {
     pub time_interval: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
     pub spatial_resolution: SpatialResolution,
+    #[serde(deserialize_with = "parse_band_selection")]
+    #[param(value_type = String)]
+    pub attributes: BandSelection,
     pub result_type: RasterStreamWebsocketResultType,
 }
 
@@ -567,7 +572,6 @@ async fn raster_stream_websocket<C: ApplicationContext>(
 
     let query = query.into_inner();
 
-    // TODO: use pixel bounds in the query
     let query_bounds = initialized_operator
         .result_descriptor()
         .tiling_geo_transform()
@@ -575,7 +579,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
     let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
         query_bounds,
         query.time_interval.into(),
-        BandSelection::first(),
+        query.attributes.clone().try_into()?,
     );
 
     // this is the only result type for now
@@ -1357,9 +1361,11 @@ mod tests {
                     "y": 0.1
                 },
                 "bands": [{
-                        "name": "band",
+                        "name": "ndvi",
                         "measurement": {
-                            "type": "unitless"
+                            "type": "continuous",
+                            "measurement": "vegetation",
+                            "unit": null
                         }
                     }]
             })
@@ -1488,7 +1494,7 @@ mod tests {
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
             GridBoundingBox2D::new([-100, 800], [499, 199]).unwrap(),
             TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
-            BandSelection::first(),
+            geoengine_datatypes::primitives::BandSelection::first(),
         );
 
         let tiling_strategy = exe_ctx

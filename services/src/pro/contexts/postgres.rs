@@ -68,7 +68,7 @@ where
 
 impl<Tls> ProPostgresContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -215,7 +215,7 @@ where
     ) -> Result<bool> {
         PostgresContext::maybe_clear_database(&conn).await?;
 
-        let migration = migrate_database(&mut conn, &pro_migrations()).await?;
+        let migration = migrate_database(&mut conn, &pro_migrations(), None).await?;
 
         Ok(migration == MigrationResult::CreatedDatabase)
     }
@@ -228,7 +228,7 @@ where
 #[async_trait]
 impl<Tls> ApplicationContext for ProPostgresContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -254,7 +254,7 @@ where
 #[async_trait]
 impl<Tls> ProApplicationContext for ProPostgresContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -279,7 +279,7 @@ where
 #[async_trait]
 impl<Tls> SessionContext for PostgresSessionContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -345,9 +345,10 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -358,7 +359,7 @@ where
 
 impl<Tls> ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -385,7 +386,7 @@ where
 #[async_trait]
 impl<Tls> MlModelDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -461,7 +462,7 @@ where
 #[async_trait]
 impl<Tls> LoadMlModel for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -479,7 +480,7 @@ where
 
 impl<Tls> GeoEngineDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -488,7 +489,7 @@ where
 
 impl<Tls> ProGeoEngineDb for ProPostgresDb<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -510,7 +511,9 @@ mod tests {
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
         LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
     };
-    use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+    use crate::layers::listing::{
+        LayerCollectionId, LayerCollectionProvider, SearchParameters, SearchType,
+    };
     use crate::layers::storage::{
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
@@ -1073,7 +1076,6 @@ mod tests {
         let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
 
         let db = app_ctx.session_context(session.clone()).db();
-        let wrap = db.wrap_meta_data(meta_data);
         let DatasetIdAndName {
             id: dataset_id,
             name: dataset_name,
@@ -1092,7 +1094,7 @@ mod tests {
                     }]),
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
-                wrap,
+                meta_data,
             )
             .await
             .unwrap();
@@ -1198,7 +1200,9 @@ mod tests {
 
         let provider = NetCdfCfDataProviderDefinition {
             name: "netcdfcf".to_string(),
-            path: test_data!("netcdf4d/").into(),
+            description: "NetCdfCfProviderDefinition".to_string(),
+            priority: Some(33),
+            data: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
             cache_ttl: CacheTtlSeconds::new(0),
         };
@@ -1220,7 +1224,7 @@ mod tests {
             LayerProviderListing {
                 id: provider_id,
                 name: "netcdfcf".to_owned(),
-                description: "NetCdfCfProviderDefinition".to_owned(),
+                priority: 33,
             }
         );
 
@@ -1237,7 +1241,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(datasets.items.len(), 3);
+        assert_eq!(datasets.items.len(), 4);
     }
 
     #[ge_context::test]
@@ -1285,9 +1289,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-        let _id = db1.add_dataset(ds, meta).await.unwrap();
+        let _id = db1.add_dataset(ds, meta.into()).await.unwrap();
 
         let list1 = db1
             .list_datasets(DatasetListOptions {
@@ -1361,9 +1363,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-        let id = db1.add_dataset(ds, meta).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
 
         assert!(db1.load_provenance(&id).await.is_ok());
 
@@ -1415,9 +1415,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-        let id = db1.add_dataset(ds, meta).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
 
         assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1475,9 +1473,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-        let id = db1.add_dataset(ds, meta).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
 
         assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1535,9 +1531,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let meta = db1.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-        let id = db1.add_dataset(ds, meta).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -1644,9 +1638,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let meta = db.wrap_meta_data(MetaDataDefinition::OgrMetaData(meta));
-
-        let id = db.add_dataset(vector_ds, meta).await.unwrap().id;
+        let id = db.add_dataset(vector_ds, meta.into()).await.unwrap().id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -1666,9 +1658,11 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataRegular(meta));
-
-        let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
+        let id = db
+            .add_dataset(raster_ds.clone(), meta.into())
+            .await
+            .unwrap()
+            .id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -1683,9 +1677,11 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let meta = db.wrap_meta_data(MetaDataDefinition::GdalStatic(meta));
-
-        let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
+        let id = db
+            .add_dataset(raster_ds.clone(), meta.into())
+            .await
+            .unwrap()
+            .id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -1698,9 +1694,11 @@ mod tests {
             params: vec![],
         };
 
-        let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetaDataList(meta));
-
-        let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
+        let id = db
+            .add_dataset(raster_ds.clone(), meta.into())
+            .await
+            .unwrap()
+            .id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -1721,9 +1719,11 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let meta = db.wrap_meta_data(MetaDataDefinition::GdalMetadataNetCdfCf(meta));
-
-        let id = db.add_dataset(raster_ds.clone(), meta).await.unwrap().id;
+        let id = db
+            .add_dataset(raster_ds.clone(), meta.into())
+            .await
+            .unwrap()
+            .id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
@@ -1951,6 +1951,1407 @@ mod tests {
                 properties: vec![],
             }
         );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_searches_layers(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+
+        let layer_db = app_ctx.session_context(session).db();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockPointSource {
+                    params: MockPointSourceParams {
+                        points: vec![Coordinate2D::new(1., 2.); 3],
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
+
+        let layer1 = layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer1".to_string(),
+                    description: "Layer 1".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: [("meta".to_string(), "datum".to_string())].into(),
+                    properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let collection1_id = layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection1".to_string(),
+                    description: "Collection 1".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let layer2 = layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let collection2_id = layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection2".to_string(),
+                    description: "Collection 2".to_string(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let root_collection_all = layer_db
+            .search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_all,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: root_collection_id.clone(),
+                },
+                name: "Layers".to_string(),
+                description: "All available Geo Engine layers".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1_id.clone(),
+                        },
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f".to_string()
+                            ),
+                        },
+                        name: "Unsorted".to_string(),
+                        description: "Unsorted Layers".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer1.clone(),
+                        },
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                        properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2.clone(),
+                        },
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        properties: vec![],
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let root_collection_filtered = layer_db
+            .search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "lection".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_filtered,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: root_collection_id.clone(),
+                },
+                name: "Layers".to_string(),
+                description: "All available Geo Engine layers".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1_id.clone(),
+                        },
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_all = layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_all,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2.clone(),
+                        },
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        properties: vec![],
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_filtered_fulltext = layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_filtered_fulltext,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: layer2.clone(),
+                    },
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    properties: vec![],
+                }),],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_filtered_prefix = layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_filtered_prefix,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_filtered_prefix2 = layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "Lay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_filtered_prefix2,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: layer2.clone(),
+                    },
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    properties: vec![],
+                }),],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_searches_layers_with_permissions(app_ctx: ProPostgresContext<NoTls>) {
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_layer_db = app_ctx.session_context(admin_session).db();
+
+        let user_session = app_ctx.create_anonymous_session().await.unwrap();
+        let user_layer_db = app_ctx.session_context(user_session.clone()).db();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockPointSource {
+                    params: MockPointSourceParams {
+                        points: vec![Coordinate2D::new(1., 2.); 3],
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let root_collection_id = admin_layer_db.get_root_layer_collection_id().await.unwrap();
+
+        let layer1 = admin_layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer1".to_string(),
+                    description: "Layer 1".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: [("meta".to_string(), "datum".to_string())].into(),
+                    properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let collection1_id = admin_layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection1".to_string(),
+                    description: "Collection 1".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let layer2 = admin_layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let collection2_id = admin_layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection2".to_string(),
+                    description: "Collection 2".to_string(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let collection3_id = admin_layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection3".to_string(),
+                    description: "Collection 3".to_string(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let layer3 = admin_layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer3".to_string(),
+                    description: "Layer 3".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection2_id,
+            )
+            .await
+            .unwrap();
+
+        // Grant user permissions for collection1, collection2, layer1 and layer2
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                collection1_id.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                collection2_id.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                layer1.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                layer2.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        // Ensure admin sees everything we added
+        let admin_root_collection_all = admin_layer_db
+            .search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            admin_root_collection_all,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: root_collection_id.clone(),
+                },
+                name: "Layers".to_string(),
+                description: "All available Geo Engine layers".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1_id.clone(),
+                        },
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection3_id.clone(),
+                        },
+                        name: "Collection3".to_string(),
+                        description: "Collection 3".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f".to_string()
+                            ),
+                        },
+                        name: "Unsorted".to_string(),
+                        description: "Unsorted Layers".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer1.clone(),
+                        },
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                        properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2.clone(),
+                        },
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer3.clone(),
+                        },
+                        name: "Layer3".to_string(),
+                        description: "Layer 3".to_string(),
+                        properties: vec![],
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let root_collection_all = user_layer_db
+            .search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_all,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: root_collection_id.clone(),
+                },
+                name: "Layers".to_string(),
+                description: "All available Geo Engine layers".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1_id.clone(),
+                        },
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f".to_string()
+                            ),
+                        },
+                        name: "Unsorted".to_string(),
+                        description: "Unsorted Layers".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer1.clone(),
+                        },
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                        properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2.clone(),
+                        },
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        properties: vec![],
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let root_collection_filtered = user_layer_db
+            .search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "lection".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_filtered,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: root_collection_id.clone(),
+                },
+                name: "Layers".to_string(),
+                description: "All available Geo Engine layers".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1_id.clone(),
+                        },
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_all = user_layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_all,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2.clone(),
+                        },
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        properties: vec![],
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_filtered_fulltext = user_layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_filtered_fulltext,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: layer2.clone(),
+                    },
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    properties: vec![],
+                }),],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_filtered_prefix = user_layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_filtered_prefix,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_filtered_prefix2 = user_layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "Lay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_filtered_prefix2,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: layer2.clone(),
+                    },
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    properties: vec![],
+                }),],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_autocompletes_layers(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+
+        let layer_db = app_ctx.session_context(session).db();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockPointSource {
+                    params: MockPointSourceParams {
+                        points: vec![Coordinate2D::new(1., 2.); 3],
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
+
+        let _layer1 = layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer1".to_string(),
+                    description: "Layer 1".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: [("meta".to_string(), "datum".to_string())].into(),
+                    properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let collection1_id = layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection1".to_string(),
+                    description: "Collection 1".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let _layer2 = layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let _collection2_id = layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection2".to_string(),
+                    description: "Collection 2".to_string(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let root_collection_all = layer_db
+            .autocomplete_search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_all,
+            vec![
+                "Collection1".to_string(),
+                "Collection2".to_string(),
+                "Layer1".to_string(),
+                "Layer2".to_string(),
+                "Unsorted".to_string(),
+            ]
+        );
+
+        let root_collection_filtered = layer_db
+            .autocomplete_search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "lection".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_filtered,
+            vec!["Collection1".to_string(), "Collection2".to_string(),]
+        );
+
+        let collection1_all = layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_all,
+            vec!["Collection2".to_string(), "Layer2".to_string(),]
+        );
+
+        let collection1_filtered_fulltext = layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection1_filtered_fulltext, vec!["Layer2".to_string(),]);
+
+        let collection1_filtered_prefix = layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection1_filtered_prefix, Vec::<String>::new());
+
+        let collection1_filtered_prefix2 = layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "Lay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection1_filtered_prefix2, vec!["Layer2".to_string(),]);
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_autocompletes_layers_with_permissions(app_ctx: ProPostgresContext<NoTls>) {
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_layer_db = app_ctx.session_context(admin_session).db();
+
+        let user_session = app_ctx.create_anonymous_session().await.unwrap();
+        let user_layer_db = app_ctx.session_context(user_session.clone()).db();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockPointSource {
+                    params: MockPointSourceParams {
+                        points: vec![Coordinate2D::new(1., 2.); 3],
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let root_collection_id = admin_layer_db.get_root_layer_collection_id().await.unwrap();
+
+        let layer1 = admin_layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer1".to_string(),
+                    description: "Layer 1".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: [("meta".to_string(), "datum".to_string())].into(),
+                    properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let collection1_id = admin_layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection1".to_string(),
+                    description: "Collection 1".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let layer2 = admin_layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let collection2_id = admin_layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection2".to_string(),
+                    description: "Collection 2".to_string(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let _collection3_id = admin_layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection3".to_string(),
+                    description: "Collection 3".to_string(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let _layer3 = admin_layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer3".to_string(),
+                    description: "Layer 3".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection2_id,
+            )
+            .await
+            .unwrap();
+
+        // Grant user permissions for collection1, collection2, layer1 and layer2
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                collection1_id.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                collection2_id.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                layer1.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                layer2.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        // Ensure admin sees everything we added
+        let admin_root_collection_all = admin_layer_db
+            .autocomplete_search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            admin_root_collection_all,
+            vec![
+                "Collection1".to_string(),
+                "Collection2".to_string(),
+                "Collection3".to_string(),
+                "Layer1".to_string(),
+                "Layer2".to_string(),
+                "Layer3".to_string(),
+                "Unsorted".to_string(),
+            ]
+        );
+
+        let root_collection_all = user_layer_db
+            .autocomplete_search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_all,
+            vec![
+                "Collection1".to_string(),
+                "Collection2".to_string(),
+                "Layer1".to_string(),
+                "Layer2".to_string(),
+                "Unsorted".to_string(),
+            ]
+        );
+
+        let root_collection_filtered = user_layer_db
+            .autocomplete_search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "lection".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_filtered,
+            vec!["Collection1".to_string(), "Collection2".to_string(),]
+        );
+
+        let collection1_all = user_layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_all,
+            vec!["Collection2".to_string(), "Layer2".to_string(),]
+        );
+
+        let collection1_filtered_fulltext = user_layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection1_filtered_fulltext, vec!["Layer2".to_string(),]);
+
+        let collection1_filtered_prefix = user_layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection1_filtered_prefix, Vec::<String>::new());
+
+        let collection1_filtered_prefix2 = user_layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "Lay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection1_filtered_prefix2, vec!["Layer2".to_string(),]);
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_reports_search_capabilities(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+
+        let layer_db = app_ctx.session_context(session).db();
+
+        let capabilities = layer_db.capabilities().search;
+
+        let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
+
+        if capabilities.search_types.fulltext {
+            assert!(layer_db
+                .search(
+                    &root_collection_id,
+                    SearchParameters {
+                        search_type: SearchType::Fulltext,
+                        search_string: String::new(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .is_ok());
+
+            if capabilities.autocomplete {
+                assert!(layer_db
+                    .autocomplete_search(
+                        &root_collection_id,
+                        SearchParameters {
+                            search_type: SearchType::Fulltext,
+                            search_string: String::new(),
+                            limit: 10,
+                            offset: 0,
+                        },
+                    )
+                    .await
+                    .is_ok());
+            } else {
+                assert!(layer_db
+                    .autocomplete_search(
+                        &root_collection_id,
+                        SearchParameters {
+                            search_type: SearchType::Fulltext,
+                            search_string: String::new(),
+                            limit: 10,
+                            offset: 0,
+                        },
+                    )
+                    .await
+                    .is_err());
+            }
+        }
+        if capabilities.search_types.prefix {
+            assert!(layer_db
+                .search(
+                    &root_collection_id,
+                    SearchParameters {
+                        search_type: SearchType::Prefix,
+                        search_string: String::new(),
+                        limit: 10,
+                        offset: 0,
+                    },
+                )
+                .await
+                .is_ok());
+
+            if capabilities.autocomplete {
+                assert!(layer_db
+                    .autocomplete_search(
+                        &root_collection_id,
+                        SearchParameters {
+                            search_type: SearchType::Prefix,
+                            search_string: String::new(),
+                            limit: 10,
+                            offset: 0,
+                        },
+                    )
+                    .await
+                    .is_ok());
+            } else {
+                assert!(layer_db
+                    .autocomplete_search(
+                        &root_collection_id,
+                        SearchParameters {
+                            search_type: SearchType::Prefix,
+                            search_string: String::new(),
+                            limit: 10,
+                            offset: 0,
+                        },
+                    )
+                    .await
+                    .is_err());
+            }
+        }
     }
 
     #[ge_context::test]
@@ -2543,7 +3944,6 @@ mod tests {
         let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
 
         let db = app_ctx.session_context(session.clone()).db();
-        let wrap = db.wrap_meta_data(meta_data);
         let dataset_id = db
             .add_dataset(
                 AddDataset {
@@ -2559,7 +3959,7 @@ mod tests {
                     }]),
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
-                wrap,
+                meta_data,
             )
             .await
             .unwrap()
@@ -2635,7 +4035,6 @@ mod tests {
         let session = admin_login(&app_ctx).await;
 
         let db = app_ctx.session_context(session).db();
-        let wrap = db.wrap_meta_data(meta_data);
         let dataset_id = db
             .add_dataset(
                 AddDataset {
@@ -2651,7 +4050,7 @@ mod tests {
                     }]),
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
-                wrap,
+                meta_data,
             )
             .await
             .unwrap()
@@ -2782,90 +4181,6 @@ mod tests {
             .unwrap();
 
         assert!(collection.items.iter().any(|c| match c {
-            CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
-            CollectionItem::Layer(_) => false,
-        }));
-
-        // add new layer in the collection as user, fails because only read permission
-        let result = db1
-            .add_layer_collection(
-                AddLayerCollection {
-                    name: "user layer".to_string(),
-                    description: String::new(),
-                    properties: Default::default(),
-                },
-                &new_collection_id,
-            )
-            .await;
-
-        assert!(result.is_err());
-
-        // give user owner permission
-        admin_db
-            .add_permission(
-                session1.user.id.into(),
-                new_collection_id.clone(),
-                Permission::Owner,
-            )
-            .await
-            .unwrap();
-
-        // add now works
-        db1.add_layer_collection(
-            AddLayerCollection {
-                name: "user layer".to_string(),
-                description: String::new(),
-                properties: Default::default(),
-            },
-            &new_collection_id,
-        )
-        .await
-        .unwrap();
-
-        // remove permissions again
-        admin_db
-            .remove_permission(
-                session1.user.id.into(),
-                new_collection_id.clone(),
-                Permission::Read,
-            )
-            .await
-            .unwrap();
-        admin_db
-            .remove_permission(
-                session1.user.id.into(),
-                new_collection_id.clone(),
-                Permission::Owner,
-            )
-            .await
-            .unwrap();
-
-        // access is gone now
-        let result = db1
-            .add_layer_collection(
-                AddLayerCollection {
-                    name: "user layer".to_string(),
-                    description: String::new(),
-                    properties: Default::default(),
-                },
-                &root,
-            )
-            .await;
-
-        assert!(result.is_err());
-
-        let collection = db1
-            .load_layer_collection(
-                &root,
-                LayerCollectionListOptions {
-                    offset: 0,
-                    limit: 10,
-                },
-            )
-            .await
-            .unwrap();
-
-        assert!(!collection.items.iter().any(|c| match c {
             CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
             CollectionItem::Layer(_) => false,
         }));
@@ -3424,7 +4739,7 @@ mod tests {
                     }]),
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
-                db.wrap_meta_data(meta_data.clone()),
+                meta_data.clone(),
             )
             .await
             .unwrap();
@@ -3450,7 +4765,7 @@ mod tests {
                     }]),
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
-                db.wrap_meta_data(meta_data),
+                meta_data,
             )
             .await
             .unwrap();

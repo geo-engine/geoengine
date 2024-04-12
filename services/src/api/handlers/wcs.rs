@@ -82,11 +82,13 @@ fn wcs_url(workflow: WorkflowId) -> Result<Url> {
         ("session_token" = [])
     )
 )]
-#[allow(clippy::unused_async)]
+#[allow(
+    clippy::unused_async, // the function signature of request handlers requires it
+    clippy::no_effect_underscore_binding // need `_session` to quire authentication
+)]
 async fn wcs_capabilities_handler<C: ApplicationContext>(
     workflow: web::Path<WorkflowId>,
     request: web::Query<GetCapabilities>,
-    _app_ctx: web::Data<C>,
     _session: C::Session,
 ) -> Result<HttpResponse> {
     let workflow = workflow.into_inner();

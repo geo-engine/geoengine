@@ -42,7 +42,11 @@ fn init_settings() -> RwLock<Config> {
     // for seperating groups, for instance double underscores `__`
     settings = settings.add_source(Environment::with_prefix("geoengine").separator("__"));
 
-    RwLock::new(settings.build().unwrap())
+    RwLock::new(
+        settings
+            .build()
+            .expect("it should crash the program if this fails"),
+    )
 }
 
 /// test may run in subdirectory

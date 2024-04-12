@@ -1,4 +1,4 @@
-use std::sync::Arc;
+#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
 
 use futures::StreamExt;
 use geoengine_datatypes::{
@@ -21,6 +21,7 @@ use geoengine_operators::{
     util::gdal::add_ndvi_dataset,
     util::Result,
 };
+use std::sync::Arc;
 
 /// This benchmarks runs a workflow twice to see the impact of the cache
 /// Run it with `cargo bench --bench cache --features pro`

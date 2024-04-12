@@ -1,3 +1,4 @@
+use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Result;
 use crate::error::{self, Error};
@@ -6,7 +7,10 @@ use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
 };
-use crate::layers::listing::{LayerCollectionId, LayerCollectionProvider};
+use crate::layers::listing::{
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+    SearchParameters, SearchType, SearchTypes,
+};
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
@@ -45,16 +49,19 @@ pub const GFBIO_PROVIDER_ID: DataProviderId =
 #[serde(rename_all = "camelCase")]
 pub struct GfbioAbcdDataProviderDefinition {
     pub name: String,
+    pub description: String,
+    pub priority: Option<i16>,
     pub db_config: DatabaseConnectionConfig,
     #[serde(default)]
     pub cache_ttl: CacheTtlSeconds,
 }
 
 #[async_trait]
-impl DataProviderDefinition for GfbioAbcdDataProviderDefinition {
-    async fn initialize(self: Box<Self>) -> Result<Box<dyn DataProvider>> {
+impl<D: GeoEngineDb> DataProviderDefinition<D> for GfbioAbcdDataProviderDefinition {
+    async fn initialize(self: Box<Self>, _db: D) -> Result<Box<dyn DataProvider>> {
         Ok(Box::new(
-            GfbioAbcdDataProvider::new(self.db_config, self.cache_ttl).await?,
+            GfbioAbcdDataProvider::new(self.name, self.description, self.db_config, self.cache_ttl)
+                .await?,
         ))
     }
 
@@ -69,11 +76,17 @@ impl DataProviderDefinition for GfbioAbcdDataProviderDefinition {
     fn id(&self) -> DataProviderId {
         GFBIO_PROVIDER_ID
     }
+
+    fn priority(&self) -> i16 {
+        self.priority.unwrap_or(0)
+    }
 }
 
-// TODO: make schema, table names and column names configurable like in crawler
+// TODO: make table names and column names configurable like in crawler
 #[derive(Debug)]
 pub struct GfbioAbcdDataProvider {
+    name: String,
+    description: String,
     db_config: DatabaseConnectionConfig,
     pool: Pool<PostgresConnectionManager<NoTls>>,
     column_hash_to_name: HashMap<String, String>,
@@ -85,7 +98,12 @@ impl GfbioAbcdDataProvider {
     const COLUMN_NAME_LONGITUDE: &'static str = "e9eefbe81d4343c6a114b7d522017bf493b89cef";
     const COLUMN_NAME_LATITUDE: &'static str = "506e190d0ad979d1c7a816223d1ded3604907d91";
 
-    async fn new(db_config: DatabaseConnectionConfig, cache_ttl: CacheTtlSeconds) -> Result<Self> {
+    async fn new(
+        name: String,
+        description: String,
+        db_config: DatabaseConnectionConfig,
+        cache_ttl: CacheTtlSeconds,
+    ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -93,6 +111,8 @@ impl GfbioAbcdDataProvider {
             Self::resolve_columns(&pool.get().await?, &db_config.schema).await?;
 
         Ok(Self {
+            name,
+            description,
             db_config,
             pool,
             column_hash_to_name,
@@ -188,6 +208,28 @@ impl GfbioAbcdDataProvider {
 
 #[async_trait]
 impl LayerCollectionProvider for GfbioAbcdDataProvider {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            listing: true,
+            search: SearchCapabilities {
+                search_types: SearchTypes {
+                    fulltext: true,
+                    prefix: true,
+                },
+                autocomplete: true,
+                filters: None,
+            },
+        }
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        &self.description
+    }
+
     async fn load_layer_collection(
         &self,
         collection: &LayerCollectionId,
@@ -312,6 +354,140 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
             properties: vec![],
             metadata: HashMap::new(),
         })
+    }
+
+    async fn search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<LayerCollection> {
+        ensure!(
+            *collection_id == self.get_root_layer_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection_id.clone()
+            }
+        );
+
+        let search_pattern = match search.search_type {
+            SearchType::Fulltext => format!("%{}%", search.search_string),
+            SearchType::Prefix => format!("{}%", search.search_string),
+        };
+
+        let conn = self.pool.get().await?;
+
+        let stmt = conn
+            .prepare(&format!(
+                r#"
+                SELECT surrogate_key, "{title}", "{details}"
+                FROM {schema}.abcd_datasets
+                WHERE "{title}" ILIKE $3
+                ORDER BY "{title}"
+                LIMIT $1
+                OFFSET $2;"#,
+                title = self
+                    .column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/Description/Representation/Title")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                details = self
+                    .column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/Description/Representation/Details")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                schema = self.db_config.schema
+            ))
+            .await?;
+
+        let rows = conn
+            .query(
+                &stmt,
+                &[
+                    &i64::from(search.limit),
+                    &i64::from(search.offset),
+                    &search_pattern,
+                ],
+            )
+            .await?;
+
+        let items: Vec<_> = rows
+            .into_iter()
+            .map(|row| {
+                CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: GFBIO_PROVIDER_ID,
+                        layer_id: LayerId(row.get::<usize, i32>(0).to_string()),
+                    },
+                    name: row.get(1),
+                    description: row.try_get(2).unwrap_or_else(|_| String::new()),
+                    properties: vec![],
+                })
+            })
+            .collect();
+
+        Ok(LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: GFBIO_PROVIDER_ID,
+                collection_id: collection_id.clone(),
+            },
+            name: "GFBio".to_owned(),
+            description: "GFBio".to_owned(),
+            items,
+            entry_label: None,
+            properties: vec![],
+        })
+    }
+
+    async fn autocomplete_search(
+        &self,
+        collection_id: &LayerCollectionId,
+        search: SearchParameters,
+    ) -> Result<Vec<String>> {
+        ensure!(
+            *collection_id == self.get_root_layer_collection_id().await?,
+            error::UnknownLayerCollectionId {
+                id: collection_id.clone()
+            }
+        );
+
+        let search_pattern = match search.search_type {
+            SearchType::Fulltext => format!("%{}%", search.search_string),
+            SearchType::Prefix => format!("{}%", search.search_string),
+        };
+
+        let conn = self.pool.get().await?;
+
+        let stmt = conn
+            .prepare(&format!(
+                r#"
+                SELECT "{title}"
+                FROM {schema}.abcd_datasets
+                WHERE "{title}" ILIKE $3
+                ORDER BY "{title}"
+                LIMIT $1
+                OFFSET $2;"#,
+                title = self
+                    .column_name_to_hash
+                    .get("/DataSets/DataSet/Metadata/Description/Representation/Title")
+                    .ok_or(Error::GfbioMissingAbcdField)?,
+                schema = self.db_config.schema
+            ))
+            .await?;
+
+        let rows = conn
+            .query(
+                &stmt,
+                &[
+                    &i64::from(search.limit),
+                    &i64::from(search.offset),
+                    &search_pattern,
+                ],
+            )
+            .await?;
+
+        let items: Vec<_> = rows
+            .into_iter()
+            .map(|row| row.get::<usize, String>(0))
+            .collect();
+
+        Ok(items)
     }
 }
 
@@ -466,6 +642,8 @@ impl
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::{PostgresContext, SessionContext, SimpleApplicationContext};
+    use crate::ge_context;
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
     use crate::util::config;
@@ -502,7 +680,7 @@ mod tests {
         let schema = format!("geoengine_test_{}", rand::thread_rng().next_u64());
 
         conn.batch_execute(&format!(
-            "CREATE SCHEMA {schema}; 
+            "CREATE SCHEMA {schema};
             SET SEARCH_PATH TO {schema}, public;
             {sql}"
         ))
@@ -528,14 +706,16 @@ mod tests {
             .unwrap();
     }
 
-    #[tokio::test]
-    async fn it_lists() {
+    #[ge_context::test]
+    async fn it_lists(app_ctx: PostgresContext<NoTls>) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
 
         let test_schema = create_test_data(&db_config).await;
 
         let provider = Box::new(GfbioAbcdDataProviderDefinition {
             name: "GFBio".to_string(),
+            description: "GFBio".to_string(),
+            priority: None,
             db_config: DatabaseConnectionConfig {
                 host: db_config.host.clone(),
                 port: db_config.port,
@@ -546,7 +726,7 @@ mod tests {
             },
             cache_ttl: Default::default(),
         })
-        .initialize()
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
         .await
         .unwrap();
 
@@ -575,12 +755,138 @@ mod tests {
                 },
                 name: "GFBio".to_string(),
                 description: "GFBio".to_string(),
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GFBIO_PROVIDER_ID,
+                            layer_id: LayerId("1".to_string()),
+                        },
+                        name: "Example Title".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GFBIO_PROVIDER_ID,
+                            layer_id: LayerId("2".to_string()),
+                        },
+                        name: "Example Title 2".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    })
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_searches_fulltext(app_ctx: PostgresContext<NoTls>) {
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let provider = Box::new(GfbioAbcdDataProviderDefinition {
+            name: "GFBio".to_string(),
+            description: "GFBio".to_string(),
+            priority: None,
+            db_config: DatabaseConnectionConfig {
+                host: db_config.host.clone(),
+                port: db_config.port,
+                database: db_config.database.clone(),
+                schema: test_schema.clone(),
+                user: db_config.user.clone(),
+                password: db_config.password.clone(),
+            },
+            cache_ttl: Default::default(),
+        })
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .await
+        .unwrap();
+
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+        let collection = provider
+            .search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "title".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    collection_id: root_id.clone(),
+                },
+                name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GFBIO_PROVIDER_ID,
+                            layer_id: LayerId("1".to_string()),
+                        },
+                        name: "Example Title".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GFBIO_PROVIDER_ID,
+                            layer_id: LayerId("2".to_string()),
+                        },
+                        name: "Example Title 2".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    })
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &root_id.clone(),
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "title 2".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        cleanup_test_data(&db_config, test_schema).await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    collection_id: root_id,
+                },
+                name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
-                        layer_id: LayerId("1".to_string()),
+                        layer_id: LayerId("2".to_string()),
                     },
-                    name: "Example Title".to_string(),
+                    name: "Example Title 2".to_string(),
                     description: String::new(),
                     properties: vec![],
                 })],
@@ -590,10 +896,302 @@ mod tests {
         );
     }
 
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    #[tokio::test]
-    async fn it_creates_meta_data() {
-        async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
+    async fn it_searches_prefix(app_ctx: PostgresContext<NoTls>) {
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let provider = Box::new(GfbioAbcdDataProviderDefinition {
+            name: "GFBio".to_string(),
+            description: "GFBio".to_string(),
+            priority: None,
+            db_config: DatabaseConnectionConfig {
+                host: db_config.host.clone(),
+                port: db_config.port,
+                database: db_config.database.clone(),
+                schema: test_schema.clone(),
+                user: db_config.user.clone(),
+                password: db_config.password.clone(),
+            },
+            cache_ttl: Default::default(),
+        })
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .await
+        .unwrap();
+
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+        let collection = provider
+            .search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "title".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    collection_id: root_id.clone(),
+                },
+                name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &root_id.clone(),
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "example".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    collection_id: root_id.clone(),
+                },
+                name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GFBIO_PROVIDER_ID,
+                            layer_id: LayerId("1".to_string()),
+                        },
+                        name: "Example Title".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GFBIO_PROVIDER_ID,
+                            layer_id: LayerId("2".to_string()),
+                        },
+                        name: "Example Title 2".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    })
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &root_id.clone(),
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "example title 2".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        cleanup_test_data(&db_config, test_schema).await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GFBIO_PROVIDER_ID,
+                    collection_id: root_id,
+                },
+                name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: GFBIO_PROVIDER_ID,
+                        layer_id: LayerId("2".to_string()),
+                    },
+                    name: "Example Title 2".to_string(),
+                    description: String::new(),
+                    properties: vec![],
+                })],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_autocompletes_fulltext_search(app_ctx: PostgresContext<NoTls>) {
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let provider = Box::new(GfbioAbcdDataProviderDefinition {
+            name: "GFBio".to_string(),
+            description: "GFBio".to_string(),
+            priority: None,
+            db_config: DatabaseConnectionConfig {
+                host: db_config.host.clone(),
+                port: db_config.port,
+                database: db_config.database.clone(),
+                schema: test_schema.clone(),
+                user: db_config.user.clone(),
+                password: db_config.password.clone(),
+            },
+            cache_ttl: Default::default(),
+        })
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .await
+        .unwrap();
+
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+        let items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "title".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        let items = items.unwrap();
+
+        assert_eq!(
+            items,
+            vec!["Example Title".to_string(), "Example Title 2".to_string()]
+        );
+
+        let items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "title 2".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        cleanup_test_data(&db_config, test_schema).await;
+
+        let items = items.unwrap();
+
+        assert_eq!(items, vec!["Example Title 2".to_string()]);
+    }
+
+    #[ge_context::test]
+    async fn it_autocompletes_prefix_search(app_ctx: PostgresContext<NoTls>) {
+        let db_config = config::get_config_element::<config::Postgres>().unwrap();
+
+        let test_schema = create_test_data(&db_config).await;
+
+        let provider = Box::new(GfbioAbcdDataProviderDefinition {
+            name: "GFBio".to_string(),
+            description: "GFBio".to_string(),
+            priority: None,
+            db_config: DatabaseConnectionConfig {
+                host: db_config.host.clone(),
+                port: db_config.port,
+                database: db_config.database.clone(),
+                schema: test_schema.clone(),
+                user: db_config.user.clone(),
+                password: db_config.password.clone(),
+            },
+            cache_ttl: Default::default(),
+        })
+        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .await
+        .unwrap();
+
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+        let items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "title".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        let items = items.unwrap();
+
+        assert_eq!(items, Vec::<String>::new());
+
+        let items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "example".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        let items = items.unwrap();
+
+        assert_eq!(
+            items,
+            vec!["Example Title".to_string(), "Example Title 2".to_string()]
+        );
+
+        let items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "example title 2".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await;
+
+        cleanup_test_data(&db_config, test_schema).await;
+
+        let items = items.unwrap();
+
+        assert_eq!(items, vec!["Example Title 2".to_string()]);
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_creates_meta_data(app_ctx: PostgresContext<NoTls>) {
+        async fn test(
+            app_ctx: &PostgresContext<NoTls>,
+            db_config: &config::Postgres,
+            test_schema: &str,
+        ) -> Result<(), String> {
             let provider_db_config = DatabaseConnectionConfig {
                 host: db_config.host.clone(),
                 port: db_config.port,
@@ -607,10 +1205,12 @@ mod tests {
 
             let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                priority: None,
                 db_config: provider_db_config,
                 cache_ttl: Default::default(),
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .map_err(|e| e.to_string())?;
 
@@ -698,25 +1298,25 @@ mod tests {
                     float: vec![],
                     text: vec![
                         "09e05cff5522bf112eedf91c5c2f1432539e59aa".to_owned(),
-                        "0dcf8788cadda41eaa5831f44227d8c531411953".to_owned(),                        
-                        "150ac8760faba3bbf29ee77713fc0402641eea82".to_owned(),                        
-                        "2598ba17aa170832b45c3c206f8133ddddc52c6e".to_owned(),                        
-                        "2b603312fc185489ffcffd5763bcd47c4b126f31".to_owned(),                        
-                        "46b0ed7a1faa8d25b0c681fbbdc2cca60cecbdf0".to_owned(),                        
-                        "4f885a9545b143d322f3bf34bf2c5148e07d578a".to_owned(),                        
-                        "54a52959a34f3c19fa1b0e22cea2ae5c8ce78602".to_owned(),                        
-                        "624516976f697c1eacc7bccfb668d2c25ae7756e".to_owned(),                        
-                        "6df446e57190f19d63fcf99ba25476510c5c8ce6".to_owned(),                        
-                        "7fdf1ed68add3ac2f4a1b2c89b75245260890dfe".to_owned(),                        
-                        "8003ddd80b42736ebf36b87018e51db3ee84efaf".to_owned(),                        
-                        "83fb54d8cfa58d729125f3dccac3a6820d95ccaa".to_owned(),                        
-                        "8603069b15071933545a8ce6563308da4d8ee019".to_owned(),                        
-                        "9691f318c0f84b4e71e3c125492902af3ad22a81".to_owned(),                        
-                        "abc0ceb08b2723a43274e1db093dfe1f333fe453".to_owned(),                        
-                        "adf8c075f2c6b97eaab5cee8f22e97abfdaf6b71".to_owned(),                        
-                        "bad2f7cae88e4219f2c3b186628189c5380f3c52".to_owned(),                        
-                        "d22ecb7dd0e5de6e8b2721977056d30aefda1b75".to_owned(),                        
-                        "f2374ad051911a65bc0d0a46c13ada2625f55a10".to_owned(),                        
+                        "0dcf8788cadda41eaa5831f44227d8c531411953".to_owned(),
+                        "150ac8760faba3bbf29ee77713fc0402641eea82".to_owned(),
+                        "2598ba17aa170832b45c3c206f8133ddddc52c6e".to_owned(),
+                        "2b603312fc185489ffcffd5763bcd47c4b126f31".to_owned(),
+                        "46b0ed7a1faa8d25b0c681fbbdc2cca60cecbdf0".to_owned(),
+                        "4f885a9545b143d322f3bf34bf2c5148e07d578a".to_owned(),
+                        "54a52959a34f3c19fa1b0e22cea2ae5c8ce78602".to_owned(),
+                        "624516976f697c1eacc7bccfb668d2c25ae7756e".to_owned(),
+                        "6df446e57190f19d63fcf99ba25476510c5c8ce6".to_owned(),
+                        "7fdf1ed68add3ac2f4a1b2c89b75245260890dfe".to_owned(),
+                        "8003ddd80b42736ebf36b87018e51db3ee84efaf".to_owned(),
+                        "83fb54d8cfa58d729125f3dccac3a6820d95ccaa".to_owned(),
+                        "8603069b15071933545a8ce6563308da4d8ee019".to_owned(),
+                        "9691f318c0f84b4e71e3c125492902af3ad22a81".to_owned(),
+                        "abc0ceb08b2723a43274e1db093dfe1f333fe453".to_owned(),
+                        "adf8c075f2c6b97eaab5cee8f22e97abfdaf6b71".to_owned(),
+                        "bad2f7cae88e4219f2c3b186628189c5380f3c52".to_owned(),
+                        "d22ecb7dd0e5de6e8b2721977056d30aefda1b75".to_owned(),
+                        "f2374ad051911a65bc0d0a46c13ada2625f55a10".to_owned(),
                         "f65b72bbbd0b17e7345821a34c1da49d317ca28b".to_owned()
                     ],
                     bool: vec![],
@@ -764,19 +1364,25 @@ mod tests {
 
         let test_schema = create_test_data(&db_config).await;
 
-        let test = test(&db_config, &test_schema).await;
+        let test = test(&app_ctx, &db_config, &test_schema).await;
 
         cleanup_test_data(&db_config, test_schema).await;
 
         assert!(test.is_ok());
     }
 
-    #[tokio::test]
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_loads() {
-        async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
+    async fn it_loads(app_ctx: PostgresContext<NoTls>) {
+        async fn test(
+            app_ctx: &PostgresContext<NoTls>,
+            db_config: &config::Postgres,
+            test_schema: &str,
+        ) -> Result<(), String> {
             let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                priority: None,
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
                     port: db_config.port,
@@ -787,7 +1393,7 @@ mod tests {
                 },
                 cache_ttl: Default::default(),
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .map_err(|e| e.to_string())?;
 
@@ -906,18 +1512,24 @@ mod tests {
 
         let test_schema = create_test_data(&db_config).await;
 
-        let result = test(&db_config, &test_schema).await;
+        let result = test(&app_ctx, &db_config, &test_schema).await;
 
         cleanup_test_data(&db_config, test_schema).await;
 
         assert!(result.is_ok());
     }
 
-    #[tokio::test]
-    async fn it_cites() {
-        async fn test(db_config: &config::Postgres, test_schema: &str) -> Result<(), String> {
+    #[ge_context::test]
+    async fn it_cites(app_ctx: PostgresContext<NoTls>) {
+        async fn test(
+            app_ctx: &PostgresContext<NoTls>,
+            db_config: &config::Postgres,
+            test_schema: &str,
+        ) -> Result<(), String> {
             let provider = Box::new(GfbioAbcdDataProviderDefinition {
                 name: "GFBio".to_string(),
+                description: "GFBio".to_string(),
+                priority: None,
                 db_config: DatabaseConnectionConfig {
                     host: db_config.host.clone(),
                     port: db_config.port,
@@ -928,7 +1540,7 @@ mod tests {
                 },
                 cache_ttl: Default::default(),
             })
-            .initialize()
+            .initialize(app_ctx.default_session_context().await.unwrap().db())
             .await
             .map_err(|e| e.to_string())?;
 
@@ -965,7 +1577,7 @@ mod tests {
 
         let test_schema = create_test_data(&db_config).await;
 
-        let result = test(&db_config, &test_schema).await;
+        let result = test(&app_ctx, &db_config, &test_schema).await;
 
         cleanup_test_data(&db_config, test_schema).await;
 

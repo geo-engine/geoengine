@@ -20,7 +20,6 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use pin_project::{pin_project, pinned_drop};
-use snafu::ensure;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -43,14 +42,6 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
     }
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            self.source.result_descriptor().bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: "CacheOperator"
-            }
-        );
-
         let processor_result = self.source.query_processor();
         match processor_result {
             Ok(p) => {
@@ -427,23 +418,22 @@ where
 
 #[cfg(test)]
 mod tests {
-    use futures::StreamExt;
-    use geoengine_datatypes::{
-        primitives::{BandSelection, RasterQueryRectangle, TimeInterval},
-        raster::{GridBoundingBox2D, TilesEqualIgnoringCacheHint},
-        util::test::TestDefault,
-    };
-
+    use super::*;
     use crate::{
         engine::{
-            ChunkByteSize, MockExecutionContext, MockQueryContext, QueryContextExtensions,
-            RasterOperator, WorkflowOperatorPath,
+            ChunkByteSize, MockExecutionContext, MockQueryContext, MultipleRasterSources,
+            QueryContextExtensions, RasterOperator, SingleRasterSource, WorkflowOperatorPath,
         },
+        processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
         util::gdal::add_ndvi_dataset,
     };
-
-    use super::*;
+    use futures::StreamExt;
+    use geoengine_datatypes::{
+        primitives::{BandSelection, RasterQueryRectangle, TimeInterval},
+        raster::{GridBoundingBox2D, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint},
+        util::test::TestDefault,
+    };
 
     #[tokio::test]
     async fn it_caches() {
@@ -452,7 +442,7 @@ mod tests {
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
 
         let operator = GdalSource {
-            params: GdalSourceParameters::new(ndvi_id),
+            params: GdalSourceParameters::new(ndvi_id.clone()),
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -490,6 +480,9 @@ mod tests {
         // wait for the cache to be filled, which happens asynchronously
         tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
+        // delete the dataset to make sure the result is served from the cache
+        exe_ctx.delete_meta_data(&ndvi_id);
+
         let stream_from_cache = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(
@@ -508,7 +501,119 @@ mod tests {
             .collect::<Result<Vec<_>>>()
             .unwrap();
 
-        // TODO: how to ensure the tiles are actually from the cache?
+        assert!(tiles.tiles_equal_ignoring_cache_hint(&tiles_from_cache));
+    }
+
+    #[tokio::test]
+    async fn it_reuses_bands_from_cache_entries() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+
+        let operator = RasterStacker {
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
+            sources: MultipleRasterSources {
+                rasters: vec![
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: ndvi_id.clone(),
+                            overview_level: None,
+                        },
+                    }
+                    .boxed(),
+                    Expression {
+                        params: ExpressionParams {
+                            expression: "2 * A".to_string(),
+                            output_type: RasterDataType::U8,
+                            output_band: None,
+                            map_no_data: false,
+                        },
+                        sources: SingleRasterSource {
+                            raster: GdalSource {
+                                params: GdalSourceParameters {
+                                    data: ndvi_id.clone(),
+                                    overview_level: None,
+                                },
+                            }
+                            .boxed(),
+                        },
+                    }
+                    .boxed(),
+                ],
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap();
+
+        let cached_op = InitializedCacheOperator::new(operator);
+
+        let processor = cached_op.query_processor().unwrap().get_u8().unwrap();
+
+        let tile_cache = Arc::new(SharedCache::test_default());
+
+        let mut extensions = QueryContextExtensions::default();
+
+        extensions.insert(tile_cache);
+
+        let query_ctx =
+            MockQueryContext::new_with_query_extensions(ChunkByteSize::test_default(), extensions);
+
+        // query the first two bands
+        let stream = processor
+            .query(
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
+                    TimeInterval::default(),
+                    BandSelection::new(vec![0, 1]).unwrap(),
+                ),
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        let tiles = stream.collect::<Vec<_>>().await;
+        let tiles = tiles.into_iter().collect::<Result<Vec<_>>>().unwrap();
+        // only keep the second band for comparison
+        let tiles = tiles
+            .into_iter()
+            .filter_map(|mut tile| {
+                if tile.band == 1 {
+                    tile.band = 0;
+                    Some(tile)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        // wait for the cache to be filled, which happens asynchronously
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+
+        // delete the dataset to make sure the result is served from the cache
+        exe_ctx.delete_meta_data(&ndvi_id);
+
+        // now query only the second band
+        let stream_from_cache = processor
+            .query(
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
+                    TimeInterval::default(),
+                    BandSelection::new_single(1),
+                ),
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        let tiles_from_cache = stream_from_cache.collect::<Vec<_>>().await;
+        let tiles_from_cache = tiles_from_cache
+            .into_iter()
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
 
         assert!(tiles.tiles_equal_ignoring_cache_hint(&tiles_from_cache));
     }

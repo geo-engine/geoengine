@@ -271,3 +271,39 @@ INSERT INTO species VALUES (
     NULL,
     'Limoniidae'
 );
+
+CREATE MATERIALIZED VIEW family_counts AS (
+    SELECT
+        family AS name, -- noqa: RF04
+        count(*) AS count
+    FROM occurrences
+    GROUP BY family
+);
+
+CREATE MATERIALIZED VIEW genus_counts AS (
+    SELECT
+        genus AS name, -- noqa: RF04
+        count(*) AS count
+    FROM occurrences
+    GROUP BY genus
+);
+
+CREATE MATERIALIZED VIEW species_counts AS (
+    SELECT
+        species AS name, -- noqa: RF04
+        count(*) AS count
+    FROM occurrences
+    GROUP BY species
+);
+
+CREATE MATERIALIZED VIEW occurrences_lite AS (
+    SELECT
+        gbifid,
+        basisofrecord,
+        scientificname,
+        geom,
+        family,
+        genus,
+        species
+    FROM occurrences
+);
