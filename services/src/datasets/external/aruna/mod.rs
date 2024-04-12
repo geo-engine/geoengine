@@ -1,16 +1,3 @@
-pub use self::error::ArunaProviderError;
-use crate::contexts::GeoEngineDb;
-use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
-use crate::datasets::listing::ProvenanceOutput;
-use crate::layers::external::{DataProvider, DataProviderDefinition};
-use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
-    ProviderLayerCollectionId, ProviderLayerId,
-};
-use crate::layers::listing::{
-    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
-};
-use crate::workflows::workflow::Workflow;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -59,6 +46,21 @@ use geoengine_operators::source::{
     OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
     OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat,
 };
+
+use crate::contexts::GeoEngineDb;
+use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
+use crate::datasets::listing::ProvenanceOutput;
+use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerCollectionId, ProviderLayerId,
+};
+use crate::layers::listing::{
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+};
+use crate::workflows::workflow::Workflow;
+
+pub use self::error::ArunaProviderError;
 
 pub mod error;
 pub mod metadata;
@@ -178,8 +180,11 @@ impl ArunaDataProvider {
     /// Creates a new provider from the given definition.
     async fn new(def: Box<ArunaDataProviderDefinition>) -> Result<ArunaDataProvider> {
         let url = def.api_url;
+        let timeout = 10;
+
         let channel = Endpoint::from_str(url.as_str())
             .map_err(|_| ArunaProviderError::InvalidUri { uri_string: url })?
+            .connect_timeout(core::time::Duration::from_secs(timeout as u64))
             .connect()
             .await?;
 
