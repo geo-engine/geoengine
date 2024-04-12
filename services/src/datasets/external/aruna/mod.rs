@@ -296,33 +296,6 @@ impl ArunaDataProvider {
                 }
             }
         }
-        // //TODO: Workaround until deleted access permissions are fixed.
-        // let mut datasets = vec![];
-        //
-        // for dataset_id in dataset_ids {
-        //     let dataset_response = dataset_stub
-        //         .get_dataset(GetDatasetRequest {
-        //             dataset_id: dataset_id.clone(),
-        //         })
-        //         .await?;
-        //
-        //     if dataset_response.is_err_and(|x| x.code() == Code::Unauthenticated) {
-        //         log::debug!(
-        //             "Ignoring Code::Unauthenticated Error in Aruna Dataset Request For id={} (Check if Dataset is deleted)",
-        //             dataset_id,
-        //         )
-        //     } else {
-        //         let dataset = dataset_response
-        //             .into_inner()
-        //             .dataset
-        //             .ok_or(ArunaProviderError::MissingDataset)?;
-        //         if dataset.status() == aruna_rust_api::api::storage::models::v2::Status::Available
-        //             && self.has_filter_label(&dataset.key_values)
-        //         {
-        //             datasets.push(dataset);
-        //         }
-        //     }
-        // }
 
         Ok(verified_datasets)
     }
@@ -351,27 +324,6 @@ impl ArunaDataProvider {
         }
 
         let aruna_objects = self.verify_object_hierarchy_and_extract_ids(verified_objects)?;
-        // //TODO: Workaround until deleted access permissions are fixed.
-        // let mut objects = vec![];
-        //
-        // for object_id in object_ids {
-        //     let object_response = object_stub.get_object(GetObjectRequest { object_id }).await;
-        //
-        //     if object_response.is_err_and(|x| x.code() == Code::Unauthenticated) {
-        //         log::debug!(
-        //             "Ignoring Code::Unauthenticated Error in Aruna Object Request For id={} (Check if Object is deleted)",
-        //             object_id,
-        //         )
-        //     } else {
-        //         let object = object_response?
-        //             .into_inner()
-        //             .object
-        //             .ok_or(ArunaProviderError::MissingObject)?;
-        //         if object.status() == aruna_rust_api::api::storage::models::v2::Status::Available {
-        //             objects.push(object);
-        //         }
-        //     }
-        // }
 
         Ok(aruna_objects)
     }
