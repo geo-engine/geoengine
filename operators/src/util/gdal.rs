@@ -95,7 +95,7 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
                     .expect("it should only be used in tests"),
             )),
             geo_transform_x: GeoTransform::new((0., 0.).into(), 0.1, -0.1),
-            pixel_bounds_x: GridBoundingBox2D::new_min_max(-900, 899, -1800, 1799).unwrap(),
+            pixel_bounds_x: GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         },
         cache_ttl,
@@ -143,8 +143,8 @@ pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds_with_cache_ttl(
         result_descriptor: RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            geo_transform_x: GeoTransform::new((-180., 85.0).into(), 0.1, -0.1),
-            pixel_bounds_x: GridShape2D::new([1700, 3600]).bounding_box(),
+            geo_transform_x: GeoTransform::new((0., 0.).into(), 0.1, -0.1),
+            pixel_bounds_x: GridBoundingBox2D::new([-850, -1800], [-845, -1799]).unwrap(),
             time: Some(TimeInterval::new_unchecked(
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
                 TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),

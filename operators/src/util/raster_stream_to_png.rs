@@ -136,7 +136,7 @@ mod tests {
         };
 
         let query = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new_min_max(200, 799, -100, 499).unwrap(),
+            GridBoundingBox2D::new([-800, -100], [-199, 499]).unwrap(),
             TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
             BandSelection::first(),
         );

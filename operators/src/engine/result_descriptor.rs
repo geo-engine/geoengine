@@ -76,7 +76,9 @@ pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
     pub time: Option<TimeInterval>,
-    pub geo_transform_x: GeoTransform,
+    #[serde(rename = "geoTransform")]
+    pub geo_transform_x: GeoTransform, // FIXME: we should rename this back to geo_transform when we have checked that all instances use the corect tiling geo transform. OR we must add a constructor that normalizes the geo transform
+    #[serde(rename = "pixelBounds")]
     pub pixel_bounds_x: GridBoundingBox2D,
     pub bands: RasterBandDescriptors,
 }

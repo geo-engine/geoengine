@@ -272,6 +272,14 @@ impl GeoTransform {
         let nearest = self.nearest_pixel_to_zero();
         GridBoundingBox2D::new_unchecked(shape.min_index() - nearest, shape.max_index() - nearest)
     }
+
+    pub fn shift_by_pixel_offset(&self, offset: GridIdx2D) -> Self {
+        GeoTransform {
+            origin_coordinate: self.grid_idx_to_pixel_upper_left_coordinate_2d(offset),
+            x_pixel_size: self.x_pixel_size,
+            y_pixel_size: self.y_pixel_size,
+        }
+    }
 }
 
 impl TestDefault for GeoTransform {
@@ -567,5 +575,18 @@ mod tests {
         let test = GeoTransform::deserialize_with_check(&mut de);
 
         assert!(test.is_err());
+    }
+
+    #[test]
+    fn shift_by_pixel_offset() {
+        let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
+        let shifted = geo_transform.shift_by_pixel_offset([1, 1].into());
+        assert_eq!(shifted.origin_coordinate, (1.0, -1.0).into());
+    }
+
+    #[test]
+    fn nearest_pixel_to_zero() {
+        let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
+        assert_eq!(geo_transform.nearest_pixel_to_zero(), [0, 0].into());
     }
 }

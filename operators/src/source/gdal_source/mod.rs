@@ -33,7 +33,6 @@ use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{
     Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, RasterSpatialQueryRectangle,
 };
-use geoengine_datatypes::raster::GridIntersection;
 use geoengine_datatypes::raster::TileInformation;
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid, GeoTransform, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
@@ -41,6 +40,7 @@ use geoengine_datatypes::raster::{
     RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
     TilingStrategy,
 };
+use geoengine_datatypes::raster::{GridBounds, GridIntersection};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{
     primitives::TimeInterval,
@@ -620,7 +620,7 @@ where
             &query
         );
 
-        // this is the result descriptor of the operator. It already incorporates the overview level.
+        // this is the result descriptor of the operator. It already incorporates the overview level AND shifts the origin to the tiling origin
         let result_descriptor = self.result_descriptor();
 
         // A `GeoTransform` maps pixel space to world space.
@@ -666,10 +666,16 @@ where
         }
         */
 
+        // Here we reverse the tiling geo transform to get the dataset geo transform.
+        // FIXME: we need both, the tiling and the original geo transform! However, there is a logical gap in the logic. We want the RasterResultDescriptor to provide the tiling ge transform since this is the one we are querying. However, we need the original geo transform to load the data. If we store the original geo transform in the stored result descrptor this will propaply cause someone to use it directly.
+        let dataset_geo_tansform = result_descriptor
+            .tiling_geo_transform()
+            .shift_by_pixel_offset(tiling_based_pixel_bounds.min_index());
+
         let reader_mode = if self.overview_level == 0 {
             GdalReaderMode::OriginalResolution(ReaderState {
                 dataset_shape: result_descriptor.pixel_bounds_x.grid_shape(),
-                dataset_geo_transform: result_descriptor.geo_transform_x, // Note: this is the original geo transform! // FIXME: should store that somewhere else!
+                dataset_geo_transform: dataset_geo_tansform,
             })
         } else {
             unimplemented!("GdalReaderMode::OverviewResolution");
