@@ -126,7 +126,7 @@ where
     let dataset = db
         .add_dataset(definition.properties.into(), definition.meta_data.into())
         .await
-        .context(DatabaseAccess)?;
+        .context(CannotCreateDataset)?;
 
     db.add_permission(
         Role::registered_user_role_id(),

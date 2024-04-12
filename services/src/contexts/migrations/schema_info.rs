@@ -430,9 +430,7 @@ pub async fn assert_migration_schema_eq(
     assert_schema_eq(
         |mut connection| {
             Box::pin(async move {
-                migrate_database(&mut connection, migrations, None)
-                    .await
-                    .unwrap();
+                migrate_database(&mut connection, migrations).await.unwrap();
 
                 connection
             })

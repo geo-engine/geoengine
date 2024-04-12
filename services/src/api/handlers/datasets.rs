@@ -587,7 +587,7 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
     let result = db
         .add_dataset(definition.properties.into(), definition.meta_data.into())
         .await
-        .context(DatabaseAccess)?;
+        .context(CannotCreateDataset)?;
 
     Ok(web::Json(result.name.into()))
 }

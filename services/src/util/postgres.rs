@@ -69,3 +69,60 @@ pub async fn assert_sql_type<T>(
         assert_eq!(value, result);
     }
 }
+
+/// Checks whether the given error presents a unique constraint violation on the given column
+pub fn postgres_error_is_unique_violation(
+    err: &tokio_postgres::Error,
+    table_name: &str,
+    column_name: &str,
+) -> bool {
+    if err.code() != Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION) {
+        return false;
+    }
+
+    let Some(db_error) = err.as_db_error() else {
+        return false;
+    };
+
+    let Some(constraint) = db_error.constraint() else {
+        return false;
+    };
+
+    let expected_constraint_name = format!("{table_name}_{column_name}_key");
+
+    constraint == expected_constraint_name
+}
+
+pub trait PostgresErrorExt<T, E> {
+    /// Maps a postgres unique violation that matches a specific table and column to a custom error.
+    /// Otherwise it returns the original error.
+    fn map_unique_violation(
+        self,
+        table_name: &str,
+        column_name: &str,
+        map_unique_violation: impl FnOnce() -> E,
+    ) -> Result<T, E>;
+}
+
+impl<T, E> PostgresErrorExt<T, E> for Result<T, tokio_postgres::Error>
+where
+    E: From<tokio_postgres::Error>,
+{
+    fn map_unique_violation(
+        self,
+        table_name: &str,
+        column_name: &str,
+        map_unique_violation: impl FnOnce() -> E,
+    ) -> Result<T, E> {
+        let postgres_error = match self {
+            Ok(v) => return Ok(v),
+            Err(e) => e,
+        };
+
+        if postgres_error_is_unique_violation(&postgres_error, table_name, column_name) {
+            Err(map_unique_violation())
+        } else {
+            Err(postgres_error.into())
+        }
+    }
+}

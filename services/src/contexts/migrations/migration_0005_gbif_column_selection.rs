@@ -65,14 +65,14 @@ mod tests {
         let mut conn = pool.get().await?;
 
         // initial schema
-        migrate_database(&mut conn, &[Box::new(Migration0000Initial)], None).await?;
+        migrate_database(&mut conn, &[Box::new(Migration0000Initial)]).await?;
 
         // insert test data on initial schema
         let test_data_sql = std::fs::read_to_string(test_data!("migrations/test_data.sql"))?;
         conn.batch_execute(&test_data_sql).await?;
 
         // perform all migrations
-        migrate_database(&mut conn, &all_migrations()[1..], None).await?;
+        migrate_database(&mut conn, &all_migrations()[1..]).await?;
 
         // verify that the default value for columns has been set correctly
         let autocomplete_timeout = conn
