@@ -2,11 +2,8 @@
 
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
+    primitives::{BandSelection, RasterQueryRectangle, TimeInterval, TimeStep},
     raster::{GridBoundingBox2D, RasterDataType, RasterTile2D, RenameBands},
-    primitives::{
-        BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-        TimeStep,
-    },
     util::test::TestDefault,
 };
 use geoengine_operators::{

@@ -16,7 +16,6 @@ use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
 use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
-use geoengine_datatypes::operations::reproject::{CoordinateProjection, CoordinateProjector};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds};
 use geoengine_datatypes::primitives::{
     DateTime, Duration, RasterQueryRectangle, TimeInstance, TimeInterval, VectorQueryRectangle,

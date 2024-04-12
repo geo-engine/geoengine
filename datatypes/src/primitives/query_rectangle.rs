@@ -151,6 +151,15 @@ impl RasterQueryRectangle {
             bands,
         )
     }
+
+    #[must_use]
+    pub fn select_bands(&self, bands: BandSelection) -> Self {
+        Self {
+            spatial_query: self.spatial_query,
+            time_interval: self.time_interval,
+            attributes: bands,
+        }
+    }
 }
 
 pub type RasterSpatialQueryRectangle = SpatialGridQueryRectangle;

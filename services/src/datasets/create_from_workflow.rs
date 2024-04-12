@@ -62,7 +62,8 @@ impl RasterDatasetFromWorkflowParams {
     ) -> error::Result<Self> {
         let query = request.query;
 
-        // FIXME: handle resolutions --> use pixel bounds in query?
+        // FIXME: handle resolutions
+        // TODO: allow to use pixel bounds in query?
         ensure!(
             approx_eq!(
                 f64,

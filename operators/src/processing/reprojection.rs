@@ -28,8 +28,8 @@ use geoengine_datatypes::{
     },
     primitives::{
         AxisAlignedRectangle, BandSelection, ColumnSelection, Geometry, RasterQueryRectangle,
-        RasterSpatialQueryRectangle, SpatialPartition2D, VectorQueryRectangle,
-        VectorSpatialQueryRectangle,
+        RasterSpatialQueryRectangle, SpatialGridQueryRectangle, SpatialPartition2D,
+        VectorQueryRectangle, VectorSpatialQueryRectangle,
     },
     raster::{GeoTransform, GridBoundingBox2D, Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
@@ -662,7 +662,7 @@ impl<Q, P> RasterReprojectionProcessor<Q, P>
 where
     Q: QueryProcessor<
         Output = RasterTile2D<P>,
-        SpatialBounds = SpatialPartition2D,
+        SpatialQuery = SpatialGridQueryRectangle,
         Selection = BandSelection,
         ResultDescription = RasterResultDescriptor,
     >,
