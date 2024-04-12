@@ -91,7 +91,7 @@ where
     /// The `QueryRectangle` the adapter is queried with
     query_rect_to_answer: RasterQueryRectangle,
     /// The `GridBoundingBox2D` that defines the tile grid space of the query.
-    grid_bounds: GridBoundingBox2D,
+    tile_grid_bounds: GridBoundingBox2D,
     // the selected bands from the source
     bands: Vec<u32>,
     // the band being currently processed
@@ -139,10 +139,11 @@ where
         );
 
         let grid_bounds = query_rect_to_answer.spatial_query.grid_bounds();
+        let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
 
         let first_tile_spec = TileInformation {
             global_geo_transform: tiling_strategy.geo_transform,
-            global_tile_position: grid_bounds.min_index(),
+            global_tile_position: tile_bounds.min_index(),
             tile_size_in_pixels: tiling_strategy.tile_size_in_pixels,
         };
 
@@ -151,7 +152,7 @@ where
             current_time_end: None,
             current_time_start: query_rect_to_answer.time_interval.start(),
             current_band_index: 0,
-            grid_bounds,
+            tile_grid_bounds: tile_bounds,
             bands: query_rect_to_answer.attributes.as_vec(),
             query_ctx,
             query_rect_to_answer,
@@ -170,7 +171,7 @@ where
     where
         Self: Stream<Item = Result<Option<RasterTile2D<PixelType>>>> + 'a,
     {
-        let grid_bounds = self.grid_bounds;
+        let grid_bounds = self.tile_grid_bounds;
         let global_geo_transform = self.current_tile_spec.global_geo_transform;
         let tile_shape = self.current_tile_spec.tile_size_in_pixels;
         let num_bands = self.bands.len() as u32;
@@ -397,7 +398,7 @@ where
         } else {
             // all bands for the current tile are processed, we can go to the next tile in space, if there is one
             *this.current_band_index = 0;
-            this.grid_bounds
+            this.tile_grid_bounds
                 .inc_idx_unchecked(this.current_tile_spec.global_tile_position, 1)
         };
 
@@ -418,7 +419,7 @@ where
             }
             (None, Some(end_time)) if end_time == *this.current_time_start => {
                 // Only for time instants: reset the spatial idx to the first tile of the grid AND increase the request time by 1.
-                this.current_tile_spec.global_tile_position = this.grid_bounds.min_index();
+                this.current_tile_spec.global_tile_position = this.tile_grid_bounds.min_index();
                 *this.current_time_start = end_time + 1;
                 *this.current_time_end = None;
 
@@ -429,7 +430,7 @@ where
             }
             (None, Some(end_time)) => {
                 // reset the spatial idx to the first tile of the grid AND move the requested time to the last known time.
-                this.current_tile_spec.global_tile_position = this.grid_bounds.min_index();
+                this.current_tile_spec.global_tile_position = this.tile_grid_bounds.min_index();
                 *this.current_time_start = end_time;
                 *this.current_time_end = None;
 
@@ -642,8 +643,8 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{Coordinate2D, TimeInterval},
         raster::{
-            BoundedGrid, GeoTransform, Grid, GridShape2D, RasterDataType,
-            TilesEqualIgnoringCacheHint, TilingSpecification,
+            GeoTransform, Grid, GridShape2D, RasterDataType, TilesEqualIgnoringCacheHint,
+            TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -706,8 +707,8 @@ mod tests {
             RasterDataType::U8,
             SpatialReference::epsg_4326().into(),
             None,
-            GeoTransform::new(Coordinate2D::new(0., -2.), 1., -1.),
-            GridShape2D::new_2d(2, 4).bounding_box(),
+            GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             RasterBandDescriptors::new_single_band(),
         );
 

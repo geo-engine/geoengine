@@ -135,7 +135,7 @@ mod test_util {
 
     pub(crate) fn create_mock_query() -> RasterQueryRectangle {
         RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new_min_max(0, 2, 0, 1).unwrap(),
+            GridBoundingBox2D::new_min_max(-3, -1, 0, 1).unwrap(),
             Default::default(),
             BandSelection::first(),
         )

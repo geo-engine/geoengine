@@ -211,7 +211,7 @@ mod tests {
 
         let output_info = TileInformation {
             global_tile_position: [0, 0].into(),
-            tile_size_in_pixels: [4, 4].into(),
+            tile_size_in_pixels: [3, 3].into(),
             global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
         };
 
@@ -240,21 +240,14 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![
                 Some(1),
+                Some(1),
                 Some(2),
+                Some(1),
+                Some(1),
                 Some(2),
-                Some(3),
                 Some(4),
-                Some(5),
-                Some(5),
-                Some(6),
                 Some(4),
-                Some(5),
-                Some(5),
-                Some(6),
-                Some(7),
-                Some(8),
-                Some(8),
-                Some(9)
+                Some(5)
             ]
         );
     }
