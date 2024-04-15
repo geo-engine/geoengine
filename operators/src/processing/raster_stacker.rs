@@ -493,7 +493,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: Some(TimeInterval::new_unchecked(0, 10)),
             geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, -1], [0, 3]).unwrap(),
+            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -529,7 +529,7 @@ mod tests {
         };
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new([0, 0], [0, 2]).unwrap(),
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             [0, 1].try_into().unwrap(),
         );

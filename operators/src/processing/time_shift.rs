@@ -988,7 +988,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
             geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds_x: GridShape2D::new_2d(3, 4).bounding_box(),
+            pixel_bounds_x: GridBoundingBox2D::new([-3, 0], [0, 4]).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
@@ -1114,7 +1114,7 @@ mod tests {
         let mut stream = query_processor
             .raster_query(
                 RasterQueryRectangle::new_with_grid_bounds(
-                    GridBoundingBox2D::new_min_max(-30, -1, 0, 39).unwrap(),
+                    GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2011, 1, 1, 0, 0, 0),
