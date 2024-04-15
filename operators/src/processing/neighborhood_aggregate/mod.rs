@@ -448,7 +448,7 @@ mod tests {
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new_min_max(0, 2, 0, 5).unwrap(),
+            GridBoundingBox2D::new([-3, 0], [-1, 5]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
@@ -499,7 +499,7 @@ mod tests {
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new_min_max(0, 2, 0, 5).unwrap(),
+            GridBoundingBox2D::new([-3, 0], [-1, 5]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
