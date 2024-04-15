@@ -812,7 +812,7 @@ mod tests {
         let processor = operator.query_processor()?.get_i8().unwrap();
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            GridBoundingBox2D::new([-4, 0], [-1, 7]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             [0, 1].try_into().unwrap(),
         );
@@ -834,23 +834,43 @@ mod tests {
             .collect::<Vec<_>>();
 
         let data = vec![
-            vec![1, 2, 5, 6],
-            vec![2, 3, 6, 7],
-            vec![3, 4, 7, 8],
-            vec![4, 0, 8, 0],
-            vec![5, 6, 0, 0],
-            vec![6, 7, 0, 0],
-            vec![7, 8, 0, 0],
-            vec![8, 0, 0, 0],
-            vec![8, 7, 4, 3],
-            vec![7, 6, 3, 2],
-            vec![6, 5, 2, 1],
-            vec![5, 0, 1, 0],
-            vec![4, 3, 0, 0],
-            vec![3, 2, 0, 0],
-            vec![2, 1, 0, 0],
-            vec![1, 0, 0, 0],
+            vec![1; 4],
+            vec![2; 4],
+            vec![3; 4],
+            vec![4; 4],
+            vec![5; 4],
+            vec![6; 4],
+            vec![7; 4],
+            vec![8; 4],
+            vec![8; 4],
+            vec![7; 4],
+            vec![6; 4],
+            vec![5; 4],
+            vec![4; 4],
+            vec![3; 4],
+            vec![2; 4],
+            vec![1; 4],
         ];
+
+        let valid = vec![
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+        ];
+
         let data = data
             .clone()
             .into_iter()
@@ -858,24 +878,6 @@ mod tests {
             .flat_map(|(a, b)| vec![a, b])
             .collect::<Vec<_>>();
 
-        let valid = vec![
-            vec![true; 4],
-            vec![true; 4],
-            vec![true; 4],
-            vec![true, false, true, false],
-            vec![true, true, false, false],
-            vec![true, true, false, false],
-            vec![true, true, false, false],
-            vec![true, false, false, false],
-            vec![true; 4],
-            vec![true; 4],
-            vec![true; 4],
-            vec![true, false, true, false],
-            vec![true, true, false, false],
-            vec![true, true, false, false],
-            vec![true, true, false, false],
-            vec![true, false, false, false],
-        ];
         let valid = valid
             .clone()
             .into_iter()
