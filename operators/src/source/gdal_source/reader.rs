@@ -41,7 +41,7 @@ impl GdalReaderMode {
     pub fn dataset_intersects_bounds(&self, bounds: &GridBoundingBox2D) -> bool {
         match self {
             GdalReaderMode::OriginalResolution(reader_state) => {
-                dbg!(reader_state.intersection_tiling_bounds(bounds)).is_some()
+                reader_state.intersection_tiling_bounds(bounds).is_some()
             }
             GdalReaderMode::OverviewLevel(_overview_reader_state) => {
                 unimplemented!()

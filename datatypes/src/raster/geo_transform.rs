@@ -4,6 +4,7 @@ use crate::{
     },
     util::test::TestDefault,
 };
+use float_cmp::{ApproxEq, F64Margin};
 use postgres_types::{FromSql, ToSql};
 use serde::{de, Deserialize, Deserializer, Serialize};
 
@@ -311,6 +312,18 @@ impl From<GeoTransform> for GdalGeoTransform {
             0.0, // self.y_rotation,
             geo_transform.y_pixel_size,
         ]
+    }
+}
+
+impl ApproxEq for GeoTransform {
+    type Margin = F64Margin;
+
+    fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
+        let m: F64Margin = margin.into();
+
+        self.origin_coordinate.approx_eq(other.origin_coordinate, m)
+            && self.x_pixel_size.approx_eq(other.x_pixel_size, m)
+            && self.y_pixel_size.approx_eq(other.y_pixel_size, m)
     }
 }
 
