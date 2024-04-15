@@ -85,14 +85,6 @@ impl RasterOperator for Interpolation {
         let raster_source = initialized_sources.raster;
         let in_descriptor = raster_source.result_descriptor();
 
-        // TODO: implement multi-band functionality and remove this check
-        ensure!(
-            in_descriptor.bands.len() == 1,
-            crate::error::OperatorDoesNotSupportMultiBandsSourcesYet {
-                operator: Interpolation::TYPE_NAME
-            }
-        );
-
         let in_geo_transform = in_descriptor.tiling_geo_transform();
         let in_pixel_bounds = in_descriptor.tiling_pixel_bounds();
 
@@ -132,18 +124,8 @@ impl RasterOperator for Interpolation {
             -output_resolution.y,
         );
 
-        let y_fract =
-            output_geo_transform.y_pixel_size() as f64 / in_geo_transform.y_pixel_size() as f64;
-        let x_fract =
-            output_geo_transform.x_pixel_size() as f64 / in_geo_transform.x_pixel_size() as f64;
-
-        let out_pixel_bounds = GridBoundingBox2D::new_min_max(
-            // TODO: maybe dont use floor and ceil?
-            (in_pixel_bounds.y_min() as f64 * y_fract).floor() as isize,
-            (in_pixel_bounds.y_max() as f64 * y_fract).floor() as isize,
-            (in_pixel_bounds.x_min() as f64 * x_fract).floor() as isize,
-            (in_pixel_bounds.x_max() as f64 * x_fract).floor() as isize,
-        )?;
+        let out_pixel_bounds = output_geo_transform
+            .spatial_to_grid_bounds(&in_geo_transform.grid_to_spatial_bounds(&in_pixel_bounds));
 
         let out_descriptor = RasterResultDescriptor {
             spatial_reference: in_descriptor.spatial_reference,
@@ -289,6 +271,7 @@ where
             return self.source.query(query, ctx).await;
         }
 
+        // This is the tiling strategy we want to fill
         let tiling_strategy = self.tiling_specification.strategy(out_geo_transform);
 
         let sub_query = InterpolationSubQuery::<_, P, I> {
@@ -366,16 +349,25 @@ where
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         // enlarge the spatial bounds in order to have the neighbor pixels for the interpolation
-        let pixel_bound = tile_info.global_pixel_bounds();
-        let enlarged = GridBoundingBox2D::new_min_max(
-            pixel_bound.y_min(),
-            pixel_bound.y_max() + 1,
-            pixel_bound.x_min(),
-            pixel_bound.x_max() + 1,
-        )?;
+
+        let tile_pixel_bounds = tile_info.global_pixel_bounds();
+        let tile_spatial_bounds = self
+            .output_geo_transform
+            .grid_to_spatial_bounds(&tile_pixel_bounds);
+        let input_pixel_bounds = self
+            .input_geo_transform
+            .spatial_to_grid_bounds(&tile_spatial_bounds);
+        let enlarged_input_pixel_bounds = GridBoundingBox2D::new(
+            [input_pixel_bounds.y_min(), input_pixel_bounds.x_min()],
+            [
+                input_pixel_bounds.y_max() + 1,
+                input_pixel_bounds.x_max() + 1,
+            ],
+        )
+        .expect("max bounds must be larger then min bounds already");
 
         Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
-            enlarged,
+            enlarged_input_pixel_bounds,
             TimeInterval::new_instant(start_time)?,
             BandSelection::new_single(band_idx),
         )))
@@ -482,9 +474,17 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>>(
         let tile_pixel_bounds = tile_info.global_pixel_bounds();
         let tile_spatial_bounds = output_geo_transform.grid_to_spatial_bounds(&tile_pixel_bounds);
         let input_pixel_bounds = input_geo_transform.spatial_to_grid_bounds(&tile_spatial_bounds);
+        let enlarged_input_pixel_bounds = GridBoundingBox2D::new(
+            [input_pixel_bounds.y_min(), input_pixel_bounds.x_min()],
+            [
+                input_pixel_bounds.y_max() + 1,
+                input_pixel_bounds.x_max() + 1,
+            ],
+        )
+        .expect("max bounds must be larger then min bounds already");
 
         // create a non-aligned (w.r.t. the tiling specification) grid by setting the origin to the top-left of the tile and the tile-index to [0, 0]
-        let grid = GridOrEmpty::new_empty(input_pixel_bounds);
+        let grid = GridOrEmpty::new_empty(enlarged_input_pixel_bounds);
 
         InterpolationAccu::new(
             grid,
@@ -523,13 +523,15 @@ where
     I: InterpolationAlgorithm<GridBoundingBox2D, T>,
 {
     // get the time now because it is not known when the accu was created
-    accu.time = tile.time;
+    accu.set_time(tile.time);
+    accu.cache_hint.merge_with(&tile.cache_hint);
 
     // TODO: add a skip if both tiles are empty?
 
     // copy all input tiles into the accu to have all data for interpolation
-    accu.input_tile
-        .grid_blit_from(&tile.into_inner_positioned_grid());
+    let in_tile = &tile.into_inner_positioned_grid();
+
+    accu.input_tile.grid_blit_from(in_tile);
 
     Ok(accu)
 }
@@ -562,6 +564,22 @@ mod tests {
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
 
+        // test raster:
+        // [0, 10)
+        // || 1 | 2 || 3 | 4 ||
+        // || 5 | 6 || 7 | 8 ||
+        //
+        // [10, 20)
+        // || 8 | 7 || 6 | 5 ||
+        // || 4 | 3 || 2 | 1 ||
+
+        // exptected raster:
+        // [0, 10)
+        // ||1 | 1 || 2 | 2 ||
+        // ||1 | 1 || 2 | 2 ||
+        // ||5 | 5 || 6 | 6 ||
+        // ||5 | 5 || 6 | 6 ||
+
         let raster = make_raster(CacheHint::max_duration());
 
         let operator =
@@ -581,7 +599,7 @@ mod tests {
         let processor = operator.query_processor()?.get_i8().unwrap();
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new_min_max(0, 1, 0, 3).unwrap(),
+            GridBoundingBox2D::new([-4, 0], [-1, 7]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
@@ -596,48 +614,48 @@ mod tests {
         times.append(&mut vec![TimeInterval::new_unchecked(10, 20); 8]);
 
         let data = vec![
-            vec![1, 2, 5, 6],
-            vec![2, 3, 6, 7],
-            vec![3, 4, 7, 8],
-            vec![4, 0, 8, 0],
-            vec![5, 6, 0, 0],
-            vec![6, 7, 0, 0],
-            vec![7, 8, 0, 0],
-            vec![8, 0, 0, 0],
-            vec![8, 7, 4, 3],
-            vec![7, 6, 3, 2],
-            vec![6, 5, 2, 1],
-            vec![5, 0, 1, 0],
-            vec![4, 3, 0, 0],
-            vec![3, 2, 0, 0],
-            vec![2, 1, 0, 0],
-            vec![1, 0, 0, 0],
+            vec![1; 4],
+            vec![2; 4],
+            vec![3; 4],
+            vec![4; 4],
+            vec![5; 4],
+            vec![6; 4],
+            vec![7; 4],
+            vec![8; 4],
+            vec![8; 4],
+            vec![7; 4],
+            vec![6; 4],
+            vec![5; 4],
+            vec![4; 4],
+            vec![3; 4],
+            vec![2; 4],
+            vec![1; 4],
         ];
 
         let valid = vec![
             vec![true; 4],
             vec![true; 4],
             vec![true; 4],
-            vec![true, false, true, false],
-            vec![true, true, false, false],
-            vec![true, true, false, false],
-            vec![true, true, false, false],
-            vec![true, false, false, false],
             vec![true; 4],
             vec![true; 4],
             vec![true; 4],
-            vec![true, false, true, false],
-            vec![true, true, false, false],
-            vec![true, true, false, false],
-            vec![true, true, false, false],
-            vec![true, false, false, false],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
+            vec![true; 4],
         ];
 
         for (i, tile) in result.into_iter().enumerate() {
             let tile = tile.into_materialized_tile();
             assert_eq!(tile.time, times[i]);
-            assert_eq!(tile.grid_array.inner_grid.data, data[i]);
             assert_eq!(tile.grid_array.validity_mask.data, valid[i]);
+            assert_eq!(tile.grid_array.inner_grid.data, data[i]);
         }
 
         Ok(())
@@ -740,7 +758,7 @@ mod tests {
         let processor = operator.query_processor()?.get_i8().unwrap();
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new_min_max(0, 1, 0, 3).unwrap(),
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );

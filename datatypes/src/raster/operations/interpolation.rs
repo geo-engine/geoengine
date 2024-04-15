@@ -45,10 +45,6 @@ where
             return Ok(GridOrEmpty::new_empty(out_bounds));
         }
 
-        debug_assert!(in_geo_transform
-            .grid_to_spatial_bounds(&input.grid_shape())
-            .contains(&out_geo_transform.grid_to_spatial_bounds(&out_bounds)));
-
         let map_fn = |gidx: GridIdx2D| {
             let coordinate = out_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(gidx);
             let pixel_in_input = in_geo_transform.coordinate_to_grid_idx_2d(coordinate); // TODO: maybe need to use round / center somewhere here
