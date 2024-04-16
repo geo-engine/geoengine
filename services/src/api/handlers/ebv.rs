@@ -37,7 +37,8 @@ pub const EBV_REMOVE_OVERVIEW_TASK_TYPE: &str = "ebv-remove-overview";
     paths(
         create_overviews,
         create_overview,
-        remove_overview
+        remove_overview,
+        refresh_overview
     ),
     components(
         schemas(
@@ -410,7 +411,6 @@ async fn create_overview<C: ApplicationContext>(
     tag = "Overviews",
     put,
     path = "/ebv/overviews/{path}/refresh",
-    request_body = Option<CreateOverviewParams>,
     responses(
         (
             status = 200,
