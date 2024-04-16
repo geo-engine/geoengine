@@ -27,7 +27,7 @@ actix-rt = "2.9"
 actix-web = "4.5"
 actix-web-actors = "4.3"
 actix-web-httpauth = "0.8"
-aruna-rust-api = { version = "1.0.0-rc.6" }
+aruna-rust-api = { version = "2.0.0-beta.12" }
 async-trait = "0.1"
 base64 = "0.21"
 bb8-postgres = { version = "0.8", features = [
@@ -86,7 +86,7 @@ tokio = { version = "1.36", features = [
   "rt-multi-thread",
 ] }
 tokio-postgres = { version = "0.7" }
-tonic = { version = "0.9", features = [
+tonic = { version = "0.11.0", features = [
   "tls",
   "tls-roots",
 ] } # must be compatible with `aruna-rust-api`
@@ -125,7 +125,7 @@ nix = { version = "0.27", features = ["socket"] }
 assert_cmd = "2.0"
 httptest = "0.15"
 pretty_assertions = "1.4"
-prost = "0.11"            # must be compatbile with aruna-rust-api
+prost = "0.12.3"            # must be compatbile with aruna-rust-api
 serial_test = "3.0"
 tempfile = "3.10"
 xml-rs = "0.8"
