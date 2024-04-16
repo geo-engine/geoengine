@@ -284,6 +284,12 @@ pub trait DatasetStore {
 
     async fn update_dataset(&self, dataset: DatasetId, update: UpdateDataset) -> Result<()>;
 
+    async fn update_dataset_loading_info(
+        &self,
+        dataset: DatasetId,
+        meta_data: &MetaDataDefinition,
+    ) -> Result<()>;
+
     async fn update_dataset_symbology(
         &self,
         dataset: DatasetId,

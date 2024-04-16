@@ -66,7 +66,8 @@ where
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
                 web::resource("/{dataset}/loadingInfo")
-                    .route(web::get().to(get_loading_info_handler::<C>)),
+                    .route(web::get().to(get_loading_info_handler::<C>))
+                    .route(web::put().to(update_loading_info_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}/symbology")
@@ -324,11 +325,56 @@ pub async fn get_loading_info_handler<C: ApplicationContext>(
     Ok(web::Json(dataset))
 }
 
+/// Updates the dataset's loading info
+#[utoipa::path(
+    tag = "Datasets",
+    put,
+    path = "/dataset/{dataset}/loadingInfo",
+    request_body = MetaDataDefinition,
+    responses(
+        (status = 200, description = "OK"),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn update_loading_info_handler<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    dataset: web::Path<DatasetName>,
+    meta_data: web::Json<MetaDataDefinition>,
+) -> Result<impl Responder> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let real_dataset = dataset.into_inner();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id.ok_or(error::Error::UnknownDatasetName {
+        dataset_name: real_dataset.to_string(),
+    })?;
+
+    session_ctx
+        .update_dataset_loading_info(dataset_id, &meta_data.into_inner().into())
+        .await?;
+
+    Ok(HttpResponse::Ok())
+}
+
 /// Updates the dataset's symbology
 #[utoipa::path(
     tag = "Datasets",
     put,
     path = "/dataset/{dataset}/symbology",
+    request_body = Symbology,
     responses(
         (status = 200, description = "OK"),
         (status = 400, description = "Bad request", body = ErrorResponse),
@@ -2707,6 +2753,87 @@ mod tests {
                 "type": "OgrMetaData"
             })
         );
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_updates_loading_info(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = ctx.session().id();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
+        let ds = AddDataset {
+            name: None,
+            display_name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+        };
+
+        let meta = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        });
+
+        let db = ctx.db();
+        let DatasetIdAndName { id, name: _ } = db.add_dataset(ds.into(), meta).await?;
+
+        let update = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: "foo.bar".into(),
+                layer_name: "baz".to_string(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor,
+            phantom: Default::default(),
+        });
+
+        let req = actix_web::test::TestRequest::put()
+            .uri(&format!("/dataset/{id}/loadingInfo"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(update.clone());
+
+        let res = send_test_request(req, app_ctx).await;
+        assert_eq!(res.status(), 200);
+
+        let loading_info = db.load_loading_info(&id).await.unwrap();
+
+        assert_eq!(loading_info, update);
 
         Ok(())
     }

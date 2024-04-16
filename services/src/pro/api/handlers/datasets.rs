@@ -5,7 +5,7 @@ use crate::{
             delete_dataset_handler, get_dataset_handler, get_loading_info_handler,
             list_datasets_handler, list_volumes_handler, suggest_meta_data_handler,
             update_dataset_handler, update_dataset_provenance_handler,
-            update_dataset_symbology_handler,
+            update_dataset_symbology_handler, update_loading_info_handler,
         },
         model::{
             responses::datasets::{errors::*, DatasetNameResponse},
@@ -43,7 +43,8 @@ where
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
                 web::resource("/{dataset}/loadingInfo")
-                    .route(web::get().to(get_loading_info_handler::<C>)),
+                    .route(web::get().to(get_loading_info_handler::<C>))
+                    .route(web::put().to(update_loading_info_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}/symbology")
