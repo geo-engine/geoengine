@@ -72,8 +72,6 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        println!("new_fold_accu {:?}", &tile_info.global_tile_position);
-
         build_accu(
             &query_rect,
             pool.clone(),

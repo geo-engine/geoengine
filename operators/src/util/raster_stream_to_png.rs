@@ -48,18 +48,8 @@ where
         query_rect.spatial_query.grid_bounds(),
     ));
 
-    println!("output_grid: {:?}", output_grid);
-
     let output_tile: BoxFuture<Result<GridOrEmpty<GridBoundingBox2D, T>>> =
         Box::pin(tile_stream.fold(output_grid, |raster2d, tile| {
-            if let Ok(ref tile) = tile {
-                println!(
-                    "tile: {:?}, empty: {:?}",
-                    tile.tile_information(),
-                    tile.is_empty()
-                );
-            }
-
             let result: Result<GridOrEmpty<GridBoundingBox2D, T>> = match (raster2d, tile) {
                 (Ok(raster2d), Ok(tile)) if tile.is_empty() => Ok(raster2d),
                 (Ok(mut raster2d), Ok(tile)) => {

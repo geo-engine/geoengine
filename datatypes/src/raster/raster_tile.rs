@@ -14,6 +14,7 @@ use crate::primitives::{
 };
 use crate::raster::Pixel;
 use crate::util::{ByteSize, Result};
+use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
 
 /// A `RasterTile` is a `BaseTile` of raster data where the data is represented by `GridOrEmpty`.
@@ -154,18 +155,48 @@ where
         loop {
             match (iter_self.next(), iter_other.next()) {
                 (Some(a), Some(b)) => {
-                    if a.time != b.time
-                        || a.tile_position != b.tile_position
-                        || a.band != b.band
-                        || a.global_geo_transform != b.global_geo_transform
-                        || a.grid_array != b.grid_array
-                        || a.properties != b.properties
-                    {
+                    if a.time != b.time {
+                        println!("i: {}, a.time: {:?}, b.time: {:?}", i, a.time, b.time,);
+                        return false;
+                    }
+                    if a.tile_position != b.tile_position {
                         println!(
-                            "i: {}, a: {:?}, b: {:?}",
+                            "i: {}, a.tile_position: {:?}, b.tile_position: {:?}",
+                            i, a.tile_position, b.tile_position
+                        );
+                        return false;
+                    }
+                    if a.band != b.band {
+                        println!("i: {}, a.band: {:?}, b.band: {:?}", i, a.band, b.band);
+                        return false;
+                    }
+                    if !approx_eq!(GeoTransform, a.global_geo_transform, b.global_geo_transform) {
+                        println!(
+                            "i: {}, approx_eq a.geo_transform: {:?}, b.geo_Transform: {:?}",
+                            i, a.global_geo_transform, b.global_geo_transform
+                        );
+                        return false;
+                    }
+                    if a.global_geo_transform != b.global_geo_transform {
+                        println!(
+                            "i: {}, equals a.geo_transform: {:?}, b.geo_Transform: {:?}",
+                            i, a.global_geo_transform, b.global_geo_transform
+                        );
+                        return false;
+                    }
+                    if a.properties != b.properties {
+                        println!(
+                            "i: {}, a.properties: {:?}, b.properties: {:?}",
+                            i, a.properties, b.properties
+                        );
+                        return false;
+                    }
+                    if a.grid_array != b.grid_array {
+                        println!(
+                            "i: {}, a.grid_array: {:?}, b.grid_array: {:?}",
                             i,
-                            a.tile_information(),
-                            b.tile_information(),
+                            AsRef::<[usize]>::as_ref(&a.grid_array.axis_size()),
+                            AsRef::<[usize]>::as_ref(&b.grid_array.axis_size()),
                         );
                         return false;
                     }

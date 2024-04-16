@@ -44,9 +44,7 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
 }
 
 pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds() -> GdalMetaDataRegular {
-    let mut meta_data = create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::default());
-    meta_data.result_descriptor.pixel_bounds_x = GridBoundingBox2D::new([-850, -1800], [849, 1799]).unwrap();
-    meta_data
+    create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::default())
 }
 
 #[allow(clippy::missing_panics_doc)]
