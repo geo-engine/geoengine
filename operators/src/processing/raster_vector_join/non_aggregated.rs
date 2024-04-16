@@ -130,13 +130,10 @@ where
         };
 
         let rd = raster_processor.result_descriptor();
-        let spatial_part = SpatialPartition2D::new_unchecked(
-            spatial_bounds.upper_left(),
-            spatial_bounds.lower_right(),
-        );
+
         let pixel_bounds = rd
             .tiling_geo_transform()
-            .spatial_to_grid_bounds(&spatial_part);
+            .bounding_box_2d_to_grid_bounds(&spatial_bounds);
 
         let query = RasterQueryRectangle::new_with_grid_bounds(
             pixel_bounds,

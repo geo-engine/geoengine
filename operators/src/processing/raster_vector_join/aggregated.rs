@@ -94,13 +94,10 @@ where
 
         for time_span in FeatureTimeSpanIter::new(collection.time_intervals()) {
             let spatial_bounds = query.spatial_query.spatial_bounds();
-            let spatial_part = SpatialPartition2D::new_unchecked(
-                spatial_bounds.upper_left(),
-                spatial_bounds.lower_right(),
-            );
+
             let pixel_bounds = rd
                 .tiling_geo_transform()
-                .spatial_to_grid_bounds(&spatial_part);
+                .bounding_box_2d_to_grid_bounds(&spatial_bounds);
 
             let raster_query = RasterQueryRectangle::new_with_grid_bounds(
                 pixel_bounds,
@@ -713,7 +710,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
             geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 3, 0, 6).unwrap(),
+            pixel_bounds_x: GridBoundingBox2D::new([0, 0], [2, 5]).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 

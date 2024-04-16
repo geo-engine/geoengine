@@ -478,7 +478,7 @@ mod tests {
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: ColumnNames::Default,
+                names: ColumnNames::Names(vec!["ndvi".to_owned()]),
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::First,
@@ -555,7 +555,7 @@ mod tests {
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: ColumnNames::Default,
+                names: ColumnNames::Names(vec!["ndvi".to_owned()]),
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
@@ -635,7 +635,7 @@ mod tests {
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: ColumnNames::Default,
+                names: ColumnNames::Names(vec!["ndvi".to_owned()]),
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
