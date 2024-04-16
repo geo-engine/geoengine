@@ -162,9 +162,7 @@ mod tests {
             .collect();
 
         let source = MockPointSource {
-            params: MockPointSourceParams {
-                points: coordinates.clone(),
-            },
+            params: MockPointSourceParams::new(coordinates.clone()),
         };
 
         let source = source

@@ -764,9 +764,7 @@ mod tests {
 
         let workflow = Workflow {
             operator: MockPointSource {
-                params: MockPointSourceParams {
-                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                },
+                params: MockPointSourceParams::new(vec![(0.0, 0.1).into(), (1.0, 1.1).into()]),
             }
             .boxed()
             .into(),
@@ -804,9 +802,7 @@ mod tests {
     async fn register_missing_header(app_ctx: PostgresContext<NoTls>) {
         let workflow = Workflow {
             operator: MockPointSource {
-                params: MockPointSourceParams {
-                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                },
+                params: MockPointSourceParams::new(vec![(0.0, 0.1).into(), (1.0, 1.1).into()]),
             }
             .boxed()
             .into(),

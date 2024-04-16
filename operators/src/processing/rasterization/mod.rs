@@ -6,37 +6,29 @@ use crate::engine::{
     ResultDescriptor, SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
     WorkflowOperatorPath,
 };
-use arrow::datatypes::ArrowNativeTypeOp;
-use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
-
 use crate::error;
 use crate::processing::rasterization::GridOrDensity::Grid;
 use crate::util;
-
+use crate::util::{spawn_blocking, spawn_blocking_with_thread_pool};
+use arrow::datatypes::ArrowNativeTypeOp;
 use async_trait::async_trait;
-
 use futures::stream::BoxStream;
 use futures::{stream, StreamExt};
 use geoengine_datatypes::collections::GeometryCollection;
-
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
     SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
 };
+use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, Grid as GridWithFlexibleBoundType, Grid2D, GridIdx,
     GridOrEmpty, GridSize, GridSpaceToLinearSpace, RasterDataType, RasterTile2D,
     TilingSpecification, TilingStrategy,
 };
-
 use num_traits::FloatConst;
 use rayon::prelude::*;
-
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-
-use crate::util::{spawn_blocking, spawn_blocking_with_thread_pool};
-
 use typetag::serde;
 
 /// An operator that rasterizes vector data
@@ -95,11 +87,11 @@ impl RasterOperator for Rasterization {
         let tiling_specification = context.tiling_specification();
 
         let resolution = match self.params {
-            Grid(params) => params.spatial_resolution,
+            GridOrDensity::Grid(params) => params.spatial_resolution,
             GridOrDensity::Density(params) => params.spatial_resolution,
         };
         let origin = match self.params {
-            Grid(params) => params.origin_coordinate,
+            GridOrDensity::Grid(params) => params.origin_coordinate,
             GridOrDensity::Density(params) => params.origin_coordinate,
         };
 
@@ -561,7 +553,7 @@ mod tests {
     };
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{
-        BandSelection, Coordinate2D, RasterQueryRectangle, SpatialResolution,
+        BandSelection, BoundingBox2D, Coordinate2D, RasterQueryRectangle, SpatialResolution,
     };
     use geoengine_datatypes::raster::{GridBoundingBox2D, TilingSpecification};
     use geoengine_datatypes::util::test::TestDefault;
@@ -600,14 +592,12 @@ mod tests {
             }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![
-                            (-1., 1.).into(),
-                            (1., 1.).into(),
-                            (-1., -1.).into(),
-                            (1., -1.).into(),
-                        ],
-                    },
+                    params: MockPointSourceParams::new(vec![
+                        (-1., 1.).into(),
+                        (1., 1.).into(),
+                        (-1., -1.).into(),
+                        (1., -1.).into(),
+                    ]),
                 }
                 .boxed(),
             },
@@ -647,14 +637,12 @@ mod tests {
             }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![
-                            (-1., 1.).into(),
-                            (1., 1.).into(),
-                            (-1., -1.).into(),
-                            (1., -1.).into(),
-                        ],
-                    },
+                    params: MockPointSourceParams::new(vec![
+                        (-1., 1.).into(),
+                        (1., 1.).into(),
+                        (-1., -1.).into(),
+                        (1., -1.).into(),
+                    ]),
                 }
                 .boxed(),
             },
@@ -696,9 +684,16 @@ mod tests {
             }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![(-1., 1.).into(), (1., 1.).into()],
-                    },
+                    params: MockPointSourceParams::new_with_bounds(
+                        vec![(-1., 1.).into(), (1., 1.).into()],
+                        crate::mock::SpatialBoundsDerive::Bounds(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(-2., 0.),
+                                Coordinate2D::new(2., 2.),
+                            )
+                            .unwrap(),
+                        ),
+                    ),
                 }
                 .boxed(),
             },
@@ -776,9 +771,16 @@ mod tests {
             }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![(-1., 1.).into(), (1., 1.).into()],
-                    },
+                    params: MockPointSourceParams::new_with_bounds(
+                        vec![(-1., 1.).into(), (1., 1.).into()],
+                        crate::mock::SpatialBoundsDerive::Bounds(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(-2., 0.),
+                                Coordinate2D::new(2., 2.),
+                            )
+                            .unwrap(),
+                        ),
+                    ),
                 }
                 .boxed(),
             },
@@ -789,7 +791,7 @@ mod tests {
         .unwrap();
 
         let query = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new_min_max(-2, -1, -2, 1).unwrap(),
+            GridBoundingBox2D::new([-2, -2], [-1, 1]).unwrap(),
             Default::default(),
             BandSelection::first(),
         );

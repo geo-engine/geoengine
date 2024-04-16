@@ -17,9 +17,8 @@ use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BandSelection, CacheHint, ColumnSelection, Geometry,
-    RasterQueryRectangle, SpatialBounded, SpatialPartition2D, VectorQueryRectangle,
-    VectorSpatialQueryRectangle,
+    BandSelection, CacheHint, ColumnSelection, Geometry, RasterQueryRectangle, SpatialBounded,
+    VectorQueryRectangle, VectorSpatialQueryRectangle,
 };
 use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
 use geoengine_datatypes::util::arrow::ArrowTyped;
