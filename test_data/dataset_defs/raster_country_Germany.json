@@ -1,0 +1,46 @@
+{
+  "properties": {
+    "name": "raster_country_Germany",
+    "displayName": "Germany",
+    "description": "Germany",
+    "sourceOperator": "GdalSource",
+    "symbology": null,
+    "provenance": null
+  },
+  "metaData": {
+    "type": "GdalStatic",
+    "time": null,
+    "params": {
+      "filePath": "/mnt/panq/dbs_research_data/geo_data/geobon/country_polygons/static_data/ne_10m_admin_0_countries_as_raster_channels.tif",
+      "rasterbandChannel": 51,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -180.0,
+          "y": 90.0
+        },
+        "xPixelSize": 0.1,
+        "yPixelSize": -0.1
+      },
+      "width": 3600,
+      "height": 1800,
+      "fileNotFoundHandling": "Error",
+      "noDataValue": 0.0
+    },
+    "resultDescriptor": {
+      "dataType": "U8",
+      "spatialReference": "EPSG:4326",
+      "measurement": {
+        "type": "unitless"
+      },
+      "noDataValue": 0.0,
+      "bands": [
+        {
+          "name": "country",
+          "measurement": {
+            "type": "unitless"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "properties": {
+    "name": "polygon_country_Germany",
+    "displayName": "Germany",
+    "description": "Boundaries of Germany",
+    "sourceOperator": "OgrSource"
+  },
+  "metaData": {
+    "type": "OgrMetaData",
+    "loadingInfo": {
+      "fileName": "/mnt/panq/dbs_research_data/geo_data/geobon/country_polygons/static_data/single_feature_layers_prod_01.gpkg",
+      "layerName": "feature_51",
+      "dataType": "MultiPolygon",
+      "time": {
+        "type": "none"
+      },
+      "columns": {
+        "x": "",
+        "float": [],
+        "int": [],
+        "text": []
+      },
+      "onError": "abort"
+    },
+    "resultDescriptor": {
+      "dataType": "MultiPolygon",
+      "spatialReference": "EPSG:4326",
+      "columns": {}
+    }
+  }
+}

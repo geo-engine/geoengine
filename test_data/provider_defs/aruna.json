@@ -4,9 +4,9 @@
   "name": "NFDI",
   "description": "Access to NFDI4Bio data stored in Aruna",
   "priority": -10,
-  "apiToken": "",
-  "apiUrl": "",
-  "projectId": "",
-  "filterLabel": "",
+  "apiToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6IjEifQ.eyJpc3MiOiJhcnVuYSIsInN1YiI6IjAxSFM4WTUzV0ZWMVg5VzdBQTRENlhNMjBTIiwiYXVkIjoiYXJ1bmEiLCJleHAiOjE3MTQwNTQxNTksInRpZCI6IjAxSFNYSEc1SDJFRzQxOVI2QUczQkU1MjE4In0.MhwOz1H3TcKcUNDAZpQQc_hxaGMjro0mdJqvNEpH6L9yRNIH09vQ0MFaytcZ0Y5T2_DKjpUgNtfowbOp8uqiAg",
+  "apiUrl": "https://grpc.dev.aruna-storage.org",
+  "projectId": "01HSE4ZPAT08GWMK3R8MAGMG1C",
+  "filterLabel": "geoengine",
   "cacheTtl": 0
 }
