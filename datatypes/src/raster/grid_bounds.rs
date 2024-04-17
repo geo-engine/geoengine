@@ -1,3 +1,7 @@
+use std::ops::Add;
+
+use postgres_types::{to_sql_checked, FromSql, ToSql};
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::{error, util::Result};
@@ -7,7 +11,8 @@ use super::{
     GridSize, GridSpaceToLinearSpace,
 };
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
+/// A bounding box for a grid where the min and max values are inclusive
 pub struct GridBoundingBox<A>
 where
     A: AsRef<[isize]>,
@@ -46,6 +51,70 @@ where
             min: idx_min,
             max: idx_max,
         }
+    }
+}
+
+impl GridBoundingBox1D {
+    #[inline]
+    pub fn x_min(&self) -> isize {
+        let [x_min] = self.min;
+        x_min
+    }
+
+    #[inline]
+    pub fn x_max(&self) -> isize {
+        let [x_max] = self.max;
+        x_max
+    }
+
+    #[inline]
+    pub fn x_bounds(&self) -> [isize; 2] {
+        [self.x_min(), self.x_max()]
+    }
+
+    #[inline]
+    pub fn new_min_max(x_min: isize, x_max: isize) -> Result<Self> {
+        Self::new([x_min], [x_max])
+    }
+}
+
+impl GridBoundingBox2D {
+    #[inline]
+    pub fn x_min(&self) -> isize {
+        let [_y_min, x_min] = self.min;
+        x_min
+    }
+
+    #[inline]
+    pub fn x_max(&self) -> isize {
+        let [_y_max, x_max] = self.max;
+        x_max
+    }
+
+    #[inline]
+    pub fn x_bounds(&self) -> [isize; 2] {
+        [self.x_min(), self.x_max()]
+    }
+
+    #[inline]
+    pub fn y_min(&self) -> isize {
+        let [y_min, _x_min] = self.min;
+        y_min
+    }
+
+    #[inline]
+    pub fn y_max(&self) -> isize {
+        let [y_max, _x_max] = self.max;
+        y_max
+    }
+
+    #[inline]
+    pub fn y_bounds(&self) -> [isize; 2] {
+        [self.y_min(), self.y_max()]
+    }
+
+    pub fn new_min_max(y_min: isize, y_max: isize, x_min: isize, x_max: isize) -> Result<Self> {
+        Self::new([y_min, x_min], [y_max, x_max])
     }
 }
 
@@ -326,6 +395,145 @@ where
     }
 }
 
+impl GridContains<GridBoundingBox2D> for GridBoundingBox2D {
+    fn contains(&self, other: &GridBoundingBox2D) -> bool {
+        let [self_y_min, self_x_min] = self.min;
+        let [other_y_min, other_x_min] = other.min;
+
+        let [self_y_max, self_x_max] = self.max;
+        let [other_y_max, other_x_max] = other.max;
+
+        self_y_min <= other_y_min
+            && self_x_min <= other_x_min
+            && self_y_max >= other_y_max
+            && self_x_max >= other_x_max
+    }
+}
+
+pub trait GridBoundingBoxExt: GridBounds {
+    fn extend(&mut self, other: &Self);
+
+    #[must_use]
+    fn extended(&self, other: &Self) -> Self
+    where
+        Self: Sized + Clone,
+    {
+        let mut extended = self.clone();
+        extended.extend(other);
+        extended
+    }
+
+    fn shift_by_offset(
+        &self,
+        offset: GridIdx<Self::IndexArray>,
+    ) -> GridBoundingBox<Self::IndexArray>
+    where
+        GridIdx<Self::IndexArray>: Add<Output = GridIdx<Self::IndexArray>> + Clone,
+    {
+        GridBoundingBox::new_unchecked(self.min_index() + offset.clone(), self.max_index() + offset)
+    }
+}
+
+impl GridBoundingBoxExt for GridBoundingBox1D {
+    fn extend(&mut self, other: &Self) {
+        let [self_x_min] = self.min;
+        let [other_x_min] = other.min;
+
+        let [self_x_max] = self.max;
+        let [other_x_max] = other.max;
+
+        self.min = [self_x_min.min(other_x_min)];
+        self.max = [self_x_max.max(other_x_max)];
+    }
+}
+
+impl GridBoundingBoxExt for GridBoundingBox2D {
+    fn extend(&mut self, other: &Self) {
+        let [self_y_min, self_x_min] = self.min;
+        let [other_y_min, other_x_min] = other.min;
+
+        let [self_y_max, self_x_max] = self.max;
+        let [other_y_max, other_x_max] = other.max;
+
+        self.min = [self_y_min.min(other_y_min), self_x_min.min(other_x_min)];
+        self.max = [self_y_max.max(other_y_max), self_x_max.max(other_x_max)];
+    }
+}
+
+impl GridBoundingBoxExt for GridBoundingBox3D {
+    fn extend(&mut self, other: &Self) {
+        let [self_z_min, self_y_min, self_x_min] = self.min;
+        let [other_z_min, other_y_min, other_x_min] = other.min;
+
+        let [self_z_max, self_y_max, self_x_max] = self.max;
+        let [other_z_max, other_y_max, other_x_max] = other.max;
+
+        self.min = [
+            self_z_min.min(other_z_min),
+            self_y_min.min(other_y_min),
+            self_x_min.min(other_x_min),
+        ];
+        self.max = [
+            self_z_max.max(other_z_max),
+            self_y_max.max(other_y_max),
+            self_x_max.max(other_x_max),
+        ];
+    }
+}
+
+// TODO: change type of bounds to i64 and then use macro to generate To/FromSql
+
+impl ToSql for GridBoundingBox2D {
+    fn to_sql(
+        &self,
+        ty: &postgres_types::Type,
+        out: &mut bytes::BytesMut,
+    ) -> std::prelude::v1::Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>>
+    where
+        Self: Sized,
+    {
+        let mut buf: Vec<i64> = Vec::with_capacity(4);
+        buf[0] = self.min[0] as i64;
+        buf[1] = self.min[1] as i64;
+        buf[2] = self.max[0] as i64;
+        buf[3] = self.max[1] as i64;
+
+        <Vec<i64> as ToSql>::to_sql(&buf, ty, out)
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool
+    where
+        Self: Sized,
+    {
+        <Vec<i64> as ToSql>::accepts(ty)
+    }
+
+    to_sql_checked!();
+}
+
+impl FromSql<'_> for GridBoundingBox2D {
+    fn from_sql(
+        ty: &postgres_types::Type,
+        raw: &[u8],
+    ) -> std::prelude::v1::Result<Self, Box<dyn std::error::Error + Sync + Send>>
+    where
+        Self: Sized,
+    {
+        let buf: Vec<i64> = <Vec<i64> as FromSql>::from_sql(ty, raw)?;
+        Ok(GridBoundingBox2D::new_unchecked(
+            [buf[0] as isize, buf[1] as isize],
+            [buf[2] as isize, buf[3] as isize],
+        ))
+    }
+
+    fn accepts(ty: &postgres_types::Type) -> bool
+    where
+        Self: Sized,
+    {
+        <Vec<i64> as FromSql>::accepts(ty)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -460,5 +668,37 @@ mod tests {
         let l2 = a.linear_space_index_unchecked([2, 2, 2]);
         assert_eq!(l2, 1 * 42 * 42 + 1 * 42 + 1);
         assert_eq!(a.grid_idx_unchecked(l2), [2, 2, 2].into());
+    }
+
+    #[test]
+    fn grid_bounding_box_2d_contains() {
+        let a = GridBoundingBox::new([1, 1], [42, 42]).unwrap();
+        let b = GridBoundingBox::new([2, 2], [41, 41]).unwrap();
+        assert!(a.contains(&b));
+        assert!(!b.contains(&a));
+    }
+
+    #[test]
+    fn extend_1d() {
+        let mut a = GridBoundingBox::new([1], [42]).unwrap();
+        let b = GridBoundingBox::new([2], [69]).unwrap();
+        a.extend(&b);
+        assert_eq!(a, GridBoundingBox::new([1], [69]).unwrap());
+    }
+
+    #[test]
+    fn extend_2d() {
+        let mut a = GridBoundingBox::new([1, 2], [42, 69]).unwrap();
+        let b = GridBoundingBox::new([2, 1], [69, 42]).unwrap();
+        a.extend(&b);
+        assert_eq!(a, GridBoundingBox::new([1, 1], [69, 69]).unwrap());
+    }
+
+    #[test]
+    fn extend_3d() {
+        let mut a = GridBoundingBox::new([1, 3, 2], [42, 69, 666]).unwrap();
+        let b = GridBoundingBox::new([3, 2, 1], [69, 666, 42]).unwrap();
+        a.extend(&b);
+        assert_eq!(a, GridBoundingBox::new([1, 2, 1], [69, 666, 666]).unwrap());
     }
 }

@@ -2,10 +2,8 @@
 
 use futures::StreamExt;
 use geoengine_datatypes::{
-    primitives::{
-        BandSelection, QueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-    },
-    raster::TilesEqualIgnoringCacheHint,
+    primitives::{BandSelection, RasterQueryRectangle, TimeInterval},
+    raster::{GridBoundingBox2D, TilesEqualIgnoringCacheHint},
     util::test::TestDefault,
 };
 use geoengine_operators::{
@@ -42,7 +40,7 @@ async fn main() {
         },
         sources: SingleRasterSource {
             raster: GdalSource {
-                params: GdalSourceParameters { data: ndvi_id },
+                params: GdalSourceParameters::new(ndvi_id),
             }
             .boxed(),
         },
@@ -69,15 +67,11 @@ async fn main() {
 
     let stream = processor
         .query(
-            QueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
-                    [-180., -90.].into(),
-                    [180., 90.].into(),
-                ),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: BandSelection::first(),
-            },
+            RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
+                TimeInterval::default(),
+                BandSelection::first(),
+            ),
             &query_ctx,
         )
         .await
@@ -93,15 +87,11 @@ async fn main() {
 
     let stream_from_cache = processor
         .query(
-            QueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
-                    [-180., -90.].into(),
-                    [180., 90.].into(),
-                ),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: BandSelection::first(),
-            },
+            RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
+                TimeInterval::default(),
+                BandSelection::first(),
+            ),
             &query_ctx,
         )
         .await

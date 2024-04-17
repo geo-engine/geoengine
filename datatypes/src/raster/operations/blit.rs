@@ -32,8 +32,8 @@ impl<T: Pixel> Blit<RasterTile2D<T>> for MaterializedRasterTile2D<T> {
 
         let offset = from_geo_transform.origin_coordinate - into_geo_transform.origin_coordinate;
 
-        let offset_x_pixels = (offset.x / into_geo_transform.x_pixel_size()).round() as isize;
-        let offset_y_pixels = (offset.y / into_geo_transform.y_pixel_size()).round() as isize;
+        let offset_x_pixels = (offset.x / into_geo_transform.x_pixel_size()).floor() as isize;
+        let offset_y_pixels = (offset.y / into_geo_transform.y_pixel_size()).floor() as isize;
 
         /*
         ensure!(

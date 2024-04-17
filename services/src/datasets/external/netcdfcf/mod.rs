@@ -29,7 +29,7 @@ use geoengine_datatypes::primitives::{
     CacheTtlSeconds, DateTime, Measurement, RasterQueryRectangle, TimeInstance,
     VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{GdalGeoTransform, RasterDataType};
+use geoengine_datatypes::raster::{GdalGeoTransform, GeoTransform, GridShape2D, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::util::gdal::ResamplingMethod;
@@ -502,30 +502,6 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
 
         let dimensions = data_array.dimensions().context(error::GdalMd)?;
 
-        let result_descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::from_gdal_data_type(
-                data_array
-                    .datatype()
-                    .numeric_datatype()
-                    .try_into()
-                    .unwrap_or(GdalDataType::Float64),
-            )
-            .unwrap_or(RasterDataType::F64),
-            spatial_reference: SpatialReference::try_from(
-                data_array.spatial_reference().context(error::GdalMd)?,
-            )
-            .context(error::CannotParseCrs)?
-            .into(),
-            time: None,
-            bbox: None,
-            resolution: None,
-            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                "band".into(),
-                derive_measurement(data_array.unit()),
-            )])
-            .context(error::GeneratingResultDescriptorFromDataset)?,
-        };
-
         let params = GdalDatasetParameters {
             file_path: netcfg_gdal_path(
                 Some(base_path),
@@ -549,6 +525,36 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+        };
+
+        let pixel_shape = GridShape2D::new_2d(params.height as usize, params.width as usize);
+        let geo_transform =
+            GeoTransform::try_from(params.geo_transform).expect("GeoTransform must be valid"); // TODO: check how the axis in netcfd are stored;
+        let tiling_geo_transform = geo_transform.nearest_pixel_to_zero_based();
+        let tiling_pixel_bounds = geo_transform.shape_to_nearest_to_zero_based(&pixel_shape);
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::from_gdal_data_type(
+                data_array
+                    .datatype()
+                    .numeric_datatype()
+                    .try_into()
+                    .unwrap_or(GdalDataType::Float64),
+            )
+            .unwrap_or(RasterDataType::F64),
+            spatial_reference: SpatialReference::try_from(
+                data_array.spatial_reference().context(error::GdalMd)?,
+            )
+            .context(error::CannotParseCrs)?
+            .into(),
+            time: None,
+            geo_transform_x: tiling_geo_transform,
+            pixel_bounds_x: tiling_pixel_bounds,
+            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                "band".into(),
+                derive_measurement(data_array.unit()),
+            )])
+            .unwrap(),
         };
 
         let dimensions_time = dimensions
@@ -1560,24 +1566,29 @@ mod tests {
     use crate::ge_context;
     use crate::layers::layer::LayerListing;
     use crate::layers::storage::LayerProviderDb;
-    use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
+    use crate::tasks::util::NopTaskContext;
+    use crate::util::tests::add_land_cover_to_datasets;
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
-    use geoengine_datatypes::primitives::{BandSelection, PlotSeriesSelection};
+    use geoengine_datatypes::primitives::{
+        BandSelection, BoundingBox2D, PlotQueryRectangle, PlotSeriesSelection,
+    };
     use geoengine_datatypes::raster::RenameBands;
+    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D};
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
-        primitives::{
-            BoundingBox2D, PlotQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
-        spatial_reference::SpatialReferenceAuthority,
-        test_data,
-        util::{gdal::hide_gdal_errors, test::TestDefault},
+        primitives::TimeInterval, spatial_reference::SpatialReferenceAuthority, test_data,
+        util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::engine::{
         MultipleRasterSources, RasterBandDescriptors, RasterOperator, SingleRasterSource,
     };
     use geoengine_operators::processing::{
         RasterStacker, RasterStackerParams, RasterTypeConversion, RasterTypeConversionParams,
+    };
+    use geoengine_operators::source::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+        GdalLoadingInfoTemporalSlice,
     };
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::{
@@ -1587,10 +1598,6 @@ mod tests {
             MeanRasterPixelValuesOverTimePosition,
         },
         processing::{Expression, ExpressionParams},
-        source::{
-            FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
-            GdalLoadingInfoTemporalSlice,
-        },
     };
     use tokio_postgres::NoTls;
 
@@ -1839,7 +1846,7 @@ mod tests {
             .await
             .unwrap();
 
-        pretty_assertions::assert_eq!(
+        assert_eq!(
             collection,
             LayerCollection {
                 id: ProviderLayerCollectionId {
@@ -1869,7 +1876,7 @@ mod tests {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string())
                     },
-                    name: "Regional Rivalry".to_string(),
+                    name: "Regional Rivalry".to_string(), 
                     description: "SSP3-RCP6.0".to_string(),
                     properties: Default::default(),
                 }), CollectionItem::Collection(LayerCollectionListing {
@@ -1929,26 +1936,26 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform_x: GeoTransform::new(
+                    (3_580_000.0, 2_370_000.0).into(),
+                    1000.0,
+                    -1000.0
+                ), // FIXME: move to tiling bounds
+                pixel_bounds_x: GridBoundingBox2D::new(
+                    [0, 0], // 0
+                    [9, 9]  // 10
+                )
+                .unwrap(),
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );
 
         let loading_info = metadata
-            .loading_info(RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new(
-                    (43.945_312_5, 0.791_015_625_25).into(),
-                    (44.033_203_125, 0.703_125_25).into(),
-                )
-                .unwrap(),
-                time_interval: TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
-                spatial_resolution: SpatialResolution::new_unchecked(
-                    0.000_343_322_7, // 256 pixel
-                    0.000_343_322_7, // 256 pixel
-                ),
-                attributes: BandSelection::first(),
-            })
+            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([0, 0], [9, 9]).unwrap(),
+                TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
+                BandSelection::first(),
+            ))
             .await
             .unwrap();
 
@@ -2063,26 +2070,26 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
                 time: None,
-                bbox: None,
-                resolution: Some(SpatialResolution::new_unchecked(1000.0, 1000.0)),
+                geo_transform_x: GeoTransform::new(
+                    (3_580_000.0, 2_370_000.0).into(),
+                    1000.0,
+                    -1000.0
+                ),
+                pixel_bounds_x: GridBoundingBox2D::new(
+                    [0, 0], // 0
+                    [9, 9]  // 10
+                )
+                .unwrap(),
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );
 
         let loading_info = metadata
-            .loading_info(RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new(
-                    (43.945_312_5, 0.791_015_625_25).into(),
-                    (44.033_203_125, 0.703_125_25).into(),
-                )
-                .unwrap(),
-                time_interval: TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
-                spatial_resolution: SpatialResolution::new_unchecked(
-                    0.000_343_322_7, // 256 pixel
-                    0.000_343_322_7, // 256 pixel
-                ),
-                attributes: BandSelection::first(),
-            })
+            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([0, 0], [9, 9]).unwrap(), // Fixme: adapt to tiling bounds
+                TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
+                BandSelection::first(),
+            ))
             .await
             .unwrap();
 
@@ -2271,6 +2278,7 @@ mod tests {
                                             })
                                             .to_string(),
                                         ),
+                                        overview_level: None,
                                     },
                                 }
                                 .boxed(),
@@ -2280,11 +2288,11 @@ mod tests {
                                     },
                                     sources: SingleRasterSource {
                                         raster: GdalSource {
-                                            params: GdalSourceParameters {
-                                                data: geoengine_datatypes::dataset::NamedData::with_system_name(
+                                            params: GdalSourceParameters::new(
+                                                geoengine_datatypes::dataset::NamedData::with_system_name(
                                                     land_cover_dataset_id.to_string(),
-                                                ),
-                                            },
+                                                )
+                                            ),
                                         }.boxed(),
                                     }
                                 }.boxed(),
@@ -2292,9 +2300,7 @@ mod tests {
                          }
                     }.boxed()
                 }
-            }
-            .boxed()
-            .into(),
+            }.boxed().into(),
         }
         .boxed();
 
@@ -2316,29 +2322,28 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new(
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new(
                         (46.478_278_849, 40.584_655_660_000_1).into(),
                         (87.323_796_021_000_1, 55.434_550_273).into(),
                     )
                     .unwrap(),
-                    time_interval: TimeInterval::new(
+                    TimeInterval::new(
                         DateTime::new_utc(1900, 4, 1, 0, 0, 0),
                         DateTime::new_utc_with_millis(2055, 4, 1, 0, 0, 0, 1),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
-                    attributes: PlotSeriesSelection::all(),
-                },
+                    PlotSeriesSelection::all(),
+                ),
                 &query_context,
             )
             .await
             .unwrap();
 
         assert_eq!(result, PlotData {
-            vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.34280000000002},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.54399999999997}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
-            metadata: PlotMetaData::None,
-        });
+                vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.34280000000002},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.54399999999997}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
+                metadata: PlotMetaData::None,
+            });
     }
 
     #[ge_context::test]

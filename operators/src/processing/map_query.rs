@@ -50,13 +50,18 @@ where
             log::debug!("Query was rewritten to empty query. Returning empty / filled stream.");
             let s = futures::stream::empty();
 
+            let res_desc = self.raster_result_descriptor();
+            let tiling_geo_transform = res_desc.tiling_geo_transform();
+
+            let strat = self.additional_data.strategy(tiling_geo_transform);
+
             // TODO: The input of the `SparseTilesFillAdapter` is empty here, so we can't derive the expiration, as there are no tiles to derive them from.
             //       As this is the result of the query not being rewritten, we should check if the expiration could also be `max`, because this error
             //       will be persistent and we might as well cache the empty stream.
             Ok(SparseTilesFillAdapter::new_like_subquery(
                 s,
                 &query,
-                self.additional_data,
+                strat,
                 FillerTileCacheExpirationStrategy::NoCache,
             )
             .boxed())

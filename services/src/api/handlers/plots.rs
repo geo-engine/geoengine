@@ -10,11 +10,10 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, Responder};
 use base64::Engine;
-use geoengine_datatypes::operations::reproject::reproject_query;
+use geoengine_datatypes::operations::reproject::reproject_spatial_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
-use geoengine_datatypes::primitives::{
-    BoundingBox2D, ColumnSelection, SpatialResolution, VectorQueryRectangle,
-};
+use geoengine_datatypes::primitives::{BoundingBox2D, SpatialResolution};
+use geoengine_datatypes::primitives::{PlotQueryRectangle, PlotSeriesSelection};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
     QueryContext, ResultDescriptor, TypedPlotQueryProcessor, WorkflowOperatorPath,
@@ -131,19 +130,24 @@ async fn get_plot_handler<C: ApplicationContext>(
     let request_spatial_ref: SpatialReference =
         params.crs.ok_or(error::Error::MissingSpatialReference)?;
 
-    let query_rect = VectorQueryRectangle {
-        spatial_bounds: params.bbox,
-        time_interval: params.time.into(),
-        spatial_resolution: params.spatial_resolution,
-        attributes: ColumnSelection::all(),
-    };
+    let query_rect = PlotQueryRectangle::with_bounds(
+        params.bbox,
+        params.time.into(),
+        PlotSeriesSelection::all(),
+    );
 
     let query_rect = if request_spatial_ref == workflow_spatial_ref {
         Some(query_rect)
     } else {
-        reproject_query(query_rect, workflow_spatial_ref, request_spatial_ref)
-            .map_err(From::from)
-            .context(error::Operator)?
+        let repr_spatial_query = reproject_spatial_query(
+            query_rect.spatial_query(),
+            workflow_spatial_ref,
+            request_spatial_ref,
+        )
+        .map_err(From::from)
+        .context(error::Operator)?;
+        repr_spatial_query
+            .map(|r| PlotQueryRectangle::new(r, query_rect.time_interval, query_rect.attributes))
     };
 
     let Some(query_rect) = query_rect else {
@@ -224,7 +228,8 @@ mod tests {
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::DateTime;
     use geoengine_datatypes::raster::{
-        Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+        GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D, TileInformation,
+        TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -239,6 +244,15 @@ mod tests {
     use tokio_postgres::NoTls;
 
     fn example_raster_source() -> Box<dyn RasterOperator> {
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
+            time: None,
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
@@ -254,21 +268,14 @@ mod tests {
                         .into(),
                     CacheHint::default(),
                 )],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed()
     }
 
     fn json_tiling_spec() -> TilingSpecification {
-        TilingSpecification::new([0.0, 0.0].into(), [3, 2].into())
+        TilingSpecification::new([3, 2].into())
     }
 
     #[ge_context::test(tiling_spec = "json_tiling_spec")]
@@ -332,7 +339,7 @@ mod tests {
     }
 
     fn json_vega_tiling_spec() -> TilingSpecification {
-        TilingSpecification::new([0.0, 0.0].into(), [3, 2].into())
+        TilingSpecification::new([3, 2].into())
     }
 
     #[ge_context::test(tiling_spec = "json_vega_tiling_spec")]

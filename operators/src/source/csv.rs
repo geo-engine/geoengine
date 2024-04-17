@@ -8,7 +8,9 @@ use futures::stream::BoxStream;
 use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{ColumnSelection, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{
+    ColumnSelection, SpatialBounded, VectorQueryRectangle, VectorSpatialQueryRectangle,
+};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
 
@@ -401,7 +403,7 @@ struct CsvSourceProcessor {
 #[async_trait]
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -411,7 +413,12 @@ impl QueryProcessor for CsvSourceProcessor {
         _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // TODO: properly handle chunk_size
-        Ok(CsvSourceStream::new(self.params.clone(), query.spatial_bounds, 10)?.boxed())
+        Ok(CsvSourceStream::new(
+            self.params.clone(),
+            query.spatial_query().spatial_bounds(),
+            10,
+        )?
+        .boxed())
     }
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
@@ -434,13 +441,10 @@ struct ParsedRow {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Seek, SeekFrom, Write};
-
-    use geoengine_datatypes::primitives::SpatialResolution;
-
     use super::*;
     use crate::engine::MockQueryContext;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, ToGeoJson};
+    use std::io::{Seek, SeekFrom, Write};
 
     #[tokio::test]
     async fn read_points() {
@@ -583,15 +587,11 @@ x,y
             },
         };
 
-        let query = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked(
-                Coordinate2D::new(0., 0.),
-                Coordinate2D::new(3., 3.),
-            ),
-            time_interval: TimeInterval::new_unchecked(0, 1),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new_unchecked(Coordinate2D::new(0., 0.), Coordinate2D::new(3., 3.)),
+            TimeInterval::new_unchecked(0, 1),
+            ColumnSelection::all(),
+        );
         let ctx = MockQueryContext::new((10 * 8 * 2).into());
 
         let r: Vec<Result<MultiPointCollection>> =

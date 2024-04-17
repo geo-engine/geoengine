@@ -1326,7 +1326,7 @@ mod tests {
         GeometryCollection, MultiPointCollection, VectorDataType,
     };
     use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
-    use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection, SpatialResolution};
+    use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection, SpatialQueryRectangle};
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use geoengine_operators::engine::{
@@ -1633,7 +1633,6 @@ mod tests {
 
     fn ctx_tiling_spec_600x600() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
         }
     }
@@ -1669,9 +1668,13 @@ mod tests {
         let query = query_processor
             .query(
                 VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    spatial_query: SpatialQueryRectangle::<BoundingBox2D> {
+                        spatial_bounds: BoundingBox2D::new(
+                            (1.85, 50.88).into(),
+                            (4.82, 52.95).into(),
+                        )?,
+                    },
                     time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
                     attributes: ColumnSelection::all(),
                 },
                 &query_ctx,

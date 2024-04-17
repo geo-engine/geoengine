@@ -510,7 +510,8 @@ mod tests {
     };
     use geoengine_datatypes::primitives::{CacheTtlSeconds, Measurement};
     use geoengine_datatypes::raster::{
-        RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
+        GeoTransform, GridBoundingBox2D, RasterDataType, RasterPropertiesEntryType,
+        RasterPropertiesKey,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::test_data;
@@ -584,9 +585,7 @@ mod tests {
             .register_workflow(Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
-                        params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
-                        },
+                        params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                     }
                     .boxed(),
                 ),
@@ -730,9 +729,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -901,15 +898,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new_unchecked(
-                        (-180., -90.).into(),
-                        (180., 90.).into()
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: ColumnSelection::all()
-                })
+                .loading_info(VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                    TimeInterval::default(),
+                    ColumnSelection::all()
+                ))
                 .await
                 .unwrap(),
             loading_info
@@ -1009,8 +1002,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: None,
-            bbox: None,
-            resolution: None,
+            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -1176,9 +1169,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -1371,9 +1362,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -1716,9 +1705,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -1996,9 +1983,7 @@ mod tests {
             workflow: Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
-                        params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
-                        },
+                        params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                     }
                     .boxed(),
                 ),
@@ -2191,9 +2176,10 @@ mod tests {
                     workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
-                                params: MockPointSourceParams {
-                                    points: vec![Coordinate2D::new(1., 2.); 3],
-                                },
+                                params: MockPointSourceParams::new(vec![
+                                    Coordinate2D::new(1., 2.);
+                                    3
+                                ]),
                             }
                             .boxed(),
                         ),
@@ -2260,9 +2246,10 @@ mod tests {
                     workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
-                                params: MockPointSourceParams {
-                                    points: vec![Coordinate2D::new(1., 2.); 3],
-                                },
+                                params: MockPointSourceParams::new(vec![
+                                    Coordinate2D::new(1., 2.);
+                                    3
+                                ]),
                             }
                             .boxed(),
                         ),
@@ -2284,9 +2271,10 @@ mod tests {
                     workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
-                                params: MockPointSourceParams {
-                                    points: vec![Coordinate2D::new(1., 2.); 3],
-                                },
+                                params: MockPointSourceParams::new(vec![
+                                    Coordinate2D::new(1., 2.);
+                                    3
+                                ]),
                             }
                             .boxed(),
                         ),
@@ -3382,14 +3370,8 @@ mod tests {
                     SpatialReference::epsg_4326(),
                 ),
                 time: Some(TimeInterval::default()),
-                bbox: Some(
-                    SpatialPartition2D::new(
-                        Coordinate2D::new(0.0f64, 1.),
-                        Coordinate2D::new(2., 0.5),
-                    )
-                    .unwrap(),
-                ),
-                resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
+                geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                 bands: RasterBandDescriptors::new_single_band(),
             }],
         )
@@ -3427,14 +3409,8 @@ mod tests {
                         SpatialReference::epsg_4326(),
                     ),
                     time: Some(TimeInterval::default()),
-                    bbox: Some(
-                        SpatialPartition2D::new(
-                            Coordinate2D::new(0.0f64, 1.),
-                            Coordinate2D::new(2., 0.5),
-                        )
-                        .unwrap(),
-                    ),
-                    resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                     bands: RasterBandDescriptors::new_single_band(),
                 }),
                 TypedResultDescriptor::Plot(PlotResultDescriptor {
@@ -3908,14 +3884,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeInterval::new_unchecked(0, 1).into(),
-                    bbox: Some(
-                        SpatialPartition2D::new(
-                            Coordinate2D::new(0.0f64, 1.),
-                            Coordinate2D::new(2., 0.5),
-                        )
-                        .unwrap(),
-                    ),
-                    resolution: Some(SpatialResolution::zero_point_one()),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         Measurement::Continuous(ContinuousMeasurement {
@@ -3980,14 +3950,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeInterval::new_unchecked(0, 1).into(),
-                    bbox: Some(
-                        SpatialPartition2D::new(
-                            Coordinate2D::new(0.0f64, 1.),
-                            Coordinate2D::new(2., 0.5),
-                        )
-                        .unwrap(),
-                    ),
-                    resolution: Some(SpatialResolution::zero_point_one()),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         Measurement::Continuous(ContinuousMeasurement {
@@ -4038,14 +4002,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeInterval::new_unchecked(0, 1).into(),
-                    bbox: Some(
-                        SpatialPartition2D::new(
-                            Coordinate2D::new(0.0f64, 1.),
-                            Coordinate2D::new(2., 0.5),
-                        )
-                        .unwrap(),
-                    ),
-                    resolution: Some(SpatialResolution::zero_point_one()),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         Measurement::Continuous(ContinuousMeasurement {
@@ -4103,14 +4061,8 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeInterval::new_unchecked(0, 1).into(),
-                    bbox: Some(
-                        SpatialPartition2D::new(
-                            Coordinate2D::new(0.0f64, 1.),
-                            Coordinate2D::new(2., 0.5),
-                        )
-                        .unwrap(),
-                    ),
-                    resolution: Some(SpatialResolution::zero_point_one()),
+                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                    pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         Measurement::Continuous(ContinuousMeasurement {
@@ -4268,14 +4220,8 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         time: TimeInterval::new_unchecked(0, 1).into(),
-                        bbox: Some(
-                            SpatialPartition2D::new(
-                                Coordinate2D::new(0.0f64, 1.),
-                                Coordinate2D::new(2., 0.5),
-                            )
-                            .unwrap(),
-                        ),
-                        resolution: Some(SpatialResolution::zero_point_one()),
+                        geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
@@ -4334,14 +4280,8 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         time: TimeInterval::new_unchecked(0, 1).into(),
-                        bbox: Some(
-                            SpatialPartition2D::new(
-                                Coordinate2D::new(0.0f64, 1.),
-                                Coordinate2D::new(2., 0.5),
-                            )
-                            .unwrap(),
-                        ),
-                        resolution: Some(SpatialResolution::zero_point_one()),
+                        geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
@@ -4386,14 +4326,8 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         time: TimeInterval::new_unchecked(0, 1).into(),
-                        bbox: Some(
-                            SpatialPartition2D::new(
-                                Coordinate2D::new(0.0f64, 1.),
-                                Coordinate2D::new(2., 0.5),
-                            )
-                            .unwrap(),
-                        ),
-                        resolution: Some(SpatialResolution::zero_point_one()),
+                        geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        pixel_bounds_x: GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
@@ -4445,14 +4379,8 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         time: TimeInterval::new_unchecked(0, 1).into(),
-                        bbox: Some(
-                            SpatialPartition2D::new(
-                                Coordinate2D::new(0.0f64, 1.),
-                                Coordinate2D::new(2., 0.5),
-                            )
-                            .unwrap(),
-                        ),
-                        resolution: Some(SpatialResolution::zero_point_one()),
+                        geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {

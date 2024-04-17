@@ -1,26 +1,8 @@
 use std::mem;
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use futures::StreamExt;
-use geoengine_datatypes::primitives::{
-    partitions_extent, time_interval_extent, RasterQueryRectangle, SpatialPartition2D,
-    SpatialResolution,
-};
-use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-use geoengine_datatypes::pro::MlModelId;
-use geoengine_datatypes::raster::{
-    BaseTile, Grid2D, GridOrEmpty, GridShape, GridShapeAccess, GridSize, RasterDataType,
-    RasterTile2D,
-};
-
-use rayon::prelude::ParallelIterator;
-use rayon::slice::ParallelSlice;
-use rayon::ThreadPool;
-use serde::{Deserialize, Serialize};
-use snafu::{ensure, OptionExt, ResultExt};
-use xgboost_rs::{Booster, DMatrix, XGBError};
-
+use super::xg_error::XGBoostModuleError;
+use super::MlModelAccess;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     MultipleRasterSources, Operator, OperatorName, QueryContext, QueryProcessor,
@@ -30,13 +12,24 @@ use crate::engine::{
 use crate::pro::xg_error::error as XgModuleError;
 use crate::util::stream_zip::StreamVectorZip;
 use crate::util::Result;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
+use futures::StreamExt;
+use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, RasterSpatialQueryRectangle};
+use geoengine_datatypes::pro::MlModelId;
+use geoengine_datatypes::raster::{
+    BaseTile, Grid2D, GridOrEmpty, GridShape, GridShapeAccess, GridSize, RasterDataType,
+    RasterTile2D,
+};
+use rayon::prelude::ParallelIterator;
+use rayon::slice::ParallelSlice;
+use rayon::ThreadPool;
+use serde::{Deserialize, Serialize};
+use snafu::{ensure, OptionExt, ResultExt};
+use xgboost_rs::{Booster, DMatrix, XGBError};
 use RasterDataType::F32 as RasterOut;
-
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
-
-use super::xg_error::XGBoostModuleError;
-use super::MlModelAccess;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -112,26 +105,23 @@ impl RasterOperator for XgboostOperator {
             );
         }
 
-        let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
-        let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
-
-        let resolution = in_descriptors
-            .iter()
-            .map(|d| d.resolution)
-            .reduce(|a, b| match (a, b) {
-                (Some(a), Some(b)) => {
-                    Some(SpatialResolution::new_unchecked(a.x.min(b.x), a.y.min(b.y)))
+        // FIXME: refine checkings
+        for &other_descriptor in in_descriptors.iter().skip(1) {
+            ensure!(
+                in_descriptors[0].spatial_tiling_compat(other_descriptor),
+                crate::error::RasterResultsIncompatible {
+                    a: in_descriptors[0].clone(),
+                    b: other_descriptor.clone(),
                 }
-                _ => None,
-            })
-            .flatten();
+            );
+        }
 
         let out_desc = RasterResultDescriptor {
             data_type: RasterOut,
-            time,
-            bbox,
-            resolution,
             spatial_reference,
+            time: None,
+            geo_transform_x: in_descriptors[0].tiling_geo_transform(),
+            pixel_bounds_x: in_descriptors[0].tiling_pixel_bounds(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -338,13 +328,13 @@ impl<Q> QueryProcessor for XgboostProcessor<Q>
 where
     Q: QueryProcessor<
         Output = RasterTile2D<f32>,
-        SpatialBounds = SpatialPartition2D,
+        SpatialQuery = RasterSpatialQueryRectangle,
         Selection = BandSelection,
         ResultDescription = RasterResultDescriptor,
     >,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -395,13 +385,11 @@ mod tests {
 
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-    use geoengine_datatypes::primitives::{
-        RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-    };
+    use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
 
     use geoengine_datatypes::raster::{
-        Grid2D, GridShape, MaskedGrid2D, RasterDataType, RasterTile2D, TileInformation,
-        TilingSpecification,
+        Grid2D, GridBoundingBox2D, GridShape, GridSize, MaskedGrid2D, RasterDataType, RasterTile2D,
+        TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::test_data;
@@ -513,8 +501,12 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform_x: TestDefault::test_default(),
+                    pixel_bounds_x: GridBoundingBox2D::new(
+                        [-1 * tile_size_in_pixels.axis_size_y() as isize, 0],
+                        [0, (n_tiles * tile_size_in_pixels.axis_size_x()) as isize],
+                    )
+                    .unwrap(),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -644,10 +636,8 @@ mod tests {
             sources: MultipleRasterSources { rasters: srcs },
         };
 
-        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [5, 5].into(),
-        ));
+        let mut exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([5, 5].into()));
 
         mock_ml_model_persistance(&mut exe_ctx, model_uuid_path)
             .expect("The model file should be available.");
@@ -659,12 +649,11 @@ mod tests {
 
         let processor = op.query_processor().unwrap().get_f32().unwrap();
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (10., 0.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(), // TODO
-        };
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-5, 0], [-1, 9]).unwrap(),
+            TimeInterval::new_unchecked(0, 1),
+            BandSelection::first(), // TODO
+        );
 
         let query_ctx = MockQueryContext::test_default();
 
@@ -986,10 +975,8 @@ mod tests {
             sources: MultipleRasterSources { rasters: srcs },
         };
 
-        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [5, 5].into(),
-        ));
+        let mut exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([5, 5].into()));
 
         mock_ml_model_persistance(&mut exe_ctx, model_uuid_path)
             .expect("The model file should be available.");
@@ -1001,12 +988,11 @@ mod tests {
 
         let processor = op.query_processor().unwrap().get_f32().unwrap();
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 5.).into(), (5., 0.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-5, 0], [-1, 4]).unwrap(),
+            TimeInterval::new_unchecked(0, 1),
+            BandSelection::first(),
+        );
 
         let query_ctx = MockQueryContext::test_default();
 

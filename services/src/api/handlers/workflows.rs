@@ -4,7 +4,10 @@ use crate::api::model::responses::IdResponse;
 use crate::api::ogc::util::{parse_bbox, parse_time};
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
-use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
+use crate::datasets::{
+    schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow,
+    RasterDatasetFromWorkflowParams,
+};
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::util::config::get_config_element;
@@ -462,11 +465,30 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
     let compression_num_threads =
         get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
 
+    // FIXME: dont initialize the workflow here, but in the task
+    let operator = workflow
+        .clone()
+        .operator
+        .get_raster()
+        .expect("must be raster here")
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &ctx.execution_context()?,
+        )
+        .await?;
+
+    let result_descriptor = operator.result_descriptor();
+
+    let info = RasterDatasetFromWorkflowParams::from_request_and_result_descriptor(
+        info.into_inner(),
+        result_descriptor,
+    )?;
+
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("workflow {id}"),
         workflow,
         ctx,
-        info.into_inner(),
+        info,
         compression_num_threads,
     )
     .await?;
@@ -540,12 +562,25 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         .get_raster()
         .boxed_context(error::WorkflowMustBeOfTypeRaster)?;
 
-    let query_rectangle = RasterQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
-        time_interval: query.time_interval.into(),
-        spatial_resolution: query.spatial_resolution,
-        attributes: query.attributes.clone().try_into()?,
-    };
+    let execution_context = ctx.execution_context()?;
+
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+    let initialized_operator = operator
+        .initialize(workflow_operator_path_root, &execution_context)
+        .await?;
+
+    let query = query.into_inner();
+
+    let query_bounds = initialized_operator
+        .result_descriptor()
+        .tiling_geo_transform()
+        .spatial_to_grid_bounds(&query.spatial_bounds);
+    let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+        query_bounds,
+        query.time_interval.into(),
+        query.attributes.clone().try_into()?,
+    );
 
     // this is the only result type for now
     debug_assert!(matches!(
@@ -554,9 +589,8 @@ async fn raster_stream_websocket<C: ApplicationContext>(
     ));
 
     let stream_handler = RasterWebsocketStreamHandler::new::<C::SessionContext>(
-        operator,
+        initialized_operator,
         query_rectangle,
-        ctx.execution_context()?,
         ctx.query_context()?,
     )
     .await?;
@@ -623,12 +657,11 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         .get_vector()
         .boxed_context(error::WorkflowMustBeOfTypeVector)?;
 
-    let query_rectangle = VectorQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
-        time_interval: query.time_interval.into(),
-        spatial_resolution: query.spatial_resolution,
-        attributes: ColumnSelection::all(),
-    };
+    let query_rectangle = VectorQueryRectangle::with_bounds(
+        query.spatial_bounds,
+        query.time_interval.into(),
+        ColumnSelection::all(),
+    );
 
     // this is the only result type for now
     debug_assert!(matches!(
@@ -691,10 +724,13 @@ mod tests {
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, FeatureData, Measurement, MultiPoint, RasterQueryRectangle,
-        SpatialPartition2D, SpatialResolution, TimeInterval,
+        TimeInterval,
     };
-    use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
+    use geoengine_datatypes::raster::{
+        GeoTransform, GridBoundingBox2D, GridShape, RasterDataType, TilingSpecification,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
         ExecutionContext, MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
         RasterBandDescriptors, TypedOperator,
@@ -728,9 +764,7 @@ mod tests {
 
         let workflow = Workflow {
             operator: MockPointSource {
-                params: MockPointSourceParams {
-                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                },
+                params: MockPointSourceParams::new(vec![(0.0, 0.1).into(), (1.0, 1.1).into()]),
             }
             .boxed()
             .into(),
@@ -768,9 +802,7 @@ mod tests {
     async fn register_missing_header(app_ctx: PostgresContext<NoTls>) {
         let workflow = Workflow {
             operator: MockPointSource {
-                params: MockPointSourceParams {
-                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                },
+                params: MockPointSourceParams::new(vec![(0.0, 0.1).into(), (1.0, 1.1).into()]),
             }
             .boxed()
             .into(),
@@ -1008,8 +1040,12 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         time: None,
-                        bbox: None,
-                        resolution: None,
+                        geo_transform_x: GeoTransform::test_default(),
+                        pixel_bounds_x: geoengine_datatypes::raster::GridBoundingBox2D::new(
+                            [0, 0],
+                            [1, 1],
+                        )
+                        .unwrap(), // FIXME: change to somethiing that is tested!
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
@@ -1155,7 +1191,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters { data: dataset },
+                    params: GdalSourceParameters::new(dataset),
                 }
                 .boxed(),
             ),
@@ -1233,7 +1269,6 @@ mod tests {
 
     fn test_download_all_metadata_zip_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape::new([600, 600]),
         }
     }
@@ -1255,9 +1290,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters {
-                        data: dataset_name.clone(),
-                    },
+                    params: GdalSourceParameters::new(dataset_name.clone()),
                 }
                 .boxed(),
             ),
@@ -1357,7 +1390,6 @@ mod tests {
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn dataset_from_workflow_task_success_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape::new([600, 600]),
         }
     }
@@ -1374,7 +1406,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters { data: dataset },
+                    params: GdalSourceParameters::new(dataset),
                 }
                 .boxed(),
             ),
@@ -1443,9 +1475,7 @@ mod tests {
 
         // query the newly created dataset
         let op = GdalSource {
-            params: GdalSourceParameters {
-                data: response.dataset.into(),
-            },
+            params: GdalSourceParameters::new(response.dataset.into()),
         }
         .boxed();
 
@@ -1457,12 +1487,15 @@ mod tests {
             .unwrap();
 
         let query_ctx = ctx.query_context().unwrap();
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: geoengine_datatypes::primitives::BandSelection::first(),
-        };
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-100, 800], [499, 199]).unwrap(),
+            TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
+            geoengine_datatypes::primitives::BandSelection::first(),
+        );
+
+        let tiling_strategy = exe_ctx
+            .tiling_specification()
+            .strategy(o.result_descriptor().tiling_geo_transform());
 
         let processor = o.query_processor().unwrap().get_u8().unwrap();
 
@@ -1483,7 +1516,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            exe_ctx.tiling_specification(),
+            tiling_strategy,
         )
         .await
         .unwrap();

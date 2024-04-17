@@ -3,6 +3,7 @@ use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor};
 use crate::error;
 use crate::util::Result;
+use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{
     ready,
@@ -11,27 +12,22 @@ use futures::{
 };
 use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt, TryFutureExt};
+use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+use geoengine_datatypes::primitives::{RasterQueryRectangle, RasterSpatialQueryRectangle};
+use geoengine_datatypes::raster::{
+    EmptyGrid2D, GridBoundingBox2D, GridBounds, GridStep, TilingStrategy,
 };
-use geoengine_datatypes::raster::{EmptyGrid2D, GridBoundingBox2D, GridBounds, GridStep};
 use geoengine_datatypes::{
     primitives::TimeInstance,
     raster::{Blit, Pixel, RasterTile2D, TileInformation},
 };
-use geoengine_datatypes::{primitives::TimeInterval, raster::TilingSpecification};
-
 use pin_project::pin_project;
 use rayon::ThreadPool;
-
 use std::marker::PhantomData;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Poll;
-
-use std::pin::Pin;
-
-use async_trait::async_trait;
 
 #[async_trait]
 pub trait FoldTileAccu {
@@ -41,7 +37,8 @@ pub trait FoldTileAccu {
 }
 
 pub trait FoldTileAccuMut: FoldTileAccu {
-    fn tile_mut(&mut self) -> &mut RasterTile2D<Self::RasterType>;
+    fn set_time(&mut self, new_time: TimeInterval);
+    fn set_cache_hint(&mut self, new_cache_hint: CacheHint);
 }
 
 pub type RasterFold<'a, T, FoldFuture, FoldMethod, FoldTileAccu> =
@@ -94,7 +91,7 @@ where
     /// The `QueryRectangle` the adapter is queried with
     query_rect_to_answer: RasterQueryRectangle,
     /// The `GridBoundingBox2D` that defines the tile grid space of the query.
-    grid_bounds: GridBoundingBox2D,
+    tile_grid_bounds: GridBoundingBox2D,
     // the selected bands from the source
     bands: Vec<u32>,
     // the band being currently processed
@@ -130,23 +127,17 @@ where
     pub fn new(
         source_processor: &'a RasterProcessor,
         query_rect_to_answer: RasterQueryRectangle,
-        tiling_spec: TilingSpecification,
+        tiling_strategy: TilingStrategy,
         query_ctx: &'a dyn QueryContext,
         sub_query: SubQuery,
     ) -> Self {
-        debug_assert!(query_rect_to_answer.spatial_resolution.y > 0.);
-
-        let tiling_strat = tiling_spec.strategy(
-            query_rect_to_answer.spatial_resolution.x,
-            -query_rect_to_answer.spatial_resolution.y,
-        );
-
-        let grid_bounds = tiling_strat.tile_grid_box(query_rect_to_answer.spatial_partition());
+        let grid_bounds = query_rect_to_answer.spatial_query.grid_bounds();
+        let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
 
         let first_tile_spec = TileInformation {
-            global_geo_transform: tiling_strat.geo_transform,
-            global_tile_position: grid_bounds.min_index(),
-            tile_size_in_pixels: tiling_strat.tile_size_in_pixels,
+            global_geo_transform: tiling_strategy.geo_transform,
+            global_tile_position: tile_bounds.min_index(),
+            tile_size_in_pixels: tiling_strategy.tile_size_in_pixels,
         };
 
         Self {
@@ -154,7 +145,7 @@ where
             current_time_end: None,
             current_time_start: query_rect_to_answer.time_interval.start(),
             current_band_index: 0,
-            grid_bounds,
+            tile_grid_bounds: tile_bounds,
             bands: query_rect_to_answer.attributes.as_vec(),
             query_ctx,
             query_rect_to_answer,
@@ -173,7 +164,7 @@ where
     where
         Self: Stream<Item = Result<Option<RasterTile2D<PixelType>>>> + 'a,
     {
-        let grid_bounds = self.grid_bounds.clone();
+        let grid_bounds = self.tile_grid_bounds;
         let global_geo_transform = self.current_tile_spec.global_geo_transform;
         let tile_shape = self.current_tile_spec.tile_size_in_pixels;
         let num_bands = self.bands.len() as u32;
@@ -214,7 +205,7 @@ where
     PixelType: Pixel,
     RasterProcessorType: QueryProcessor<
         Output = RasterTile2D<PixelType>,
-        SpatialBounds = SpatialPartition2D,
+        SpatialQuery = RasterSpatialQueryRectangle,
         Selection = BandSelection,
         ResultDescription = RasterResultDescriptor,
     >,
@@ -231,7 +222,7 @@ where
     PixelType: Pixel,
     RasterProcessorType: QueryProcessor<
         Output = RasterTile2D<PixelType>,
-        SpatialBounds = SpatialPartition2D,
+        SpatialQuery = RasterSpatialQueryRectangle,
         Selection = BandSelection,
         ResultDescription = RasterResultDescriptor,
     >,
@@ -400,7 +391,7 @@ where
         } else {
             // all bands for the current tile are processed, we can go to the next tile in space, if there is one
             *this.current_band_index = 0;
-            this.grid_bounds
+            this.tile_grid_bounds
                 .inc_idx_unchecked(this.current_tile_spec.global_tile_position, 1)
         };
 
@@ -421,7 +412,7 @@ where
             }
             (None, Some(end_time)) if end_time == *this.current_time_start => {
                 // Only for time instants: reset the spatial idx to the first tile of the grid AND increase the request time by 1.
-                this.current_tile_spec.global_tile_position = this.grid_bounds.min_index();
+                this.current_tile_spec.global_tile_position = this.tile_grid_bounds.min_index();
                 *this.current_time_start = end_time + 1;
                 *this.current_time_end = None;
 
@@ -432,7 +423,7 @@ where
             }
             (None, Some(end_time)) => {
                 // reset the spatial idx to the first tile of the grid AND move the requested time to the last known time.
-                this.current_tile_spec.global_tile_position = this.grid_bounds.min_index();
+                this.current_tile_spec.global_tile_position = this.tile_grid_bounds.min_index();
                 *this.current_time_start = end_time;
                 *this.current_time_end = None;
 
@@ -487,13 +478,13 @@ where
         source: &'a S,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
-        tiling_specification: TilingSpecification,
+        tiling_strategy: TilingStrategy,
     ) -> RasterSubQueryAdapter<'a, T, S, Self>
     where
         S: RasterQueryProcessor<RasterType = T>,
         Self: Sized,
     {
-        RasterSubQueryAdapter::<'a, T, S, Self>::new(source, query, tiling_specification, ctx, self)
+        RasterSubQueryAdapter::<'a, T, S, Self>::new(source, query, tiling_strategy, ctx, self)
     }
 }
 
@@ -523,8 +514,12 @@ impl<T: Pixel> FoldTileAccu for RasterTileAccu2D<T> {
 }
 
 impl<T: Pixel> FoldTileAccuMut for RasterTileAccu2D<T> {
-    fn tile_mut(&mut self) -> &mut RasterTile2D<T> {
-        &mut self.tile
+    fn set_time(&mut self, new_time: TimeInterval) {
+        self.tile.time = new_time;
+    }
+
+    fn set_cache_hint(&mut self, new_cache_hint: CacheHint) {
+        self.tile.cache_hint = new_cache_hint;
     }
 }
 
@@ -559,16 +554,15 @@ where
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: RasterQueryRectangle,
+        _query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        Ok(Some(RasterQueryRectangle {
-            spatial_bounds: tile_info.spatial_partition(),
-            time_interval: TimeInterval::new_instant(start_time)?,
-            spatial_resolution: query_rect.spatial_resolution,
-            attributes: band_idx.into(),
-        }))
+        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+            tile_info.global_pixel_bounds(),
+            TimeInterval::new_instant(start_time)?,
+            band_idx.into(),
+        )))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {
@@ -640,8 +634,11 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
+        primitives::{Coordinate2D, TimeInterval},
+        raster::{
+            GeoTransform, Grid, GridShape2D, RasterDataType, TilesEqualIgnoringCacheHint,
+            TilingSpecification,
+        },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
@@ -699,35 +696,33 @@ mod tests {
             },
         ];
 
+        let result_descriptor = RasterResultDescriptor::new(
+            RasterDataType::U8,
+            SpatialReference::epsg_4326().into(),
+            None,
+            GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            RasterBandDescriptors::new_single_band(),
+        );
+
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor: result_descriptor.clone(),
             },
         }
         .boxed();
+        let tiling_specification = TilingSpecification::new(GridShape2D::new_2d(2, 2));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
-        let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
-            shape_array: [2, 2],
-        };
-
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
+        );
 
         let query_ctx = MockQueryContext::test_default();
-        let tiling_strat = exe_ctx.tiling_specification;
+        let tiling_strat = result_descriptor.generate_data_tiling_strategy([2, 2]);
 
         let op = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

@@ -544,12 +544,12 @@ mod tests {
     use geoengine_datatypes::dataset::{DataProviderId, LayerId};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
-        RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
-        TimeStep, VectorQueryRectangle,
+        RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+        VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheTtlSeconds, ColumnSelection};
     use geoengine_datatypes::pro::MlModelId;
-    use geoengine_datatypes::raster::RasterDataType;
+    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::Identifier;
@@ -746,9 +746,7 @@ mod tests {
             .register_workflow(Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
-                        params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
-                        },
+                        params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                     }
                     .boxed(),
                 ),
@@ -993,9 +991,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -1164,15 +1160,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new_unchecked(
-                        (-180., -90.).into(),
-                        (180., 90.).into()
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: ColumnSelection::all()
-                })
+                .loading_info(VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                    TimeInterval::default(),
+                    ColumnSelection::all()
+                ))
                 .await
                 .unwrap(),
             loading_info
@@ -1584,8 +1576,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: None,
-            bbox: None,
-            resolution: None,
+            geo_transform_x: GeoTransform::test_default(),
+            pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 1, 1).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -1777,9 +1769,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -1972,9 +1962,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -2319,9 +2307,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -2823,9 +2809,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -3005,9 +2989,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -3529,9 +3511,7 @@ mod tests {
             workflow: Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
-                        params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
-                        },
+                        params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                     }
                     .boxed(),
                 ),
@@ -3724,9 +3704,10 @@ mod tests {
                     workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
-                                params: MockPointSourceParams {
-                                    points: vec![Coordinate2D::new(1., 2.); 3],
-                                },
+                                params: MockPointSourceParams::new(vec![
+                                    Coordinate2D::new(1., 2.);
+                                    3
+                                ]),
                             }
                             .boxed(),
                         ),
@@ -3793,9 +3774,10 @@ mod tests {
                     workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
-                                params: MockPointSourceParams {
-                                    points: vec![Coordinate2D::new(1., 2.); 3],
-                                },
+                                params: MockPointSourceParams::new(vec![
+                                    Coordinate2D::new(1., 2.);
+                                    3
+                                ]),
                             }
                             .boxed(),
                         ),
@@ -3817,9 +3799,10 @@ mod tests {
                     workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
-                                params: MockPointSourceParams {
-                                    points: vec![Coordinate2D::new(1., 2.); 3],
-                                },
+                                params: MockPointSourceParams::new(vec![
+                                    Coordinate2D::new(1., 2.);
+                                    3
+                                ]),
                             }
                             .boxed(),
                         ),

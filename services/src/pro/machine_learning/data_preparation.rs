@@ -77,8 +77,14 @@ where
     A: Aggregatable<Data = f32>,
 {
     let mut queries = Vec::with_capacity(processors.len());
-    let q = RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first());
+
     for (i, raster_processor) in processors.iter().enumerate() {
+        let q = RasterQueryRectangle::with_spatial_query_and_geo_transform(
+            &query,
+            raster_processor.result_descriptor().tiling_geo_transform(),
+            BandSelection::first(),
+        );
+
         queries.push(
             call_on_generic_raster_processor!(raster_processor, processor => {
                 processor.query(q.clone(), ctx).await?

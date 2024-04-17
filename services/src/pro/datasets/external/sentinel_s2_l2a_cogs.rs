@@ -16,15 +16,11 @@ use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
 use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
-use geoengine_datatypes::operations::reproject::{
-    CoordinateProjection, CoordinateProjector, ReprojectClipped,
-};
-use geoengine_datatypes::primitives::CacheTtlSeconds;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, RasterQueryRectangle,
-    SpatialPartitioned, TimeInstance, TimeInterval, VectorQueryRectangle,
+    DateTime, Duration, RasterQueryRectangle, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, OperatorName, RasterBandDescriptors, RasterOperator,
@@ -350,13 +346,11 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
             workflow: Workflow {
                 operator: TypedOperator::Raster(
                     GdalSource {
-                        params: GdalSourceParameters {
-                            data: NamedData {
-                                namespace: None,
-                                provider: Some(self.id.to_string()),
-                                name: id.to_string(),
-                            },
-                        },
+                        params: GdalSourceParameters::new(NamedData {
+                            namespace: None,
+                            provider: Some(self.id.to_string()),
+                            name: id.to_string(),
+                        }),
                     }
                     .boxed(),
                 ),
@@ -547,17 +541,10 @@ impl SentinelS2L2aCogsMetaData {
         let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
 
         // request all features in zone in order to be able to determine the temporal validity of individual tile
-        let projector = CoordinateProjector::from_known_srs(
-            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg),
-            SpatialReference::epsg_4326(),
-        )?;
-
-        let spatial_partition = query.spatial_partition(); // TODO: use SpatialPartition2D directly
-        let bbox = BoundingBox2D::new_upper_left_lower_right_unchecked(
-            spatial_partition.upper_left(),
-            spatial_partition.lower_right(),
-        );
-        let bbox = bbox.reproject_clipped(&projector)?; // TODO: use reproject_clipped on SpatialPartition2D
+        let bbox: Option<BoundingBox2D> =
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg)
+                .area_of_use()
+                .ok();
 
         Ok(bbox.map(|bbox| {
             vec![
@@ -696,8 +683,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             )
             .into(),
             time: None,
-            bbox: None,
-            resolution: None, // TODO: determine from STAC or data or hardcode it
+            geo_transform_x: GeoTransform::new((0., 0.).into(), 1., -1.), // FIXME: we will need to query the actual data for this
+            pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 0, 0).unwrap(), // FIXME: derive from loading info
             bands: RasterBandDescriptors::new_single_band(),
         })
     }
@@ -798,7 +785,8 @@ mod tests {
     };
     use futures::StreamExt;
     use geoengine_datatypes::{
-        dataset::{DatasetId, ExternalDataId},
+        dataset::DatasetId,
+        dataset::ExternalDataId,
         primitives::{BandSelection, SpatialPartition2D, SpatialResolution},
         util::{gdal::hide_gdal_errors, test::TestDefault, Identifier},
     };
@@ -848,17 +836,15 @@ mod tests {
                 .await
                 .unwrap();
 
+        let data_bounds =
+            SpatialPartition2D::new((166_021.44, 9_329_005.18).into(), (534_994.66, 0.00).into())
+                .unwrap();
         let loading_info = meta
-            .loading_info(RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new(
-                    (166_021.44, 9_329_005.18).into(),
-                    (534_994.66, 0.00).into(),
-                )
-                .unwrap(),
-                time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
-                spatial_resolution: SpatialResolution::one(),
-                attributes: BandSelection::first(),
-            })
+            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(), // FIXME: we need to calculate that once..
+                TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
+                BandSelection::first(),
+            ))
             .await
             .unwrap();
 
@@ -951,7 +937,7 @@ mod tests {
         );
 
         let op = GdalSource {
-            params: GdalSourceParameters { data: name },
+            params: GdalSourceParameters::new(name),
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe)
@@ -960,20 +946,15 @@ mod tests {
 
         let processor = op.query_processor()?.get_u16().unwrap();
 
-        let spatial_bounds =
+        let sp =
             SpatialPartition2D::new((166_021.44, 9_329_005.18).into(), (534_994.66, 0.00).into())
                 .unwrap();
-
-        let spatial_resolution = SpatialResolution::new_unchecked(
-            spatial_bounds.size_x() / 256.,
-            spatial_bounds.size_y() / 256.,
+        let sr = SpatialResolution::new_unchecked(sp.size_x() / 256., sp.size_y() / 256.);
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([0, 0], [255, 255]).unwrap(), // FIXME: we need to calculate that once..
+            TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
+            BandSelection::first(),
         );
-        let query = RasterQueryRectangle {
-            spatial_bounds,
-            time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
-            spatial_resolution,
-            attributes: BandSelection::first(),
-        };
 
         let ctx = MockQueryContext::new(ChunkByteSize::MAX);
 
@@ -984,6 +965,7 @@ mod tests {
             .await;
 
         // TODO: check actual data
+        // Note this is 1 IF the tile size larger then 256x25
         assert_eq!(result.len(), 1);
 
         Ok(())
@@ -1243,16 +1225,15 @@ mod tests {
                 .await
                 .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (600_000.00, 9_750_100.).into(),
-                (600_100.0, 9_750_000.).into(),
-            ),
-            time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44))
-                .unwrap(),
-            spatial_resolution: SpatialResolution::new_unchecked(10., 10.),
-            attributes: BandSelection::first(),
-        };
+        let data_bounds = SpatialPartition2D::new_unchecked(
+            (600_000.00, 9_750_100.).into(),
+            (600_100.0, 9_750_000.).into(),
+        );
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(), // FIXME: we need to calculate that once..
+            TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44)).unwrap(),
+            BandSelection::first(),
+        );
 
         let loading_info = meta.loading_info(query).await.unwrap();
         let parts =
@@ -1325,8 +1306,8 @@ mod tests {
                     data_type: RasterDataType::U16,
                     spatial_reference: SpatialReference::from_str("EPSG:32736").unwrap().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    geo_transform_x: GeoTransform::new((0., 0.).into(), 1., -1.), // FIXME: find out correct geo transform
+                    pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 0, 0).unwrap(), // FIXME: find out the correct pixel bounds
                     bands: RasterBandDescriptors::new_single_band(),
                 },
                 params,
@@ -1335,7 +1316,7 @@ mod tests {
         );
 
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { data: name },
+            params: GdalSourceParameters::new(name),
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1348,20 +1329,18 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
+        let data_bounds = SpatialPartition2D::new_unchecked(
+            (499_980., 9_804_800.).into(),
+            (499_990., 9_804_810.).into(),
+        );
+
         let stream = gdal_source
             .raster_query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (499_980., 9_804_800.).into(),
-                        (499_990., 9_804_810.).into(),
-                    ),
-                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
-                        2014, 3, 1, 0, 0, 0,
-                    ))
-                    .unwrap(),
-                    spatial_resolution: SpatialResolution::new(10., 10.).unwrap(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(), // FIXME: we need to calculate that once..
+                    TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+                    BandSelection::first(),
+                ),
                 &query_context,
             )
             .await

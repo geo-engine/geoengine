@@ -45,6 +45,48 @@ pub type GridShape1D = GridShape<[usize; 1]>;
 pub type GridShape2D = GridShape<[usize; 2]>;
 pub type GridShape3D = GridShape<[usize; 3]>;
 
+impl GridShape1D {
+    pub fn new_1d(x_size: usize) -> Self {
+        Self::new([x_size])
+    }
+
+    pub fn x(&self) -> usize {
+        self.shape_array[0]
+    }
+}
+
+impl GridShape2D {
+    pub fn new_2d(y_size: usize, x_size: usize) -> Self {
+        Self::new([y_size, x_size])
+    }
+
+    pub fn x(&self) -> usize {
+        self.shape_array[1]
+    }
+
+    pub fn y(&self) -> usize {
+        self.shape_array[0]
+    }
+}
+
+impl GridShape3D {
+    pub fn new_3d(z_size: usize, y_size: usize, x_size: usize) -> Self {
+        Self::new([z_size, y_size, x_size])
+    }
+
+    pub fn x(&self) -> usize {
+        self.shape_array[2]
+    }
+
+    pub fn y(&self) -> usize {
+        self.shape_array[1]
+    }
+
+    pub fn z(&self) -> usize {
+        self.shape_array[0]
+    }
+}
+
 impl From<[usize; 1]> for GridShape1D {
     fn from(shape: [usize; 1]) -> Self {
         GridShape1D { shape_array: shape }
@@ -484,25 +526,35 @@ where
     }
 }
 
-impl<D, T, I> ChangeGridBounds<I> for Grid<D, T>
+impl<D, T, I, A> ChangeGridBounds<I, A> for Grid<D, T>
 where
-    I: AsRef<[isize]> + Clone,
-    D: GridBounds<IndexArray = I> + Clone,
-    T: Clone,
-    GridBoundingBox<I>: GridSize,
+    D: GridBounds<IndexArray = I> + GridSize<ShapeArray = A>,
+    I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
+    A: AsRef<[usize]> + Into<GridShape<A>> + Clone,
+    GridBoundingBox<I>: GridSize<ShapeArray = A>,
+    GridShape<A>: GridSize<ShapeArray = A>,
     GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
+    T: Copy,
 {
-    type Output = Grid<GridBoundingBox<I>, T>;
+    type BoundedOutput = Grid<GridBoundingBox<I>, T>;
+    type UnboundedOutput = Grid<GridShape<A>, T>;
 
-    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {
+    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::BoundedOutput {
         Grid {
             shape: self.shift_bounding_box(offset),
             data: self.data,
         }
     }
 
-    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
+    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::BoundedOutput> {
         Grid::new(bounds, self.data)
+    }
+
+    fn unbounded(self) -> Self::UnboundedOutput {
+        Grid {
+            shape: self.grid_shape(),
+            data: self.data,
+        }
     }
 }
 

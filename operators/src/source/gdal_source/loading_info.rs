@@ -498,11 +498,8 @@ pub struct GdalLoadingInfoTemporalSlice {
 mod tests {
     use geoengine_datatypes::{
         hashmap,
-        primitives::{
-            BandSelection, DateTime, DateTimeParseFormat, SpatialPartition2D, SpatialResolution,
-            TimeGranularity,
-        },
-        raster::RasterDataType,
+        primitives::{BandSelection, DateTime, DateTimeParseFormat, TimeGranularity},
+        raster::{BoundedGrid, GeoTransform, GridBoundingBox2D, GridShape2D, RasterDataType},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
@@ -522,8 +519,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -568,9 +565,9 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                bbox: None,
-                resolution: None,
-                bands: RasterBandDescriptors::new_single_band()
+                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
+                bands: RasterBandDescriptors::new_single_band(),
             }
         );
     }
@@ -581,15 +578,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 30),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::new_unchecked(0, 30),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -624,15 +617,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::default(),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -669,15 +658,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(-10, -5),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::new_unchecked(-10, -5),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -699,15 +684,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(50, 55),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::new_unchecked(50, 55),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -729,15 +710,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 22),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::new_unchecked(0, 22),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -768,15 +745,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 20),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::new_unchecked(0, 20),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -811,8 +784,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: vec![
@@ -879,23 +852,19 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band()
             }
         );
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 3),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::new_unchecked(0, 3),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -926,8 +895,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform_x: GeoTransform::new((0., 0.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(128, 128).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -955,12 +924,11 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
-            time_interval: TimeInterval::new(time_start, time_end).unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-128, 0], [-1, 127]).unwrap(),
+            TimeInterval::new(time_start, time_end).unwrap(),
+            BandSelection::first(),
+        );
 
         let loading_info = metadata.loading_info(query).await.unwrap();
         let mut iter = loading_info.info;
@@ -994,8 +962,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -1023,12 +991,11 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
-            time_interval: TimeInterval::new(time_start, time_end).unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-128, 0], [-1, 127]).unwrap(),
+            TimeInterval::new(time_start, time_end).unwrap(),
+            BandSelection::first(),
+        );
 
         let loading_info = metadata.loading_info(query).await.unwrap();
         let mut iter = loading_info.info;
@@ -1062,8 +1029,8 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                bbox: None,
-                resolution: None,
+                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
+                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -1091,15 +1058,14 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-128, 0], [-1, 127]).unwrap(),
+            TimeInterval::new_unchecked(
                 TimeInstance::from(DateTime::new_utc(2009, 7, 1, 0, 0, 0)),
                 TimeInstance::from(DateTime::new_utc(2013, 3, 1, 0, 0, 0)),
             ),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+            BandSelection::first(),
+        );
 
         let loading_info = metadata.loading_info(query).await.unwrap();
         let mut iter = loading_info.info;

@@ -4,7 +4,9 @@ use super::{
     GridIndexAccess, GridShape, GridShape2D, GridShape3D, GridShapeAccess, GridSize, Raster,
     TileInformation,
 };
-use super::{GridIndexAccessMut, RasterProperties};
+use super::{
+    BoundedGrid, ChangeGridBounds, GridBoundingBox2D, GridIndexAccessMut, RasterProperties,
+};
 use crate::primitives::CacheHint;
 use crate::primitives::{
     SpatialBounded, SpatialPartition2D, SpatialPartitioned, SpatialResolution, TemporalBounded,
@@ -12,6 +14,7 @@ use crate::primitives::{
 };
 use crate::raster::Pixel;
 use crate::util::{ByteSize, Result};
+use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
 
 /// A `RasterTile` is a `BaseTile` of raster data where the data is represented by `GridOrEmpty`.
@@ -35,7 +38,7 @@ pub type MaterializedRasterTile3D<T> = MaterializedRasterTile<GridShape3D, T>;
 pub struct BaseTile<G> {
     /// The `TimeInterval` where this tile is valid.
     pub time: TimeInterval,
-    /// The tile position is the position of the tile in the gird of tiles with origin at the origin of the global_geo_transform.
+    /// The tile position is the position of the tile in the grid of tiles with origin at the origin of the global_geo_transform.
     /// This is NOT a pixel position inside the tile.
     pub tile_position: GridIdx2D,
     // the band of the tile, relevant for multi-band raster
@@ -141,21 +144,60 @@ impl<G: PartialEq, const N: usize> IterableBaseTile<G> for [BaseTile<G>; N] {
     }
 }
 
-impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I {
+impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I
+where
+    G: GridSize,
+{
     fn tiles_equal_ignoring_cache_hint(&self, other: &dyn IterableBaseTile<G>) -> bool {
         let mut iter_self = self.iter_tiles();
         let mut iter_other = other.iter_tiles();
-
+        let mut i = 0;
         loop {
             match (iter_self.next(), iter_other.next()) {
                 (Some(a), Some(b)) => {
-                    if a.time != b.time
-                        || a.tile_position != b.tile_position
-                        || a.band != b.band
-                        || a.global_geo_transform != b.global_geo_transform
-                        || a.grid_array != b.grid_array
-                        || a.properties != b.properties
-                    {
+                    if a.time != b.time {
+                        println!("i: {}, a.time: {:?}, b.time: {:?}", i, a.time, b.time,);
+                        return false;
+                    }
+                    if a.tile_position != b.tile_position {
+                        println!(
+                            "i: {}, a.tile_position: {:?}, b.tile_position: {:?}",
+                            i, a.tile_position, b.tile_position
+                        );
+                        return false;
+                    }
+                    if a.band != b.band {
+                        println!("i: {}, a.band: {:?}, b.band: {:?}", i, a.band, b.band);
+                        return false;
+                    }
+                    if !approx_eq!(GeoTransform, a.global_geo_transform, b.global_geo_transform) {
+                        println!(
+                            "i: {}, approx_eq a.geo_transform: {:?}, b.geo_Transform: {:?}",
+                            i, a.global_geo_transform, b.global_geo_transform
+                        );
+                        return false;
+                    }
+                    if a.global_geo_transform != b.global_geo_transform {
+                        println!(
+                            "i: {}, equals a.geo_transform: {:?}, b.geo_Transform: {:?}",
+                            i, a.global_geo_transform, b.global_geo_transform
+                        );
+                        return false;
+                    }
+                    if a.properties != b.properties {
+                        println!(
+                            "i: {}, a.properties: {:?}, b.properties: {:?}",
+                            i, a.properties, b.properties
+                        );
+                        return false;
+                    }
+                    if a.grid_array != b.grid_array {
+                        println!(
+                            "i: {}, a.grid_array: {:?}, b.grid_array: {:?}",
+                            i,
+                            AsRef::<[usize]>::as_ref(&a.grid_array.axis_size()),
+                            AsRef::<[usize]>::as_ref(&b.grid_array.axis_size()),
+                        );
                         return false;
                     }
                 }
@@ -164,6 +206,7 @@ impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I 
                 // one iterator is exhausted, the other is not, so they are not equal
                 _ => return false,
             }
+            i += 1;
         }
     }
 }
@@ -336,6 +379,38 @@ where
                     .into();
             }
         }
+    }
+}
+
+impl<T> RasterTile2D<T>
+where
+    T: Pixel,
+{
+    pub fn into_inner_positioned_grid(self) -> GridOrEmpty<GridBoundingBox2D, T> {
+        let b = self.bounding_box();
+        let g = self.grid_array;
+        g.set_grid_bounds(b).expect("tile was valid before")
+    }
+}
+
+impl<T> BoundedGrid for RasterTile2D<T>
+where
+    T: Pixel,
+{
+    type IndexArray = [isize; 2];
+
+    fn bounding_box(&self) -> GridBoundingBox2D {
+        let shape = self.grid_array.shape_ref();
+        let offset =
+            self.tile_position * [shape.axis_size_y() as isize, shape.axis_size_x() as isize];
+        GridBoundingBox2D::new_unchecked(
+            offset,
+            offset
+                + [
+                    shape.axis_size_y() as isize - 1,
+                    shape.axis_size_x() as isize - 1,
+                ],
+        )
     }
 }
 

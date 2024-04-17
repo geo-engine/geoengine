@@ -249,9 +249,7 @@ mod tests {
         let (gdal_dataset_id, gdal_dataset_name) =
             add_ndvi_to_datasets(&app_ctx, false, false).await;
         let gdal = GdalSource {
-            params: GdalSourceParameters {
-                data: gdal_dataset_name,
-            },
+            params: GdalSourceParameters::new(gdal_dataset_name),
         }
         .boxed();
 

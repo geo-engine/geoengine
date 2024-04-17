@@ -5,15 +5,12 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{FutureExt, TryFutureExt};
 use geoengine_datatypes::primitives::CacheHint;
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
-    Blit, EmptyGrid, EmptyGrid2D, FromIndexFnParallel, GeoTransform, GridIdx, GridIdx2D,
-    GridIndexAccess, GridOrEmpty, GridSize,
+    ChangeGridBounds, FromIndexFnParallel, GridBlit, GridBoundingBox2D, GridContains, GridIdx,
+    GridIdx2D, GridIndexAccess, GridOrEmpty, GridSize, TilingStrategy,
 };
 use geoengine_datatypes::{
-    primitives::{
-        Coordinate2D, RasterQueryRectangle, SpatialPartition2D, TimeInstance, TimeInterval,
-    },
+    primitives::{RasterQueryRectangle, TimeInstance, TimeInterval},
     raster::{Pixel, RasterTile2D, TileInformation, TilingSpecification},
 };
 use num_traits::AsPrimitive;
@@ -96,28 +93,27 @@ where
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: RasterQueryRectangle,
+        _query_rect: RasterQueryRectangle,
         start_time: TimeInstance,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        let spatial_bounds = tile_info.spatial_partition();
+        let pixel_bounds = tile_info.global_pixel_bounds();
 
-        let margin_pixels = Coordinate2D::from((
-            self.neighborhood.x_radius() as f64 * tile_info.global_geo_transform.x_pixel_size(),
-            self.neighborhood.y_radius() as f64 * tile_info.global_geo_transform.y_pixel_size(),
-        ));
+        let margin_y = self.neighborhood.y_radius() as isize;
+        let margin_x = self.neighborhood.x_radius() as isize;
 
-        let enlarged_spatial_bounds = SpatialPartition2D::new(
-            spatial_bounds.upper_left() - margin_pixels,
-            spatial_bounds.lower_right() + margin_pixels,
+        let larger_bounds = GridBoundingBox2D::new_min_max(
+            pixel_bounds.y_min() - margin_y,
+            pixel_bounds.y_max() + margin_y,
+            pixel_bounds.x_min() - margin_x,
+            pixel_bounds.x_max() + margin_x,
         )?;
 
-        Ok(Some(RasterQueryRectangle {
-            spatial_bounds: enlarged_spatial_bounds,
-            time_interval: TimeInterval::new_instant(start_time)?,
-            spatial_resolution: query_rect.spatial_resolution,
-            attributes: band_idx.into(),
-        }))
+        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+            larger_bounds,
+            TimeInterval::new_instant(start_time)?,
+            band_idx.into(),
+        )))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {
@@ -131,7 +127,10 @@ where
 #[derive(Clone, Debug)]
 pub struct NeighborhoodAggregateAccu<P: Pixel, A> {
     pub output_info: TileInformation,
-    pub input_tile: RasterTile2D<P>,
+    pub accu_grid: GridOrEmpty<GridBoundingBox2D, P>,
+    pub accu_time: TimeInterval,
+    pub accu_cache_hint: CacheHint,
+    pub accu_band: u32,
     pub pool: Arc<ThreadPool>,
     pub neighborhood: Neighborhood,
     phantom_aggregate_fn: PhantomData<A>,
@@ -139,14 +138,20 @@ pub struct NeighborhoodAggregateAccu<P: Pixel, A> {
 
 impl<P: Pixel, A> NeighborhoodAggregateAccu<P, A> {
     pub fn new(
-        input_tile: RasterTile2D<P>,
+        accu_grid: GridOrEmpty<GridBoundingBox2D, P>,
+        accu_time: TimeInterval,
+        accu_cache_hint: CacheHint,
+        accu_band: u32,
         output_info: TileInformation,
         pool: Arc<ThreadPool>,
         neighborhood: Neighborhood,
     ) -> Self {
         NeighborhoodAggregateAccu {
             output_info,
-            input_tile,
+            accu_grid,
+            accu_time,
+            accu_cache_hint,
+            accu_band,
             pool,
             neighborhood,
             phantom_aggregate_fn: PhantomData,
@@ -168,7 +173,10 @@ where
         let neighborhood = self.neighborhood.clone();
         let output_tile = crate::util::spawn_blocking_with_thread_pool(self.pool, move || {
             apply_kernel_for_each_inner_pixel::<P, A>(
-                &self.input_tile,
+                &self.accu_grid,
+                &self.accu_time,
+                self.accu_cache_hint,
+                self.accu_band,
                 &self.output_info,
                 &neighborhood,
             )
@@ -185,7 +193,10 @@ where
 
 /// Apply kernel function to all pixels of the inner input tile in the 9x9 grid
 fn apply_kernel_for_each_inner_pixel<P, A>(
-    input: &RasterTile2D<P>,
+    accu_grid: &GridOrEmpty<GridBoundingBox2D, P>,
+    accu_time: &TimeInterval,
+    accu_cache_hint: CacheHint,
+    accu_band: u32,
     info_out: &TileInformation,
     neighborhood: &Neighborhood,
 ) -> RasterTile2D<P>
@@ -194,13 +205,13 @@ where
     f64: AsPrimitive<P>,
     A: AggregateFunction,
 {
-    if input.is_empty() {
+    if accu_grid.is_empty() {
         return RasterTile2D::new_with_tile_info(
-            input.time,
+            *accu_time,
             *info_out,
             0, // TODO
-            EmptyGrid::new(info_out.tile_size_in_pixels).into(),
-            CacheHint::max_duration(),
+            GridOrEmpty::new_empty(info_out.tile_size_in_pixels),
+            accu_cache_hint, // TODO: is this correct? Was CacheHint::max_duration() before
         );
     }
 
@@ -210,13 +221,16 @@ where
         let mut neighborhood_matrix =
             Vec::<Option<f64>>::with_capacity(neighborhood.matrix().number_of_elements());
 
-        let y_stop = y + neighborhood.y_width() as isize;
-        let x_stop = x + neighborhood.x_width() as isize;
+        let y_start = y - neighborhood.y_radius() as isize;
+        let x_start = x - neighborhood.x_radius() as isize;
+
+        let y_stop = y + neighborhood.y_radius() as isize;
+        let x_stop = x + neighborhood.x_radius() as isize;
         // copy row-by-row all pixels in x direction into kernel matrix
-        for y_index in y..y_stop {
-            for x_index in x..x_stop {
+        for y_index in y_start..=y_stop {
+            for x_index in x_start..=x_stop {
                 neighborhood_matrix.push(
-                    input
+                    accu_grid
                         .get_at_grid_index_unchecked([y_index, x_index])
                         .map(AsPrimitive::as_),
                 );
@@ -226,16 +240,25 @@ where
         A::apply(&neighborhood.apply(neighborhood_matrix))
     };
 
+    let out_pixel_bounds = info_out.global_pixel_bounds();
+
+    debug_assert!(accu_grid.shape_ref().contains(&out_pixel_bounds));
+
     // TODO: this will check for empty tiles. Change to MaskedGrid::from(…) to avoid this.
-    let out_data = GridOrEmpty::from_index_fn_parallel(&info_out.tile_size_in_pixels, map_fn);
+    let out_data = GridOrEmpty::from_index_fn_parallel(&out_pixel_bounds, map_fn);
+
+    debug_assert_eq!(
+        out_data.shape_ref().axis_size(),
+        info_out.tile_size_in_pixels.axis_size()
+    );
 
     RasterTile2D::new(
-        input.time,
+        *accu_time,
         info_out.global_tile_position,
-        input.band,
+        accu_band,
         info_out.global_geo_transform,
-        out_data,
-        input.cache_hint.clone_with_current_datetime(),
+        out_data.unbounded(),
+        accu_cache_hint.clone_with_current_datetime(),
     )
 }
 
@@ -248,37 +271,39 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
 ) -> NeighborhoodAggregateAccu<P, A> {
     // create an accumulator as a single tile that fits all the input tiles + some margin for the kernel size
 
-    let tiling = tiling_specification.strategy(
-        query_rect.spatial_resolution.x,
-        -query_rect.spatial_resolution.y,
+    let tiling = TilingStrategy::new(
+        tiling_specification.tile_size_in_pixels,
+        tile_info.global_geo_transform,
     );
 
-    let origin_coordinate = query_rect.spatial_bounds.upper_left();
+    let target_tile_start =
+        tiling_specification.tile_idx_to_global_pixel_idx(tile_info.global_tile_position);
+    let accu_start = target_tile_start
+        - GridIdx([
+            neighborhood.y_radius() as isize,
+            neighborhood.x_radius() as isize,
+        ]);
+    let accu_end = accu_start
+        + GridIdx2D::new_y_x(
+            tiling.tile_size_in_pixels.y() as isize + 2 * neighborhood.y_radius() as isize - 1, // -1 because the end is inclusive
+            tiling.tile_size_in_pixels.x() as isize + 2 * neighborhood.x_radius() as isize - 1,
+        );
 
-    let geo_transform = GeoTransform::new(
-        origin_coordinate,
-        query_rect.spatial_resolution.x,
-        -query_rect.spatial_resolution.y,
-    );
-
-    let shape = [
-        tiling.tile_size_in_pixels.axis_size_y() + 2 * neighborhood.y_radius(),
-        tiling.tile_size_in_pixels.axis_size_x() + 2 * neighborhood.x_radius(),
-    ];
+    let accu_bounds = GridBoundingBox2D::new(accu_start, accu_end)
+        .expect("accu bounds must be valid because they are calculated from valid bounds");
 
     // create a non-aligned (w.r.t. the tiling specification) grid by setting the origin to the top-left of the tile and the tile-index to [0, 0]
-    let grid = EmptyGrid2D::new(shape.into());
+    let grid = GridOrEmpty::new_empty(accu_bounds);
 
-    let input_tile = RasterTile2D::new(
+    NeighborhoodAggregateAccu::new(
+        grid,
         query_rect.time_interval,
-        [0, 0].into(),
-        0, // TODO
-        geo_transform,
-        GridOrEmpty::from(grid),
         CacheHint::max_duration(),
-    );
-
-    NeighborhoodAggregateAccu::new(input_tile, tile_info, pool, neighborhood)
+        0,
+        tile_info,
+        pool,
+        neighborhood,
+    )
 }
 
 type FoldFutureFn<P, F> = fn(
@@ -309,7 +334,8 @@ where
     f64: AsPrimitive<P>,
 {
     // get the time now because it is not known when the accu was created
-    accu.input_tile.time = tile.time;
+    accu.accu_time = tile.time;
+    accu.accu_cache_hint = tile.cache_hint;
 
     // if the tile is empty, we can skip it
     if tile.is_empty() {
@@ -317,17 +343,11 @@ where
     }
 
     // copy all input tiles into the accu to have all data for raster kernel
-    let mut accu_input_tile = accu.input_tile.into_materialized_tile();
-    accu_input_tile.blit(tile)?;
+    let x = tile.into_inner_positioned_grid();
 
-    let accu_input_tile: RasterTile2D<P> = accu_input_tile.into();
+    accu.accu_grid.grid_blit_from(&x);
 
-    Ok(NeighborhoodAggregateAccu::new(
-        accu_input_tile,
-        accu.output_info,
-        accu.pool,
-        accu.neighborhood,
-    ))
+    Ok(accu)
 }
 
 #[cfg(test)]
@@ -342,8 +362,8 @@ mod tests {
         },
     };
     use geoengine_datatypes::{
-        primitives::{BandSelection, SpatialResolution},
-        raster::TilingStrategy,
+        primitives::BandSelection,
+        raster::{GeoTransform, GridBoundingBox2D, TilingStrategy},
         util::test::TestDefault,
     };
 
@@ -352,25 +372,22 @@ mod tests {
     fn test_create_enlarged_tile() {
         let execution_context = MockExecutionContext::test_default();
 
-        let spatial_resolution = SpatialResolution::one();
         let tiling_strategy = TilingStrategy::new_with_tiling_spec(
             execution_context.tiling_specification,
-            spatial_resolution.x,
-            -spatial_resolution.y,
+            GeoTransform::new_with_coordinate_x_y(0., 1., 0., -1.),
         );
 
-        let spatial_partition = SpatialPartition2D::new((0., 1.).into(), (1., 0.).into()).unwrap();
+        let grid_bounds = GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap();
         let tile_info = tiling_strategy
-            .tile_information_iterator(spatial_partition)
+            .tile_information_iterator_from_grid_bounds(grid_bounds)
             .next()
             .unwrap();
 
-        let qrect = RasterQueryRectangle {
-            spatial_bounds: tile_info.spatial_partition(),
-            time_interval: TimeInstance::from_millis(0).unwrap().into(),
-            spatial_resolution,
-            attributes: BandSelection::first(),
-        };
+        let qrect = RasterQueryRectangle::new_with_grid_bounds(
+            tile_info.global_pixel_bounds(),
+            TimeInstance::from_millis(0).unwrap().into(),
+            BandSelection::first(),
+        );
 
         let aggregator = NeighborhoodAggregateTileNeighborhood::<u8, StandardDeviation>::new(
             NeighborhoodParams::Rectangle { dimensions: [5, 5] }
@@ -385,12 +402,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            tile_info.spatial_partition(),
-            SpatialPartition2D::new((0., 512.).into(), (512., 0.).into()).unwrap()
+            tile_info.global_pixel_bounds(),
+            GridBoundingBox2D::new([-512, 0], [-1, 511]).unwrap()
         );
+
         assert_eq!(
-            tile_query_rectangle.spatial_bounds,
-            SpatialPartition2D::new((-2., 514.).into(), (514., -2.).into()).unwrap()
+            tile_query_rectangle.spatial_query().grid_bounds(),
+            GridBoundingBox2D::new([-514, -2], [1, 513]).unwrap()
         );
 
         let accu = create_enlarged_tile::<u8, Sum>(
@@ -403,11 +421,8 @@ mod tests {
 
         assert_eq!(tile_info.tile_size_in_pixels.axis_size(), [512, 512]);
         assert_eq!(
-            accu.input_tile.grid_array.shape_ref().axis_size(),
+            accu.accu_grid.shape_ref().axis_size(),
             [512 + 2 + 2, 512 + 2 + 2]
         );
-
-        assert_eq!(accu.input_tile.tile_geo_transform().x_pixel_size(), 1.);
-        assert_eq!(accu.input_tile.tile_geo_transform().y_pixel_size(), -1.);
     }
 }

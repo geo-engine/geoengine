@@ -14,8 +14,8 @@ use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, ColumnSelection, FeatureDataType, FeatureDataValue, Geometry,
-    VectorQueryRectangle,
+    ColumnSelection, FeatureDataType, FeatureDataValue, Geometry, VectorQueryRectangle,
+    VectorSpatialQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
@@ -117,7 +117,7 @@ where
     G: Geometry + ArrowTyped + Sync + Send + 'static,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -191,9 +191,8 @@ mod tests {
     use geoengine_datatypes::collections::{
         ChunksEqualIgnoringCacheHint, FeatureCollectionModifications, MultiPointCollection,
     };
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
+        BoundingBox2D, CacheHint, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
     };
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -284,12 +283,11 @@ mod tests {
             panic!();
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
 
         let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
 

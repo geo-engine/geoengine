@@ -11,7 +11,7 @@ use crate::error::{
     RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique, Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::ColumnSelection;
+use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use geoengine_datatypes::util::ByteSize;
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
@@ -114,8 +114,8 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
             time: value.time.map(Into::into),
-            bbox: value.bbox.map(Into::into),
-            resolution: value.resolution.map(Into::into),
+            bbox: Some(value.spatial_bounds().into()), // TODO: maybe change the field to GeoTransform and pixel bounds
+            resolution: Some(value.tiling_geo_transform().spatial_resolution().into()),
             bands: value.bands.into(),
         }
     }
@@ -123,12 +123,40 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
 
 impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultDescriptor {
     fn from(value: RasterResultDescriptor) -> Self {
+        // FIXME: this is a hack to get the geo transform from the bbox and resolution
+
+        let bbox: geoengine_datatypes::primitives::SpatialPartition2D = value
+            .bbox
+            .expect("we need the bbox to create a geo transform")
+            .into();
+        let resolution: geoengine_datatypes::primitives::SpatialResolution = value
+            .resolution
+            .expect("we need the resolution to create a geo transform")
+            .into();
+
+        let geo_transform = geoengine_datatypes::raster::GeoTransform::new(
+            bbox.upper_left(),
+            resolution.x,
+            -resolution.y,
+        );
+
+        let pixel_bounds = geoengine_datatypes::raster::GridBoundingBox2D::new_min_max(
+            0,
+            (bbox.size_y() / resolution.y).ceil() as isize,
+            0,
+            (bbox.size_x() / resolution.x).ceil() as isize,
+        )
+        .expect("creating pixel bounds with 0., 0. start should work");
+
+        let tiling_bounds = geo_transform.shape_to_nearest_to_zero_based(&pixel_bounds);
+        let tiling_geo_transform = geo_transform.nearest_pixel_to_zero_based();
+
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
             time: value.time.map(Into::into),
-            bbox: value.bbox.map(Into::into),
-            resolution: value.resolution.map(Into::into),
+            geo_transform_x: tiling_geo_transform,
+            pixel_bounds_x: tiling_bounds,
             bands: value.bands.into(),
         }
     }
@@ -378,10 +406,7 @@ impl
         geoengine_operators::engine::StaticMetaData<
             geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-                ColumnSelection,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     >
     for StaticMetaData<
@@ -394,10 +419,7 @@ impl
         value: geoengine_operators::engine::StaticMetaData<
             geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-                ColumnSelection,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     ) -> Self {
         Self {
@@ -413,10 +435,7 @@ impl
         geoengine_operators::engine::StaticMetaData<
             geoengine_operators::source::OgrSourceDataset,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-                ColumnSelection,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     > for StaticMetaData<OgrSourceDataset, VectorResultDescriptor, QueryRectangle<BoundingBox2D>>
 {
@@ -424,10 +443,7 @@ impl
         value: geoengine_operators::engine::StaticMetaData<
             geoengine_operators::source::OgrSourceDataset,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-                ColumnSelection,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     ) -> Self {
         Self {
@@ -462,10 +478,7 @@ impl From<MockMetaData>
     for geoengine_operators::engine::StaticMetaData<
         geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
         geoengine_operators::engine::VectorResultDescriptor,
-        geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::BoundingBox2D,
-            ColumnSelection,
-        >,
+        geoengine_datatypes::primitives::VectorQueryRectangle,
     >
 {
     fn from(value: MockMetaData) -> Self {
@@ -481,10 +494,7 @@ impl From<OgrMetaData>
     for geoengine_operators::engine::StaticMetaData<
         geoengine_operators::source::OgrSourceDataset,
         geoengine_operators::engine::VectorResultDescriptor,
-        geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::BoundingBox2D,
-            ColumnSelection,
-        >,
+        geoengine_datatypes::primitives::VectorQueryRectangle,
     >
 {
     fn from(value: OgrMetaData) -> Self {

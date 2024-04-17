@@ -12,15 +12,12 @@ use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOption};
 use gdal::{Dataset, DriverManager, Metadata};
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BandSelection, DateTimeParseFormat, QueryRectangle, RasterQueryRectangle,
-    SpatialPartition2D, TimeInterval,
-};
 use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
+use geoengine_datatypes::primitives::{DateTimeParseFormat, RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{
-    ChangeGridBounds, EmptyGrid2D, GeoTransform, GridBlit, GridIdx, GridIdx2D, GridSize,
-    MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D, TilingSpecification,
-    TilingStrategy,
+    ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridBounds, GridIntersection,
+    GridOrEmpty, GridSize, MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D,
+    TilingSpecification, TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use log::debug;
@@ -49,6 +46,13 @@ pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'stat
 where
     T: Pixel + GdalType,
 {
+    let result_descriptor = processor.raster_result_descriptor();
+    let raster_geo_transform = result_descriptor.tiling_geo_transform();
+    let tiling_strategy = TilingStrategy {
+        tile_size_in_pixels: tiling_specification.tile_size_in_pixels,
+        geo_transform: raster_geo_transform,
+    };
+
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
     let tiles = abortable_query_execution(
@@ -61,7 +65,7 @@ where
     let (initial_tile_time, file_path, dataset, writer) = create_multiband_dataset_and_writer(
         &tiles,
         &query_rect,
-        tiling_specification,
+        tiling_strategy,
         gdal_tiff_options,
         gdal_tiff_metadata,
     )?;
@@ -108,9 +112,9 @@ where
 }
 
 fn create_multiband_dataset_and_writer<T>(
-    tiles: &[RasterTile2D<T>],
-    query_rect: &QueryRectangle<SpatialPartition2D, BandSelection>,
-    tiling_specification: TilingSpecification,
+    tiles: &Vec<RasterTile2D<T>>,
+    query_rect: &RasterQueryRectangle,
+    tiling_strategy: TilingStrategy,
     gdal_tiff_options: GdalGeoTiffOptions,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
 ) -> Result<(TimeInterval, PathBuf, Dataset, GdalDatasetWriter<T>), Error>
@@ -129,28 +133,24 @@ where
         geo_transform: initial_tile_info.global_geo_transform,
     };
     let num_tiles_per_timestep = strat
-        .tile_grid_box(query_rect.spatial_bounds)
+        .global_pixel_grid_bounds_to_tile_grid_bounds(query_rect.spatial_query().grid_bounds())
         .number_of_elements();
     let num_timesteps = tiles.len() / num_tiles_per_timestep;
 
-    let x_pixel_size = query_rect.spatial_resolution.x;
-    let y_pixel_size = query_rect.spatial_resolution.y;
-    let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as usize;
-    let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as usize;
-    let output_geo_transform = GeoTransform::new(
-        query_rect.spatial_bounds.upper_left(),
-        x_pixel_size,
-        -y_pixel_size,
-    );
+    let x_pixel_size = tiling_strategy.geo_transform.x_pixel_size();
+    let y_pixel_size = tiling_strategy.geo_transform.y_pixel_size();
 
-    let global_geo_transform = tiling_specification
-        .strategy(x_pixel_size, -y_pixel_size)
-        .geo_transform;
-    let window_start =
-        global_geo_transform.coordinate_to_grid_idx_2d(query_rect.spatial_bounds.upper_left());
-    let window_end = window_start + GridIdx2D::from([height as isize, width as isize]);
+    let coordinate_of_ul_query_pixel = strat
+        .geo_transform
+        .grid_idx_to_pixel_upper_left_coordinate_2d(
+            query_rect.spatial_query().grid_bounds().min_index(),
+        );
+    let output_geo_transform =
+        GeoTransform::new(coordinate_of_ul_query_pixel, x_pixel_size, y_pixel_size);
+    let out_pixel_bounds = query_rect.spatial_query().grid_bounds();
 
-    let uncompressed_byte_size = width * height * std::mem::size_of::<T>();
+    let uncompressed_byte_size =
+        query_rect.spatial_query.grid_bounds().number_of_elements() * std::mem::size_of::<T>();
 
     let use_big_tiff =
         gdal_tiff_options.force_big_tiff || uncompressed_byte_size >= BIG_TIFF_BYTE_THRESHOLD;
@@ -183,8 +183,8 @@ where
 
     let mut dataset = driver.create_with_band_type_with_options::<T, _>(
         &file_path,
-        width as isize,
-        height as isize,
+        query_rect.spatial_query().grid_bounds().axis_size_x() as isize,
+        query_rect.spatial_query().grid_bounds().axis_size_y() as isize,
         num_timesteps as isize,
         &options,
     )?;
@@ -203,12 +203,10 @@ where
     let writer = GdalDatasetWriter::<T> {
         gdal_tiff_options,
         gdal_tiff_metadata,
-        _output_bounds: query_rect.spatial_bounds,
+        output_pixel_grid_bounds: out_pixel_bounds,
         output_geo_transform,
         use_big_tiff,
         _type: Default::default(),
-        window_start,
-        window_end,
     };
 
     Ok((initial_tile_time, file_path, dataset, writer))
@@ -216,7 +214,7 @@ where
 
 async fn consume_stream_into_vec<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    query_rect: geoengine_datatypes::primitives::QueryRectangle<SpatialPartition2D, BandSelection>,
+    query_rect: geoengine_datatypes::primitives::RasterQueryRectangle,
     query_ctx: C,
     tile_limit: Option<usize>,
 ) -> Result<Vec<RasterTile2D<T>>>
@@ -249,7 +247,7 @@ pub async fn single_timestep_raster_stream_to_geotiff_bytes<T, C: QueryContext +
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
-    tiling_specification: TilingSpecification,
+    tiling_strategy: TilingStrategy,
 ) -> Result<Vec<u8>>
 where
     T: Pixel + GdalType,
@@ -262,7 +260,7 @@ where
         gdal_tiff_options,
         tile_limit,
         conn_closed,
-        tiling_specification,
+        tiling_strategy,
     )
     .await?;
 
@@ -287,7 +285,7 @@ pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
-    tiling_specification: TilingSpecification,
+    tiling_strategy: TilingStrategy,
 ) -> Result<Vec<Vec<u8>>>
 where
     T: Pixel + GdalType,
@@ -303,7 +301,7 @@ where
         gdal_tiff_options,
         tile_limit,
         conn_closed,
-        tiling_specification,
+        tiling_strategy,
     )
     .await?
     .into_iter()
@@ -326,7 +324,7 @@ pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
-    tiling_specification: TilingSpecification,
+    tiling_strategy: TilingStrategy,
 ) -> Result<Vec<GdalLoadingInfoTemporalSlice>>
 where
     P: Pixel + GdalType,
@@ -355,14 +353,15 @@ where
         None
     };
 
-    let dataset_holder: Result<GdalDatasetHolder<P>> = Ok(GdalDatasetHolder::new_with_tiling_spec(
-        tiling_specification,
-        &file_path,
-        &query_rect,
-        gdal_tiff_metadata,
-        gdal_tiff_options,
-        gdal_config_options,
-    ));
+    let dataset_holder: Result<GdalDatasetHolder<P>> =
+        Ok(GdalDatasetHolder::new_with_tiling_strat(
+            tiling_strategy,
+            &file_path,
+            &query_rect,
+            gdal_tiff_metadata,
+            gdal_tiff_options,
+            gdal_config_options,
+        ));
 
     let tile_stream = processor
         .raster_query(query_rect.clone(), &query_ctx)
@@ -494,8 +493,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
         gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
         gdal_tiff_options: GdalGeoTiffOptions,
         gdal_config_options: Option<Vec<(String, String)>>,
-        window_start: GridIdx2D,
-        window_end: GridIdx2D,
+        tiling_strategy: TilingStrategy,
     ) -> Self {
         const INTERMEDIATE_FILE_SUFFIX: &str = "GEO-ENGINE-TMP";
 
@@ -514,27 +512,35 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
         let file_path = file_path.join("raster.tiff");
         let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
 
-        let x_pixel_size = query_rect.spatial_resolution.x;
-        let y_pixel_size = query_rect.spatial_resolution.y;
-        let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as u32;
-        let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as u32;
+        let width = query_rect.spatial_query().grid_bounds().axis_size_x();
+        let height = query_rect.spatial_query().grid_bounds().axis_size_y();
+
+        let output_pixel_grid_bounds = query_rect.spatial_query().grid_bounds();
+
+        let out_geo_transform_origin = tiling_strategy
+            .geo_transform
+            .grid_idx_to_pixel_upper_left_coordinate_2d(
+                query_rect.spatial_query().grid_bounds().min_index(),
+            );
 
         let output_geo_transform = GeoTransform::new(
-            query_rect.spatial_bounds.upper_left(),
-            x_pixel_size,
-            -y_pixel_size,
+            out_geo_transform_origin,
+            tiling_strategy.geo_transform.x_pixel_size(),
+            tiling_strategy.geo_transform.y_pixel_size(),
         );
+
+        let output_gdal_geo_transform = GdalDatasetGeoTransform {
+            origin_coordinate: out_geo_transform_origin,
+            x_pixel_size: tiling_strategy.geo_transform.x_pixel_size(),
+            y_pixel_size: tiling_strategy.geo_transform.y_pixel_size(),
+        };
 
         let intermediate_dataset_parameters = GdalDatasetParameters {
             file_path: intermediate_file_path,
             rasterband_channel: 1,
-            geo_transform: GdalDatasetGeoTransform {
-                origin_coordinate: query_rect.spatial_bounds.upper_left(),
-                x_pixel_size,
-                y_pixel_size: -y_pixel_size,
-            },
-            width: width as usize,
-            height: height as usize,
+            geo_transform: output_gdal_geo_transform,
+            width,
+            height,
             file_not_found_handling: FileNotFoundHandling::Error,
             no_data_value: None, // `None` will let the GdalSource detect the correct no-data value.
             properties_mapping: None, // TODO: add properties
@@ -561,8 +567,8 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             intermediate_dataset: None,
             create_meta: IntermediateDatasetMetadata {
                 raster_band_index: rasterband_index,
-                width,
-                height,
+                width: width as u32,
+                height: height as u32,
                 use_big_tiff,
                 path_with_placeholder,
                 gdal_config_options,
@@ -571,12 +577,10 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             dataset_writer: GdalDatasetWriter {
                 gdal_tiff_options,
                 gdal_tiff_metadata,
-                _output_bounds: query_rect.spatial_bounds,
+                output_pixel_grid_bounds,
                 output_geo_transform,
                 use_big_tiff,
                 _type: Default::default(),
-                window_start,
-                window_end,
             },
             result: vec![],
         }
@@ -653,37 +657,21 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
         Ok(())
     }
 
-    fn new_with_tiling_spec(
-        tiling_specification: TilingSpecification,
+    fn new_with_tiling_strat(
+        tiling_strategy: TilingStrategy,
         file_path: &Path,
         query_rect: &RasterQueryRectangle,
         gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
         gdal_tiff_options: GdalGeoTiffOptions,
         gdal_config_options: Option<Vec<(String, String)>>,
     ) -> Self {
-        let x_pixel_size = query_rect.spatial_resolution.x;
-        let y_pixel_size = query_rect.spatial_resolution.y;
-
-        let width = (query_rect.spatial_bounds.size_x() / x_pixel_size).ceil() as u32;
-        let height = (query_rect.spatial_bounds.size_y() / y_pixel_size).ceil() as u32;
-
-        let global_geo_transform = tiling_specification
-            .strategy(x_pixel_size, -y_pixel_size)
-            .geo_transform;
-
-        let window_start =
-            global_geo_transform.coordinate_to_grid_idx_2d(query_rect.spatial_bounds.upper_left());
-
-        let window_end = window_start + GridIdx2D::from([height as isize, width as isize]);
-
         Self::new(
             file_path,
             query_rect,
             gdal_tiff_metadata,
             gdal_tiff_options,
             gdal_config_options,
-            window_start,
-            window_end,
+            tiling_strategy,
         )
     }
 
@@ -734,82 +722,43 @@ pub struct GdalGeoTiffDatasetMetadata {
 struct GdalDatasetWriter<P: Pixel + GdalType> {
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
-    _output_bounds: SpatialPartition2D, // currently unused due to workaround for intersection and contained because of float precision
+    output_pixel_grid_bounds: GridBoundingBox2D,
     output_geo_transform: GeoTransform,
     use_big_tiff: bool,
     _type: std::marker::PhantomData<P>,
-    window_start: GridIdx2D,
-    window_end: GridIdx2D,
 }
 
 impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
     fn write_tile_into_band(&self, tile: RasterTile2D<P>, raster_band: RasterBand) -> Result<()> {
         let tile_info = tile.tile_information();
 
-        let tile_start = tile_info.global_upper_left_pixel_idx();
-        let [tile_height, tile_width] = tile_info.tile_size_in_pixels.shape_array;
-        let tile_end = tile_start + GridIdx2D::from([tile_height as isize, tile_width as isize]);
+        let tile_grid_bounds = tile_info.global_pixel_bounds();
 
-        let GridIdx([tile_start_y, tile_start_x]) = tile_start;
-        let GridIdx([tile_end_y, tile_end_x]) = tile_end;
-        let GridIdx([window_start_y, window_start_x]) = self.window_start;
-        let GridIdx([window_end_y, window_end_x]) = self.window_end;
+        let out_data_bounds = self
+            .output_pixel_grid_bounds
+            .intersection(&tile_grid_bounds);
 
-        // compute the upper left pixel index in the output raster and extract the input data
-        let (GridIdx([output_ul_y, output_ul_x]), grid_array) =
-            // TODO: check contains on the `SpatialPartition2D`s once the float precision issue is fixed
-            if tile_start_x >= window_start_x && tile_start_y >= window_start_y && tile_end_x <= window_end_x && tile_end_y <= window_end_y {
-                // tile is completely inside the output raster
-                (
-                    tile_info.global_upper_left_pixel_idx() - self.window_start,
-                    tile.into_materialized_tile().grid_array,
-                )
-            } else {
-                // extract relevant data from tile (intersection with output_bounds)
+        if out_data_bounds.is_none() {
+            return Ok(());
+        }
 
-                // TODO: compute the intersection on the `SpatialPartition2D`s once the float precision issue is fixed
+        let out_data_bounds = out_data_bounds.expect("was checked before");
 
-                if tile_end_y < window_start_y
-                    || tile_end_x < window_start_x
-                    || tile_start_y >= window_end_y
-                    || tile_start_x >= window_end_x
-                {
-                    // tile is outside of output bounds
-                    return Ok(());
-                }
+        let mut write_buffer_grid = GridOrEmpty::<_, P>::new_empty(out_data_bounds);
 
-                let intersection_start = GridIdx2D::from([
-                    std::cmp::max(tile_start_y, window_start_y),
-                    std::cmp::max(tile_start_x, window_start_x),
-                ]);
-                let GridIdx([intersection_start_y, intersection_start_x]) = intersection_start;
+        write_buffer_grid.grid_blit_from(&tile.into_inner_positioned_grid());
 
-                let width = std::cmp::min(
-                    tile_info.tile_size_in_pixels.axis_size_x() as isize,
-                    window_end_x - intersection_start_x,
-                );
+        let window_start = out_data_bounds.min_index() - self.output_pixel_grid_bounds.min_index();
+        let window = (window_start.x(), window_start.y());
 
-                let height = std::cmp::min(
-                    tile_info.tile_size_in_pixels.axis_size_y() as isize,
-                    window_end_y - intersection_start_y,
-                );
+        let window_size = (
+            write_buffer_grid.shape_ref().axis_size_x(),
+            write_buffer_grid.shape_ref().axis_size_y(),
+        );
 
-                let mut output_grid =
-                    MaskedGrid2D::from(EmptyGrid2D::new([height as usize, width as usize].into()));
-
-                let shift_offset = intersection_start - tile_start;
-                let shifted_source = tile
-                    .grid_array
-                    .shift_by_offset(GridIdx([-1, -1]) * shift_offset);
-
-                output_grid.grid_blit_from(&shifted_source);
-
-                (intersection_start - self.window_start, output_grid)
-            };
-
-        let window = (output_ul_x, output_ul_y);
-        let [shape_y, shape_x] = grid_array.axis_size();
-        let window_size = (shape_x, shape_y);
+        let grid_array = write_buffer_grid
+            .into_materialized_masked_grid()
+            .unbounded();
 
         // Check if the gdal_tiff_metadata no-data value is set.
         // If it is set write a geotiff with no-data values.
@@ -1049,56 +998,45 @@ mod tests {
     use std::marker::PhantomData;
     use std::ops::Add;
 
-    use geoengine_datatypes::primitives::CacheHint;
-    use geoengine_datatypes::primitives::{DateTime, Duration};
-    use geoengine_datatypes::raster::{Grid, RasterDataType};
-    use geoengine_datatypes::{
-        primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::TilingSpecification,
-        util::test::TestDefault,
-    };
-
     use crate::engine::RasterResultDescriptor;
     use crate::mock::MockRasterSourceProcessor;
     use crate::util::gdal::gdal_open_dataset;
     use crate::{
         engine::MockQueryContext, source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data,
     };
+    use geoengine_datatypes::primitives::{
+        BandSelection, CacheHint, DateTime, Duration, TimeInterval,
+    };
+    use geoengine_datatypes::raster::{Grid, GridBoundingBox2D, RasterDataType};
+    use geoengine_datatypes::util::test::TestDefault;
 
     use super::*;
 
     #[tokio::test]
     async fn geotiff_with_no_data_from_stream() {
         let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
-
         let metadata = create_ndvi_meta_data();
 
+        let tiling_specification = TilingSpecification::new([600, 600].into());
+
+        let tiling_strategy =
+            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
+
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
+            overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
 
-        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
-                    query_bbox.size_x() / 600.,
-                    query_bbox.size_y() / 600.,
-                ),
-                attributes: BandSelection::first(),
-            },
+            RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1111,7 +1049,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_specification,
+            tiling_strategy,
         )
         .await
         .unwrap();
@@ -1121,6 +1059,7 @@ mod tests {
         //    "../test_data/raster/geotiff_from_stream_compressed.tiff",
         // );
 
+        // FIXME: this will fail since we no longer use scaling sources which causes this to write a subset of the data not a scaled version of all data
         assert_eq!(
             include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
@@ -1131,35 +1070,29 @@ mod tests {
     #[tokio::test]
     async fn geotiff_with_mask_from_stream() {
         let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
         let metadata = create_ndvi_meta_data();
 
+        let tiling_specification = TilingSpecification::new([600, 600].into());
+
+        let tiling_strategy =
+            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
+
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
+            overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
 
-        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
-                    query_bbox.size_x() / 600.,
-                    query_bbox.size_y() / 600.,
-                ),
-                attributes: BandSelection::first(),
-            },
+            RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: None,
@@ -1172,7 +1105,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_specification,
+            tiling_strategy,
         )
         .await
         .unwrap();
@@ -1188,35 +1121,29 @@ mod tests {
     #[tokio::test]
     async fn geotiff_big_tiff_from_stream() {
         let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
         let metadata = create_ndvi_meta_data();
 
+        let tiling_specification = TilingSpecification::new([600, 600].into());
+
+        let tiling_strategy =
+            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
+
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
+            overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
 
-        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
-                    query_bbox.size_x() / 600.,
-                    query_bbox.size_y() / 600.,
-                ),
-                attributes: BandSelection::first(),
-            },
+            RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1229,7 +1156,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_specification,
+            tiling_strategy,
         )
         .await
         .unwrap();
@@ -1249,35 +1176,28 @@ mod tests {
     #[tokio::test]
     async fn cloud_optimized_geotiff_big_tiff_from_stream() {
         let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
         let metadata = create_ndvi_meta_data();
 
+        let tiling_specification = TilingSpecification::new([600, 600].into());
+
+        let tiling_strategy =
+            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
+            overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
 
-        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
-                    query_bbox.size_x() / 600.,
-                    query_bbox.size_y() / 600.,
-                ),
-                attributes: BandSelection::first(),
-            },
+            RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1290,7 +1210,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_specification,
+            tiling_strategy,
         )
         .await
         .unwrap();
@@ -1313,35 +1233,29 @@ mod tests {
     #[tokio::test]
     async fn cloud_optimized_geotiff_from_stream() {
         let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
         let metadata = create_ndvi_meta_data();
 
+        let tiling_specification = TilingSpecification::new([600, 600].into());
+
+        let tiling_strategy =
+            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
+
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
+            overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
 
-        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
-                    query_bbox.size_x() / 600.,
-                    query_bbox.size_y() / 600.,
-                ),
-                attributes: BandSelection::first(),
-            },
+            RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1354,7 +1268,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_specification,
+            tiling_strategy,
         )
         .await
         .unwrap();
@@ -1377,38 +1291,29 @@ mod tests {
     #[tokio::test]
     async fn cloud_optimized_geotiff_multiple_timesteps_from_stream() {
         let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
         let metadata = create_ndvi_meta_data();
 
+        let tiling_specification = TilingSpecification::new([600, 600].into());
+
+        let tiling_strategy =
+            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
+
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
+            overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
 
-        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
-
         let mut bytes = raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(
-                    1_388_534_400_000,
-                    1_388_534_400_000 + 7_776_000_000,
-                )
-                .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
-                    query_bbox.size_x() / 600.,
-                    query_bbox.size_y() / 600.,
-                ),
-                attributes: BandSelection::first(),
-            },
+            RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 7_776_000_000).unwrap(),
+                BandSelection::first(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1421,7 +1326,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_specification,
+            tiling_strategy,
         )
         .await
         .unwrap();
@@ -1458,38 +1363,29 @@ mod tests {
     #[tokio::test]
     async fn cloud_optimized_geotiff_multiple_timesteps_from_stream_wrong_request() {
         let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
         let metadata = create_ndvi_meta_data();
 
+        let tiling_specification = TilingSpecification::new([600, 600].into());
+
+        let tiling_strategy =
+            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
+
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
+            overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
 
-        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(
-                    1_388_534_400_000,
-                    1_388_534_400_000 + 7_776_000_000,
-                )
-                .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
-                    query_bbox.size_x() / 600.,
-                    query_bbox.size_y() / 600.,
-                ),
-                attributes: BandSelection::first(),
-            },
+            RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 7_776_000_000).unwrap(),
+                BandSelection::first(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1502,7 +1398,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_specification,
+            tiling_strategy,
         )
         .await;
 
@@ -1512,35 +1408,29 @@ mod tests {
     #[tokio::test]
     async fn geotiff_from_stream_limit() {
         let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
 
         let metadata = create_ndvi_meta_data();
 
+        let tiling_specification = TilingSpecification::new([600, 600].into());
+
+        let tiling_strategy =
+            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
+
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
+            overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
 
-        let query_bbox = SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
-                    query_bbox.size_x() / 600.,
-                    query_bbox.size_y() / 600.,
-                ),
-                attributes: BandSelection::first(),
-            },
+            RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Some(0.),
@@ -1553,64 +1443,11 @@ mod tests {
             },
             Some(1),
             Box::pin(futures::future::pending()),
-            tiling_specification,
+            tiling_strategy,
         )
         .await;
 
         assert!(bytes.is_err());
-    }
-
-    #[tokio::test]
-    async fn geotiff_from_stream_in_range_of_window() {
-        let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
-
-        let metadata = create_ndvi_meta_data();
-
-        let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
-            tiling_specification,
-            meta_data: Box::new(metadata),
-            _phantom_data: PhantomData,
-        };
-
-        let query_bbox =
-            SpatialPartition2D::new((-180., -66.227_224_576_271_84).into(), (180., -90.).into())
-                .unwrap();
-
-        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
-            gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(
-                    0.228_716_645_489_199_48,
-                    0.226_407_384_987_887_26,
-                ),
-                attributes: BandSelection::first(),
-            },
-            ctx,
-            GdalGeoTiffDatasetMetadata {
-                no_data_value: Some(0.),
-                spatial_reference: SpatialReference::epsg_4326(),
-            },
-            GdalGeoTiffOptions {
-                as_cog: false,
-                compression_num_threads: GdalCompressionNumThreads::AllCpus,
-                force_big_tiff: false,
-            },
-            None,
-            Box::pin(futures::future::pending()),
-            tiling_specification,
-        )
-        .await;
-
-        assert!(bytes.is_ok());
     }
 
     fn generate_time_intervals(
@@ -1660,24 +1497,29 @@ mod tests {
             },
         ];
 
+        let result_descriptor = RasterResultDescriptor::with_datatype_and_num_bands(
+            RasterDataType::U8,
+            1,
+            GridBoundingBox2D::new([-4, -4], [4, 4]).unwrap(),
+            GeoTransform::test_default(),
+        );
+        let tiling_specification = TilingSpecification::new([600, 600].into());
+        let tiling_stratgy =
+            tiling_specification.strategy(result_descriptor.tiling_geo_transform());
+
         let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
         let processor = MockRasterSourceProcessor {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
+            result_descriptor,
             data,
             tiling_specification,
         }
         .boxed();
-        let query_rectangle = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(1_596_109_801_000, 1_659_181_801_000),
-            spatial_resolution: GeoTransform::test_default().spatial_resolution(),
-            attributes: BandSelection::first(),
-        };
+
+        let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-2, -1], [0, 1]).unwrap(),
+            TimeInterval::new_unchecked(1_596_109_801_000, 1_659_181_801_000),
+            BandSelection::first(),
+        );
 
         let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
         let expected_paths = file_suffixes
@@ -1700,7 +1542,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_specification,
+            tiling_stratgy,
         )
         .await
         .unwrap();
@@ -1776,32 +1618,27 @@ mod tests {
     #[tokio::test]
     async fn multi_band_geotriff() {
         let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [512, 512].into());
 
         let metadata = create_ndvi_meta_data();
 
+        let tiling_specification = TilingSpecification::new([512, 512].into());
+
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
+            result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
+            overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
 
-        let query_bbox = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
-
         let (mut bytes, _) = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_bbox,
+            RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new_min_max(0, 1799, 0, 3599).unwrap(),
                 // 1.1.2014 - 1.4.2014
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_396_306_800_000).unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
-                attributes: BandSelection::first(),
-            },
+                TimeInterval::new(1_388_534_400_000, 1_396_306_800_000).unwrap(),
+                BandSelection::first(),
+            ),
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: None,

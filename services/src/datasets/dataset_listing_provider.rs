@@ -460,7 +460,7 @@ mod tests {
     use geoengine_datatypes::{
         collections::VectorDataType,
         primitives::{CacheTtlSeconds, TimeGranularity, TimeStep},
-        raster::RasterDataType,
+        raster::{GeoTransform, GridBoundingBox, RasterDataType},
         spatial_reference::SpatialReferenceOption,
     };
     use geoengine_operators::{
@@ -704,8 +704,8 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: None,
-            bbox: None,
-            resolution: None,
+            geo_transform_x: GeoTransform::new((0., 0.).into(), 1., -1.),
+            pixel_bounds_x: GridBoundingBox::new([0, 0], [0, 0]).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -737,8 +737,8 @@ mod tests {
                 x_pixel_size: 0.0,
                 y_pixel_size: 0.0,
             },
-            width: 0,
-            height: 0,
+            width: 1,
+            height: 1,
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value: None,
             properties_mapping: None,

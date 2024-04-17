@@ -1,3 +1,4 @@
+use crate::engine::RasterResultDescriptor;
 use crate::util::statistics::StatisticsError;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
@@ -437,6 +438,12 @@ pub enum Error {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    #[snafu(display("RasterResults are incompatible error: {a:?} vs {b:?}"))]
+    RasterResultsIncompatible {
+        a: RasterResultDescriptor,
+        b: RasterResultDescriptor,
+    },
+
     #[snafu(display("Input stream {stream_index} is not temporally aligned. Expected {expected:?}, found {found:?}."))]
     InputStreamsMustBeTemporallyAligned {
         stream_index: usize,
@@ -489,6 +496,8 @@ pub enum Error {
     BandDoesNotExist {
         band_idx: u32,
     },
+
+    ReprojectionFailed,
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

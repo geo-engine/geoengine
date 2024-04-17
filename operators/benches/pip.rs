@@ -2,13 +2,13 @@
 
 use futures::StreamExt;
 use geo_rand::{GeoRand, GeoRandParameters};
-use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPolygonCollection};
-use geoengine_datatypes::primitives::{
-    BoundingBox2D, MultiPoint, QueryRectangle, SpatialResolution,
+use geoengine_datatypes::collections::{
+    FeatureCollectionInfos, MultiPointCollection, MultiPolygonCollection,
 };
-use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, CacheHint, ColumnSelection, MultiPoint, TimeInterval, VectorQueryRectangle,
+};
 use geoengine_datatypes::util::test::TestDefault;
-use geoengine_datatypes::{collections::MultiPointCollection, primitives::TimeInterval};
 use geoengine_operators::engine::{
     ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, VectorOperator,
     WorkflowOperatorPath,
@@ -44,12 +44,11 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
 
     let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-    let query_rectangle = QueryRectangle {
-        spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-        time_interval: TimeInterval::default(),
-        spatial_resolution: SpatialResolution::zero_point_one(),
-        attributes: ColumnSelection::all(),
-    };
+    let query_rectangle = VectorQueryRectangle::with_bounds(
+        BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+        TimeInterval::default(),
+        ColumnSelection::all(),
+    );
     let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, num_threads);
 
     let query = query_processor.query(query_rectangle, &ctx).await.unwrap();

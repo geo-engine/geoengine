@@ -11,7 +11,9 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{Plot, PlotData};
-use geoengine_datatypes::primitives::{FeatureDataRef, Measurement, PlotQueryRectangle};
+use geoengine_datatypes::primitives::{
+    ColumnSelection, FeatureDataRef, Measurement, PlotQueryRectangle, VectorQueryRectangle,
+};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::collections::HashMap;
@@ -224,9 +226,16 @@ impl CountPieChartVectorQueryProcessor {
         let mut slices: HashMap<String, f64> = HashMap::new();
 
         // TODO: parallelize
+        let query: VectorQueryRectangle = VectorQueryRectangle::new(
+            query.spatial_query,
+            query.time_interval,
+            ColumnSelection::all(),
+        );
 
         call_on_generic_vector_processor!(&self.input, processor => {
-            let mut query = processor.query(query.into(), ctx).await?;
+
+
+            let mut query = processor.query(query, ctx).await?;
 
             while let Some(collection) = query.next().await {
                 let collection = collection?;
@@ -293,8 +302,8 @@ mod tests {
     use crate::test_data;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, FeatureDataType, NoGeometry, PlotSeriesSelection,
-        SpatialResolution, TimeInterval,
+        BoundingBox2D, FeatureData, FeatureDataType, NoGeometry, PlotQueryRectangle,
+        PlotSeriesSelection, TimeInterval,
     };
     use geoengine_datatypes::primitives::{CacheTtlSeconds, VectorQueryRectangle};
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -396,13 +405,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
@@ -473,13 +480,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
@@ -620,13 +625,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
@@ -669,13 +672,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
@@ -750,13 +751,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await
@@ -815,13 +814,11 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
                 &MockQueryContext::new(ChunkByteSize::MIN),
             )
             .await

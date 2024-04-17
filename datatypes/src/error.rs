@@ -330,6 +330,8 @@ pub enum Error {
     DuplicateBandInQueryBandSelection,
     QueryBandSelectionMustNotBeEmpty,
 
+    TilingGeoTransformOriginCoordinateMismatch,
+    TilingGeoTransformResolutionMissmatch,
     #[snafu(display("Invalid number of suffixes, expected {} found {}", expected, found))]
     InvalidNumberOfSuffixes {
         expected: usize,
