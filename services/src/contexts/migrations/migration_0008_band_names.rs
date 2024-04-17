@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use futures::{pin_mut, TryStreamExt};
 use serde_json::json;
 use tokio_postgres::Transaction;
 use uuid::Uuid;
@@ -22,24 +21,25 @@ impl Migration for Migration0008BandNames {
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
-        let empty_params: Vec<String> = vec![];
+        let stmt = tx.prepare("SELECT id, workflow FROM workflows;").await?;
+        let portal = tx.bind(&stmt, &[]).await?;
+        let batch_size = 100;
+        let mut rows = tx.query_portal(&portal, batch_size).await?;
 
-        let stmt = tx.prepare("SELECT id, workflow FROM workflows").await?;
-        let cursor = tx.query_raw(&stmt, &empty_params).await?;
+        while !rows.is_empty() {
+            for row in rows {
+                let id: Uuid = row.get(0);
+                let mut workflow: serde_json::Value = row.get(1);
 
-        pin_mut!(cursor);
-        while let Some(row) = cursor.try_next().await? {
-            let id: Uuid = row.get(0);
-            let mut workflow: serde_json::Value = row.get(1);
-
-            map_objects(&mut workflow, &migrate_expression);
-            map_objects(&mut workflow, &migrate_raster_stacker);
-
-            tx.execute(
-                "UPDATE workflows SET workflow = $1 WHERE id = $2",
-                &[&workflow, &id],
-            )
-            .await?;
+                map_objects(&mut workflow, &migrate_expression);
+                map_objects(&mut workflow, &migrate_raster_stacker);
+                tx.execute(
+                    "UPDATE workflows SET workflow = $1 WHERE id = $2",
+                    &[&workflow, &id],
+                )
+                .await?;
+            }
+            rows = tx.query_portal(&portal, batch_size).await?;
         }
 
         Ok(())
@@ -108,6 +108,56 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::migrations::all_migrations;
+    use crate::contexts::{migrate_database, Migration0000Initial};
+    use crate::util::config::get_config_element;
+    use bb8_postgres::bb8::Pool;
+    use bb8_postgres::PostgresConnectionManager;
+    use geoengine_datatypes::test_data;
+    use std::time::Duration;
+    use tokio::time::timeout;
+    use tokio_postgres::NoTls;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_does_not_get_stuck() -> Result<()> {
+        let workflow = json!({});
+
+        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+
+        let pool = Pool::builder().max_size(1).build(pg_mgr).await?;
+
+        let mut conn = pool.get().await?;
+
+        // initial schema
+        migrate_database(&mut conn, &[Box::new(Migration0000Initial)]).await?;
+
+        // insert test data on initial schema
+        let test_data_sql = std::fs::read_to_string(test_data!("migrations/test_data.sql"))?;
+        conn.batch_execute(&test_data_sql).await?;
+
+        // perform all previous migrations
+        migrate_database(&mut conn, &all_migrations()[1..8]).await?;
+
+        let prepared = conn
+            .prepare("INSERT INTO workflows VALUES ($1, $2)")
+            .await?;
+
+        for _ in 0..1000 {
+            conn.execute(&prepared, &[&Uuid::new_v4(), &workflow])
+                .await?;
+        }
+
+        let _ = timeout(
+            Duration::from_secs(5),
+            migrate_database(&mut conn, &[Box::new(Migration0008BandNames)]),
+        )
+        .await
+        .expect("Should finish within five seconds");
+
+        Ok(())
+    }
 
     #[test]
     #[allow(clippy::too_many_lines)]
