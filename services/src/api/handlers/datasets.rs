@@ -348,7 +348,7 @@ pub async fn update_loading_info_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     dataset: web::Path<DatasetName>,
     meta_data: web::Json<MetaDataDefinition>,
-) -> Result<impl Responder> {
+) -> Result<HttpResponse> {
     let session_ctx = app_ctx.session_context(session).db();
 
     let real_dataset = dataset.into_inner();
@@ -366,7 +366,7 @@ pub async fn update_loading_info_handler<C: ApplicationContext>(
         .update_dataset_loading_info(dataset_id, &meta_data.into_inner().into())
         .await?;
 
-    Ok(HttpResponse::Ok())
+    Ok(HttpResponse::Ok().finish())
 }
 
 /// Updates the dataset's symbology
@@ -933,7 +933,6 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
             meta_data: meta_data.into(),
         }))
     } else {
-        // TODO: suggest multiple slices and temporal validity
         let gdal_params = gdal_parameters_from_dataset(&dataset, 1, &main_file_path, None, None)?;
         let result_descriptor = raster_descriptor_from_dataset(&dataset, 1)?;
 
@@ -2495,10 +2494,15 @@ mod tests {
 
         assert_eq!(&upload_content, body[0].1);
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/suggest?upload={}", upload.id))
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset/suggest")
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(SuggestMetaData {
+                data_path: DataPath::Upload(upload.id),
+                layer_name: None,
+                main_file: None,
+            });
         let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
