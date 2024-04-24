@@ -1,12 +1,14 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
 use crate::pro::permissions::{RoleDescription, RoleId};
-use crate::pro::users::oidc::ExternalUserClaims;
+use crate::pro::users::oidc::{OidcTokens, UserClaims};
 use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use crate::projects::{ProjectId, STRectangle};
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::Duration;
+use geoengine_datatypes::primitives::DateTime;
+use oauth2::AccessToken;
 use snafu::Snafu;
+use tokio_postgres::Transaction;
 
 #[async_trait]
 pub trait UserAuth {
@@ -43,8 +45,8 @@ pub trait UserAuth {
     ///
     async fn login_external(
         &self,
-        user: ExternalUserClaims,
-        duration: Duration,
+        user: UserClaims,
+        oidc_tokens: OidcTokens,
     ) -> Result<UserSession>;
 
     /// Get session by id
@@ -196,4 +198,27 @@ pub trait RoleDb {
         &self,
         user_id: &UserId,
     ) -> Result<Vec<RoleDescription>, RoleDbError>;
+}
+
+pub struct StoredOidcTokens {
+    pub oidc_tokens: OidcTokens,
+    pub db_valid_until: DateTime,
+}
+
+#[async_trait]
+pub trait SessionTokenStore {
+    async fn store_tokens(
+        &self,
+        session: SessionId,
+        oidc_tokens: OidcTokens,
+        tx: &Transaction<'_>,
+    ) -> Result<StoredOidcTokens>;
+
+    async fn refresh_tokens(
+        &self,
+        session: SessionId,
+        tx: &Transaction<'_>,
+    ) -> Result<StoredOidcTokens>;
+
+    async fn get_access_token(&self, session: SessionId) -> Result<AccessToken>;
 }

@@ -1,14 +1,15 @@
 use crate::contexts::SessionId;
-use crate::error::Result;
-use crate::pro::contexts::ProPostgresDb;
+use crate::error::{Error, Result};
+use crate::pro::contexts::{ProApplicationContext, ProPostgresDb};
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Role, RoleDescription, RoleId};
-use crate::pro::users::oidc::ExternalUserClaims;
+use crate::pro::users::oidc::{FlatMaybeEncryptedOidcTokens, OidcTokens, UserClaims};
 use crate::pro::users::userdb::{
     CannotRevokeRoleThatIsNotAssignedRoleDbError, RoleIdDoesNotExistRoleDbError,
 };
 use crate::pro::users::{
-    User, UserCredentials, UserDb, UserId, UserInfo, UserRegistration, UserSession,
+    SessionTokenStore, StoredOidcTokens, User, UserCredentials, UserDb, UserId, UserInfo,
+    UserRegistration, UserSession,
 };
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::postgres::PostgresErrorExt;
@@ -16,12 +17,14 @@ use crate::util::Identifier;
 use crate::{error, pro::contexts::ProPostgresContext};
 use async_trait::async_trait;
 
+use crate::util::encryption::MaybeEncryptedBytes;
 use bb8_postgres::{
     tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
-use geoengine_datatypes::primitives::Duration;
+use oauth2::AccessToken;
 use pwhash::bcrypt;
 use snafu::{ensure, ResultExt};
+use tokio_postgres::Transaction;
 use uuid::Uuid;
 
 use super::userdb::{
@@ -31,7 +34,7 @@ use super::userdb::{
 #[async_trait]
 impl<Tls> UserAuth for ProPostgresContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -269,8 +272,8 @@ where
     #[allow(clippy::too_many_lines)]
     async fn login_external(
         &self,
-        user: ExternalUserClaims,
-        duration: Duration,
+        user: UserClaims,
+        oidc_tokens: OidcTokens,
     ) -> Result<UserSession> {
         let mut conn = self.pool.get().await?;
         let tx = conn.build_transaction().start().await?;
@@ -298,7 +301,6 @@ where
                     crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
                         .initial_credits;
 
-                //TODO: Inconsistent to hashmap implementation, where an external user is not part of the user database.
                 //TODO: A user might be able to login without external login using this (internal) id. Would be a problem with anonymous users as well.
                 let stmt = tx
                     .prepare(
@@ -347,7 +349,7 @@ where
             INSERT INTO sessions (id)
             VALUES ($1);",
             )
-            .await?; //TODO: Check documentation if inconsistent to hashmap implementation - would happen if CURRENT_TIMESTAMP is called twice in postgres for a single query. Worked in tests.
+            .await?;
 
         tx.execute(&stmt, &[&session_id]).await?;
 
@@ -365,9 +367,15 @@ where
         let row = tx
             .query_one(
                 &stmt,
-                &[&user_id, &session_id, &(duration.num_seconds() as f64)],
+                &[
+                    &user_id,
+                    &session_id,
+                    &(oidc_tokens.expires_in.num_seconds() as f64),
+                ],
             )
             .await?;
+
+        self.store_tokens(session_id, oidc_tokens, &tx).await?;
 
         let stmt = tx
             .prepare("SELECT role_id FROM user_roles WHERE user_id = $1;")
@@ -405,18 +413,20 @@ where
         let stmt = tx
             .prepare(
                 "
-            SELECT 
-                u.id,   
+            SELECT
+                u.id,
                 u.email,
-                u.real_name,             
-                us.created, 
-                us.valid_until, 
+                u.real_name,
+                us.created,
+                us.valid_until,
                 s.project_id,
-                s.view
-            FROM 
-                sessions s JOIN user_sessions us ON (s.id = us.session_id) 
+                s.view,
+                CASE WHEN CURRENT_TIMESTAMP < us.valid_until THEN TRUE ELSE FALSE END AS valid_session
+            FROM
+                sessions s JOIN user_sessions us ON (s.id = us.session_id)
                     JOIN users u ON (us.user_id = u.id)
-            WHERE s.id = $1 AND CURRENT_TIMESTAMP < us.valid_until;",
+                    LEFT JOIN oidc_session_tokens t ON (s.id = t.session_id)
+            WHERE s.id = $1 AND (CURRENT_TIMESTAMP < us.valid_until OR t.refresh_token IS NOT NULL);",
             )
             .await?;
 
@@ -424,6 +434,17 @@ where
             .query_one(&stmt, &[&session])
             .await
             .map_err(|_error| error::Error::InvalidSession)?;
+
+        let valid_session: bool = row.get(7);
+
+        let valid_until = if valid_session {
+            row.get(4)
+        } else {
+            self.refresh_tokens(session, &tx)
+                .await
+                .map_err(|_error| Error::InvalidSession)?
+                .db_valid_until
+        };
 
         let mut session = UserSession {
             id: session,
@@ -433,7 +454,7 @@ where
                 real_name: row.get(2),
             },
             created: row.get(3),
-            valid_until: row.get(4),
+            valid_until,
             project: row.get::<usize, Option<Uuid>>(5).map(ProjectId),
             view: row.get(6),
             roles: vec![],
@@ -449,9 +470,201 @@ where
 
         let rows = tx.query(&stmt, &[&session.user.id]).await?;
 
+        tx.commit().await?;
+
         session.roles = rows.into_iter().map(|row| row.get(0)).collect();
 
         Ok(session)
+    }
+}
+
+#[async_trait]
+impl<Tls> SessionTokenStore for ProPostgresContext<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn store_tokens(
+        &self,
+        session: SessionId,
+        oidc_tokens: OidcTokens,
+        tx: &Transaction<'_>,
+    ) -> Result<StoredOidcTokens> {
+        let flat_tokens: FlatMaybeEncryptedOidcTokens = self
+            .oidc_manager()
+            .maybe_encrypt_tokens(&oidc_tokens)?
+            .into();
+
+        let stmt = tx
+            .prepare(
+                "
+                INSERT INTO oidc_session_tokens
+                    (session_id, access_token, access_token_encryption_nonce, access_token_valid_until, refresh_token, refresh_token_encryption_nonce)
+                VALUES
+                    ($1, $2, $3, CURRENT_TIMESTAMP + make_interval(secs:=$4), $5, $6)
+                RETURNING
+                    access_token_valid_until;
+                ;"
+            )
+            .await?;
+
+        let db_valid_until = tx
+            .query_one(
+                &stmt,
+                &[
+                    &session,
+                    &flat_tokens.access_token_value,
+                    &flat_tokens.access_token_nonce,
+                    &(oidc_tokens.expires_in.num_seconds() as f64),
+                    &flat_tokens.refresh_token_value,
+                    &flat_tokens.refresh_token_nonce,
+                ],
+            )
+            .await?
+            .get(0);
+
+        Ok(StoredOidcTokens {
+            oidc_tokens,
+            db_valid_until,
+        })
+    }
+
+    async fn refresh_tokens(
+        &self,
+        session: SessionId,
+        tx: &Transaction<'_>,
+    ) -> Result<StoredOidcTokens> {
+        let stmt = tx
+            .prepare(
+                "
+            SELECT
+                refresh_token,
+                refresh_token_encryption_nonce
+            FROM
+                oidc_session_tokens
+            WHERE session_id = $1 AND refresh_token IS NOT NULL;",
+            )
+            .await?;
+
+        let rows = tx.query_opt(&stmt, &[&session]).await?;
+
+        if let Some(refresh_string) = rows {
+            let string_field_and_nonce = MaybeEncryptedBytes {
+                value: refresh_string.get(0),
+                nonce: refresh_string.get(1),
+            };
+
+            let refresh_token = self
+                .oidc_manager()
+                .maybe_decrypt_refresh_token(string_field_and_nonce)?;
+
+            let oidc_manager = self.oidc_manager();
+
+            let oidc_tokens = oidc_manager
+                .get_client()
+                .await?
+                .refresh_token(refresh_token)
+                .await?;
+
+            let flat_tokens: FlatMaybeEncryptedOidcTokens = self
+                .oidc_manager()
+                .maybe_encrypt_tokens(&oidc_tokens)?
+                .into();
+
+            let update_session_tokens = tx.prepare("
+                UPDATE
+                    oidc_session_tokens
+                SET
+                    access_token = $2, access_token_encryption_nonce = $3, access_token_valid_until = CURRENT_TIMESTAMP + make_interval(secs:=$4), refresh_token = $5, refresh_token_encryption_nonce = $6
+                WHERE
+                    session_id = $1;",
+
+            ).await?;
+
+            let updated_token_rows = tx
+                .execute(
+                    &update_session_tokens,
+                    &[
+                        &session,
+                        &flat_tokens.access_token_value,
+                        &flat_tokens.access_token_nonce,
+                        &(oidc_tokens.expires_in.num_seconds() as f64),
+                        &flat_tokens.refresh_token_value,
+                        &flat_tokens.refresh_token_nonce,
+                    ],
+                )
+                .await?;
+
+            if updated_token_rows != 1 {
+                return Err(Error::InvalidSession);
+            }
+
+            let stmt = tx
+                .prepare(
+                    "
+                UPDATE
+                    user_sessions
+                SET
+                    valid_until = CURRENT_TIMESTAMP + make_interval(secs:=$2)
+                WHERE
+                    session_id = $1
+                RETURNING
+                    valid_until;",
+                )
+                .await?;
+
+            let expiration = tx
+                .query_one(
+                    &stmt,
+                    &[&session, &(oidc_tokens.expires_in.num_seconds() as f64)],
+                )
+                .await?
+                .get(0);
+
+            return Ok(StoredOidcTokens {
+                oidc_tokens,
+                db_valid_until: expiration,
+            });
+        };
+
+        Err(Error::InvalidSession)
+    }
+
+    async fn get_access_token(&self, session: SessionId) -> Result<AccessToken> {
+        let mut conn = self.pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        let stmt = tx
+            .prepare(
+                "
+            SELECT
+                access_token,
+                access_token_encryption_nonce
+            FROM
+                oidc_session_tokens
+            WHERE session_id = $1 AND (CURRENT_TIMESTAMP < access_token_valid_until);",
+            )
+            .await?;
+
+        let rows = tx.query_opt(&stmt, &[&session]).await?;
+
+        let access_token = if let Some(token_row) = rows {
+            let string_field_and_nonce = MaybeEncryptedBytes {
+                value: token_row.get(0),
+                nonce: token_row.get(1),
+            };
+            self.oidc_manager()
+                .maybe_decrypt_access_token(string_field_and_nonce)?
+        } else {
+            self.refresh_tokens(session, &tx).await?.oidc_tokens.access
+        };
+
+        tx.commit().await?;
+
+        Ok(access_token)
     }
 }
 

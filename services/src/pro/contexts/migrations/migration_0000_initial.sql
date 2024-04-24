@@ -211,3 +211,13 @@ CREATE TABLE ml_models (
     id uuid PRIMARY KEY,
     content text NOT NULL
 );
+
+CREATE TABLE oidc_session_tokens (
+    session_id uuid REFERENCES sessions (id) ON DELETE CASCADE NOT NULL,
+    access_token bytea NOT NULL,
+    access_token_encryption_nonce bytea,
+    access_token_valid_until timestamp with time zone NOT NULL,
+    refresh_token bytea,
+    refresh_token_encryption_nonce bytea
+);
+

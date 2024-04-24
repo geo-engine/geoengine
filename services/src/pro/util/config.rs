@@ -37,7 +37,7 @@ pub enum QuotaTrackingMode {
     Disabled,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Oidc {
     pub enabled: bool,
     pub issuer: String,
@@ -45,6 +45,7 @@ pub struct Oidc {
     pub client_secret: Option<String>,
     pub redirect_uri: String, //TODO: Maybe URL type
     pub scopes: Vec<String>,
+    pub postgres_password: Option<String>,
 }
 
 impl ConfigElement for Oidc {
