@@ -23,7 +23,8 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
-    ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
+    build_workflow_schema, ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor,
+    WorkflowOperatorPath,
 };
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
@@ -42,6 +43,7 @@ where
         // TODO: rename to plural `workflows`
         web::scope("/workflow")
             .service(web::resource("").route(web::post().to(register_workflow_handler::<C>)))
+            .service(web::resource("/schema").route(web::get().to(get_workflow_schema_handler)))
             .service(
                 web::scope("/{id}")
                     .service(web::resource("").route(web::get().to(load_workflow_handler::<C>)))
@@ -648,6 +650,19 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         Ok(websocket) => Ok(websocket),
         Err(e) => Ok(e.error_response()),
     }
+}
+
+/// Gets the schema of workflows
+#[utoipa::path(
+    tag = "Workflows",
+    get,
+    path = "/workflow/schema",
+    responses(
+        (status = 200, description = "JSON Schema for workflows")
+    )
+)]
+async fn get_workflow_schema_handler() -> impl Responder {
+    web::Json(build_workflow_schema())
 }
 
 #[derive(Debug, Snafu)]

@@ -1,4 +1,11 @@
+use std::borrow::Cow;
+
 use crate::identifier;
+use schemars::{
+    gen::SchemaGenerator,
+    schema::{Schema, SchemaObject},
+    JsonSchema,
+};
 use serde::{de::Visitor, Deserialize, Serialize};
 
 identifier!(DataProviderId);
@@ -84,6 +91,54 @@ pub struct NamedData {
     pub namespace: Option<String>,
     pub provider: Option<String>,
     pub name: String,
+}
+
+impl JsonSchema for NamedData {
+    fn schema_name() -> String {
+        "NamedData".to_owned()
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        Cow::Borrowed(concat!(module_path!(), "::NamedData"))
+    }
+
+    fn json_schema(_gen: &mut SchemaGenerator) -> Schema {
+        Schema::Object(SchemaObject {
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                id: None,
+                title: None,
+                description: Some("The user-facing identifier for loadable data.
+It can be resolved into a [`DataId`].
+
+It is a triple of namespace, provider and name.
+The namespace and provider are optional and default to the system namespace and provider.
+
+# Examples
+
+* `dataset` -> `NamedData { namespace: None, provider: None, name: \"dataset\" }`
+* `namespace:dataset` -> `NamedData { namespace: Some(\"namespace\"), provider: None, name: \"dataset\" }`
+* `namespace:provider:dataset` -> `NamedData { namespace: Some(\"namespace\"), provider: Some(\"provider\"), name: \"dataset\" }`".to_owned()),
+                default: None,
+                deprecated: false,
+                read_only: false,
+                write_only: false,
+                examples: Vec::new(),
+            })),
+            instance_type: Some(schemars::schema::SingleOrVec::Single(Box::new(schemars::schema::InstanceType::String))),
+            format: None,
+            enum_values: None,
+            const_value: None,
+            subschemas: None,
+            number: None,
+            string: None,
+            array: None,
+            object: None,
+            reference: None,
+            extensions: schemars::Map::from([
+                ("help_text".to_owned(), serde_json::Value::String("https://docs.geoengine.io/geoengine/datasets.html".to_owned()))
+            ]),
+        })
+    }
 }
 
 impl NamedData {

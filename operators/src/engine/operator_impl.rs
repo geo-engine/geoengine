@@ -1,4 +1,5 @@
 use geoengine_datatypes::dataset::NamedData;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::util::input::{MultiRasterOrVectorOperator, RasterOrVectorOperator};
@@ -12,7 +13,7 @@ pub struct Operator<Params, Sources> {
     pub sources: Sources,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceOperator<Params> {
     pub params: Params,

@@ -60,6 +60,8 @@ tracing = "0.1"
 typetag = "0.2"
 uuid = { version = "1.7", features = ["serde", "v4", "v5"] }
 xgboost-rs = { version = "0.3", optional = true }
+schemars = "0.8.16"
+inventory = "0.3.15"
 
 [dev-dependencies]
 async-stream = "0.3"

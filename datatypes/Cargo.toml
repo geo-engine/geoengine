@@ -37,6 +37,7 @@ postgres-types = { version = "0.2", features = [
 ] }
 proj = "0.22" # needs to stay fixed to use fixed proj version
 rayon = "1.8"
+schemars = "0.8.16"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3.6"

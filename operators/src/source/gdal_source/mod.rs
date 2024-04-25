@@ -1,4 +1,5 @@
 use crate::adapters::{FillerTileCacheExpirationStrategy, SparseTilesFillAdapter};
+use crate::define_operator;
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
 };
@@ -9,7 +10,7 @@ use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-        SourceOperator, TypedRasterQueryProcessor,
+        TypedRasterQueryProcessor,
     },
     error::Error,
     util::Result,
@@ -51,6 +52,7 @@ pub use loading_info::{
 use log::debug;
 use num::FromPrimitive;
 use postgres_types::{FromSql, ToSql};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
@@ -94,7 +96,7 @@ static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 ///     },
 /// });
 /// ```
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct GdalSourceParameters {
     pub data: NamedData,
 }
@@ -758,11 +760,12 @@ where
     }
 }
 
-pub type GdalSource = SourceOperator<GdalSourceParameters>;
-
-impl OperatorName for GdalSource {
-    const TYPE_NAME: &'static str = "GdalSource";
-}
+define_operator!(
+    GdalSource,
+    GdalSourceParameters,
+    output_type = "raster",
+    help_text = "https://docs.geoengine.io/operators/gdalsource.html"
+);
 
 #[typetag::serde]
 #[async_trait]

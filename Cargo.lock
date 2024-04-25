@@ -2688,6 +2688,7 @@ dependencies = [
  "postgres-types",
  "proj",
  "rayon",
+ "schemars",
  "serde",
  "serde_json",
  "serde_with",
@@ -2752,6 +2753,7 @@ dependencies = [
  "geoengine-datatypes",
  "geoengine-expression",
  "httptest",
+ "inventory",
  "itertools 0.12.1",
  "libloading",
  "log",
@@ -2769,6 +2771,7 @@ dependencies = [
  "rand",
  "rayon",
  "rustc-hash",
+ "schemars",
  "serde",
  "serde_json",
  "snafu",
@@ -6313,6 +6316,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemars"
+version = "0.8.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45a28f4c49489add4ce10783f7911893516f15afe45d015608d41faca6bc4d29"
+dependencies = [
+ "dyn-clone",
+ "schemars_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "0.8.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c767fd6fa65d9ccf9cf026122c1b555f2ef9a4f0cea69da4d7dbc3e258d30967"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6412,6 +6439,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.48",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85bf8229e7920a9f636479437026331ce11aa132b4dde37d121944a44d6e5f3c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]

@@ -115,6 +115,7 @@ use utoipa::{Modify, OpenApi};
         handlers::workflows::raster_stream_websocket,
         handlers::workflows::register_workflow_handler,
         handlers::workflows::get_workflow_all_metadata_zip_handler,
+        handlers::workflows::get_workflow_schema_handler,
         pro::api::handlers::users::anonymous_handler,
         pro::api::handlers::users::login_handler,
         pro::api::handlers::users::logout_handler,
