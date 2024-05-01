@@ -109,6 +109,7 @@ where
                     .handler(http::StatusCode::NOT_FOUND, render_404)
                     .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
             )
+            .wrap(configure_cors())
             .wrap(TracingLogger::<CustomRootSpanBuilder>::new())
             .service(api)
     })

@@ -492,34 +492,15 @@ macro_rules! define_operator {
 pub fn build_workflow_schema() -> serde_json::Value {
     let mut workflow_schema = serde_json::json!({
         "$schema": "http://json-schema.org/draft-07/schema",
-        "definitions": {
-            "raster": {
-                "oneOf": []
-            },
-            "vector": {
-                "oneOf": []
-            },
-            "plot": {
-                "oneOf": []
-            }
-        },
-        "oneOf": [
-            {
-                "$ref": "#/definitions/raster"
-            },
-            {
-                "$ref": "#/definitions/vector"
-            },
-            {
-                "$ref": "#/definitions/plot"
-            }
-        ]
+        "definitions": {},
+        "oneOf": []
     });
     let definitions = workflow_schema
         .get_mut("definitions")
         .unwrap()
         .as_object_mut()
         .unwrap();
+    let mut output_types: Vec<&str> = Vec::new();
 
     for operator in inventory::iter::<OperatorSchema> {
         let operator_schema = operator.get_schema();
@@ -538,15 +519,35 @@ pub fn build_workflow_schema() -> serde_json::Value {
         definitions.insert(operator_name.clone(), operator_schema);
 
         let operator_output_type = operator.get_output_type();
+
+        if !output_types.contains(&operator_output_type) {
+            output_types.push(operator_output_type);
+            definitions.insert(
+                operator_output_type.to_owned(),
+                serde_json::json!({
+                    "oneOf": []
+                }),
+            );
+        }
         definitions
             .get_mut(operator_output_type)
-            .expect("operator output type is raster, vector or plot")
+            .unwrap()
             .get_mut("oneOf")
             .unwrap()
             .as_array_mut()
             .unwrap()
             .push(serde_json::json!({
                 "$ref": format!("#/definitions/{}", operator_name)
+            }));
+    }
+    for operator_output_type in output_types {
+        workflow_schema
+            .get_mut("oneOf")
+            .unwrap()
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "$ref": format!("#/definitions/{}", operator_output_type)
             }));
     }
     workflow_schema

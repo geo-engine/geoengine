@@ -2,6 +2,7 @@ use crate::api::model::responses::ErrorResponse;
 use crate::error::Result;
 use crate::util::config::get_config_element;
 
+use actix_cors::Cors;
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::header::{HeaderName, HeaderValue};
 use actix_http::uri::PathAndQuery;
@@ -434,4 +435,19 @@ impl CacheControlHeader for CacheHint {
 
         (actix_http::header::CACHE_CONTROL, value)
     }
+}
+
+pub(crate) fn configure_cors() -> Cors {
+    Cors::default()
+        .allowed_origin_fn(|header, _req| {
+            matches!(
+                header.to_str(),
+                Ok(origin)
+                if origin.starts_with("http://localhost")
+                    || origin.starts_with("http://127.0.0.1")
+                    || origin.starts_with("vscode-webview")
+            )
+        })
+        .allowed_methods(vec!["GET"])
+        .allowed_header(http::header::AUTHORIZATION)
 }
