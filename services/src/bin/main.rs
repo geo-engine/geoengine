@@ -150,7 +150,6 @@ where
         .pretty()
         .with_file(false)
         .with_target(true)
-        .with_ansi(true)
         .with_writer(std::io::stderr)
         .with_filter(filter)
 }
