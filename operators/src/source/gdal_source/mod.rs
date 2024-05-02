@@ -98,6 +98,7 @@ static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 /// ```
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct GdalSourceParameters {
+    #[schemars(schema_with = "geoengine_datatypes::dataset::named_data_raster_schema")]
     pub data: NamedData,
 }
 
