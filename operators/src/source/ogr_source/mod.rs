@@ -1,6 +1,7 @@
 mod dataset_iterator;
 use self::dataset_iterator::OgrDatasetIterator;
 use crate::adapters::FeatureCollectionStreamExt;
+use crate::define_operator;
 use crate::engine::{
     CanonicOperatorName, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
 };
@@ -9,7 +10,7 @@ use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
 use crate::{
     engine::{
-        InitializedVectorOperator, MetaData, QueryContext, SourceOperator,
+        InitializedVectorOperator, MetaData, QueryContext,
         TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     error,
@@ -40,6 +41,7 @@ use log::debug;
 use pin_project::pin_project;
 use postgres_protocol::escape::{escape_identifier, escape_literal};
 use postgres_types::{FromSql, ToSql};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::collections::{HashMap, HashSet};
@@ -54,15 +56,17 @@ use std::sync::Arc;
 use std::task::Poll;
 use tokio::sync::Mutex;
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceParameters {
+    #[schemars(schema_with = "geoengine_datatypes::dataset::named_data_vector_schema")]
     pub data: NamedData,
+    #[schemars(title = "Attributes to select")]
     pub attribute_projection: Option<Vec<String>>,
     pub attribute_filters: Option<Vec<AttributeFilter>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AttributeFilter {
     pub attribute: String,
@@ -76,11 +80,12 @@ impl OperatorData for OgrSourceParameters {
     }
 }
 
-pub type OgrSource = SourceOperator<OgrSourceParameters>;
-
-impl OperatorName for OgrSource {
-    const TYPE_NAME: &'static str = "OgrSource";
-}
+define_operator!(
+    OgrSource,
+    OgrSourceParameters,
+    output_type = "vector",
+    help_text = "https://docs.geoengine.io/operators/ogrsource.html"
+);
 
 ///  - `file_name`: path to the input file
 ///  - `layer_name`: name of the layer to load
