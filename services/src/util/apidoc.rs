@@ -148,18 +148,11 @@ impl Modify for TransformSchemasWithTag {
                 let Some(variant_tag) = Self::get_variant_tag(item, discriminator) else {
                     continue 'outer;
                 };
-                let variant_schema_name = match Self::get_base_type_name(item) {
-                    Some(base_type) => format!(
-                        "{}With{}",
-                        base_type,
-                        Self::uppercase_first_letter(discriminator),
-                    ),
-                    None => format!(
-                        "{}{}",
-                        Self::uppercase_first_letter(variant_tag),
-                        schema_name
-                    ),
-                };
+                let variant_schema_name = format!(
+                    "{}{}",
+                    schema_name,
+                    Self::uppercase_first_letter(variant_tag)
+                );
 
                 if let Some(flattened) = Self::flatten_allof(item, old_schemas) {
                     new_schemas.insert(variant_schema_name.clone(), flattened.into());
