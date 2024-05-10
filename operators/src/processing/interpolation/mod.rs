@@ -4,8 +4,9 @@ use std::sync::Arc;
 use crate::adapters::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
 };
+use crate::define_operator;
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
@@ -24,24 +25,25 @@ use geoengine_datatypes::raster::{
     NearestNeighbor, Pixel, RasterTile2D, TileInformation, TilingSpecification,
 };
 use rayon::ThreadPool;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct InterpolationParams {
     pub interpolation: InterpolationMethod,
     pub input_resolution: InputResolution,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, JsonSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum InputResolution {
     Value(SpatialResolution),
     Source,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum InterpolationMethod {
     NearestNeighbor,
@@ -57,11 +59,13 @@ pub enum InterpolationError {
     UnknownInputResolution,
 }
 
-pub type Interpolation = Operator<InterpolationParams, SingleRasterSource>;
-
-impl OperatorName for Interpolation {
-    const TYPE_NAME: &'static str = "Interpolation";
-}
+define_operator!(
+    Interpolation,
+    InterpolationParams,
+    SingleRasterSource,
+    output_type = "raster",
+    help_text = "https://docs.geoengine.io/operators/interpolation.html"
+);
 
 #[typetag::serde]
 #[async_trait]

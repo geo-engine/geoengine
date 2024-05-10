@@ -1,9 +1,9 @@
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
+    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
     OperatorName, QueryContext, QueryProcessor, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
-use crate::error;
+use crate::{define_operator, error};
 use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
 use crate::{adapters::FeatureCollectionChunkMerger, engine::SingleVectorSource};
@@ -18,11 +18,12 @@ use geoengine_datatypes::primitives::{
     VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::ops::RangeInclusive;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ColumnRangeFilterParams {
     pub column: String,
@@ -30,11 +31,13 @@ pub struct ColumnRangeFilterParams {
     pub keep_nulls: bool,
 }
 
-pub type ColumnRangeFilter = Operator<ColumnRangeFilterParams, SingleVectorSource>;
-
-impl OperatorName for ColumnRangeFilter {
-    const TYPE_NAME: &'static str = "ColumnRangeFilter";
-}
+define_operator!(
+    ColumnRangeFilter,
+    ColumnRangeFilterParams,
+    SingleVectorSource,
+    output_type = "vector",
+    help_text = "https://docs.geoengine.io/operators/columnrangefilter.html"
+);
 
 #[typetag::serde]
 #[async_trait]

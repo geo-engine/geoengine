@@ -6,7 +6,7 @@ use crate::util::input::{MultiRasterOrVectorOperator, RasterOrVectorOperator};
 
 use super::{OperatorData, RasterOperator, VectorOperator};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Operator<Params, Sources> {
     pub params: Params,
@@ -19,13 +19,13 @@ pub struct SourceOperator<Params> {
     pub params: Params,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleRasterSource {
     pub raster: Box<dyn RasterOperator>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleVectorSource {
     pub vector: Box<dyn VectorOperator>,

@@ -1,11 +1,10 @@
 use crate::{
-    engine::{
+    define_operator, engine::{
         CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
-        Operator, OperatorName, QueryContext, QueryProcessor, SingleVectorSource,
+        OperatorName, QueryContext, QueryProcessor, SingleVectorSource,
         TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
         WorkflowOperatorPath,
-    },
-    util::Result,
+    }, util::Result
 };
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
@@ -21,6 +20,7 @@ use geoengine_datatypes::{
     util::arrow::ArrowTyped,
 };
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
@@ -29,11 +29,13 @@ use snafu::Snafu;
 /// The simplification is performed on the geometry of the `Vector` and not on the data.
 /// The `LineSimplification` operator is only available for (multi-)lines or (multi-)polygons.
 ///
-pub type LineSimplification = Operator<LineSimplificationParams, SingleVectorSource>;
-
-impl OperatorName for LineSimplification {
-    const TYPE_NAME: &'static str = "LineSimplification";
-}
+define_operator!(
+    LineSimplification,
+    LineSimplificationParams,
+    SingleVectorSource,
+    output_type = "vector",
+    help_text = "https://docs.geoengine.io/operators/linesimplification.html"
+);
 
 #[typetag::serde]
 #[async_trait]
@@ -76,7 +78,7 @@ impl VectorOperator for LineSimplification {
     span_fn!(LineSimplification);
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LineSimplificationParams {
     pub algorithm: LineSimplificationAlgorithm,
@@ -85,7 +87,7 @@ pub struct LineSimplificationParams {
     pub epsilon: Option<f64>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum LineSimplificationAlgorithm {
     DouglasPeucker,

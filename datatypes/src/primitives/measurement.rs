@@ -1,14 +1,16 @@
 use postgres_types::{FromSql, ToSql};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
     Unitless,
     Continuous(ContinuousMeasurement),
+    #[schemars(with = "SerializableClassificationMeasurement")]
     Classification(ClassificationMeasurement),
 }
 
@@ -31,7 +33,7 @@ impl Default for Measurement {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, FromSql, ToSql)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, FromSql, ToSql, JsonSchema)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
     pub unit: Option<String>,
@@ -47,9 +49,12 @@ pub struct ClassificationMeasurement {
     pub classes: HashMap<u8, String>,
 }
 
-/// A type that is solely for serde's serializability.
-/// You cannot serialize floats as JSON map keys.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+// A type that is solely for serde's serializability.
+// You cannot serialize floats as JSON map keys.
+//
+// Note: Do not use a doc comment here, because otherwise
+// internal details would be shown in workflow editor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SerializableClassificationMeasurement {
     pub measurement: String,
     // use a BTreeMap to preserve the order of the keys

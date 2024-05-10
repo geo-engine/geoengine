@@ -6,6 +6,7 @@ use float_cmp::ApproxEq;
 
 use postgres_types::{FromSql, ToSql};
 use proj::Coord;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::{
@@ -15,7 +16,7 @@ use std::{
 };
 
 #[derive(
-    Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default, ToSql, FromSql,
+    Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default, ToSql, FromSql, JsonSchema
 )]
 #[repr(C)]
 pub struct Coordinate2D {

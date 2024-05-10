@@ -10,12 +10,14 @@ use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use rayon::ThreadPool;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::adapters::FeatureCollectionChunkMerger;
+use crate::define_operator;
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
+    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
     OperatorName, QueryContext, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
 };
@@ -35,16 +37,18 @@ pub use wrapper::PointInPolygonTesterWithCollection;
 /// 1. a `MultiPointCollection` source
 /// 2. a `MultiPolygonCollection` source
 /// Then, it filters the `MultiPolygonCollection`s so that only those features are retained that are in any polygon.
-pub type PointInPolygonFilter = Operator<PointInPolygonFilterParams, PointInPolygonFilterSource>;
+define_operator!(
+    PointInPolygonFilter,
+    PointInPolygonFilterParams,
+    PointInPolygonFilterSource,
+    output_type = "vector",
+    help_text = "https://docs.geoengine.io/operators/pointinpolygon.html"
+);
 
-impl OperatorName for PointInPolygonFilter {
-    const TYPE_NAME: &'static str = "PointInPolygonFilter";
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PointInPolygonFilterParams {}
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PointInPolygonFilterSource {
     pub points: Box<dyn VectorOperator>,
     pub polygons: Box<dyn VectorOperator>,

@@ -1,14 +1,15 @@
 use crate::engine::TypedVectorQueryProcessor::MultiPoint;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
+    InitializedVectorOperator, OperatorName, QueryContext, QueryProcessor,
     RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
     SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
+use schemars::JsonSchema;
 
-use crate::error;
+use crate::{define_operator, error};
 use crate::processing::rasterization::GridOrDensity::Grid;
 use crate::util;
 
@@ -38,13 +39,15 @@ use crate::util::{spawn_blocking, spawn_blocking_with_thread_pool};
 use typetag::serde;
 
 /// An operator that rasterizes vector data
-pub type Rasterization = Operator<GridOrDensity, SingleVectorSource>;
+define_operator!(
+    Rasterization,
+    GridOrDensity,
+    SingleVectorSource,
+    output_type = "raster",
+    help_text = "https://docs.geoengine.io/operators/rasterization.html"
+);
 
-impl OperatorName for Rasterization {
-    const TYPE_NAME: &'static str = "Rasterization";
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum GridSizeMode {
     /// The spatial resolution is interpreted as a fixed size in coordinate units
@@ -53,7 +56,7 @@ pub enum GridSizeMode {
     Relative,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum GridOrDensity {
@@ -63,7 +66,7 @@ pub enum GridOrDensity {
     Density(DensityParams),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct DensityParams {
     /// Defines the cutoff (as percentage of maximum density) down to which a point is taken
     /// into account for an output pixel density value
@@ -72,7 +75,7 @@ pub struct DensityParams {
     stddev: f64,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GridParams {
     /// The size of grid cells, interpreted depending on the chosen grid size mode

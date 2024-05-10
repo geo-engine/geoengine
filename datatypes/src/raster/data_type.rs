@@ -6,6 +6,7 @@ use crate::util::Result;
 use gdal::raster::GdalDataType;
 use num_traits::{AsPrimitive, Bounded, Num};
 use postgres_types::{FromSql, ToSql};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -142,7 +143,7 @@ impl Pixel for f32 {}
 impl Pixel for f64 {}
 
 #[derive(
-    Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone, FromSql, ToSql,
+    Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone, FromSql, ToSql, JsonSchema
 )]
 pub enum RasterDataType {
     U8,

@@ -48,7 +48,9 @@ impl JsonSchema for StringOrNumberRange {
                                         title: Some("Start inclusive".to_owned()),
                                         ..Default::default()
                                     })),
-                                    instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::String))),
+                                    instance_type: Some(SingleOrVec::Single(Box::new(
+                                        InstanceType::String,
+                                    ))),
                                     ..Default::default()
                                 }),
                                 Schema::Object(SchemaObject {
@@ -56,9 +58,11 @@ impl JsonSchema for StringOrNumberRange {
                                         title: Some("End inclusive".to_owned()),
                                         ..Default::default()
                                     })),
-                                    instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::String))),
+                                    instance_type: Some(SingleOrVec::Single(Box::new(
+                                        InstanceType::String,
+                                    ))),
                                     ..Default::default()
-                                })
+                                }),
                             ])),
                             max_items: Some(2),
                             min_items: Some(2),
@@ -79,7 +83,9 @@ impl JsonSchema for StringOrNumberRange {
                                         title: Some("Start inclusive".to_owned()),
                                         ..Default::default()
                                     })),
-                                    instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::Number))),
+                                    instance_type: Some(SingleOrVec::Single(Box::new(
+                                        InstanceType::Number,
+                                    ))),
                                     ..Default::default()
                                 }),
                                 Schema::Object(SchemaObject {
@@ -87,9 +93,11 @@ impl JsonSchema for StringOrNumberRange {
                                         title: Some("End inclusive".to_owned()),
                                         ..Default::default()
                                     })),
-                                    instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::Number))),
+                                    instance_type: Some(SingleOrVec::Single(Box::new(
+                                        InstanceType::Number,
+                                    ))),
                                     ..Default::default()
-                                })
+                                }),
                             ])),
                             max_items: Some(2),
                             min_items: Some(2),

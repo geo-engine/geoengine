@@ -5,8 +5,9 @@ use self::aggregate::{AggregateFunction, Neighborhood, StandardDeviation, Sum};
 use self::tile_sub_query::NeighborhoodAggregateTileNeighborhood;
 use crate::adapters::stack_individual_aligned_raster_bands;
 use crate::adapters::RasterSubQueryAdapter;
+use crate::define_operator;
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
@@ -19,19 +20,22 @@ use geoengine_datatypes::raster::{
 };
 use num::Integer;
 use num_traits::AsPrimitive;
+use schemars::{gen::SchemaGenerator, schema::Schema, JsonSchema};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::marker::PhantomData;
 
 /// A neighborhood aggregate operator applies an aggregate function to each raster pixel and its surrounding.
 /// For each output pixel, the aggregate function is applied to an input pixel plus its neighborhood.
-pub type NeighborhoodAggregate = Operator<NeighborhoodAggregateParams, SingleRasterSource>;
+define_operator!(
+    NeighborhoodAggregate,
+    NeighborhoodAggregateParams,
+    SingleRasterSource,
+    output_type = "raster",
+    help_text = "https://docs.geoengine.io/operators/neighborhoodaggregate.html"
+);
 
-impl OperatorName for NeighborhoodAggregate {
-    const TYPE_NAME: &'static str = "NeighborhoodAggregate";
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 /// Parameters for the `NeighborhoodAggregate` operator.
 ///
@@ -45,18 +49,62 @@ pub struct NeighborhoodAggregateParams {
     pub aggregate_function: AggregateFunctionParams,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum AggregateFunctionParams {
     Sum,
     StandardDeviation,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Generates a schema for [usize; 2] where each dimension is odd.
+fn odd_usize2_schema(_gen: &mut SchemaGenerator) -> Schema {
+    use schemars::schema::*;
+    Schema::Object(SchemaObject {
+        instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::Array))),
+        array: Some(Box::new(ArrayValidation {
+            items: Some(SingleOrVec::Single(Box::new(Schema::Object(
+                SchemaObject {
+                    instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::Integer))),
+                    format: Some("uint".to_owned()),
+                    subschemas: Some(Box::new(SubschemaValidation {
+                        not: Some(Box::new(Schema::Object(SchemaObject {
+                            number: Some(Box::new(NumberValidation {
+                                multiple_of: Some(2.0),
+                                ..Default::default()
+                            })),
+                            ..Default::default()
+                        }))),
+                        ..Default::default()
+                    })),
+                    number: Some(Box::new(NumberValidation {
+                        minimum: Some(0.0),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+            )))),
+            max_items: Some(2),
+            min_items: Some(2),
+            ..Default::default()
+        })),
+        ..Default::default()
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum NeighborhoodParams {
-    Rectangle { dimensions: [usize; 2] },
-    WeightsMatrix { weights: Vec<Vec<f64>> },
+    Rectangle {
+        #[schemars(schema_with = "odd_usize2_schema")]
+        dimensions: [usize; 2],
+    },
+    WeightsMatrix {
+        // At the moment it is impossible to check an array has an odd item
+        // count using JSON Schema (see https://stackoverflow.com/a/77910644).
+        // Workaround using min length 1 for now.
+        #[schemars(length(min = 1), inner(length(min = 1)))]
+        weights: Vec<Vec<f64>>,
+    },
 }
 
 impl NeighborhoodParams {

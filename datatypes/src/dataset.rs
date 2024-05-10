@@ -93,8 +93,6 @@ pub struct NamedData {
 pub fn named_data_raster_schema(_gen: &mut SchemaGenerator) -> Schema {
     Schema::Object(SchemaObject {
             metadata: Some(Box::new(schemars::schema::Metadata {
-                id: None,
-                title: None,
                 description: Some("The user-facing identifier for loadable raster data.
 It can be resolved into a [`DataId`].
 
@@ -106,33 +104,20 @@ The namespace and provider are optional and default to the system namespace and 
 * `dataset` -> `NamedData { namespace: None, provider: None, name: \"dataset\" }`
 * `namespace:dataset` -> `NamedData { namespace: Some(\"namespace\"), provider: None, name: \"dataset\" }`
 * `namespace:provider:dataset` -> `NamedData { namespace: Some(\"namespace\"), provider: Some(\"provider\"), name: \"dataset\" }`".to_owned()),
-                default: None,
-                deprecated: false,
-                read_only: false,
-                write_only: false,
-                examples: Vec::new(),
+..Default::default()
             })),
             instance_type: Some(schemars::schema::SingleOrVec::Single(Box::new(schemars::schema::InstanceType::String))),
             format: Some("raster-ref".to_owned()),
-            enum_values: None,
-            const_value: None,
-            subschemas: None,
-            number: None,
-            string: None,
-            array: None,
-            object: None,
-            reference: None,
             extensions: schemars::Map::from([
                 ("help_text".to_owned(), serde_json::Value::String("https://docs.geoengine.io/geoengine/datasets.html".to_owned()))
             ]),
+            ..Default::default()
         })
 }
 
 pub fn named_data_vector_schema(_gen: &mut SchemaGenerator) -> Schema {
     Schema::Object(SchemaObject {
             metadata: Some(Box::new(schemars::schema::Metadata {
-                id: None,
-                title: None,
                 description: Some("The user-facing identifier for loadable vector data.
 It can be resolved into a [`DataId`].
 
@@ -144,25 +129,14 @@ The namespace and provider are optional and default to the system namespace and 
 * `dataset` -> `NamedData { namespace: None, provider: None, name: \"dataset\" }`
 * `namespace:dataset` -> `NamedData { namespace: Some(\"namespace\"), provider: None, name: \"dataset\" }`
 * `namespace:provider:dataset` -> `NamedData { namespace: Some(\"namespace\"), provider: Some(\"provider\"), name: \"dataset\" }`".to_owned()),
-                default: None,
-                deprecated: false,
-                read_only: false,
-                write_only: false,
-                examples: Vec::new(),
+                ..Default::default()
             })),
             instance_type: Some(schemars::schema::SingleOrVec::Single(Box::new(schemars::schema::InstanceType::String))),
             format: Some("vector-ref".to_owned()),
-            enum_values: None,
-            const_value: None,
-            subschemas: None,
-            number: None,
-            string: None,
-            array: None,
-            object: None,
-            reference: None,
             extensions: schemars::Map::from([
                 ("help_text".to_owned(), serde_json::Value::String("https://docs.geoengine.io/geoengine/datasets.html".to_owned()))
             ]),
+            ..Default::default()
         })
 }
 

@@ -8,6 +8,7 @@ use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
 };
 use postgres_types::{FromSql, IsNull, ToSql, Type};
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use snafu::ensure;
 use std::collections::{HashMap, HashSet};
@@ -225,7 +226,7 @@ impl ToSql for RasterBandDescriptors {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, ToSql, FromSql)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, ToSql, FromSql, JsonSchema)]
 pub struct RasterBandDescriptor {
     pub name: String,
     pub measurement: Measurement,

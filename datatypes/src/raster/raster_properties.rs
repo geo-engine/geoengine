@@ -3,6 +3,7 @@ use crate::util::{ByteSize, Result};
 
 use num_traits::FromPrimitive;
 use postgres_types::{FromSql, ToSql};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use std::collections::HashMap;
@@ -120,7 +121,7 @@ impl RasterProperties {
 }
 
 #[derive(
-    Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq, PartialOrd, Ord, FromSql, ToSql,
+    Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq, PartialOrd, Ord, FromSql, ToSql, JsonSchema
 )]
 pub struct RasterPropertiesKey {
     pub domain: Option<String>,

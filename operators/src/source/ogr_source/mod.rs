@@ -10,8 +10,8 @@ use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
 use crate::{
     engine::{
-        InitializedVectorOperator, MetaData, QueryContext,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        InitializedVectorOperator, MetaData, QueryContext, TypedVectorQueryProcessor,
+        VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     error,
 };

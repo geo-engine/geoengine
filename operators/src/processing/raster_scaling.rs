@@ -1,5 +1,6 @@
+use crate::define_operator;
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     OperatorName, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
@@ -18,11 +19,12 @@ use geoengine_datatypes::{
 use num::FromPrimitive;
 use num_traits::AsPrimitive;
 use rayon::ThreadPool;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterScalingParams {
     slope: SlopeOffsetSelection,
@@ -31,14 +33,14 @@ pub struct RasterScalingParams {
     scaling_mode: ScalingMode,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ScalingMode {
     MulSlopeAddOffset,
     SubOffsetDivSlope,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 enum SlopeOffsetSelection {
     Auto,
@@ -69,11 +71,13 @@ impl Default for SlopeOffsetSelection {
 ///
 /// - offset: `msg.calibration_offset`
 /// - slope: `msg.calibration_slope`
-pub type RasterScaling = Operator<RasterScalingParams, SingleRasterSource>;
-
-impl OperatorName for RasterScaling {
-    const TYPE_NAME: &'static str = "RasterScaling";
-}
+define_operator!(
+    RasterScaling,
+    RasterScalingParams,
+    SingleRasterSource,
+    output_type = "raster",
+    help_text = "https://docs.geoengine.io/operators/rasterscaling.html"
+);
 
 pub struct InitializedRasterScalingOperator {
     name: CanonicOperatorName,
