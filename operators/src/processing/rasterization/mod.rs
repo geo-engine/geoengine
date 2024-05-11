@@ -1,17 +1,17 @@
 use crate::engine::TypedVectorQueryProcessor::MultiPoint;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    InitializedVectorOperator, OperatorName, QueryContext, QueryProcessor,
-    RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
+    InitializedVectorOperator, OperatorName, QueryContext, QueryProcessor, RasterBandDescriptors,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleVectorSource,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use arrow::datatypes::ArrowNativeTypeOp;
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use schemars::JsonSchema;
 
-use crate::{define_operator, error};
 use crate::processing::rasterization::GridOrDensity::Grid;
 use crate::util;
+use crate::{define_operator, error};
 
 use async_trait::async_trait;
 

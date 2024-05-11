@@ -143,7 +143,19 @@ impl Pixel for f32 {}
 impl Pixel for f64 {}
 
 #[derive(
-    Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone, FromSql, ToSql, JsonSchema
+    Debug,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Deserialize,
+    Serialize,
+    Copy,
+    Clone,
+    FromSql,
+    ToSql,
+    JsonSchema,
 )]
 pub enum RasterDataType {
     U8,

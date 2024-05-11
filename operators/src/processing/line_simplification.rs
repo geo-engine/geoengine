@@ -1,10 +1,11 @@
 use crate::{
-    define_operator, engine::{
+    define_operator,
+    engine::{
         CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
-        OperatorName, QueryContext, QueryProcessor, SingleVectorSource,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
-        WorkflowOperatorPath,
-    }, util::Result
+        OperatorName, QueryContext, QueryProcessor, SingleVectorSource, TypedVectorQueryProcessor,
+        VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    },
+    util::Result,
 };
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};

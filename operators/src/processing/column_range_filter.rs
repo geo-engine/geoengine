@@ -3,10 +3,10 @@ use crate::engine::{
     OperatorName, QueryContext, QueryProcessor, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
-use crate::{define_operator, error};
 use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
 use crate::{adapters::FeatureCollectionChunkMerger, engine::SingleVectorSource};
+use crate::{define_operator, error};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;

@@ -121,7 +121,18 @@ impl RasterProperties {
 }
 
 #[derive(
-    Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq, PartialOrd, Ord, FromSql, ToSql, JsonSchema
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Hash,
+    Eq,
+    PartialOrd,
+    Ord,
+    FromSql,
+    ToSql,
+    JsonSchema,
 )]
 pub struct RasterPropertiesKey {
     pub domain: Option<String>,

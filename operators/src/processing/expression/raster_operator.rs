@@ -4,12 +4,15 @@ use super::{
     RasterExpressionError,
 };
 use crate::{
-    define_operator, engine::{
+    define_operator,
+    engine::{
         CanonicOperatorName, InitializedRasterOperator, InitializedSources, OperatorName,
         RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterQueryProcessor,
         RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
         WorkflowOperatorPath,
-    }, error::InvalidNumberOfExpressionInputBands, util::Result
+    },
+    error::InvalidNumberOfExpressionInputBands,
+    util::Result,
 };
 use async_trait::async_trait;
 use geoengine_datatypes::raster::RasterDataType;
