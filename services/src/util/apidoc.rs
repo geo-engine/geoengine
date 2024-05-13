@@ -214,17 +214,17 @@ mod tests {
                 "MyEnum": {
                     "oneOf": [
                         {
-                            "$ref": "#/components/schemas/InlinedMyEnum"
+                            "$ref": "#/components/schemas/MyEnumInlined"
                         },
                         {
-                            "$ref": "#/components/schemas/MyStructWithType"
+                            "$ref": "#/components/schemas/MyEnumB"
                         }
                     ],
                     "discriminator": {
                         "propertyName": "type",
                         "mapping": {
-                            "inlined": "#/components/schemas/InlinedMyEnum",
-                            "b": "#/components/schemas/MyStructWithType"
+                            "inlined": "#/components/schemas/MyEnumInlined",
+                            "b": "#/components/schemas/MyEnumB"
                         }
                     }
                 },
@@ -239,7 +239,7 @@ mod tests {
                         }
                     }
                 },
-                "MyStructWithType": {
+                "MyEnumB": {
                     "type": "object",
                     "required": [
                         "text",
@@ -257,7 +257,7 @@ mod tests {
                         }
                     }
                 },
-                "InlinedMyEnum": {
+                "MyEnumInlined": {
                     "type": "object",
                     "required": [
                         "v",
@@ -309,13 +309,13 @@ mod tests {
                 "MyEnum": {
                     "oneOf": [
                         {
-                            "$ref": "#/components/schemas/MyStructWithType"
+                            "$ref": "#/components/schemas/MyEnumX"
                         }
                     ],
                     "discriminator": {
                         "propertyName": "type",
                         "mapping": {
-                            "x": "#/components/schemas/MyStructWithType",
+                            "x": "#/components/schemas/MyEnumX",
                         }
                     }
                 },
@@ -330,7 +330,7 @@ mod tests {
                         }
                     }
                 },
-                "MyStructWithType": {
+                "MyEnumX": {
                     "type": "object",
                     "required": [
                         "name",
