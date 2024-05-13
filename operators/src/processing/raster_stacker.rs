@@ -1,7 +1,8 @@
 use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
+use crate::define_operator;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptor,
+    MultipleRasterSources, OperatorName, QueryContext, RasterBandDescriptor,
     RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
     WorkflowOperatorPath,
 };
@@ -15,10 +16,11 @@ use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, BandSelection, RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D, RenameBands};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterStackerParams {
     pub rename_bands: RenameBands,
@@ -29,9 +31,17 @@ pub struct RasterStackerParams {
 /// The tiles are automatically temporally aligned.
 ///
 /// All inputs must have the same data type and spatial reference.
-pub type RasterStacker = Operator<RasterStackerParams, MultipleRasterSources>;
+/* Currently cannot be processed by editor.
+define_operator!(
+    RasterStacker,
+    RasterStackerParams,
+    MultipleRasterSources,
+    output_type = "raster",
+    help_text = "https://docs.geoengine.io/operators/rasterstacker.html"
+);*/
+pub type RasterStacker = crate::engine::Operator<RasterStackerParams, MultipleRasterSources>;
 
-impl OperatorName for RasterStacker {
+impl crate::engine::OperatorName for RasterStacker {
     const TYPE_NAME: &'static str = "RasterStacker";
 }
 

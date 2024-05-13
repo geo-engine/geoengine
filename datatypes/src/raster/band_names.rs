@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -7,12 +8,15 @@ use crate::error::{
 };
 use crate::util::Result;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", tag = "type", content = "values")]
 pub enum RenameBands {
-    Default,             // append " (n)" to the band name for the `n`-th conflict,
-    Suffix(Vec<String>), // A suffix for every input, to be appended to the original band names
-    Rename(Vec<String>), // A new name for each band, to be used instead of the original band names
+    /// Append " (n)" to the band name for the `n`-th conflict
+    Default,
+    /// A suffix for every input, to be appended to the original band names
+    Suffix(Vec<String>),
+    /// A new name for each band, to be used instead of the original band names
+    Rename(Vec<String>),
 }
 
 impl RenameBands {

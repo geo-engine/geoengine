@@ -75,7 +75,7 @@ impl MultipleRasterOrSingleVectorSource {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MultipleRasterSources {
     pub rasters: Vec<Box<dyn RasterOperator>>,

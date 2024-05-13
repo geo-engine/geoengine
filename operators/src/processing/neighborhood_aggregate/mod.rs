@@ -94,10 +94,12 @@ fn odd_usize2_schema(_gen: &mut SchemaGenerator) -> Schema {
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum NeighborhoodParams {
+    #[schemars(title = "Rectangle")]
     Rectangle {
         #[schemars(schema_with = "odd_usize2_schema")]
         dimensions: [usize; 2],
     },
+    #[schemars(title = "WeightsMatrix")]
     WeightsMatrix {
         // At the moment it is impossible to check an array has an odd item
         // count using JSON Schema (see https://stackoverflow.com/a/77910644).
