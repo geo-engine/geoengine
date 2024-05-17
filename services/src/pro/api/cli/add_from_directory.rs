@@ -53,9 +53,8 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
         if let Ok(entry) = entry {
             if let Err(e) = add_dataset_definition_from_dir_entry(dataset_db, &entry).await {
                 warn!(
-                    "Skipped adding dataset from directory entry: {:?} error: {}",
-                    entry,
-                    e.to_string()
+                    "Skipped adding dataset from directory entry: {:?} error: {:?}",
+                    entry, e
                 );
             }
         } else {
