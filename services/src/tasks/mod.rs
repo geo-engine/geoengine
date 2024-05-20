@@ -12,6 +12,7 @@ use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::{error::ErrorSource, util::AsAnyArc};
 pub use in_memory::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
+use snafu::Report;
 use std::borrow::Cow;
 use std::{fmt, sync::Arc};
 use utoipa::{IntoParams, ToSchema};
@@ -376,8 +377,9 @@ fn serialize_failed_task_status<S>(
 where
     S: Serializer,
 {
-    let error_string = error.to_string();
-    serializer.serialize_str(error_string.as_str())
+    let error_string = Report::from_error(error).to_string();
+    //Trim to remove unwanted trailing newline
+    serializer.serialize_str(error_string.trim_end())
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)] // must adhere to serde's signature
