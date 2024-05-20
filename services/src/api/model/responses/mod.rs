@@ -3,6 +3,7 @@ pub mod datasets;
 use actix_http::StatusCode;
 use actix_web::{dev::ServiceResponse, HttpResponse};
 use serde::{Deserialize, Serialize};
+use snafu::Report;
 use std::fmt;
 use utoipa::{ToResponse, ToSchema};
 
@@ -84,9 +85,10 @@ where
     &'static str: From<&'a T>,
 {
     fn from(value: &'a T) -> Self {
+        let message = Report::from_error(value).to_string();
         ErrorResponse {
             error: Into::<&str>::into(value).to_string(),
-            message: value.to_string(),
+            message: message.trim_end().to_string(),
         }
     }
 }
