@@ -517,7 +517,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: Header with authorization token not provided.",
+            "Authorization error *\n\nCaused by this error:\n  1: Header with authorization token not provided.\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -598,7 +598,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: Header with authorization token not provided.",
+            "Authorization error *\n\nCaused by this error:\n  1: Header with authorization token not provided.\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -648,7 +648,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: Header with authorization token not provided.",
+            "Authorization error *\n\nCaused by this error:\n  1: Header with authorization token not provided.\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -1090,7 +1090,7 @@ mod tests {
             res,
             400,
             "DeleteProject",
-            &format!("Could not delete project: Project {project} does not exist"),
+            &format!("Could not delete project *\n\nCaused by this error:\n  1: Project {project} does not exist\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior."),
         )
         .await;
     }

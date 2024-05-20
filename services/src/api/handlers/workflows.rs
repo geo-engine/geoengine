@@ -787,7 +787,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: Header with authorization token not provided.",
+            "Authorization error *\n\nCaused by this error:\n  1: Header with authorization token not provided.\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -904,7 +904,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: Header with authorization token not provided.",
+            "Authorization error *\n\nCaused by this error:\n  1: Header with authorization token not provided.\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -1099,7 +1099,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: Header with authorization token not provided.",
+            "Authorization error *\n\nCaused by this error:\n  1: Header with authorization token not provided.\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -1227,7 +1227,7 @@ mod tests {
         let res_body = read_body_string(res).await;
         assert_eq!(
             res_body,
-            json!({"error": "Operator", "message": "Operator: Invalid operator type: expected Vector found Raster"}).to_string()
+            json!({"error": "Operator", "message": "Operator *\n\nCaused by this error:\n  1: Invalid operator type: expected Vector found Raster\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior."}).to_string()
         );
     }
 
