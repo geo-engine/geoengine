@@ -948,7 +948,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: User does not exist or password is wrong.",
+            "Authorization error *\n\nCaused by this error:\n  1: User does not exist or password is wrong.\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -1055,7 +1055,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: Header with authorization token not provided.",
+            "Authorization error *\n\nCaused by this error:\n  1: Header with authorization token not provided.\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -1072,7 +1072,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: The session id is invalid.",
+            "Authorization error *\n\nCaused by this error:\n  1: The session id is invalid.\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -1088,7 +1088,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: Authentication scheme must be Bearer.",
+            "Authorization error *\n\nCaused by this error:\n  1: Authentication scheme must be Bearer.\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -1104,7 +1104,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: Identifier does not have the right format.",
+            "Authorization error *\n\nCaused by this error:\n  1: Identifier does not have the right format.\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -1142,7 +1142,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: The session id is invalid.",
+            "Authorization error *\n\nCaused by this error:\n  1: The session id is invalid.\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -1202,7 +1202,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error: Anonymous access is disabled, please log in",
+            "Authorization error *\n\nCaused by this error:\n  1: Anonymous access is disabled, please log in\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
@@ -1370,7 +1370,7 @@ mod tests {
             res,
             400,
             "Oidc",
-            "OidcError: ProviderDiscoveryError: Server returned invalid response: HTTP status code 404 Not Found",
+            "OidcError *\n\nCaused by these errors (recent errors listed first):\n  1: ProviderDiscoveryError *\n  2: Server returned invalid response: HTTP status code 404 Not Found\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         ).await;
     }
 
@@ -1447,7 +1447,7 @@ mod tests {
 
         let res = oidc_login_test_helper(Method::POST, app_ctx, auth_code_response).await;
 
-        ErrorResponse::assert(res, 400, "Oidc", "OidcError: Login failed: Request unknown").await;
+        ErrorResponse::assert(res, 400, "Oidc", "OidcError *\n\nCaused by this error:\n  1: Login failed: Request unknown\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.").await;
     }
 
     fn oidc_login_fail_oidc_db() -> (Server, impl Fn() -> OidcRequestDb) {
@@ -1494,7 +1494,7 @@ mod tests {
             res,
             400,
             "Oidc",
-            "OidcError: Verification failed: Request for code to token exchange failed",
+            "OidcError *\n\nCaused by these errors (recent errors listed first):\n  1: Verification failed: Request for code to token exchange failed\n  2: Server returned error response\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
         )
         .await;
     }
