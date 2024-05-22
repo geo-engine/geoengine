@@ -32,6 +32,9 @@ pub enum NetCdfCf4DProviderError {
     MissingCrs {
         source: GdalError,
     },
+    CannotConvertSRefFromGdal {
+        source: geoengine_datatypes::error::Error,
+    },
     MissingSubdatasets,
     MissingEntities {
         source: GdalError,
@@ -190,7 +193,7 @@ pub enum NetCdfCf4DProviderError {
     CannotOpenNetCdfSubdataset {
         source: Box<dyn ErrorSource>,
     },
-
+    #[snafu(display("Cannot generate loading info: {source}"))]
     CannotGenerateLoadingInfo {
         source: Box<dyn ErrorSource>,
     },
