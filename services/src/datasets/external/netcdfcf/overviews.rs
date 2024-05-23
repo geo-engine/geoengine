@@ -24,10 +24,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     source::GdalMetaDataList,
-    util::gdal::{
-        gdal_parameters_from_dataset, raster_descriptor_from_dataset,
-        raster_descriptor_from_dataset_and_sref,
-    },
+    util::gdal::{gdal_parameters_from_dataset, raster_descriptor_from_dataset_and_sref},
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -35,7 +32,6 @@ use snafu::ResultExt;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
-    str::FromStr,
     sync::Arc,
 };
 use tokio::fs;
@@ -413,7 +409,6 @@ async fn index_subdataset_entity(
         .await
         .boxed_context(error::CannotCreateOverviews)?;
 
-    let mut subdataset_sref_string = None;
     let mut first_overview_dataset = None;
     let mut data_range = DataRange::uninitialized();
 
@@ -424,11 +419,7 @@ async fn index_subdataset_entity(
             time_idx,
         };
         let mut result = if check_file_only {
-            open_subdataset_tiff(
-                &conversion.base.file_path,
-                conversion_entity_part.destination(),
-            )
-            .await?
+            open_subdataset_tiff(&conversion.base.file_path, conversion_entity_part).await?
         } else {
             let (result, returned_subdataset) =
                 create_subdataset_tiff(subdataset, conversion_entity_part).await?;
@@ -447,15 +438,15 @@ async fn index_subdataset_entity(
         }
 
         if time_idx == 0 {
-            first_overview_dataset = Some((result.overview_dataset, result.overview_destination));
-        }
-
-        if let Some(sref) = result.sref_string {
-            subdataset_sref_string = Some(sref);
+            first_overview_dataset = Some((
+                result.overview_dataset,
+                result.overview_destination,
+                result.sref,
+            ));
         }
     }
 
-    let Some((overview_dataset, overview_destination)) = first_overview_dataset else {
+    let Some((overview_dataset, overview_destination, sref)) = first_overview_dataset else {
         return Err(NetCdfCf4DProviderError::NoOverviewsGeneratedForSource {
             path: conversion
                 .base
@@ -473,7 +464,7 @@ async fn index_subdataset_entity(
                 &overview_dataset,
                 &overview_destination,
                 &time_coverage,
-                subdataset_sref_string.clone(),
+                sref,
             )
         })
         .await
@@ -503,13 +494,15 @@ pub struct LoadingInfoMetadata {
 struct CreateSubdatasetTiffResult {
     overview_dataset: Dataset,
     overview_destination: PathBuf,
-    sref_string: Option<String>,
+    sref: SpatialReference,
 }
 
 async fn open_subdataset_tiff(
     dataset: &Path,
-    overview_destination: PathBuf,
+    conversion_entity_part: ConversionMetadataEntityPart,
 ) -> Result<CreateSubdatasetTiffResult> {
+    let overview_destination = conversion_entity_part.destination();
+
     let (dataset_result, overview_destination) = crate::util::spawn_blocking(move || {
         (Dataset::open(&overview_destination), overview_destination)
     })
@@ -518,9 +511,9 @@ async fn open_subdataset_tiff(
 
     if let Ok(dataset) = dataset_result {
         Ok(CreateSubdatasetTiffResult {
+            sref: subdataset_sref(&dataset, &conversion_entity_part)?,
             overview_dataset: dataset,
             overview_destination,
-            sref_string: None,
         })
     } else {
         Err(NetCdfCf4DProviderError::OverviewMissingForRefresh {
@@ -575,20 +568,7 @@ fn _create_subdataset_tiff(
         "COG".to_string(),
     ];
 
-    let input_sref_string = {
-        // open the concrete dataset to get the spatial reference. This does not work on the `subdataset`.
-        let temp_ds = geoengine_operators::util::gdal::gdal_open_dataset(Path::new(&format!(
-            "{}:{}",
-            conversion.entity.base.dataset_in, conversion.entity.base.array_path
-        )))
-        .boxed_context(error::CannotOpenNetCdfSubdataset)?;
-
-        temp_ds
-            .spatial_ref()
-            .context(error::MissingCrs)?
-            .authority()
-            .ok()
-    };
+    let input_sref = subdataset_sref(subdataset, conversion)?;
 
     for raster_creation_option in conversion.entity.raster_creation_options.options() {
         options.push("-co".to_string());
@@ -608,8 +588,34 @@ fn _create_subdataset_tiff(
     Ok(CreateSubdatasetTiffResult {
         overview_dataset,
         overview_destination: destination,
-        sref_string: input_sref_string,
+        sref: input_sref,
     })
+}
+
+fn subdataset_sref(
+    subdataset: &Dataset,
+    conversion: &ConversionMetadataEntityPart,
+) -> Result<SpatialReference> {
+    // try to get the spatial reference directly from the dataset
+    if let Ok(Ok(spatial_ref)) = subdataset
+        .spatial_ref()
+        .map(TryInto::<SpatialReference>::try_into)
+    {
+        return Ok(spatial_ref);
+    }
+
+    // open the concrete dataset to get the spatial reference
+    let temp_ds = geoengine_operators::util::gdal::gdal_open_dataset(Path::new(&format!(
+        "{}:{}",
+        conversion.entity.base.dataset_in, conversion.entity.base.array_path
+    )))
+    .boxed_context(error::CannotOpenNetCdfSubdataset)?;
+
+    temp_ds
+        .spatial_ref()
+        .context(error::MissingCrs)?
+        .try_into()
+        .context(error::CannotConvertSRefFromGdal)
 }
 
 #[derive(Debug, Clone)]
@@ -688,20 +694,12 @@ fn generate_loading_info(
     dataset: &Dataset,
     overview_dataset_path: &Path,
     time_coverage: &TimeCoverage,
-    sref_string: Option<String>,
+    sref: SpatialReference,
 ) -> Result<GdalMetaDataList> {
     const TIFF_BAND_INDEX: usize = 1;
 
-    let result_descriptor = if let Some(sref) = sref_string {
-        let spatial_ref =
-            SpatialReference::from_str(&sref).boxed_context(error::CannotGenerateLoadingInfo)?;
-
-        raster_descriptor_from_dataset_and_sref(dataset, 1, spatial_ref)
-            .boxed_context(error::CannotGenerateLoadingInfo)?
-    } else {
-        raster_descriptor_from_dataset(dataset, 1)
-            .boxed_context(error::CannotGenerateLoadingInfo)?
-    };
+    let result_descriptor = raster_descriptor_from_dataset_and_sref(dataset, 1, sref)
+        .boxed_context(error::CannotGenerateLoadingInfo)?;
 
     let params = gdal_parameters_from_dataset(
         dataset,
@@ -832,7 +830,7 @@ mod tests {
                     DateTime::new_utc(2020, 2, 1, 0, 0, 0).into(),
                 ],
             },
-            None,
+            dataset.spatial_ref().unwrap().try_into().unwrap(),
         )
         .unwrap();
 
