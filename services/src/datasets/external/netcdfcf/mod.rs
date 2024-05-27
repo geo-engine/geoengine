@@ -785,33 +785,38 @@ fn fallback_colorizer() -> Result<Colorizer> {
             )
                 .into(),
             (
-                36.428_571_428_571_42.try_into().expect("not nan"),
-                RgbaColor::new(70, 50, 126, 255),
+                31.875.try_into().expect("not nan"),
+                RgbaColor::new(71, 44, 122, 255),
             )
                 .into(),
             (
-                72.857_142_857_142_85.try_into().expect("not nan"),
-                RgbaColor::new(54, 92, 141, 255),
+                63.75.try_into().expect("not nan"),
+                RgbaColor::new(59, 81, 139, 255),
             )
                 .into(),
             (
-                109.285_714_285_714_28.try_into().expect("not nan"),
-                RgbaColor::new(39, 127, 142, 255),
+                95.625.try_into().expect("not nan"),
+                RgbaColor::new(44, 113, 142, 255),
             )
                 .into(),
             (
-                109.285_714_285_714_28.try_into().expect("not nan"),
-                RgbaColor::new(31, 161, 135, 255),
+                127.5.try_into().expect("not nan"),
+                RgbaColor::new(33, 144, 140, 255),
             )
                 .into(),
             (
-                182.142_857_142_857_1.try_into().expect("not nan"),
-                RgbaColor::new(74, 193, 109, 255),
+                159.375.try_into().expect("not nan"),
+                RgbaColor::new(39, 173, 128, 255),
             )
                 .into(),
             (
-                218.571_428_571_428_53.try_into().expect("not nan"),
-                RgbaColor::new(160, 218, 57, 255),
+                191.25.try_into().expect("not nan"),
+                RgbaColor::new(92, 200, 98, 255),
+            )
+                .into(),
+            (
+                223.125.try_into().expect("not nan"),
+                RgbaColor::new(170, 220, 49, 255),
             )
                 .into(),
             (
