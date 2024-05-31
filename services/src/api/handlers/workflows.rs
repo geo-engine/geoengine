@@ -1114,6 +1114,7 @@ mod tests {
             operator: Statistics {
                 params: StatisticsParams {
                     column_names: vec![],
+                    percentiles: vec![],
                 },
                 sources: MultipleRasterOrSingleVectorSource {
                     source: Raster(vec![]),

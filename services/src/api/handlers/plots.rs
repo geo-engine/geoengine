@@ -279,6 +279,7 @@ mod tests {
             operator: Statistics {
                 params: StatisticsParams {
                     column_names: vec![],
+                    percentiles: vec![],
                 },
                 sources: vec![example_raster_source()].into(),
             }
@@ -477,6 +478,7 @@ mod tests {
                 operator: Statistics {
                     params: StatisticsParams {
                         column_names: vec![],
+                        percentiles: vec![],
                     },
                     sources: vec![example_raster_source()].into(),
                 }
