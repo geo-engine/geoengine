@@ -44,7 +44,7 @@ define_operator!(
     GridOrDensity,
     SingleVectorSource,
     output_type = "raster",
-    help_text = "https://docs.geoengine.io/operators/rasterization.html"
+    help_url = "https://docs.geoengine.io/operators/rasterization.html"
 );
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]

@@ -35,7 +35,7 @@ define_operator!(
     LineSimplificationParams,
     SingleVectorSource,
     output_type = "vector",
-    help_text = "https://docs.geoengine.io/operators/linesimplification.html"
+    help_url = "https://docs.geoengine.io/operators/linesimplification.html"
 );
 
 #[typetag::serde]

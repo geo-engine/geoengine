@@ -765,7 +765,7 @@ define_operator!(
     GdalSource,
     GdalSourceParameters,
     output_type = "raster",
-    help_text = "https://docs.geoengine.io/operators/gdalsource.html"
+    help_url = "https://docs.geoengine.io/operators/gdalsource.html"
 );
 
 #[typetag::serde]

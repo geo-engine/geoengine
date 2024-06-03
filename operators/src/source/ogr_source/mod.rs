@@ -84,7 +84,7 @@ define_operator!(
     OgrSource,
     OgrSourceParameters,
     output_type = "vector",
-    help_text = "https://docs.geoengine.io/operators/ogrsource.html"
+    help_url = "https://docs.geoengine.io/operators/ogrsource.html"
 );
 
 ///  - `file_name`: path to the input file

@@ -36,7 +36,7 @@ define_operator!(
     ColumnRangeFilterParams,
     SingleVectorSource,
     output_type = "vector",
-    help_text = "https://docs.geoengine.io/operators/columnrangefilter.html"
+    help_url = "https://docs.geoengine.io/operators/columnrangefilter.html"
 );
 
 #[typetag::serde]

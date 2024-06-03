@@ -64,7 +64,7 @@ define_operator!(
     InterpolationParams,
     SingleRasterSource,
     output_type = "raster",
-    help_text = "https://docs.geoengine.io/operators/interpolation.html"
+    help_url = "https://docs.geoengine.io/operators/interpolation.html"
 );
 
 #[typetag::serde]

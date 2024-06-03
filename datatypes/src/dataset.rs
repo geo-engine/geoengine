@@ -1,4 +1,4 @@
-use crate::identifier;
+use crate::{identifier, util::helpers::json_schema_help_link};
 use schemars::{
     gen::SchemaGenerator,
     schema::{Schema, SchemaObject},
@@ -109,7 +109,7 @@ The namespace and provider are optional and default to the system namespace and 
             instance_type: Some(schemars::schema::SingleOrVec::Single(Box::new(schemars::schema::InstanceType::String))),
             format: Some("raster-ref".to_owned()),
             extensions: schemars::Map::from([
-                ("help_text".to_owned(), serde_json::Value::String("https://docs.geoengine.io/geoengine/datasets.html".to_owned()))
+                json_schema_help_link("https://docs.geoengine.io/geoengine/datasets.html")
             ]),
             ..Default::default()
         })
@@ -134,7 +134,7 @@ The namespace and provider are optional and default to the system namespace and 
             instance_type: Some(schemars::schema::SingleOrVec::Single(Box::new(schemars::schema::InstanceType::String))),
             format: Some("vector-ref".to_owned()),
             extensions: schemars::Map::from([
-                ("help_text".to_owned(), serde_json::Value::String("https://docs.geoengine.io/geoengine/datasets.html".to_owned()))
+                json_schema_help_link("https://docs.geoengine.io/geoengine/datasets.html")
             ]),
             ..Default::default()
         })

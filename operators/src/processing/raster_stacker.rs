@@ -37,7 +37,7 @@ define_operator!(
     RasterStackerParams,
     MultipleRasterSources,
     output_type = "raster",
-    help_text = "https://docs.geoengine.io/operators/rasterstacker.html"
+    help_url = "https://docs.geoengine.io/operators/rasterstacker.html"
 );*/
 pub type RasterStacker = crate::engine::Operator<RasterStackerParams, MultipleRasterSources>;
 

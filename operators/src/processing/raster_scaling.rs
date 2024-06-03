@@ -76,7 +76,7 @@ define_operator!(
     RasterScalingParams,
     SingleRasterSource,
     output_type = "raster",
-    help_text = "https://docs.geoengine.io/operators/rasterscaling.html"
+    help_url = "https://docs.geoengine.io/operators/rasterscaling.html"
 );
 
 pub struct InitializedRasterScalingOperator {

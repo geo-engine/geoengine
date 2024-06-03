@@ -42,7 +42,7 @@ define_operator!(
     PointInPolygonFilterParams,
     PointInPolygonFilterSource,
     output_type = "vector",
-    help_text = "https://docs.geoengine.io/operators/pointinpolygon.html"
+    help_url = "https://docs.geoengine.io/operators/pointinpolygon.html"
 );
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]

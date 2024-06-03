@@ -44,7 +44,7 @@ define_operator!(
     ExpressionParams,
     SingleRasterSource,
     output_type = "raster",
-    help_text = "https://docs.geoengine.io/operators/expression.html"
+    help_url = "https://docs.geoengine.io/operators/expression.html"
 );
 
 /// Create a parameter name from an index.

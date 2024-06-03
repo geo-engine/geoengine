@@ -11,7 +11,7 @@ use tracing::debug;
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::{dataset::NamedData, util::ByteSize};
+use geoengine_datatypes::{dataset::NamedData, util::{helpers::json_schema_help_link, ByteSize}};
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
@@ -467,11 +467,11 @@ pub trait OperatorName {
 pub(crate) struct OperatorSchema {
     gen: fn() -> RootSchema,
     output_type: &'static str,
-    help_text: &'static str,
+    help_url: &'static str,
 }
 
 impl OperatorSchema {
-    pub(crate) const fn new<T>(output_type: &'static str, help_text: &'static str) -> Self
+    pub(crate) const fn new<T>(output_type: &'static str, help_url: &'static str) -> Self
     where
         T: JsonSchema + OperatorName,
     {
@@ -515,22 +515,20 @@ impl OperatorSchema {
                 schema
             },
             output_type,
-            help_text,
+            help_url,
         }
     }
 
     fn get_schema(&self) -> serde_json::Value {
         assert!(
-            self.help_text.starts_with("http"),
-            "all operator help_text's must be urls"
+            self.help_url.starts_with("http"),
+            "all operator help_url's must be urls"
         );
 
         let mut schema = (self.gen)();
 
-        schema.schema.extensions.insert(
-            "help_text".to_owned(),
-            serde_json::Value::String(self.help_text.to_owned()),
-        );
+        let help_url = json_schema_help_link(self.help_url);
+        schema.schema.extensions.insert(help_url.0, help_url.1);
 
         serde_json::to_value(schema).unwrap()
     }
@@ -544,7 +542,7 @@ inventory::collect!(OperatorSchema);
 
 #[macro_export]
 macro_rules! define_operator {
-    ($operator_name:ident, $operator_params:ident, output_type = $output_type:literal, help_text = $help_text:literal) => {
+    ($operator_name:ident, $operator_params:ident, output_type = $output_type:literal, help_url = $help_url:literal) => {
         pub type $operator_name = $crate::engine::SourceOperator<$operator_params>;
 
         impl $crate::engine::OperatorName for $operator_name {
@@ -552,10 +550,10 @@ macro_rules! define_operator {
         }
 
         inventory::submit! {
-            $crate::engine::OperatorSchema::new::<$operator_name>($output_type, $help_text)
+            $crate::engine::OperatorSchema::new::<$operator_name>($output_type, $help_url)
         }
     };
-    ($operator_name:ident, $operator_params:ident, $operator_sources:ident, output_type = $output_type:literal, help_text = $help_text:literal) => {
+    ($operator_name:ident, $operator_params:ident, $operator_sources:ident, output_type = $output_type:literal, help_url = $help_url:literal) => {
         pub type $operator_name = $crate::engine::Operator<$operator_params, $operator_sources>;
 
         impl $crate::engine::OperatorName for $operator_name {
@@ -563,7 +561,7 @@ macro_rules! define_operator {
         }
 
         inventory::submit! {
-            $crate::engine::OperatorSchema::new::<$operator_name>($output_type, $help_text)
+            $crate::engine::OperatorSchema::new::<$operator_name>($output_type, $help_url)
         }
     };
 }

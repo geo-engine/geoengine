@@ -245,6 +245,15 @@ pub fn indices_for_split_at(
     (left_index, left_length_right_index, right_length)
 }
 
+pub fn json_schema_help_link(url: &str) -> (String, serde_json::Value) {
+    ("links".to_owned(), serde_json::json!([
+        {
+            "rel": "external help",
+            "href": url
+        }
+    ]))
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;

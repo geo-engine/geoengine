@@ -32,7 +32,7 @@ define_operator!(
     NeighborhoodAggregateParams,
     SingleRasterSource,
     output_type = "raster",
-    help_text = "https://docs.geoengine.io/operators/neighborhoodaggregate.html"
+    help_url = "https://docs.geoengine.io/operators/neighborhoodaggregate.html"
 );
 
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
