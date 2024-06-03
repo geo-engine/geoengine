@@ -785,18 +785,23 @@ fn fallback_colorizer() -> Result<Colorizer> {
             )
                 .into(),
             (
-                31.875.try_into().expect("not nan"),
-                RgbaColor::new(71, 44, 122, 255),
+                25.5.try_into().expect("not nan"),
+                RgbaColor::new(72, 36, 117, 255),
             )
                 .into(),
             (
-                63.75.try_into().expect("not nan"),
-                RgbaColor::new(59, 81, 139, 255),
+                51.0.try_into().expect("not nan"),
+                RgbaColor::new(65, 68, 135, 255),
             )
                 .into(),
             (
-                95.625.try_into().expect("not nan"),
-                RgbaColor::new(44, 113, 142, 255),
+                76.5.try_into().expect("not nan"),
+                RgbaColor::new(52, 95, 141, 255),
+            )
+                .into(),
+            (
+                102.0.try_into().expect("not nan"),
+                RgbaColor::new(42, 120, 142, 255),
             )
                 .into(),
             (
@@ -805,18 +810,23 @@ fn fallback_colorizer() -> Result<Colorizer> {
             )
                 .into(),
             (
-                159.375.try_into().expect("not nan"),
-                RgbaColor::new(39, 173, 128, 255),
+                153.0.try_into().expect("not nan"),
+                RgbaColor::new(34, 168, 132, 255),
             )
                 .into(),
             (
-                191.25.try_into().expect("not nan"),
-                RgbaColor::new(92, 200, 98, 255),
+                178.5.try_into().expect("not nan"),
+                RgbaColor::new(67, 190, 112, 255),
             )
                 .into(),
             (
-                223.125.try_into().expect("not nan"),
-                RgbaColor::new(170, 220, 49, 255),
+                204.0.try_into().expect("not nan"),
+                RgbaColor::new(122, 209, 81, 255),
+            )
+                .into(),
+            (
+                229.5.try_into().expect("not nan"),
+                RgbaColor::new(187, 222, 39, 255),
             )
                 .into(),
             (
