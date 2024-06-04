@@ -1760,7 +1760,16 @@ mod tests {
                         name: "Test dataset metric and scenario".to_string(),
                         description: "Fake description of test dataset with metric and scenario.".to_string(),
                         properties: Default::default(),
-                    })
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: NETCDF_CF_PROVIDER_ID,
+                            collection_id: LayerCollectionId("dataset_esri.nc".to_string())
+                        },
+                        name: "Test dataset metric monthly".to_string(),
+                        description: "Fake description of test dataset with metric.".to_string(),
+                        properties: Default::default(),
+                    }),
                 ],
                 entry_label: None,
                 properties: vec![]
@@ -2025,6 +2034,7 @@ mod tests {
         let expected_files: Vec<PathBuf> = vec![
             "Biodiversity/dataset_daily.nc".into(),
             "Biodiversity/dataset_monthly.nc".into(),
+            "dataset_esri.nc".into(),
             "dataset_irr_ts.nc".into(),
             "dataset_m.nc".into(),
             "dataset_sm.nc".into(),
@@ -2617,6 +2627,129 @@ mod tests {
                 .path()
                 .join(file_name)
                 .join("scenario_2/metric_2/1/2010-01-01T00:00:00.000Z.tiff"),
+        )
+        .await
+        .unwrap();
+
+        provider
+            .refresh_overview_metadata(Path::new(file_name), NopTaskContext)
+            .await
+            .unwrap_err();
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_handles_esri_in_creation_and_refresh(app_ctx: PostgresContext<NoTls>) {
+        async fn query_collection_name(
+            provider: &NetCdfCfDataProvider<PostgresDb<NoTls>>,
+            id: &LayerCollectionId,
+        ) -> String {
+            let collection = provider
+                .load_layer_collection(
+                    id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    },
+                )
+                .await
+                .unwrap();
+            collection.name
+        }
+
+        hide_gdal_errors();
+
+        let session_context = app_ctx.default_session_context().await.unwrap();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let provider = Box::new(NetCdfCfDataProviderDefinition {
+            name: "NetCdfCfDataProvider".to_string(),
+            description: "NetCdfCfProviderDefinition".to_string(),
+            priority: None,
+            data: test_data!("netcdf4d").into(),
+            overviews: overview_folder.path().to_path_buf(),
+            cache_ttl: Default::default(),
+        })
+        .initialize(session_context.db())
+        .await
+        .unwrap();
+
+        let file_name = "dataset_esri.nc";
+        let id = LayerCollectionId(file_name.to_string());
+
+        let provider = provider
+            .as_any()
+            .downcast_ref::<NetCdfCfDataProvider<PostgresDb<NoTls>>>()
+            .unwrap();
+
+        provider
+            .create_overviews(Path::new(file_name), None, NopTaskContext)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            query_collection_name(provider, &id).await,
+            "Test dataset metric monthly"
+        );
+
+        let layer_id =
+            netcdf_entity_to_layer_id(Path::new(file_name), &["metric_2".to_string()], 2);
+
+        assert_eq!(
+            provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
+            "[2.0,25093.0]"
+        );
+
+        // manipulate a field in the metadata
+
+        let db = session_context.db();
+
+        db.test_execute_with_transaction(
+            "UPDATE ebv_provider_overviews SET title = 'MANIPULATED' WHERE file_name = $1",
+            &[&file_name],
+        )
+        .await
+        .unwrap();
+
+        db.test_execute_with_transaction(
+            "UPDATE ebv_provider_groups SET data_range = ARRAY[5, 23] WHERE file_name = $1",
+            &[&file_name],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(query_collection_name(provider, &id).await, "MANIPULATED");
+
+        assert_eq!(
+            provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
+            "[5.0,23.0]"
+        );
+
+        provider
+            .refresh_overview_metadata(Path::new(file_name), NopTaskContext)
+            .await
+            .unwrap();
+
+        // after refresh, the metadata should be correct
+
+        assert_eq!(
+            query_collection_name(provider, &id).await,
+            "Test dataset metric monthly"
+        );
+
+        assert_eq!(
+            provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
+            "[2.0,25093.0]"
+        );
+
+        // forcefully remove file to test error handling
+
+        tokio::fs::remove_file(
+            overview_folder
+                .path()
+                .join(file_name)
+                .join("metric_2/1/2000-01-01T00:00:00.000Z.tiff"),
         )
         .await
         .unwrap();
