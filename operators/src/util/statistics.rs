@@ -320,6 +320,14 @@ impl<T: AsPrimitive<f64>> SafePSquareQuantileEstimator<T> {
         }
     }
 
+    /// Returns the quantile that's being estimated
+    pub fn quantile_arg(&self) -> f64 {
+        match self {
+            Self::Values { quantile, .. } => *quantile,
+            Self::Estimator(estimator) => estimator.quantile(),
+        }
+    }
+
     /// Updates the estimator with the given sample.
     ///
     /// # Note
