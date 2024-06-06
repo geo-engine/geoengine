@@ -119,16 +119,69 @@ impl OgrDatasetIterator {
         query_rectangle: &VectorQueryRectangle,
         attribute_filters: &[AttributeFilter],
     ) -> Result<FeaturesProvider<'d>> {
-        // TODO: add OGR time filter if forced
+        let filter_string = if dataset.driver().short_name() == "CSV" {
+            FeaturesProvider::create_attribute_filter_string_cast(attribute_filters)
+        } else {
+            FeaturesProvider::create_attribute_filter_string(attribute_filters)
+        };
+
+        let time_filter = if dataset_information.force_ogr_time_filter {
+            debug!(
+                "using time filter {:?} for layer {:?}",
+                query_rectangle.time_interval, &dataset_information.layer_name
+            );
+            FeaturesProvider::create_time_filter_string(
+                dataset_information.time.clone(),
+                query_rectangle.time_interval,
+                &dataset.driver().short_name(),
+            )
+        } else {
+            None
+        };
+
+        let final_filter = filter_string
+            .map(|f| match &dataset_information.attribute_query {
+                Some(a) => format!("({a}) AND {f}"),
+                None => f,
+            })
+            .or_else(|| dataset_information.attribute_query.clone())
+            .map(|f| match &time_filter {
+                None => f,
+                Some(t) => format!("({t}) AND {f}"),
+            })
+            .or_else(|| time_filter.clone());
 
         let mut features_provider = if let Some(sql) = dataset_information.sql_query.as_ref() {
+            let query = if let Some(filter) = final_filter {
+                debug!(
+                    "using attribute filter {:?} for layer {:?}",
+                    &filter, &dataset_information.layer_name
+                );
+
+                // This is necessary because otherwise the GDAL postgres driver does not perform a filter-pushdown in case an explicit SQL query is given
+                format!("SELECT * FROM ({sql}) q WHERE {filter}")
+            } else {
+                sql.clone()
+            };
+
             FeaturesProvider::ResultSet(
                 dataset
-                    .execute_sql(sql, None, Dialect::DEFAULT)?
+                    .execute_sql(query, None, Dialect::DEFAULT)?
                     .ok_or(error::Error::OgrSqlQuery)?,
             )
         } else {
-            FeaturesProvider::Layer(dataset.layer_by_name(&dataset_information.layer_name)?)
+            let mut features_provider =
+                FeaturesProvider::Layer(dataset.layer_by_name(&dataset_information.layer_name)?);
+
+            if let Some(filter) = final_filter {
+                debug!(
+                    "using attribute filter {:?} for layer {:?}",
+                    &filter, &dataset_information.layer_name
+                );
+                features_provider.set_attribute_filter(filter.as_str())?;
+            }
+
+            features_provider
         };
 
         let use_ogr_spatial_filter = dataset_information.force_ogr_spatial_filter
@@ -143,26 +196,6 @@ impl OgrDatasetIterator {
             features_provider.set_spatial_filter(&query_rectangle.spatial_bounds);
         }
 
-        let filter_string = if dataset.driver().short_name() == "CSV" {
-            FeaturesProvider::create_attribute_filter_string_cast(attribute_filters)
-        } else {
-            FeaturesProvider::create_attribute_filter_string(attribute_filters)
-        };
-
-        let final_filter = filter_string
-            .map(|f| match &dataset_information.attribute_query {
-                Some(a) => format!("({a}) AND {f}"),
-                None => f,
-            })
-            .or_else(|| dataset_information.attribute_query.clone());
-
-        if let Some(filter) = final_filter {
-            debug!(
-                "using attribute filter {:?} for layer {:?}",
-                &filter, &dataset_information.layer_name
-            );
-            features_provider.set_attribute_filter(filter.as_str())?;
-        }
         Ok(features_provider)
     }
 
