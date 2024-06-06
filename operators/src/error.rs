@@ -322,7 +322,7 @@ pub enum Error {
     SparseTilesFillAdapter {
         source: crate::adapters::SparseTilesFillAdapterError,
     },
-    #[snafu(context(false))]
+    #[snafu(context(false), display("Expression: {}", source))]
     ExpressionOperator {
         source: crate::processing::RasterExpressionError,
     },
