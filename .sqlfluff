@@ -2,3 +2,4 @@
 dialect = postgres
 templater = jinja
 sql_file_exts = .sql
+large_file_skip_byte_limit = 40000
