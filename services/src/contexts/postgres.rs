@@ -603,6 +603,7 @@ mod tests {
                 operator: Statistics {
                     params: StatisticsParams {
                         column_names: vec![],
+                        percentiles: vec![],
                     },
                     sources: MultipleRasterOrSingleVectorSource {
                         source: Raster(vec![]),
@@ -989,7 +990,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(datasets.items.len(), 4, "{:?}", datasets.items);
+        assert_eq!(datasets.items.len(), 5, "{:?}", datasets.items);
     }
 
     #[allow(clippy::too_many_lines)]
