@@ -220,4 +220,3 @@ CREATE TABLE oidc_session_tokens (
     refresh_token bytea,
     refresh_token_encryption_nonce bytea
 );
-
