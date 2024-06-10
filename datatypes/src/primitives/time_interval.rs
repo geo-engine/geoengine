@@ -7,6 +7,7 @@ use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
 
 use postgres_types::{FromSql, ToSql};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::fmt::{Debug, Display};
@@ -14,7 +15,7 @@ use std::sync::Arc;
 use std::{cmp::Ordering, convert::TryInto};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql, JsonSchema)]
 #[repr(C)]
 pub struct TimeInterval {
     start: TimeInstance,

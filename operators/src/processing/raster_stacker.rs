@@ -31,19 +31,13 @@ pub struct RasterStackerParams {
 /// The tiles are automatically temporally aligned.
 ///
 /// All inputs must have the same data type and spatial reference.
-/* Currently cannot be processed by editor.
 define_operator!(
     RasterStacker,
     RasterStackerParams,
     MultipleRasterSources,
     output_type = "raster",
     help_url = "https://docs.geoengine.io/operators/rasterstacker.html"
-);*/
-pub type RasterStacker = crate::engine::Operator<RasterStackerParams, MultipleRasterSources>;
-
-impl crate::engine::OperatorName for RasterStacker {
-    const TYPE_NAME: &'static str = "RasterStacker";
-}
+);
 
 #[typetag::serde]
 #[async_trait]

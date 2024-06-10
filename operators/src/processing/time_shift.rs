@@ -1,7 +1,8 @@
+use crate::define_operator;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSingleRasterOrVectorOperator, InitializedSources, InitializedVectorOperator,
-    Operator, OperatorName, QueryContext, RasterOperator, RasterQueryProcessor,
+    OperatorName, QueryContext, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
@@ -21,17 +22,20 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
 /// Project the query rectangle to a new time interval.
-pub type TimeShift = Operator<TimeShiftParams, SingleRasterOrVectorSource>;
+define_operator!(
+    TimeShift,
+    TimeShiftParams,
+    SingleRasterOrVectorSource,
+    output_type = "copyFromSource",
+    help_url = "https://docs.geoengine.io/operators/timeshift.html"
+);
 
-impl OperatorName for TimeShift {
-    const TYPE_NAME: &'static str = "TimeShift";
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum TimeShiftParams {
     /// Shift the query rectangle relative with a time step

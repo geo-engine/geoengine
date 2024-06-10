@@ -59,7 +59,6 @@ use tokio::sync::Mutex;
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceParameters {
-    #[schemars(schema_with = "geoengine_datatypes::dataset::named_data_vector_schema")]
     pub data: NamedData,
     #[schemars(title = "Attributes to select")]
     pub attribute_projection: Option<Vec<String>>,

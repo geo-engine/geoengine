@@ -1,9 +1,10 @@
 use crate::engine::{OperatorData, RasterOperator, TypedOperator, VectorOperator};
 use geoengine_datatypes::dataset::NamedData;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// It is either a `RasterOperator` or a `VectorOperator`
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum RasterOrVectorOperator {
     Raster(Box<dyn RasterOperator>),

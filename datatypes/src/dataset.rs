@@ -1,7 +1,9 @@
+use std::borrow::Cow;
+
 use crate::{identifier, util::helpers::json_schema_help_link};
 use schemars::{
     gen::SchemaGenerator,
-    schema::{Schema, SchemaObject},
+    schema::Schema, JsonSchema,
 };
 use serde::{de::Visitor, Deserialize, Serialize};
 
@@ -90,10 +92,24 @@ pub struct NamedData {
     pub name: String,
 }
 
-pub fn named_data_raster_schema(_gen: &mut SchemaGenerator) -> Schema {
-    Schema::Object(SchemaObject {
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("The user-facing identifier for loadable raster data.
+impl JsonSchema for NamedData {
+    fn schema_name() -> String {
+        "NamedData".to_owned()
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        Cow::Borrowed(concat!(module_path!(), "::NamedData"))
+    }
+
+    fn is_referenceable() -> bool {
+        false
+    }
+
+    fn json_schema(_gen: &mut SchemaGenerator) -> Schema {
+        use schemars::schema::*;
+        Schema::Object(SchemaObject {
+            metadata: Some(Box::new(Metadata {
+                description: Some("The user-facing identifier for loadable data.
 It can be resolved into a [`DataId`].
 
 It is a triple of namespace, provider and name.
@@ -106,38 +122,13 @@ The namespace and provider are optional and default to the system namespace and 
 * `namespace:provider:dataset` -> `NamedData { namespace: Some(\"namespace\"), provider: Some(\"provider\"), name: \"dataset\" }`".to_owned()),
 ..Default::default()
             })),
-            instance_type: Some(schemars::schema::SingleOrVec::Single(Box::new(schemars::schema::InstanceType::String))),
-            format: Some("raster-ref".to_owned()),
+            instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::String))),
             extensions: schemars::Map::from([
                 json_schema_help_link("https://docs.geoengine.io/geoengine/datasets.html")
             ]),
             ..Default::default()
         })
-}
-
-pub fn named_data_vector_schema(_gen: &mut SchemaGenerator) -> Schema {
-    Schema::Object(SchemaObject {
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("The user-facing identifier for loadable vector data.
-It can be resolved into a [`DataId`].
-
-It is a triple of namespace, provider and name.
-The namespace and provider are optional and default to the system namespace and provider.
-
-# Examples
-
-* `dataset` -> `NamedData { namespace: None, provider: None, name: \"dataset\" }`
-* `namespace:dataset` -> `NamedData { namespace: Some(\"namespace\"), provider: None, name: \"dataset\" }`
-* `namespace:provider:dataset` -> `NamedData { namespace: Some(\"namespace\"), provider: Some(\"provider\"), name: \"dataset\" }`".to_owned()),
-                ..Default::default()
-            })),
-            instance_type: Some(schemars::schema::SingleOrVec::Single(Box::new(schemars::schema::InstanceType::String))),
-            format: Some("vector-ref".to_owned()),
-            extensions: schemars::Map::from([
-                json_schema_help_link("https://docs.geoengine.io/geoengine/datasets.html")
-            ]),
-            ..Default::default()
-        })
+    }
 }
 
 impl NamedData {

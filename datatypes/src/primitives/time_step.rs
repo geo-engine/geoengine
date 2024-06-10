@@ -1,6 +1,7 @@
 use std::ops::{Mul, Sub};
 use std::{cmp::max, convert::TryInto, ops::Add};
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use postgres_types::{FromSql, ToSql};
@@ -13,7 +14,7 @@ use crate::util::Result;
 use super::{DateTime, Duration, TimeInterval};
 
 /// A time granularity.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSql, FromSql)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSql, FromSql, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum TimeGranularity {
     Millis,

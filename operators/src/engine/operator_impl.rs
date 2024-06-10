@@ -31,7 +31,7 @@ pub struct SingleVectorSource {
     pub vector: Box<dyn VectorOperator>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleRasterOrVectorSource {
     pub source: RasterOrVectorOperator,

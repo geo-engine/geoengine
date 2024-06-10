@@ -2,7 +2,7 @@ use crate::{
     error,
     operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
     primitives::AxisAlignedRectangle,
-    util::Result,
+    util::{helpers::json_schema_help_link, Result},
 };
 use gdal::spatial_ref::SpatialRef;
 
@@ -10,12 +10,13 @@ use postgres_types::private::BytesMut;
 
 use postgres_types::{FromSql, IsNull, ToSql, Type};
 use proj::Proj;
+use schemars::{gen::SchemaGenerator, schema::Schema, JsonSchema};
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use snafu::Error;
 use snafu::ResultExt;
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 use std::{convert::TryFrom, fmt::Formatter};
 
 /// A spatial reference authority that is part of a spatial reference definition
@@ -50,6 +51,31 @@ impl std::fmt::Display for SpatialReferenceAuthority {
 pub struct SpatialReference {
     authority: SpatialReferenceAuthority,
     code: u32,
+}
+
+impl JsonSchema for SpatialReference {
+    fn schema_name() -> String {
+        "SpatialReference".to_owned()
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        Cow::Borrowed(concat!(module_path!(), "::SpatialReference"))
+    }
+
+    fn is_referenceable() -> bool {
+        false
+    }
+
+    fn json_schema(_gen: &mut SchemaGenerator) -> Schema {
+        use schemars::schema::*;
+        Schema::Object(SchemaObject {
+            instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::String))),
+            extensions: schemars::Map::from([
+                json_schema_help_link("https://epsg.io")
+            ]),
+            ..Default::default()
+        })
+    }
 }
 
 impl SpatialReference {

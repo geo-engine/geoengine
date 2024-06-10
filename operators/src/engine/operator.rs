@@ -496,18 +496,9 @@ impl OperatorSchema {
                 object.properties.insert(
                     "type".to_owned(),
                     Schema::Object(SchemaObject {
-                        metadata: None,
                         instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::String))),
-                        format: None,
                         enum_values: Some(vec![serde_json::Value::String(T::TYPE_NAME.to_owned())]),
-                        const_value: None,
-                        subschemas: None,
-                        number: None,
-                        string: None,
-                        array: None,
-                        object: None,
-                        reference: None,
-                        extensions: schemars::Map::new(),
+                        ..Default::default()
                     }),
                 );
                 object.required.insert("type".to_owned());

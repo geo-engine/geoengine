@@ -5,16 +5,13 @@ use crate::{
     adapters::{
         fold_by_coordinate_lookup_future, FillerTileCacheExpirationStrategy, RasterSubQueryAdapter,
         SparseTilesFillAdapter, TileReprojectionSubQuery,
-    },
-    engine::{
+    }, define_operator, engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-        InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
+        InitializedVectorOperator, OperatorName, QueryContext, QueryProcessor,
         RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
         TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
         VectorResultDescriptor, WorkflowOperatorPath,
-    },
-    error::{self, Error},
-    util::Result,
+    }, error::{self, Error}, util::Result
 };
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -33,9 +30,10 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
     util::arrow::ArrowTyped,
 };
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReprojectionParams {
     pub target_spatial_reference: SpatialReference,
@@ -47,13 +45,13 @@ pub struct ReprojectionBounds {
     valid_out_bounds: SpatialPartition2D,
 }
 
-pub type Reprojection = Operator<ReprojectionParams, SingleRasterOrVectorSource>;
-
-impl Reprojection {}
-
-impl OperatorName for Reprojection {
-    const TYPE_NAME: &'static str = "Reprojection";
-}
+define_operator!(
+    Reprojection,
+    ReprojectionParams,
+    SingleRasterOrVectorSource,
+    output_type = "copyFromSource",
+    help_url = "https://docs.geoengine.io/operators/reprojection.html"
+);
 
 pub struct InitializedVectorReprojection {
     name: CanonicOperatorName,
