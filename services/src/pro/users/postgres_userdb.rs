@@ -407,8 +407,8 @@ where
                 "
             SELECT 
                 u.id,   
-                u.email,
-                u.real_name,             
+                COALESCE(u.email, eu.email) AS email,
+                COALESCE(u.real_name, eu.real_name) AS real_name,
                 us.created, 
                 us.valid_until, 
                 s.project_id,
@@ -416,6 +416,7 @@ where
             FROM 
                 sessions s JOIN user_sessions us ON (s.id = us.session_id) 
                     JOIN users u ON (us.user_id = u.id)
+                    LEFT JOIN external_users eu ON (u.id = eu.id)
             WHERE s.id = $1 AND CURRENT_TIMESTAMP < us.valid_until;",
             )
             .await?;
