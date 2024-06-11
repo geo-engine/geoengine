@@ -207,14 +207,14 @@ pub struct StoredOidcTokens {
 
 #[async_trait]
 pub trait SessionTokenStore {
-    async fn store_tokens(
+    async fn store_oidc_session_tokens(
         &self,
         session: SessionId,
         oidc_tokens: OidcTokens,
         tx: &Transaction<'_>,
     ) -> Result<StoredOidcTokens>;
 
-    async fn refresh_tokens(
+    async fn refresh_oidc_session_tokens(
         &self,
         session: SessionId,
         tx: &Transaction<'_>,

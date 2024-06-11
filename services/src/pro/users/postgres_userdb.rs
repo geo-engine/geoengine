@@ -375,7 +375,7 @@ where
             )
             .await?;
 
-        self.store_tokens(session_id, oidc_tokens, &tx).await?;
+        self.store_oidc_session_tokens(session_id, oidc_tokens, &tx).await?;
 
         let stmt = tx
             .prepare("SELECT role_id FROM user_roles WHERE user_id = $1;")
@@ -442,10 +442,16 @@ where
             row.get(4)
         } else {
             log::debug!("Session expired, trying to extend");
-            self.refresh_tokens(session, &tx)
-                .await
-                .map_err(|_error| Error::InvalidSession)?
-                .db_valid_until
+            let refresh_result = self.refresh_oidc_session_tokens(session, &tx)
+                .await;
+
+            if let Err(refresh_error) = refresh_result {
+                log::debug!("Session extension failed {}", refresh_error);
+                return Err(Error::InvalidSession)
+            } else {
+                log::debug!("Session extended");
+                refresh_result.unwrap().db_valid_until
+            }
         };
 
         let mut session = UserSession {
@@ -488,7 +494,7 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn store_tokens(
+    async fn store_oidc_session_tokens(
         &self,
         session: SessionId,
         oidc_tokens: OidcTokens,
@@ -533,7 +539,7 @@ where
         })
     }
 
-    async fn refresh_tokens(
+    async fn refresh_oidc_session_tokens(
         &self,
         session: SessionId,
         tx: &Transaction<'_>,
@@ -567,7 +573,7 @@ where
             let oidc_tokens = oidc_manager
                 .get_client()
                 .await?
-                .refresh_token(refresh_token)
+                .refresh_access_token(refresh_token)
                 .await?;
 
             let flat_tokens: FlatMaybeEncryptedOidcTokens = self
@@ -585,7 +591,7 @@ where
 
             ).await?;
 
-            let updated_token_rows = tx
+            tx
                 .execute(
                     &update_session_tokens,
                     &[
@@ -598,10 +604,6 @@ where
                     ],
                 )
                 .await?;
-
-            if updated_token_rows != 1 {
-                return Err(Error::InvalidSession);
-            }
 
             let stmt = tx
                 .prepare(
@@ -624,8 +626,6 @@ where
                 )
                 .await?
                 .get(0);
-
-            log::debug!("Session extended");
 
             return Ok(StoredOidcTokens {
                 oidc_tokens,
@@ -663,7 +663,7 @@ where
             self.oidc_manager()
                 .maybe_decrypt_access_token(string_field_and_nonce)?
         } else {
-            self.refresh_tokens(session, &tx).await?.oidc_tokens.access
+            self.refresh_oidc_session_tokens(session, &tx).await?.oidc_tokens.access
         };
 
         tx.commit().await?;

@@ -544,7 +544,7 @@ impl OidcRequestDb {
         Ok(res)
     }
 
-    async fn refresh_token(
+    async fn refresh_access_token(
         &self,
         client: &DefaultClient,
         refresh_token: RefreshToken,
@@ -601,9 +601,9 @@ impl OidcRequestClient {
             .await
     }
 
-    pub async fn refresh_token(&self, refresh_token: RefreshToken) -> Result<OidcTokens> {
+    pub async fn refresh_access_token(&self, refresh_token: RefreshToken) -> Result<OidcTokens> {
         self.request_db
-            .refresh_token(&self.client, refresh_token)
+            .refresh_access_token(&self.client, refresh_token)
             .await
     }
 }
@@ -1372,7 +1372,7 @@ mod tests {
         let refresh_token = token_response.refresh_token().unwrap().clone();
         mock_valid_request(&server, &token_response);
 
-        let response = request_db.refresh_token(&client, refresh_token).await;
+        let response = request_db.refresh_access_token(&client, refresh_token).await;
 
         assert!(response.is_ok());
     }
@@ -1407,7 +1407,7 @@ mod tests {
             ),
         );
 
-        let response = request_db.refresh_token(&client, refresh_token).await;
+        let response = request_db.refresh_access_token(&client, refresh_token).await;
 
         assert!(matches!(response, Err(IllegalRequestToken { source: _ })));
     }
