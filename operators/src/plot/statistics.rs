@@ -485,7 +485,11 @@ impl<T: AsPrimitive<f64>> PercentileEstimator<T> {
     pub fn update(&mut self, sample: T) -> Result<(), StatisticsError> {
         match self {
             Self::Unitialized(quantile) => {
-                *self = Self::Initialized(SafePSquareQuantileEstimator::new(*quantile, sample)?);
+                // initial sample must be finite, if the current sample is not, stay uninitialized
+                if f64::is_finite(sample.as_()) {
+                    *self =
+                        Self::Initialized(SafePSquareQuantileEstimator::new(*quantile, sample)?);
+                }
             }
             Self::Initialized(estimator) => estimator.update(sample),
         }
