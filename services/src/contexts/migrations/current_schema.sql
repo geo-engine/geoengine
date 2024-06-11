@@ -136,16 +136,29 @@ CREATE TYPE "PolygonSymbology" AS (
 );
 
 CREATE TYPE "RasterColorizerType" AS ENUM (
-    'SingleBand'
-    -- TODO: 'MultiBand'
+    'SingleBand',
+    'MultiBand'
 );
 
 CREATE TYPE "RasterColorizer" AS (
     "type" "RasterColorizerType",
     -- single band colorizer
     band bigint,
-    band_colorizer "Colorizer"
-    -- TODO: multi band colorizer
+    band_colorizer "Colorizer",
+    -- multi band colorizer
+    red_band bigint,
+    red_min double precision,
+    red_max double precision,
+    red_scale double precision,
+    green_band bigint,
+    green_min double precision,
+    green_max double precision,
+    green_scale double precision,
+    blue_band bigint,
+    blue_min double precision,
+    blue_max double precision,
+    blue_scale double precision,
+    no_data_color "RgbaColor"
 );
 
 CREATE TYPE "RasterSymbology" AS (

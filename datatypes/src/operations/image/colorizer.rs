@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum RasterColorizer {
     #[serde(rename_all = "camelCase")]
@@ -18,13 +18,44 @@ pub enum RasterColorizer {
         band: u32,
         band_colorizer: Colorizer,
     },
-    // TODO: multiband colorizer, e.g.
-    // MultiBand {
-    //     red: ...,
-    //     green: ...,
-    //     blue: ..,
-    // },
+    #[serde(rename_all = "camelCase")]
+    MultiBand {
+        /// Unmapped values results in the NO DATA color.
+        no_data_color: RgbaColor,
+
+        /// The band index of the red channel.
+        red_band: u32,
+        /// The minimum value for the red channel.
+        red_min: f64,
+        /// The maximum value for the red channel.
+        red_max: f64,
+        /// A scaling factor for the red channel between 0 and 1.
+        #[serde(default = "num_traits::One::one")]
+        red_scale: f64,
+
+        /// The band index of the green channel.
+        green_band: u32,
+        /// The minimum value for the red channel.
+        green_min: f64,
+        /// The maximum value for the red channel.
+        green_max: f64,
+        /// A scaling factor for the green channel between 0 and 1.
+        #[serde(default = "num_traits::One::one")]
+        green_scale: f64,
+
+        /// The band index of the blue channel.
+        blue_band: u32,
+        /// The minimum value for the red channel.
+        blue_min: f64,
+        /// The maximum value for the red channel.
+        blue_max: f64,
+        /// A scaling factor for the blue channel between 0 and 1.
+        #[serde(default = "num_traits::One::one")]
+        blue_scale: f64,
+    },
 }
+
+impl Eq for RasterColorizer {}
 
 /// A colorizer specifies a mapping between raster values and an output image
 /// There are different variants that perform different kinds of mapping.
