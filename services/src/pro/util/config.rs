@@ -45,7 +45,7 @@ pub struct Oidc {
     pub client_secret: Option<String>,
     pub redirect_uri: String, //TODO: Maybe URL type
     pub scopes: Vec<String>,
-    pub postgres_password: Option<String>,
+    pub token_encryption_password: Option<String>,
 }
 
 impl ConfigElement for Oidc {

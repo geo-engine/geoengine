@@ -756,7 +756,7 @@ pub(in crate::pro) mod mock_oidc {
                 client_secret: None,
                 redirect_uri: "https://dummy-redirect.com/".into(),
                 scopes: vec!["profile".to_string(), "email".to_string()],
-                postgres_password: config.client_side_password,
+                token_encryption_password: config.client_side_password,
             },
         )
     }

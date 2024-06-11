@@ -1266,7 +1266,7 @@ mod tests {
             client_secret: None,
             redirect_uri: "https://dummy-redirect.com/".into(),
             scopes: vec!["profile".to_string(), "email".to_string()],
-            postgres_password: None,
+            token_encryption_password: None,
         };
 
         OidcManager::from_oidc_with_static_tokens(oidc_config)

@@ -143,7 +143,7 @@ impl OidcManager {
             oidc_request_db: Some(Arc::new(request_db)),
             token_at_rest_encryption: OptionalStringEncryption::new(
                 value
-                    .postgres_password
+                    .token_encryption_password
                     .map(|pw| AesGcmStringPasswordEncryption::new(&pw)),
             ),
         }
@@ -162,7 +162,7 @@ impl Default for OidcManager {
 impl From<Oidc> for OidcManager {
     fn from(value: Oidc) -> Self {
         let string_encryption = value
-            .postgres_password
+            .token_encryption_password
             .as_ref()
             .map(AesGcmStringPasswordEncryption::new);
 
