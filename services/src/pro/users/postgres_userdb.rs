@@ -375,7 +375,8 @@ where
             )
             .await?;
 
-        self.store_oidc_session_tokens(session_id, oidc_tokens, &tx).await?;
+        self.store_oidc_session_tokens(session_id, oidc_tokens, &tx)
+            .await?;
 
         let stmt = tx
             .prepare("SELECT role_id FROM user_roles WHERE user_id = $1;")
@@ -442,16 +443,16 @@ where
             row.get(4)
         } else {
             log::debug!("Session expired, trying to extend");
-            let refresh_result = self.refresh_oidc_session_tokens(session, &tx)
-                .await;
+            let refresh_result = self.refresh_oidc_session_tokens(session, &tx).await;
 
             if let Err(refresh_error) = refresh_result {
                 log::debug!("Session extension failed {}", refresh_error);
-                return Err(Error::InvalidSession)
-            } else {
-                log::debug!("Session extended");
-                refresh_result.unwrap().db_valid_until
+                return Err(Error::InvalidSession);
             }
+            log::debug!("Session extended");
+            refresh_result
+                .expect("Refresh result should exist")
+                .db_valid_until
         };
 
         let mut session = UserSession {
@@ -591,19 +592,18 @@ where
 
             ).await?;
 
-            tx
-                .execute(
-                    &update_session_tokens,
-                    &[
-                        &session,
-                        &flat_tokens.access_token_value,
-                        &flat_tokens.access_token_nonce,
-                        &(oidc_tokens.expires_in.num_seconds() as f64),
-                        &flat_tokens.refresh_token_value,
-                        &flat_tokens.refresh_token_nonce,
-                    ],
-                )
-                .await?;
+            tx.execute(
+                &update_session_tokens,
+                &[
+                    &session,
+                    &flat_tokens.access_token_value,
+                    &flat_tokens.access_token_nonce,
+                    &(oidc_tokens.expires_in.num_seconds() as f64),
+                    &flat_tokens.refresh_token_value,
+                    &flat_tokens.refresh_token_nonce,
+                ],
+            )
+            .await?;
 
             let stmt = tx
                 .prepare(
@@ -663,7 +663,10 @@ where
             self.oidc_manager()
                 .maybe_decrypt_access_token(string_field_and_nonce)?
         } else {
-            self.refresh_oidc_session_tokens(session, &tx).await?.oidc_tokens.access
+            self.refresh_oidc_session_tokens(session, &tx)
+                .await?
+                .oidc_tokens
+                .access
         };
 
         tx.commit().await?;

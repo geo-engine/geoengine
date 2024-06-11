@@ -1,3 +1,4 @@
+use crate::contexts::migrations::migration_0009_oidc_tokens::Migration0009OidcTokens;
 use crate::contexts::Migration;
 use crate::contexts::{
     Migration0000Initial, Migration0001RasterStacks, Migration0002DatasetListingProvider,
@@ -5,7 +6,6 @@ use crate::contexts::{
     Migration0005GbifColumnSelection, Migration0006EbvProvider, Migration0007OwnerRole,
     Migration0008BandNames,
 };
-use crate::contexts::migrations::migration_0009_oidc_tokens::Migration0009OidcTokens;
 use crate::pro::contexts::migrations::database_migration::NoProMigrationImpl;
 
 pub use crate::pro::contexts::migrations::database_migration::ProMigrationImpl;

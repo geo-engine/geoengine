@@ -1372,7 +1372,9 @@ mod tests {
         let refresh_token = token_response.refresh_token().unwrap().clone();
         mock_valid_request(&server, &token_response);
 
-        let response = request_db.refresh_access_token(&client, refresh_token).await;
+        let response = request_db
+            .refresh_access_token(&client, refresh_token)
+            .await;
 
         assert!(response.is_ok());
     }
@@ -1407,7 +1409,9 @@ mod tests {
             ),
         );
 
-        let response = request_db.refresh_access_token(&client, refresh_token).await;
+        let response = request_db
+            .refresh_access_token(&client, refresh_token)
+            .await;
 
         assert!(matches!(response, Err(IllegalRequestToken { source: _ })));
     }

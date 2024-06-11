@@ -17,7 +17,7 @@ impl ProMigration for ProMigrationImpl<Migration0009OidcTokens> {
                     refresh_token bytea,
                     refresh_token_encryption_nonce bytea
                 );
-            "
+            ",
         )
         .await?;
 
