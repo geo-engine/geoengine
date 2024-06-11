@@ -1092,7 +1092,7 @@ where
         chunk_byte_size: usize,
     ) -> Result<FeatureCollection<G>> {
         let was_spatial_filtered_by_ogr = feature_iterator.was_spatial_filtered_by_ogr();
-        let was_time_filtered_by_ogr = false; // TODO currently, we don't know whether a filter was applied at this point, so we filter again
+        let was_time_filtered_by_ogr = feature_iterator.was_time_filtered_by_ogr(); // TODO currently, we don't know whether a filter was applied at this point, so we filter again
 
         let mut builder = feature_collection_builder.finish_header();
 

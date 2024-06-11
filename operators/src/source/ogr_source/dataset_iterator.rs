@@ -23,7 +23,8 @@ pub struct OgrDatasetIterator {
     // must be cell since we borrow self in the iterator for emitting the output value
     // and thus cannot mutably borrow this value
     has_ended: Cell<bool>,
-    use_ogr_spatial_filter: bool,
+    was_spatial_filtered_by_ogr: bool,
+    was_time_filtered_by_ogr: bool,
 }
 
 // We can implement `Send` for the combination of OGR dataset and layer
@@ -52,6 +53,8 @@ impl OgrDatasetIterator {
         let adjusted_filters =
             Self::adjust_filters_to_column_renaming(dataset_information, attribute_filters);
 
+        let mut was_time_filtered_by_ogr = false;
+
         let dataset_iterator = _OgrDatasetIteratorTryBuilder {
             dataset: Self::open_gdal_dataset(dataset_information)?,
             features_provider_builder: |dataset| {
@@ -61,11 +64,16 @@ impl OgrDatasetIterator {
                     query_rectangle,
                     &adjusted_filters,
                 )
+                .map(|(provider, filtered)| {
+                    was_time_filtered_by_ogr = filtered;
+
+                    provider
+                })
             },
         }
         .try_build()?;
 
-        let use_ogr_spatial_filter = dataset_information.force_ogr_spatial_filter
+        let was_spatial_filtered_by_ogr = dataset_information.force_ogr_spatial_filter
             || dataset_iterator
                 .borrow_features_provider()
                 .has_gdal_capability(gdal::vector::LayerCaps::OLCFastSpatialFilter);
@@ -73,7 +81,8 @@ impl OgrDatasetIterator {
         Ok(Self {
             dataset_iterator,
             has_ended: Cell::new(false),
-            use_ogr_spatial_filter,
+            was_spatial_filtered_by_ogr,
+            was_time_filtered_by_ogr,
         })
     }
 
@@ -118,7 +127,7 @@ impl OgrDatasetIterator {
         dataset_information: &OgrSourceDataset,
         query_rectangle: &VectorQueryRectangle,
         attribute_filters: &[AttributeFilter],
-    ) -> Result<FeaturesProvider<'d>> {
+    ) -> Result<(FeaturesProvider<'d>, bool)> {
         let filter_string = if dataset.driver().short_name() == "CSV" {
             FeaturesProvider::create_attribute_filter_string_cast(attribute_filters)
         } else {
@@ -196,7 +205,7 @@ impl OgrDatasetIterator {
             features_provider.set_spatial_filter(&query_rectangle.spatial_bounds);
         }
 
-        Ok(features_provider)
+        Ok((features_provider, time_filter.is_some()))
     }
 
     fn open_gdal_dataset(dataset_info: &OgrSourceDataset) -> Result<Dataset> {
@@ -272,7 +281,11 @@ impl OgrDatasetIterator {
     }
 
     pub fn was_spatial_filtered_by_ogr(&self) -> bool {
-        self.use_ogr_spatial_filter
+        self.was_spatial_filtered_by_ogr
+    }
+
+    pub fn was_time_filtered_by_ogr(&self) -> bool {
+        self.was_time_filtered_by_ogr
     }
 }
 
