@@ -441,6 +441,7 @@ where
         let valid_until = if valid_session {
             row.get(4)
         } else {
+            log::debug!("Session expired, trying to extend");
             self.refresh_tokens(session, &tx)
                 .await
                 .map_err(|_error| Error::InvalidSession)?
@@ -623,6 +624,8 @@ where
                 )
                 .await?
                 .get(0);
+
+            log::debug!("Session extended");
 
             return Ok(StoredOidcTokens {
                 oidc_tokens,
