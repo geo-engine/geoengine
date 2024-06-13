@@ -30,10 +30,12 @@ libloading = "0.8"
 log = "0.4"
 lru = "0.12"
 lz4_flex = { version = "0.11" }
+ndarray = "0.15"
 num-traits = "0.2"
 num = "0.4"
 ouroboros = "0.18"
 ordered-float = { version = "4.2", features = ["serde"] }
+ort = "2.0.0-rc.2"
 paste = "1.0"
 pin-project = "1.1"
 postgres-protocol = "0.6.6"
@@ -57,6 +59,7 @@ tokio = { version = "1.36", features = [
   "time",
 ] }
 tracing = "0.1"
+tract-onnx = "0.21"
 typetag = "0.2"
 uuid = { version = "1.7", features = ["serde", "v4", "v5"] }
 xgboost-rs = { version = "0.3", optional = true }
