@@ -489,9 +489,9 @@ pub enum Error {
     BandDoesNotExist {
         band_idx: u32,
     },
-    // Onnx, // {
-    //     source: Box<dyn ErrorSource>,
-    // },
+    Onnx {
+        source: ort::Error,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

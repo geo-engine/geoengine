@@ -1,30 +1,22 @@
-use std::sync::Arc;
-
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, RasterBandDescriptors, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, ResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
-use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
-use ndarray::{arr2, Array2};
+use crate::error;
+use ndarray::Array2;
+use snafu::ResultExt;
 
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use futures::{StreamExt, TryStreamExt};
+use futures::StreamExt;
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::raster::{
-    Grid, Grid2D, GridIdx2D, GridIndexAccess, GridOrEmpty2D, GridSize, MapElementsParallel, Pixel,
-    RasterDataType, RasterTile2D,
+    Grid, GridIdx2D, GridIndexAccess, GridSize, RasterDataType, RasterTile2D,
 };
 use geoengine_datatypes::test_data;
-use geoengine_expression::{
-    DataType, ExpressionAst, ExpressionParser, LinkedExpression, Parameter,
-};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
-use tract_onnx::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,7 +46,7 @@ impl RasterOperator for Onnx {
 
         let in_descriptor = source.result_descriptor();
 
-        // TODO: check that number of input bands fits number of model features
+        // TODO: check that number of input bands fits number of model features, this should be checked against the metadata and not require loading the actual model.
 
         // TODO: output descriptor may depend on the ml task, e.g. classification or regression
         let out_descriptor = RasterResultDescriptor {
@@ -132,17 +124,12 @@ impl RasterQueryProcessor for OnnxProcessor {
         let num_bands = self.source.raster_result_descriptor().bands.count() as usize;
 
         let mut source_query = query.clone();
-        source_query.attributes = (0..num_bands)
-            .into_iter()
-            .map(|b| b as u32)
-            .collect::<Vec<u32>>()
-            .try_into()
-            .unwrap();
+        source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
 
         let session = ort::Session::builder()
-            .unwrap()
+            .context(error::Onnx)?
             .commit_from_file(test_data!("pro/ml/onnx/test.onnx"))
-            .unwrap();
+            .context(error::Onnx)?;
 
         let stream = self
             .source
@@ -159,7 +146,7 @@ impl RasterQueryProcessor for OnnxProcessor {
                     unreachable!("the source did not produce all bands");
                 }
 
-                let tiles = chunk.into_iter().map(Result::unwrap).collect::<Vec<_>>(); // TODO: handle errors
+                let tiles = chunk.into_iter().collect::<Result<Vec<_>>>()?;
 
                 let first_tile = &tiles[0];
                 let time = first_tile.time;
@@ -177,11 +164,10 @@ impl RasterQueryProcessor for OnnxProcessor {
                 for (tile_index, tile) in tiles.into_iter().enumerate() {
                     for y in 0..height {
                         for x in 0..width {
-                            let pixel_index = y * width + x; // Calculate the linear index for the pixel
+                            let pixel_index = y * width + x;
                             let pixel_value = tile
-                                .get_at_grid_index(GridIdx2D::from([y as isize, x as isize]))
-                                .unwrap()
-                                .unwrap();
+                                .get_at_grid_index(GridIdx2D::from([y as isize, x as isize]))?
+                                .unwrap_or(f32::NAN); // TODO: skip the pixel entirely instead?
                             pixels[pixel_index][tile_index] = pixel_value;
                         }
                     }
@@ -191,15 +177,19 @@ impl RasterQueryProcessor for OnnxProcessor {
                 let rows = width * height;
                 let cols = num_bands;
 
-                let samples = Array2::from_shape_vec((rows, cols), pixels).unwrap();
+                let samples = Array2::from_shape_vec((rows, cols), pixels).expect(
+                    "Array2 should be valid because it is created from a Vec with the correct size",
+                );
 
                 let input_name = &session.inputs[0].name;
 
                 let outputs = session
-                    .run(ort::inputs![input_name => samples].unwrap())
-                    .unwrap();
+                    .run(ort::inputs![input_name => samples].context(error::Onnx)?)
+                    .context(error::Onnx)?;
 
-                let predictions = outputs["output_label"].try_extract_tensor::<i64>().unwrap();
+                let predictions = outputs["output_label"]
+                    .try_extract_tensor::<i64>()
+                    .context(error::Onnx)?;
                 let predictions = predictions.into_owned().into_raw_vec();
 
                 Ok(RasterTile2D::new(
@@ -240,7 +230,8 @@ mod tests {
 
     #[test]
     fn tract() {
-        // TODO: load during initialization? or at least store it for later reuse
+        use tract_onnx::prelude::*;
+
         let model = tract_onnx::onnx()
             // load the model
             .model_for_path(test_data!("pro/ml/onnx/test_no_zipmap.onnx"))
@@ -254,13 +245,15 @@ mod tests {
 
         // run the model on the input
 
-        // TODO: fix the input because the prediction is wrong
+        // TODO: fix the input because the prediction is wrong(?)
         let result = model.run(tvec!(tensor.into())).unwrap();
-        dbg!(&result);
 
-        let result_array_view = result[0].to_array_view::<i64>().unwrap();
+        let predictions = result[0].to_array_view::<i64>().unwrap();
 
-        dbg!(result_array_view);
+        assert_eq!(
+            predictions,
+            Array1::from(vec![33i64, 33, 42, 42]).into_dyn()
+        );
     }
 
     #[test]
