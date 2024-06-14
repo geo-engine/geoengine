@@ -1,3 +1,4 @@
+use crate::contexts::migrations::migration_0009_oidc_tokens::Migration0009OidcTokens;
 use crate::contexts::Migration;
 use crate::contexts::{
     Migration0000Initial, Migration0001RasterStacks, Migration0002DatasetListingProvider,
@@ -14,6 +15,7 @@ mod database_migration;
 mod migration_0000_initial;
 mod migration_0004_dataset_listing_provider_prio;
 mod migration_0007_owner_role;
+mod migration_0009_oidc_tokens;
 
 /// Get all regular and pro migrations. This function wraps all regular migrations into a pro migration.
 pub fn pro_migrations() -> Vec<Box<dyn Migration>>
@@ -33,6 +35,7 @@ where
         Box::new(NoProMigrationImpl::from(Migration0006EbvProvider)),
         Box::new(NoProMigrationImpl::from(Migration0007OwnerRole)),
         Box::new(NoProMigrationImpl::from(Migration0008BandNames)),
+        Box::new(ProMigrationImpl::from(Migration0009OidcTokens)),
     ]
 }
 

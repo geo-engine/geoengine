@@ -28,7 +28,7 @@ use crate::error::Result;
 use crate::pro::machine_learning::ml_model::MlModelDb;
 
 use crate::layers::storage::LayerProviderDb;
-use crate::pro::users::{OidcRequestDb, UserDb};
+use crate::pro::users::{OidcManager, UserDb};
 
 use async_trait::async_trait;
 
@@ -41,7 +41,7 @@ pub use postgres::ProPostgresDb;
 
 /// A pro application contexts that extends the default context.
 pub trait ProApplicationContext: ApplicationContext<Session = UserSession> + UserAuth {
-    fn oidc_request_db(&self) -> Option<&OidcRequestDb>;
+    fn oidc_manager(&self) -> &OidcManager;
 }
 
 pub trait ProGeoEngineDb: GeoEngineDb + UserDb + PermissionDb + RoleDb + MlModelDb {}
