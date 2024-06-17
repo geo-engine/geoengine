@@ -461,7 +461,7 @@ mod tests {
                 (1.0, -2.0),
             ])
             .unwrap(),
-            vec![TimeInterval::default(); 6],
+            vec![TimeInterval::new(0, 20).unwrap(); 6],
             Default::default(),
             CacheHint::default(),
         )
@@ -477,7 +477,7 @@ mod tests {
             false,
             VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
-                time_interval: Default::default(),
+                time_interval: TimeInterval::new(0, 20).unwrap(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
                 attributes: ColumnSelection::all(),
             },
@@ -584,7 +584,7 @@ mod tests {
                 vec![(1.0, 0.0), (3.0, 0.0)],
             ])
             .unwrap(),
-            vec![TimeInterval::default(); 2],
+            vec![TimeInterval::new(0, 20).unwrap(); 2],
             Default::default(),
             CacheHint::default(),
         )
@@ -600,7 +600,7 @@ mod tests {
             false,
             VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
-                time_interval: Default::default(),
+                time_interval: TimeInterval::new(0, 20).unwrap(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
                 attributes: ColumnSelection::all(),
             },
@@ -741,7 +741,7 @@ mod tests {
                 (0.5, -0.5).into(),
             ]]])
             .unwrap()],
-            vec![TimeInterval::default(); 1],
+            vec![TimeInterval::new(0,20).unwrap(); 1],
             Default::default(),
             CacheHint::default(),
         )
@@ -757,7 +757,7 @@ mod tests {
             false,
             VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
-                time_interval: Default::default(),
+                time_interval: TimeInterval::new(0, 20).unwrap(),
                 spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
                 attributes: ColumnSelection::all(),
             },
@@ -992,7 +992,7 @@ mod tests {
                 (0.5, -0.5).into(),
             ]]])
             .unwrap()],
-            vec![TimeInterval::default(); 1],
+            vec![TimeInterval::new(0,20).unwrap(); 1],
             Default::default(),
             CacheHint::default(),
         )
@@ -1056,6 +1056,7 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         let result = result.remove(0);
+        
 
         assert!(result.chunks_equal_ignoring_cache_hint(
             &MultiPolygonCollection::from_slices(
@@ -1066,7 +1067,7 @@ mod tests {
                     (0.5, -0.5).into(),
                 ]]])
                 .unwrap(),],
-                &[TimeInterval::default()],
+                &[TimeInterval::new(0,20).unwrap()],
                 &[
                     (
                         "foo",
@@ -1087,6 +1088,6 @@ mod tests {
                 ],
             )
             .unwrap()
-        ));
+        )); 
     }
 }
