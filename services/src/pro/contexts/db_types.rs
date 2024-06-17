@@ -117,7 +117,7 @@ mod tests {
     use super::*;
     use crate::{
         pro::{
-            datasets::{StacBand, StacZone},
+            datasets::{StacBand, StacQueryBuffer, StacZone},
             util::tests::with_pro_temp_context,
         },
         util::postgres::assert_sql_type,
@@ -197,6 +197,7 @@ mod tests {
                         number_of_retries: 3,
                     },
                     cache_ttl: CacheTtlSeconds::new(60),
+                    query_buffer: StacQueryBuffer { start_seconds: -1, end_seconds: 1 }
                 }],
             )
             .await;
@@ -230,6 +231,9 @@ mod tests {
                                 number_of_retries: 3,
                             },
                             cache_ttl: CacheTtlSeconds::new(60),
+                            query_buffer: StacQueryBuffer { start_seconds: -1, end_seconds: 1 }
+
+
                         },
                     ),
                 ],

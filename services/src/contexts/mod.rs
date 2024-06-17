@@ -28,7 +28,7 @@ pub use migrations::{
     CurrentSchemaMigration, DatabaseVersion, Migration, Migration0001RasterStacks,
     Migration0002DatasetListingProvider, Migration0003GbifConfig,
     Migration0004DatasetListingProviderPrio, Migration0005GbifColumnSelection,
-    Migration0006EbvProvider, Migration0007OwnerRole, Migration0008BandNames, MigrationResult,
+    Migration0006EbvProvider, Migration0007OwnerRole, Migration0008BandNames, MigrationResult, Migration0009S2StacTimeBuffers
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};

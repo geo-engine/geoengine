@@ -59,5 +59,9 @@
       "name": "UTM37S",
       "epsg": 32737
     }
-  ]
+  ],
+  "query_buffer": {
+    "start_seconds": -1,
+    "end_seconds": 1
+  }
 }

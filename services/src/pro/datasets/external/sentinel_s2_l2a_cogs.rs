@@ -65,6 +65,26 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     pub gdal_retries: GdalRetries,
     #[serde(default)]
     pub cache_ttl: CacheTtlSeconds,
+    #[serde(default)]
+    pub query_buffer: StacQueryBuffer,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, FromSql, ToSql)]
+#[serde(rename_all = "camelCase")]
+/// A struct that represents buffers to apply to stac requests
+pub struct StacQueryBuffer {
+    pub start_seconds: i64,
+    pub end_seconds: i64,
+    // TODO: add also spatial buffers?
+}
+
+impl Default for StacQueryBuffer {
+    fn default() -> Self {
+        Self {
+            start_seconds: -1,
+            end_seconds: 1
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
@@ -114,6 +134,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for SentinelS2L2ACogsProviderDefi
             self.stac_api_retries,
             self.gdal_retries,
             self.cache_ttl,
+            self.query_buffer,
         )))
     }
 
@@ -170,6 +191,8 @@ pub struct SentinelS2L2aCogsDataProvider {
     gdal_retries: GdalRetries,
 
     cache_ttl: CacheTtlSeconds,
+
+    query_buffer: StacQueryBuffer,
 }
 
 impl SentinelS2L2aCogsDataProvider {
@@ -183,7 +206,8 @@ impl SentinelS2L2aCogsDataProvider {
         zones: &[StacZone],
         stac_api_retries: StacApiRetries,
         gdal_retries: GdalRetries,
-        cache_ttl: CacheTtlSeconds,
+        cache_ttl: CacheTtlSeconds,        
+        query_buffer: StacQueryBuffer,
     ) -> Self {
         Self {
             id,
@@ -193,7 +217,8 @@ impl SentinelS2L2aCogsDataProvider {
             datasets: Self::create_datasets(&id, bands, zones),
             stac_api_retries,
             gdal_retries,
-            cache_ttl,
+            cache_ttl,            
+            query_buffer
         }
     }
 
@@ -376,6 +401,7 @@ pub struct SentinelS2L2aCogsMetaData {
     stac_api_retries: StacApiRetries,
     gdal_retries: GdalRetries,
     cache_ttl: CacheTtlSeconds,
+    stac_query_buffer: StacQueryBuffer,
 }
 
 impl SentinelS2L2aCogsMetaData {
@@ -415,7 +441,7 @@ impl SentinelS2L2aCogsMetaData {
             .collect();
         let start_times = Self::make_unique_start_times_from_sorted_features(&start_times_pre);
 
-        let mut parts = vec![];
+        let mut parts: Vec<GdalLoadingInfoTemporalSlice> = vec![];
         let num_features = features.len();
         debug!("number of features in current zone: {}", num_features);
         for i in 0..num_features {
@@ -426,8 +452,8 @@ impl SentinelS2L2aCogsMetaData {
             // feature is valid until next feature starts
             let end = if i < num_features - 1 {
                 start_times[i + 1]
-            } else {
-                start + 1000 // TODO: determine correct validity for last tile
+            } else {                
+                    start + 1000 // there was no tile before and there is no tile following. Use 1 sec to be safe. We could assume that there is no other tile in the query and use the query length?
             };
 
             let time_interval = TimeInterval::new(start, end)?;
@@ -454,6 +480,44 @@ impl SentinelS2L2aCogsMetaData {
             }
         }
         debug!("number of generated loading infos: {}", parts.len());
+
+
+
+        // This is a workaround to avoid errors when a provider does not fill the complete query rectangle.
+        let buffered_start = query.time_interval.start() + Duration::seconds(self.stac_query_buffer.start_seconds);
+        let buffered_end = query.time_interval.end() + Duration::seconds(self.stac_query_buffer.end_seconds);
+
+        if let Some(first) = parts.first() {
+            if first.time.start() > query.time_interval.start() {
+                log::debug!("Missing temporal slice information to provide loading info for the whole query rectangle. Inserting fake first element! Query time: {} Buffered start: {} First element available: {}. Increase query buffer to avoid.", query.time_interval, buffered_start, first.time);
+                parts.insert(0, GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new(buffered_start, first.time.start()).expect("Condition is checked above"),
+                    params: None,
+                    cache_ttl: first.cache_ttl // TODO: maybe this needs to be zero.
+                });
+            }
+        }
+
+        if let Some(last) = parts.last() {
+            if last.time.end() < query.time_interval.end() {
+                log::debug!("Missing temporal slice information to provide loading info for the whole query rectangle. Inserting fake last element! Query time: {} Buffered end: {} Last element available: {}. Increase query buffer to avoid.", query.time_interval, buffered_end, last.time);
+                parts.push(GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new(last.time.end(), buffered_end).expect("Condition is checked above"),
+                    params: None,
+                    cache_ttl: last.cache_ttl // TODO: maybe this needs to be zero.
+                });
+            }
+        }
+        
+        if parts.is_empty() {
+            log::debug!("NO temporal slice information to provide loading info for the query rectangle. Inserting no data element! Query time: {} Buffered start: {} Bufferend end: {}. Increase query buffer to avoid.", query.time_interval, buffered_start, buffered_end);
+            parts.push(GdalLoadingInfoTemporalSlice {
+                time: TimeInterval::new(buffered_start, buffered_end).expect("Condition is checked above"),
+                params: None,
+                cache_ttl: CacheTtlSeconds::new(0) // Could this be larger?
+            });
+        
+        }
 
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoTemporalSliceIterator::Static {
@@ -545,6 +609,9 @@ impl SentinelS2L2aCogsMetaData {
         query: &RasterQueryRectangle,
     ) -> Result<Option<Vec<(String, String)>>> {
         let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
+
+        let t_start = t_start + Duration::seconds(self.stac_query_buffer.start_seconds);
+        let t_end = t_end + Duration::seconds(self.stac_query_buffer.end_seconds);
 
         // request all features in zone in order to be able to determine the temporal validity of individual tile
         let projector = CoordinateProjector::from_known_srs(
@@ -654,9 +721,6 @@ impl SentinelS2L2aCogsMetaData {
                     },
                 })?;
 
-        // shift start by 1 minute to ensure getting the most recent data for start time
-        let t_start = t_start - Duration::minutes(1);
-
         let t_end =
             time.end()
                 .as_date_time()
@@ -740,6 +804,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             stac_api_retries: self.stac_api_retries,
             gdal_retries: self.gdal_retries,
             cache_ttl: self.cache_ttl,
+            stac_query_buffer: self.query_buffer
         }))
     }
 }
@@ -1220,6 +1285,7 @@ mod tests {
                     number_of_retries: 999,
                 },
                 cache_ttl: Default::default(),
+                query_buffer: Default::default(),
             });
 
         let provider = provider_def
