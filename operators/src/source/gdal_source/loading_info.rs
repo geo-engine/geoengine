@@ -30,18 +30,44 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         let valid = self.time.unwrap_or_default();
 
         let parts = if valid.intersects(&query.time_interval) {
-            vec![GdalLoadingInfoTemporalSlice {
+            let mut p = vec![];
+            
+            if valid.start() > query.time_interval.start() {
+                log::debug!("Missing temporal slice information to provide loading info for the whole query rectangle. Inserting fake first element! Query time: {} First element awailable: {}.", query.time_interval, valid);
+                p.push(GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new(query.time_interval.start(), valid.start()).expect("Condition is checked above"),
+                    params: None,
+                    cache_ttl: self.cache_ttl // TODO: maybe this needs to be zero.
+                });
+            }
+
+            p.push(GdalLoadingInfoTemporalSlice {
                 time: valid,
                 params: Some(self.params.clone()),
                 cache_ttl: self.cache_ttl,
-            }]
-            .into_iter()
+            });
+
+            if valid.end() < query.time_interval.end() {
+                log::debug!("Missing temporal slice information to provide loading info for the whole query rectangle. Inserting fake last element! Query time: {} Last element awailable: {}.", query.time_interval, valid);
+                p.push(GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new(valid.end(), query.time_interval.end(), ).expect("Condition is checked above"),
+                    params: None,
+                    cache_ttl: self.cache_ttl // TODO: maybe this needs to be zero.
+                });
+            }
+
+            p
+            
         } else {
-            vec![].into_iter()
+            vec![GdalLoadingInfoTemporalSlice {
+                time: query.time_interval,
+                params: None,
+                cache_ttl: self.cache_ttl, // can't change?
+            }]
         };
 
         Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoTemporalSliceIterator::Static { parts },
+            info: GdalLoadingInfoTemporalSliceIterator::Static { parts: parts.into_iter() },
         })
     }
 
@@ -191,15 +217,98 @@ pub struct GdalMetaDataList {
 impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for GdalMetaDataList {
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
         #[allow(clippy::needless_collect)]
-        let parts = self
+        let mut parts = self
             .params
             .iter()
             .filter(|item| item.time.intersects(&query.time_interval))
             .cloned()
             .collect::<Vec<_>>();
 
+        // This is a workaround to avoid errors when a provider does not fill the complete query rectangle.
+        if let Some(first) = parts.first() {
+            if first.time.start() > query.time_interval.start() {
+                // try to find an element before
+                let element_before = self.params.iter().filter(|item| item.time.end() < query.time_interval.start()).last();
+                
+                let no_data_start = if let Some(eb) = element_before {
+                    if eb.time.is_instant() {
+                        eb.time.end() +1
+                    } else {
+                        eb.time.end()
+                    }
+                 } else {
+                    query.time_interval.start() // TODO: if there is no data before can we assume that it is MIN?
+                 };
+
+                parts.insert(0, GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new(no_data_start, first.time.start()).expect("Condition is checked above"),
+                    params: None,
+                    cache_ttl: first.cache_ttl // TODO: maybe this needs to be zero.
+                });
+            }
+        }
+
+        if let Some(last) = parts.last() {
+            if (
+                !last.time.is_instant() && last.time.end() < query.time_interval.end()
+             ) || (
+                 last.time.is_instant() && last.time.end() +1 < query.time_interval.end()
+             ) {   
+                 // try to find an element following
+                 let element_following = self.params.iter().find(|item| item.time.start() > query.time_interval.end());
+
+                 let no_data_start = if last.time.is_instant() {
+                    last.time.end() +1
+                } else {
+                    last.time.end()
+                };
+
+                 let no_data_end = if let Some(ef) = element_following {
+                    ef.time.start()
+                 } else {
+                    query.time_interval.end() // TODO: if there is no data following can we assume that it is MAX?
+                 };
+
+                parts.push(GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::new(no_data_start, no_data_end).expect("Condition is checked above"),
+                    params: None,
+                    cache_ttl: last.cache_ttl // TODO: maybe this needs to be zero.
+                });
+            }
+        }
+
         // TODO: if `parts` is empty, return a `GdalLoadingInfoTemporalSlice` with `None` as params but proper cache ttl,
         //       otherwise the result will not be cached, because the fill adapter can't derive the ttl as there are no surrounding tiles
+        if parts.is_empty() {
+            // try to find an element before
+            let element_before = self.params.iter().filter(|item| item.time.end() < query.time_interval.start()).last();
+
+            let no_data_start = if let Some(eb) = element_before {
+                if eb.time.is_instant() {
+                    eb.time.end() +1
+                } else {
+                    eb.time.end()
+                }
+            } else {
+                query.time_interval.start() // TODO: if there is no data before can we assume that it is MIN?
+            };
+
+            // try to find an element following
+            let element_following = self.params.iter().find(|item| item.time.start() > query.time_interval.end());
+
+            let no_data_end = if let Some(ef) = element_following {
+                ef.time.start()
+            } else {
+                query.time_interval.end() // TODO: if there is no data following can we assume that it is MAX?
+            };
+
+            parts.push(GdalLoadingInfoTemporalSlice {
+                time: TimeInterval::new(no_data_start, no_data_end).expect("Condition is checked above"),
+                params: None,
+                cache_ttl: CacheTtlSeconds::new(0)  // TODO: where to get the cache ttl?
+            });
+        }
+
 
         Ok(GdalLoadingInfo {
             info: GdalLoadingInfoTemporalSliceIterator::Static {
