@@ -1,13 +1,16 @@
 use crate::contexts::Db;
-use crate::error::{Error, Result};
-use crate::pro::users::UserId;
+use crate::error::Error;
 use crate::pro::util::config::Oidc;
 #[cfg(test)]
 use crate::pro::util::tests::mock_oidc::{SINGLE_NONCE, SINGLE_STATE};
+use crate::util::encryption::{
+    AesGcmStringPasswordEncryption, EncryptionError, MaybeEncryptedBytes, OptionalStringEncryption,
+    U96,
+};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::Duration;
 use oauth2::basic::{BasicErrorResponseType, BasicRevocationErrorResponse, BasicTokenType};
-use oauth2::{Scope, StandardRevocableToken};
+use oauth2::{AccessToken, RefreshToken, RequestTokenError, Scope, StandardRevocableToken};
 use openidconnect::core::{
     CoreAuthDisplay, CoreAuthPrompt, CoreAuthenticationFlow, CoreClaimName, CoreClaimType,
     CoreClient, CoreClientAuthMethod, CoreGenderClaim, CoreGrantType, CoreJsonWebKey,
@@ -30,6 +33,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use url::{ParseError, Url};
 use utoipa::{ToResponse, ToSchema};
+
+type Result<T, E = OidcError> = std::result::Result<T, E>;
 
 pub type DefaultProviderMetadata = ProviderMetadata<
     EmptyAdditionalProviderMetadata,
@@ -71,7 +76,105 @@ type DefaultClient = Client<
     BasicRevocationErrorResponse,
 >;
 
-pub struct OidcRequestDb {
+#[derive(Clone)]
+pub struct OidcManager {
+    oidc_request_db: Option<Arc<OidcRequestDb>>,
+    token_at_rest_encryption: OptionalStringEncryption,
+}
+
+impl OidcManager {
+    pub async fn get_client(&self) -> Result<OidcRequestClient> {
+        if let Some(oidc_request_db) = &self.oidc_request_db {
+            let client = oidc_request_db.get_client().await?;
+            Ok(OidcRequestClient {
+                client,
+                request_db: Arc::clone(oidc_request_db),
+            })
+        } else {
+            Err(OidcError::OidcDisabled)
+        }
+    }
+
+    pub fn maybe_encrypt_tokens(
+        &self,
+        oidc_tokens: &OidcTokens,
+    ) -> Result<MaybeEncryptedOidcTokens> {
+        let access_token = self
+            .token_at_rest_encryption
+            .to_bytes(oidc_tokens.access.secret().clone())?;
+        let refresh_token = if let Some(refresh) = &oidc_tokens.refresh {
+            let encrypted_refresh_token = self
+                .token_at_rest_encryption
+                .to_bytes(refresh.secret().clone())?;
+
+            Some(encrypted_refresh_token)
+        } else {
+            None
+        };
+        let result = MaybeEncryptedOidcTokens {
+            access_token,
+            refresh_token,
+        };
+        Ok(result)
+    }
+
+    pub fn maybe_decrypt_access_token(&self, token: MaybeEncryptedBytes) -> Result<AccessToken> {
+        let token_secret = self.token_at_rest_encryption.to_string(token)?;
+        Ok(AccessToken::new(token_secret))
+    }
+
+    pub fn maybe_decrypt_refresh_token(&self, token: MaybeEncryptedBytes) -> Result<RefreshToken> {
+        let token_secret = self.token_at_rest_encryption.to_string(token)?;
+        Ok(RefreshToken::new(token_secret))
+    }
+    #[cfg(test)]
+    pub(in crate::pro) fn from_oidc_with_static_tokens(value: Oidc) -> Self {
+        let request_db = OidcRequestDb {
+            issuer: value.issuer.to_string(),
+            client_id: value.client_id.to_string(),
+            client_secret: value.client_secret.clone(),
+            redirect_uri: value.redirect_uri.to_string(),
+            scopes: value.scopes,
+            users: Arc::new(Default::default()),
+            state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
+            nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
+        };
+        OidcManager {
+            oidc_request_db: Some(Arc::new(request_db)),
+            token_at_rest_encryption: OptionalStringEncryption::new(
+                value
+                    .token_encryption_password
+                    .map(|pw| AesGcmStringPasswordEncryption::new(&pw)),
+            ),
+        }
+    }
+}
+
+impl Default for OidcManager {
+    fn default() -> Self {
+        OidcManager {
+            oidc_request_db: None,
+            token_at_rest_encryption: OptionalStringEncryption::new(None),
+        }
+    }
+}
+
+impl From<Oidc> for OidcManager {
+    fn from(value: Oidc) -> Self {
+        let string_encryption = value
+            .token_encryption_password
+            .as_ref()
+            .map(AesGcmStringPasswordEncryption::new);
+
+        let oidc_request_db = OidcRequestDb::try_from(value).ok().map(Arc::new);
+        OidcManager {
+            oidc_request_db,
+            token_at_rest_encryption: OptionalStringEncryption::new(string_encryption),
+        }
+    }
+}
+
+struct OidcRequestDb {
     issuer: String,
     client_id: String,
     client_secret: Option<String>,
@@ -101,17 +204,50 @@ pub struct AuthCodeResponse {
 }
 
 #[derive(Clone)]
-pub struct ExternalUser {
-    pub id: UserId,
-    pub claims: ExternalUserClaims,
-    pub active: bool,
-}
-
-#[derive(Clone)]
-pub struct ExternalUserClaims {
+pub struct UserClaims {
     pub external_id: SubjectIdentifier,
     pub email: String,
     pub real_name: String,
+}
+
+pub struct OidcTokens {
+    pub access: AccessToken,
+    pub refresh: Option<RefreshToken>,
+    pub expires_in: Duration,
+}
+
+pub struct OidcIdentityAttributes {
+    pub user_claims: UserClaims,
+    pub oidc_tokens: OidcTokens,
+}
+
+pub struct MaybeEncryptedOidcTokens {
+    pub access_token: MaybeEncryptedBytes,
+    pub refresh_token: Option<MaybeEncryptedBytes>,
+}
+
+pub struct FlatMaybeEncryptedOidcTokens {
+    pub access_token_value: Vec<u8>,
+    pub access_token_nonce: Option<U96>,
+    pub refresh_token_value: Option<Vec<u8>>,
+    pub refresh_token_nonce: Option<U96>,
+}
+
+impl From<MaybeEncryptedOidcTokens> for FlatMaybeEncryptedOidcTokens {
+    fn from(value: MaybeEncryptedOidcTokens) -> Self {
+        let (refresh_token_value, refresh_token_nonce) = if let Some(refresh) = value.refresh_token
+        {
+            (Some(refresh.value), refresh.nonce)
+        } else {
+            (None, None)
+        };
+        FlatMaybeEncryptedOidcTokens {
+            access_token_value: value.access_token.value,
+            access_token_nonce: value.access_token.nonce,
+            refresh_token_value,
+            refresh_token_nonce,
+        }
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -125,6 +261,12 @@ pub enum OidcError {
     #[snafu(display("ProviderDiscoveryError: {}", source))]
     ProviderDiscovery {
         source: DiscoveryError<oauth2::reqwest::Error<reqwest::Error>>,
+    },
+    IllegalRequestToken {
+        source: RequestTokenError<
+            oauth2::reqwest::Error<reqwest::Error>,
+            StandardErrorResponse<BasicErrorResponseType>,
+        >,
     },
     #[snafu(display("Illegal OIDC Provider: {}", reason))]
     IllegalProvider {
@@ -144,6 +286,10 @@ pub enum OidcError {
     LoginFailed {
         reason: String,
     },
+    #[snafu(context(false))]
+    Encryption {
+        source: EncryptionError,
+    },
 }
 
 impl From<DiscoveryError<oauth2::reqwest::Error<reqwest::Error>>> for OidcError {
@@ -158,8 +304,26 @@ impl From<ParseError> for OidcError {
     }
 }
 
+impl
+    From<
+        oauth2::RequestTokenError<
+            oauth2::reqwest::Error<reqwest::Error>,
+            oauth2::StandardErrorResponse<oauth2::basic::BasicErrorResponseType>,
+        >,
+    > for OidcError
+{
+    fn from(
+        source: RequestTokenError<
+            oauth2::reqwest::Error<reqwest::Error>,
+            StandardErrorResponse<BasicErrorResponseType>,
+        >,
+    ) -> Self {
+        Self::IllegalRequestToken { source }
+    }
+}
+
 impl OidcRequestDb {
-    pub async fn get_client(&self) -> Result<DefaultClient, OidcError> {
+    async fn get_client(&self) -> Result<DefaultClient> {
         let issuer_url = IssuerUrl::new(self.issuer.to_string())?;
 
         //TODO: Provider meta data could be added as a fixed field in the DB, making discovery a one-time process. This would have implications for server startup.
@@ -212,7 +376,7 @@ impl OidcRequestDb {
             });
         }
 
-        let result = CoreClient::from_provider_metadata(
+        let client = CoreClient::from_provider_metadata(
             provider_metadata,
             ClientId::new(self.client_id.to_string()),
             self.client_secret
@@ -221,13 +385,10 @@ impl OidcRequestDb {
         )
         .set_redirect_uri(RedirectUrl::new(self.redirect_uri.to_string())?);
 
-        Ok(result)
+        Ok(client)
     }
 
-    async fn generate_unique_state_and_insert(
-        &self,
-        client: &DefaultClient,
-    ) -> Result<Url, OidcError> {
+    async fn generate_unique_state_and_insert(&self, client: &DefaultClient) -> Result<Url> {
         let mut auth_request = client.authorize_url(
             CoreAuthenticationFlow::AuthorizationCode,
             self.state_function,
@@ -261,15 +422,12 @@ impl OidcRequestDb {
         Ok(auth_url)
     }
 
-    pub async fn generate_request(
-        &self,
-        client: DefaultClient,
-    ) -> Result<AuthCodeRequestURL, OidcError> {
-        let mut result = self.generate_unique_state_and_insert(&client).await;
+    async fn generate_request(&self, client: &DefaultClient) -> Result<AuthCodeRequestURL> {
+        let mut result = self.generate_unique_state_and_insert(client).await;
         let mut max_retries = 5;
 
         while result.is_err() && max_retries > 0 {
-            result = self.generate_unique_state_and_insert(&client).await;
+            result = self.generate_unique_state_and_insert(client).await;
             max_retries -= 1;
         }
 
@@ -278,11 +436,29 @@ impl OidcRequestDb {
         Ok(AuthCodeRequestURL { url })
     }
 
-    pub async fn resolve_request(
+    fn decode_token_response(token_response: &CoreTokenResponse) -> Result<OidcTokens> {
+        let validity = match token_response.expires_in() {
+            None => Err(OidcError::ResponseFieldError {
+                field: "duration".to_string(),
+                reason: "missing".to_string(),
+            }),
+            Some(x) => Ok(x),
+        }?;
+
+        let oidc_token = OidcTokens {
+            access: token_response.access_token().clone(),
+            refresh: token_response.refresh_token().cloned(),
+            expires_in: Duration::milliseconds(validity.as_millis() as i64),
+        };
+
+        Ok(oidc_token)
+    }
+
+    async fn resolve_request(
         &self,
-        client: DefaultClient,
+        client: &DefaultClient,
         auth_code_response: AuthCodeResponse,
-    ) -> Result<(ExternalUserClaims, Duration), OidcError> {
+    ) -> Result<OidcIdentityAttributes> {
         let mut user_db = self.users.write().await;
         let pending_request =
             user_db
@@ -300,7 +476,6 @@ impl OidcRequestDb {
                 reason: "Request for code to token exchange failed".to_string(),
                 source: Box::new(token_error),
             })?;
-
         let id_token = token_response
             .id_token()
             .ok_or_else(|| OidcError::ResponseFieldError {
@@ -338,7 +513,7 @@ impl OidcRequestDb {
         }
 
         //Currently, we expect e-mail and real-name to be present claims to match required fields for internal users.
-        let user = ExternalUserClaims {
+        let external_user_claims = UserClaims {
             external_id: claims.subject().clone(),
             email: match claims.email() {
                 None => Err(OidcError::ResponseFieldError {
@@ -359,29 +534,27 @@ impl OidcRequestDb {
             }?,
         };
 
-        let validity = match token_response.expires_in() {
-            None => Err(OidcError::ResponseFieldError {
-                field: "duration".to_string(),
-                reason: "missing".to_string(),
-            }),
-            Some(x) => Ok(x),
-        }?;
+        let oidc_tokens = Self::decode_token_response(&token_response)?;
 
-        Ok((user, Duration::milliseconds(validity.as_millis() as i64))) //TODO: Consider allowing u128 for durations to avoid cast.
+        let res = OidcIdentityAttributes {
+            user_claims: external_user_claims,
+            oidc_tokens,
+        };
+
+        Ok(res)
     }
 
-    #[cfg(test)]
-    pub(in crate::pro) fn from_oidc_with_static_tokens(value: Oidc) -> Self {
-        OidcRequestDb {
-            issuer: value.issuer.to_string(),
-            client_id: value.client_id.to_string(),
-            client_secret: value.client_secret.clone(),
-            redirect_uri: value.redirect_uri.to_string(),
-            scopes: value.scopes,
-            users: Arc::new(Default::default()),
-            state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
-            nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
-        }
+    async fn refresh_access_token(
+        &self,
+        client: &DefaultClient,
+        refresh_token: RefreshToken,
+    ) -> Result<OidcTokens> {
+        let result = client
+            .exchange_refresh_token(&refresh_token)
+            .request_async(async_http_client)
+            .await?;
+
+        Self::decode_token_response(&result)
     }
 }
 
@@ -409,9 +582,35 @@ impl TryFrom<Oidc> for OidcRequestDb {
     }
 }
 
+pub struct OidcRequestClient {
+    client: DefaultClient,
+    request_db: Arc<OidcRequestDb>,
+}
+
+impl OidcRequestClient {
+    pub async fn generate_request(&self) -> Result<AuthCodeRequestURL> {
+        self.request_db.generate_request(&self.client).await
+    }
+
+    pub async fn resolve_request(
+        &self,
+        auth_code_response: AuthCodeResponse,
+    ) -> Result<OidcIdentityAttributes> {
+        self.request_db
+            .resolve_request(&self.client, auth_code_response)
+            .await
+    }
+
+    pub async fn refresh_access_token(&self, refresh_token: RefreshToken) -> Result<OidcTokens> {
+        self.request_db
+            .refresh_access_token(&self.client, refresh_token)
+            .await
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::error::{Error, Result};
+    use crate::error::Result;
     use crate::pro::users::oidc::OidcError::{
         IllegalProvider, LoginFailed, ProviderDiscovery, ResponseFieldError, TokenExchangeError,
     };
@@ -419,6 +618,7 @@ mod tests {
         AuthCodeResponse, DefaultClient, DefaultJsonWebKeySet, DefaultProviderMetadata,
         OidcRequestDb,
     };
+    use crate::pro::users::OidcError::IllegalRequestToken;
     use crate::pro::util::tests::mock_oidc::{
         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_NONCE,
         SINGLE_STATE,
@@ -429,7 +629,7 @@ mod tests {
     use oauth2::basic::BasicTokenType;
     use oauth2::{
         AccessToken, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields, RedirectUrl,
-        StandardTokenResponse,
+        StandardTokenResponse, TokenResponse,
     };
     use openidconnect::core::{CoreClient, CoreIdTokenFields, CoreTokenResponse, CoreTokenType};
     use openidconnect::Nonce;
@@ -467,7 +667,7 @@ mod tests {
         }
     }
 
-    fn mock_client(request_db: &OidcRequestDb) -> Result<DefaultClient, Error> {
+    fn mock_client(request_db: &OidcRequestDb) -> Result<DefaultClient> {
         let client_id = request_db.client_id.clone();
         let client_secret = request_db.client_secret.clone();
         let redirect_uri = request_db.redirect_uri.clone();
@@ -670,7 +870,7 @@ mod tests {
 
         let client = mock_client(&request_db).unwrap();
 
-        let url = request_db.generate_request(client).await.unwrap().url;
+        let url = request_db.generate_request(&client).await.unwrap().url;
 
         assert_eq!(url.scheme(), "https");
         assert_eq!(url.host_str(), Some("dummy-issuer.com"));
@@ -709,11 +909,11 @@ mod tests {
         let request_db = single_state_nonce_request_db();
         let client = mock_client(&request_db).unwrap();
 
-        let first_request = request_db.generate_request(client.clone()).await;
+        let first_request = request_db.generate_request(&client).await;
 
         assert!(first_request.is_ok());
 
-        let second_request = request_db.generate_request(client).await;
+        let second_request = request_db.generate_request(&client).await;
 
         assert!(
             matches!(second_request, Err(LoginFailed{reason}) if reason == "Failed to generate unique state")
@@ -727,7 +927,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
-        request_db.generate_request(client.clone()).await.unwrap();
+        request_db.generate_request(&client).await.unwrap();
 
         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(
             request_db.issuer.clone(),
@@ -737,7 +937,9 @@ mod tests {
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
 
         assert!(response.is_ok());
     }
@@ -753,7 +955,9 @@ mod tests {
             state: "Illegal Request State".to_string(),
         };
 
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
         assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
     }
 
@@ -762,7 +966,7 @@ mod tests {
         let request_db = single_state_nonce_request_db();
         let client = mock_client(&request_db).unwrap();
 
-        let request = request_db.generate_request(client.clone()).await;
+        let request = request_db.generate_request(&client).await;
 
         assert!(request.is_ok());
 
@@ -772,7 +976,9 @@ mod tests {
             state: "Illegal Request State".to_string(),
         };
 
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
         assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
     }
 
@@ -796,12 +1002,14 @@ mod tests {
 
         let client = mock_client(&request_db).unwrap();
 
-        let request = request_db.generate_request(client.clone()).await;
+        let request = request_db.generate_request(&client).await;
 
         assert!(request.is_ok());
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
 
         assert!(
             matches!(response, Err(ResponseFieldError{field, reason}) if field == "id token" && reason == "missing")
@@ -815,7 +1023,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
-        request_db.generate_request(client.clone()).await.unwrap();
+        request_db.generate_request(&client).await.unwrap();
 
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
             request_db.issuer.clone(),
@@ -826,7 +1034,9 @@ mod tests {
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
 
         assert!(
             matches!(response, Err(TokenExchangeError{reason, source: _}) if reason == "Failed to verify claims")
@@ -840,7 +1050,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
-        request_db.generate_request(client.clone()).await.unwrap();
+        request_db.generate_request(&client).await.unwrap();
 
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
             request_db.issuer.clone(),
@@ -851,7 +1061,9 @@ mod tests {
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
 
         assert!(
             matches!(response, Err(TokenExchangeError{reason, source: _}) if reason == "Failed to verify claims")
@@ -865,7 +1077,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
-        request_db.generate_request(client.clone()).await.unwrap();
+        request_db.generate_request(&client).await.unwrap();
 
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
             request_db.issuer.clone(),
@@ -876,7 +1088,9 @@ mod tests {
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
 
         assert!(
             matches!(response, Err(ResponseFieldError{field, reason}) if field == "e-mail" && reason == "missing")
@@ -890,7 +1104,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
-        request_db.generate_request(client.clone()).await.unwrap();
+        request_db.generate_request(&client).await.unwrap();
 
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
             request_db.issuer.clone(),
@@ -901,7 +1115,9 @@ mod tests {
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
 
         assert!(
             matches!(response, Err(ResponseFieldError{field, reason}) if field == "name" && reason == "missing")
@@ -915,7 +1131,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
-        request_db.generate_request(client.clone()).await.unwrap();
+        request_db.generate_request(&client).await.unwrap();
 
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
             request_db.issuer.clone(),
@@ -926,7 +1142,9 @@ mod tests {
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
 
         assert!(
             matches!(response, Err(ResponseFieldError{field, reason}) if field == "duration" && reason == "missing")
@@ -940,7 +1158,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
-        request_db.generate_request(client.clone()).await.unwrap();
+        request_db.generate_request(&client).await.unwrap();
 
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
             request_db.issuer.clone(),
@@ -953,7 +1171,9 @@ mod tests {
         mock_valid_request(&server, &token_response);
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
 
         assert!(
             matches!(response, Err(ResponseFieldError{field, reason}) if field == "access token" && reason == "wrong hash")
@@ -967,7 +1187,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
-        request_db.generate_request(client.clone()).await.unwrap();
+        request_db.generate_request(&client).await.unwrap();
 
         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(
             request_db.issuer.clone(),
@@ -978,13 +1198,15 @@ mod tests {
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response = request_db
-            .resolve_request(client.clone(), auth_code_response)
+            .resolve_request(&client, auth_code_response)
             .await;
 
         assert!(response.is_ok());
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
 
         assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
     }
@@ -1029,7 +1251,7 @@ mod tests {
             request_db.state_function = state_functions[i];
             request_db.nonce_function = nonce_functions[i];
 
-            let request_result = request_db.generate_request(client.clone()).await;
+            let request_result = request_db.generate_request(&client).await;
 
             assert!(request_result.is_ok());
         }
@@ -1049,7 +1271,7 @@ mod tests {
             let mut auth_code_response = auth_code_response_empty_with_valid_state();
             auth_code_response.state = state;
             let response = request_db
-                .resolve_request(client.clone(), auth_code_response)
+                .resolve_request(&client, auth_code_response)
                 .await;
 
             assert!(response.is_ok());
@@ -1063,7 +1285,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
-        request_db.generate_request(client.clone()).await.unwrap();
+        request_db.generate_request(&client).await.unwrap();
 
         //TODO: Maybe search for more detailed error types and test/display them more gracefully.
         let error_message = serde_json::to_string(&json!({
@@ -1081,7 +1303,9 @@ mod tests {
         );
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
 
         assert!(
             matches!(response, Err(TokenExchangeError{reason, source: _}) if reason == "Request for code to token exchange failed")
@@ -1095,7 +1319,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db).unwrap();
 
-        request_db.generate_request(client.clone()).await.unwrap();
+        request_db.generate_request(&client).await.unwrap();
 
         let error_message = serde_json::to_string(&json!({
             "error_description": "Dummy bad request",
@@ -1113,7 +1337,7 @@ mod tests {
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
         let response_bad = request_db
-            .resolve_request(client.clone(), auth_code_response)
+            .resolve_request(&client, auth_code_response)
             .await;
 
         assert!(
@@ -1121,10 +1345,74 @@ mod tests {
         );
 
         let auth_code_response = auth_code_response_empty_with_valid_state();
-        let response = request_db.resolve_request(client, auth_code_response).await;
+        let response = request_db
+            .resolve_request(&client, auth_code_response)
+            .await;
 
         assert!(matches!(response, Err(LoginFailed{reason}) if reason == "Request unknown"));
     }
 
     //TODO: Did not test code and PKCE verifier.
+
+    #[tokio::test]
+    async fn resolve_refresh_success() {
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
+        let client = mock_client(&request_db).unwrap();
+
+        request_db.generate_request(&client).await.unwrap();
+
+        let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+            request_db.issuer.clone(),
+            request_db.client_id.clone(),
+        );
+        mock_token_config.refresh = Some("REFRESH_TOKEN".into());
+        let token_response = mock_token_response(mock_token_config);
+        let refresh_token = token_response.refresh_token().unwrap().clone();
+        mock_valid_request(&server, &token_response);
+
+        let response = request_db
+            .refresh_access_token(&client, refresh_token)
+            .await;
+
+        assert!(response.is_ok());
+    }
+
+    #[tokio::test]
+    async fn resolve_refresh_failed() {
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+        let request_db = single_state_nonce_mocked_request_db(server_url);
+        let client = mock_client(&request_db).unwrap();
+
+        request_db.generate_request(&client).await.unwrap();
+
+        let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+            request_db.issuer.clone(),
+            request_db.client_id.clone(),
+        );
+        mock_token_config.refresh = Some("REFRESH_TOKEN".into());
+        let token_response = mock_token_response(mock_token_config);
+        let refresh_token = token_response.refresh_token().unwrap().clone();
+
+        let error_message = serde_json::to_string(&json!({
+            "error": "invalid_request"
+        }))
+        .expect("Serde Json unsuccessful");
+
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token")).respond_with(
+                status_code(404)
+                    .insert_header("content-type", "application/json")
+                    .body(error_message),
+            ),
+        );
+
+        let response = request_db
+            .refresh_access_token(&client, refresh_token)
+            .await;
+
+        assert!(matches!(response, Err(IllegalRequestToken { source: _ })));
+    }
 }

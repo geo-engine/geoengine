@@ -15,9 +15,10 @@ use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
+use chrono::NaiveDateTime;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
-use geoengine_datatypes::primitives::CacheTtlSeconds;
+use geoengine_datatypes::primitives::{BoundingBox2D, CacheTtlSeconds, Coordinate2D, TimeInterval};
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
@@ -26,10 +27,11 @@ use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, TypedOperator,
     VectorColumnInfo, VectorOperator, VectorResultDescriptor,
 };
+use geoengine_operators::error::Error::{Bb8Postgres, Postgres};
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     GdalLoadingInfo, OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
-    OgrSourceErrorSpec, OgrSourceParameters,
+    OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat,
 };
 use itertools::Itertools;
 use postgres_types::{FromSql, ToSql};
@@ -113,7 +115,7 @@ impl GbifDataProvider {
 
     const LISTABLE_RANKS: [&'static str; 3] = ["family", "genus", "species"];
 
-    const OCCURRENCE_COLUMNS: [&'static str; 50] = [
+    const OCCURRENCE_COLUMNS: [&'static str; 49] = [
         "gbifid",
         "datasetkey",
         "occurrenceid",
@@ -143,7 +145,6 @@ impl GbifDataProvider {
         "elevationaccuracy",
         "depth",
         "depthaccuracy",
-        "eventdate",
         "day",
         "month",
         "year",
@@ -290,7 +291,7 @@ impl GbifDataProvider {
         let query = &format!(
             r#"
             SELECT name, count
-            FROM {schema}.{taxonrank}_counts
+            FROM {schema}.{taxonrank}_stats
             WHERE name IN
                 (
                     SELECT canonicalname
@@ -358,7 +359,7 @@ impl GbifDataProvider {
                     {union}
                     (
                         SELECT count, name, '{rank}' AS rank
-                        FROM {schema}.{rank}_counts
+                        FROM {schema}.{rank}_stats
                         WHERE name IN (SELECT name FROM names)
                         ORDER BY name
                     )
@@ -969,12 +970,49 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                     source: Box::new(e),
                 })?;
 
+        let conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Bb8Postgres { source: e })?;
+
+        let stats = conn
+            .query_one(
+                &format!(
+                    r#"
+                SELECT
+                    lower(time) AS tmin,
+                    upper(time) AS tmax,
+                    public.ST_XMIN(extent) AS xmin,
+                    public.ST_XMAX(extent) AS xmax,
+                    public.ST_YMIN(extent) AS ymin,
+                    public.ST_YMAX(extent) AS ymax
+                FROM {schema}.{taxonrank}_stats
+                WHERE name = '{canonicalname}'"#,
+                    schema = self.db_config.schema
+                ),
+                &[],
+            )
+            .await
+            .map_err(|e| Postgres { source: e })?;
+
+        let tmin = stats.get::<usize, NaiveDateTime>(0);
+        let tmax = stats.get::<usize, NaiveDateTime>(1);
+        let xmin = stats.get::<usize, f64>(2);
+        let xmax = stats.get::<usize, f64>(3);
+        let ymin = stats.get::<usize, f64>(4);
+        let ymax = stats.get::<usize, f64>(5);
+
         Ok(Box::new(StaticMetaData {
             loading_info: OgrSourceDataset {
                 file_name: self.db_config.ogr_pg_config().into(),
                 layer_name: format!("{}.{}", self.db_config.schema, self.occurrence_table),
                 data_type: Some(VectorDataType::MultiPoint),
-                time: OgrSourceDatasetTimeType::None, // TODO
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "eventdate".to_string(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
                 default_geometry: None,
                 columns: Some(OgrSourceColumnSpec {
                     format_specifics: None,
@@ -1017,7 +1055,6 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                         "coordinateprecision".to_string(),
                         "elevationaccuracy".to_string(),
                         "depthaccuracy".to_string(),
-                        "eventdate".to_string(),
                         "specieskey".to_string(),
                         "basisofrecord".to_string(),
                         "institutioncode".to_string(),
@@ -1039,11 +1076,11 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                     datetime: vec![],
                     rename: None,
                 }),
-                force_ogr_time_filter: false,
+                force_ogr_time_filter: true,
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Ignore,
                 sql_query: Some(format!(
-                    "SELECT {} geom FROM {}.{} WHERE {taxonrank} = '{canonicalname}'",
+                    "SELECT {} geom, eventdate FROM {}.{} WHERE {taxonrank} = '{canonicalname}'",
                     self.columns
                         .iter()
                         .map(|column| format!(r#""{column}","#))
@@ -1255,13 +1292,6 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                         },
                     ),
                     (
-                        "eventdate".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Text,
-                            measurement: Measurement::Unitless,
-                        },
-                    ),
-                    (
                         "day".to_string(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Int,
@@ -1405,8 +1435,14 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 .into_iter()
                 .filter(|(column, _)| self.columns.contains(column))
                 .collect(),
-                time: None,
-                bbox: None,
+                time: Some(TimeInterval::new(
+                    tmin.timestamp_millis(),
+                    tmax.timestamp_millis(),
+                )?),
+                bbox: Some(BoundingBox2D::new(
+                    Coordinate2D::new(xmin, ymin),
+                    Coordinate2D::new(xmax, ymax),
+                )?),
             },
             phantom: Default::default(),
         }))
@@ -1507,10 +1543,10 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
     use geoengine_datatypes::dataset::ExternalDataId;
-    use geoengine_datatypes::primitives::ColumnSelection;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, CacheHint, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
     };
+    use geoengine_datatypes::primitives::{ColumnSelection, TimeInstance};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
@@ -1541,7 +1577,8 @@ mod tests {
         let schema = format!("geoengine_test_{}", rand::thread_rng().next_u64());
 
         conn.batch_execute(&format!(
-            "CREATE SCHEMA {schema}; 
+            "CREATE SCHEMA {schema};
+            CREATE EXTENSION IF NOT EXISTS postgis;
             SET SEARCH_PATH TO {schema}, public;
             {sql}"
         ))
@@ -2197,7 +2234,6 @@ mod tests {
                         ("coordinateprecision".to_string(), text_column.clone()),
                         ("elevationaccuracy".to_string(), text_column.clone()),
                         ("depthaccuracy".to_string(), text_column.clone()),
-                        ("eventdate".to_string(), text_column.clone()),
                         ("specieskey".to_string(), text_column.clone()),
                         ("basisofrecord".to_string(), text_column.clone()),
                         ("institutioncode".to_string(), text_column.clone()),
@@ -2215,8 +2251,9 @@ mod tests {
                         ("mediatype".to_string(), text_column.clone()),
                         ("issue".to_string(), text_column.clone()),
                     ]),
-                    time: None,
-                    bbox: None,
+                    time: Some(TimeInterval::new(1_517_011_200_000, 1_517_443_200_000).unwrap()),
+                    #[allow(clippy::excessive_precision)]
+                    bbox: Some(BoundingBox2D::new(Coordinate2D::new(-61.114_469_999_999_997, 14.679_15), Coordinate2D::new(-61.065_219_999_999_997, 14.775_33)).unwrap()),
                 };
 
                 let result_descriptor =
@@ -2250,7 +2287,11 @@ mod tests {
                     file_name: PathBuf::from(ogr_pg_string),
                     layer_name: format!("{0}.occurrences", db_config.schema),
                     data_type: Some(VectorDataType::MultiPoint),
-                    time: OgrSourceDatasetTimeType::None,
+                    time: OgrSourceDatasetTimeType::Start {
+                        start_field: "eventdate".to_string(),
+                        start_format: OgrSourceTimeFormat::Auto,
+                        duration: OgrSourceDurationSpec::Zero,
+                    },
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         format_specifics: None,
@@ -2282,7 +2323,6 @@ mod tests {
                             "depthaccuracy".to_string(),
                             "elevationaccuracy".to_string(),
                             "establishmentmeans".to_string(),
-                            "eventdate".to_string(),
                             "family".to_string(),
                             "genus".to_string(),
                             "identifiedby".to_string(),
@@ -2315,11 +2355,11 @@ mod tests {
                         datetime: vec![],
                         rename: None,
                     }),
-                    force_ogr_time_filter: false,
+                    force_ogr_time_filter: true,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
                     sql_query: Some(format!(
-                        "SELECT {} geom FROM {}.occurrences WHERE species = 'Rhipidia willistoniana'",
+                        "SELECT {} geom, eventdate FROM {}.occurrences WHERE species = 'Rhipidia willistoniana'",
                         GbifDataProvider::all_columns()
                             .iter()
                             .map(|column| format!(r#""{column}","#))
@@ -2403,8 +2443,9 @@ mod tests {
                         ("elevation".to_string(), float_column.clone()),
                         ("scientificname".to_string(), text_column.clone()),
                     ]),
-                    time: None,
-                    bbox: None,
+                    time: Some(TimeInterval::new(1_517_011_200_000, 1_517_443_200_000).unwrap()),
+                    #[allow(clippy::excessive_precision)]
+                    bbox: Some(BoundingBox2D::new(Coordinate2D::new(-61.114_469_999_999_997, 14.679_15), Coordinate2D::new(-61.065_219_999_999_997, 14.775_33)).unwrap()),
                 };
 
                 let result_descriptor =
@@ -2438,7 +2479,11 @@ mod tests {
                     file_name: PathBuf::from(ogr_pg_string),
                     layer_name: format!("{0}.occurrences", db_config.schema),
                     data_type: Some(VectorDataType::MultiPoint),
-                    time: OgrSourceDatasetTimeType::None,
+                    time: OgrSourceDatasetTimeType::Start {
+                        start_field: "eventdate".to_string(),
+                        start_format: OgrSourceTimeFormat::Auto,
+                        duration: OgrSourceDurationSpec::Zero,
+                    },
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         format_specifics: None,
@@ -2451,10 +2496,10 @@ mod tests {
                         datetime: vec![],
                         rename: None,
                     }),
-                    force_ogr_time_filter: false,
+                    force_ogr_time_filter: true,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: Some(format!(r#"SELECT "gbifid","scientificname","elevation", geom FROM {}.occurrences WHERE species = 'Rhipidia willistoniana'"#, db_config.schema)),
+                    sql_query: Some(format!(r#"SELECT "gbifid","scientificname","elevation", geom, eventdate FROM {}.occurrences WHERE species = 'Rhipidia willistoniana'"#, db_config.schema)),
                     attribute_query: None,
                     cache_ttl: CacheTtlSeconds::default(),
                 };
@@ -2526,8 +2571,9 @@ mod tests {
                         ("gbifid".to_string(), int_column.clone()),
                         ("scientificname".to_string(), text_column.clone()),
                     ]),
-                    time: None,
-                    bbox: None,
+                    time: Some(TimeInterval::new(1_517_011_200_000, 1_517_443_200_000).unwrap()),
+                    #[allow(clippy::excessive_precision)]
+                    bbox: Some(BoundingBox2D::new(Coordinate2D::new(-61.114_469_999_999_997, 14.679_15), Coordinate2D::new(-61.065_219_999_999_997, 14.775_33)).unwrap()),
                 };
 
                 let result_descriptor =
@@ -2561,7 +2607,11 @@ mod tests {
                     file_name: PathBuf::from(ogr_pg_string),
                     layer_name: format!("{0}.occurrences_lite", db_config.schema),
                     data_type: Some(VectorDataType::MultiPoint),
-                    time: OgrSourceDatasetTimeType::None,
+                    time: OgrSourceDatasetTimeType::Start {
+                        start_field: "eventdate".to_string(),
+                        start_format: OgrSourceTimeFormat::Auto,
+                        duration: OgrSourceDurationSpec::Zero,
+                    },
                     default_geometry: None,
                     columns: Some(OgrSourceColumnSpec {
                         format_specifics: None,
@@ -2574,10 +2624,10 @@ mod tests {
                         datetime: vec![],
                         rename: None,
                     }),
-                    force_ogr_time_filter: false,
+                    force_ogr_time_filter: true,
                     force_ogr_spatial_filter: false,
                     on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: Some(format!(r#"SELECT "gbifid","scientificname", geom FROM {}.occurrences_lite WHERE species = 'Rhipidia willistoniana'"#, db_config.schema)),
+                    sql_query: Some(format!(r#"SELECT "gbifid","scientificname", geom, eventdate FROM {}.occurrences_lite WHERE species = 'Rhipidia willistoniana'"#, db_config.schema)),
                     attribute_query: None,
                     cache_ttl: CacheTtlSeconds::default(),
                 };
@@ -2671,7 +2721,7 @@ mod tests {
                 let expected = MultiPointCollection::from_data(
                     MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)])
                         .unwrap(),
-                    vec![TimeInterval::default(); 2],
+                    vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
                     [
                         (
                             "gbifid".to_string(),
@@ -2771,13 +2821,6 @@ mod tests {
                         (
                             "establishmentmeans".to_string(),
                             FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "eventdate".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("2018-01-27 00:00:00 +00:00".to_string()),
-                                Some("2018-01-27 00:00:00 +00:00".to_string()),
-                            ]),
                         ),
                         (
                             "family".to_string(),
@@ -3055,7 +3098,7 @@ mod tests {
                 let expected = MultiPointCollection::from_data(
                     MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)])
                         .unwrap(),
-                    vec![TimeInterval::default(); 2],
+                    vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
                     [
                         (
                             "gbifid".to_string(),
@@ -3176,7 +3219,7 @@ mod tests {
                 let expected = MultiPointCollection::from_data(
                     MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)])
                         .unwrap(),
-                    vec![TimeInterval::default(); 2],
+                    vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
                     [
                         (
                             "gbifid".to_string(),
@@ -3193,6 +3236,311 @@ mod tests {
                             ]),
                         ),
                     ]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    CacheHint::default(),
+                )
+                .unwrap();
+
+                if !result.chunks_equal_ignoring_cache_hint(&expected) {
+                    return Err(format!("{result:?} != {expected:?}"));
+                }
+
+                Ok(())
+            }
+
+            let result = test(app_ctx, db_config).await;
+
+            assert!(result.is_ok());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_loads_for_lite_subset_selected_columns_with_time_instant_filter() {
+        with_temp_schema(|app_ctx, db_config| async {
+            async fn test(
+                app_ctx: PostgresContext<NoTls>,
+                db_config: DatabaseConnectionConfig,
+            ) -> Result<(), String> {
+                let provider = Box::new(GbifDataProviderDefinition {
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    priority: Some(12),
+                    db_config,
+                    cache_ttl: Default::default(),
+                    autocomplete_timeout: 5,
+                    columns: vec!["gbifid".to_string()],
+                })
+                .initialize(app_ctx.default_session_context().await.unwrap().db())
+                .await
+                .map_err(|e| e.to_string())?;
+
+                let meta: Box<
+                    dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+                > = provider
+                    .meta_data(&DataId::External(ExternalDataId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                    }))
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
+                    VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        columns: HashMap::new(),
+                        time: None,
+                        bbox: None,
+                    },
+                    meta,
+                    vec![],
+                );
+
+                let query_rectangle = VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::new_instant(1_517_011_200_000).unwrap(),
+                    spatial_resolution: SpatialResolution::zero_point_one(),
+                    attributes: ColumnSelection::all(),
+                };
+                let ctx = MockQueryContext::test_default();
+
+                let result: Vec<_> = processor
+                    .query(query_rectangle, &ctx)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .collect()
+                    .await;
+
+                if result.len() != 1 {
+                    return Err("result.len() != 1".to_owned());
+                }
+
+                if result[0].is_err() {
+                    return Err("result[0].is_err()".to_owned());
+                }
+
+                let result = result[0].as_ref().unwrap();
+
+                let expected = MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)])
+                        .unwrap(),
+                    vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
+                    [(
+                        "gbifid".to_string(),
+                        FeatureData::NullableInt(vec![Some(4_021_925_301), Some(4_021_925_303)]),
+                    )]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    CacheHint::default(),
+                )
+                .unwrap();
+
+                if !result.chunks_equal_ignoring_cache_hint(&expected) {
+                    return Err(format!("{result:?} != {expected:?}"));
+                }
+
+                let query_rectangle = VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::new_instant(1_517_443_200_000).unwrap(),
+                    spatial_resolution: SpatialResolution::zero_point_one(),
+                    attributes: ColumnSelection::all(),
+                };
+                let ctx = MockQueryContext::test_default();
+
+                let result: Vec<_> = processor
+                    .query(query_rectangle, &ctx)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .collect()
+                    .await;
+
+                if result.len() != 1 {
+                    return Err("result.len() != 1".to_owned());
+                }
+
+                if result[0].is_err() {
+                    return Err("result[0].is_err()".to_owned());
+                }
+
+                let result = result[0].as_ref().unwrap();
+
+                let expected = MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(-61.114_47, 14.679_15)]).unwrap(),
+                    vec![TimeInterval::new_instant(1_517_443_200_000).unwrap()],
+                    [(
+                        "gbifid".to_string(),
+                        FeatureData::NullableInt(vec![Some(4_021_925_302)]),
+                    )]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    CacheHint::default(),
+                )
+                .unwrap();
+
+                if !result.chunks_equal_ignoring_cache_hint(&expected) {
+                    return Err(format!("{result:?} != {expected:?}"));
+                }
+
+                Ok(())
+            }
+
+            let result = test(app_ctx, db_config).await;
+
+            assert!(result.is_ok());
+        })
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[allow(clippy::too_many_lines)]
+    async fn it_loads_for_lite_subset_selected_columns_with_time_range_filter() {
+        with_temp_schema(|app_ctx, db_config| async {
+            async fn test(
+                app_ctx: PostgresContext<NoTls>,
+                db_config: DatabaseConnectionConfig,
+            ) -> Result<(), String> {
+                let provider = Box::new(GbifDataProviderDefinition {
+                    name: "GBIF".to_string(),
+                    description: "GBIF occurrence datasets".to_string(),
+                    priority: Some(12),
+                    db_config,
+                    cache_ttl: Default::default(),
+                    autocomplete_timeout: 5,
+                    columns: vec!["gbifid".to_string()],
+                })
+                .initialize(app_ctx.default_session_context().await.unwrap().db())
+                .await
+                .map_err(|e| e.to_string())?;
+
+                let meta: Box<
+                    dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+                > = provider
+                    .meta_data(&DataId::External(ExternalDataId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                    }))
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
+                    VectorResultDescriptor {
+                        data_type: VectorDataType::MultiPoint,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        columns: HashMap::new(),
+                        time: None,
+                        bbox: None,
+                    },
+                    meta,
+                    vec![],
+                );
+
+                let query_rectangle = VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::new(
+                        TimeInstance::from_millis_unchecked(1_517_011_200_000),
+                        TimeInstance::from_millis_unchecked(1_517_443_200_000),
+                    )
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::zero_point_one(),
+                    attributes: ColumnSelection::all(),
+                };
+                let ctx = MockQueryContext::test_default();
+
+                let result: Vec<_> = processor
+                    .query(query_rectangle, &ctx)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .collect()
+                    .await;
+
+                if result.len() != 1 {
+                    return Err("result.len() != 1".to_owned());
+                }
+
+                if result[0].is_err() {
+                    return Err("result[0].is_err()".to_owned());
+                }
+
+                let result = result[0].as_ref().unwrap();
+
+                let expected = MultiPointCollection::from_data(
+                    MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)])
+                        .unwrap(),
+                    vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
+                    [(
+                        "gbifid".to_string(),
+                        FeatureData::NullableInt(vec![Some(4_021_925_301), Some(4_021_925_303)]),
+                    )]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                    CacheHint::default(),
+                )
+                .unwrap();
+
+                if !result.chunks_equal_ignoring_cache_hint(&expected) {
+                    return Err(format!("{result:?} != {expected:?}"));
+                }
+
+                let query_rectangle = VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                        .unwrap(),
+                    time_interval: TimeInterval::new(
+                        TimeInstance::from_millis_unchecked(1_517_011_200_000),
+                        TimeInstance::from_millis_unchecked(1_517_443_200_001),
+                    )
+                    .unwrap(),
+                    spatial_resolution: SpatialResolution::zero_point_one(),
+                    attributes: ColumnSelection::all(),
+                };
+                let ctx = MockQueryContext::test_default();
+
+                let result: Vec<_> = processor
+                    .query(query_rectangle, &ctx)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .collect()
+                    .await;
+
+                if result.len() != 1 {
+                    return Err("result.len() != 1".to_owned());
+                }
+
+                if result[0].is_err() {
+                    return Err("result[0].is_err()".to_owned());
+                }
+
+                let result = result[0].as_ref().unwrap();
+
+                let expected = MultiPointCollection::from_data(
+                    MultiPoint::many(vec![
+                        (-61.065_22, 14.775_33),
+                        (-61.114_47, 14.679_15),
+                        (-61.065_22, 14.775_33),
+                    ])
+                    .unwrap(),
+                    vec![
+                        TimeInterval::new_instant(1_517_011_200_000).unwrap(),
+                        TimeInterval::new_instant(1_517_443_200_000).unwrap(),
+                        TimeInterval::new_instant(1_517_011_200_000).unwrap(),
+                    ],
+                    [(
+                        "gbifid".to_string(),
+                        FeatureData::NullableInt(vec![
+                            Some(4_021_925_301),
+                            Some(4_021_925_302),
+                            Some(4_021_925_303),
+                        ]),
+                    )]
                     .iter()
                     .cloned()
                     .collect(),

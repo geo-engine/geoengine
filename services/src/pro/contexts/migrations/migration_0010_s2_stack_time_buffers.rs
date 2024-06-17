@@ -2,10 +2,10 @@ use async_trait::async_trait;
 use tokio_postgres::Transaction;
 
 use super::database_migration::{ProMigration, ProMigrationImpl};
-use crate::{contexts::Migration0009S2StacTimeBuffers, error::Result};
+use crate::{contexts::Migration0010S2StacTimeBuffers, error::Result};
 
 #[async_trait]
-impl ProMigration for ProMigrationImpl<Migration0009S2StacTimeBuffers> {
+impl ProMigration for ProMigrationImpl<Migration0010S2StacTimeBuffers> {
     async fn pro_migrate(&self, tx: &Transaction<'_>) -> Result<()> {
         // add priority column to layer_providers table and move description column to the definition types
         tx.batch_execute(

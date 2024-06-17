@@ -491,10 +491,12 @@ mod tests {
         ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, RasterSymbology,
         STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
     };
+    use crate::util::encryption::U96;
     use crate::util::postgres::{assert_sql_type, DatabaseConnectionConfig};
     use crate::util::tests::register_ndvi_workflow_helper;
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
+    use aes_gcm::aead::generic_array::arr;
     use bb8_postgres::tokio_postgres::NoTls;
     use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
@@ -4497,6 +4499,15 @@ mod tests {
                     }],
                 }),
             ],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "bytea",
+            [U96::from(
+                arr![u8; 13, 227, 191, 247, 123, 193, 214, 165, 185, 37, 101, 24],
+            )],
         )
         .await;
 

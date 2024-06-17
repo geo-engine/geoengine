@@ -8,7 +8,8 @@ pub use crate::contexts::migrations::{
     migration_0006_ebv_provider::Migration0006EbvProvider,
     migration_0007_owner_role::Migration0007OwnerRole,
     migration_0008_band_names::Migration0008BandNames,
-    migration_0009_s2_stack_time_buffers::Migration0009S2StacTimeBuffers,
+    migration_0009_oidc_tokens::Migration0009OidcTokens,
+    migration_0010_s2_stack_time_buffers::Migration0010S2StacTimeBuffers,
 };
 pub use database_migration::{
     initialize_database, migrate_database, DatabaseVersion, Migration, MigrationResult,
@@ -25,10 +26,12 @@ pub mod migration_0005_gbif_column_selection;
 mod migration_0006_ebv_provider;
 pub mod migration_0007_owner_role;
 pub mod migration_0008_band_names;
-pub mod migration_0009_s2_stack_time_buffers;
+pub mod migration_0009_oidc_tokens;
+pub mod migration_0010_s2_stack_time_buffers;
 
 #[cfg(test)]
 mod schema_info;
+
 #[cfg(test)]
 pub(crate) use schema_info::{assert_migration_schema_eq, AssertSchemaEqPopulationConfig};
 
@@ -46,8 +49,9 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0005GbifColumnSelection),
         Box::new(Migration0006EbvProvider),
         Box::new(Migration0007OwnerRole),
-        Box::new(Migration0008BandNames),
-        Box::new(Migration0009S2StacTimeBuffers),
+        Box::new(Migration0008BandNames),        
+        Box::new(Migration0009OidcTokens),
+        Box::new(Migration0010S2StacTimeBuffers),
     ]
 }
 
