@@ -49,7 +49,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0005GbifColumnSelection),
         Box::new(Migration0006EbvProvider),
         Box::new(Migration0007OwnerRole),
-        Box::new(Migration0008BandNames),        
+        Box::new(Migration0008BandNames),
         Box::new(Migration0009OidcTokens),
         Box::new(Migration0010S2StacTimeBuffers),
     ]

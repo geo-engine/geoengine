@@ -82,7 +82,7 @@ impl Default for StacQueryBuffer {
     fn default() -> Self {
         Self {
             start_seconds: -1,
-            end_seconds: 1
+            end_seconds: 1,
         }
     }
 }
@@ -206,7 +206,7 @@ impl SentinelS2L2aCogsDataProvider {
         zones: &[StacZone],
         stac_api_retries: StacApiRetries,
         gdal_retries: GdalRetries,
-        cache_ttl: CacheTtlSeconds,        
+        cache_ttl: CacheTtlSeconds,
         query_buffer: StacQueryBuffer,
     ) -> Self {
         Self {
@@ -217,8 +217,8 @@ impl SentinelS2L2aCogsDataProvider {
             datasets: Self::create_datasets(&id, bands, zones),
             stac_api_retries,
             gdal_retries,
-            cache_ttl,            
-            query_buffer
+            cache_ttl,
+            query_buffer,
         }
     }
 
@@ -405,6 +405,7 @@ pub struct SentinelS2L2aCogsMetaData {
 }
 
 impl SentinelS2L2aCogsMetaData {
+    #[allow(clippy::too_many_lines)]
     async fn create_loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
         // for reference: https://stacspec.org/STAC-ext-api.html#operation/getSearchSTAC
         debug!("create_loading_info with: {:?}", &query);
@@ -452,8 +453,8 @@ impl SentinelS2L2aCogsMetaData {
             // feature is valid until next feature starts
             let end = if i < num_features - 1 {
                 start_times[i + 1]
-            } else {                
-                    start + 1000 // there was no tile before and there is no tile following. Use 1 sec to be safe. We could assume that there is no other tile in the query and use the query length?
+            } else {
+                start + 1000 // there was no tile before and there is no tile following. Use 1 sec to be safe. We could assume that there is no other tile in the query and use the query length?
             };
 
             let time_interval = TimeInterval::new(start, end)?;
@@ -481,20 +482,24 @@ impl SentinelS2L2aCogsMetaData {
         }
         debug!("number of generated loading infos: {}", parts.len());
 
-
-
         // This is a workaround to avoid errors when a provider does not fill the complete query rectangle.
-        let buffered_start = query.time_interval.start() + Duration::seconds(self.stac_query_buffer.start_seconds);
-        let buffered_end = query.time_interval.end() + Duration::seconds(self.stac_query_buffer.end_seconds);
+        let buffered_start =
+            query.time_interval.start() + Duration::seconds(self.stac_query_buffer.start_seconds);
+        let buffered_end =
+            query.time_interval.end() + Duration::seconds(self.stac_query_buffer.end_seconds);
 
         if let Some(first) = parts.first() {
             if first.time.start() > query.time_interval.start() {
                 log::debug!("Missing temporal slice information to provide loading info for the whole query rectangle. Inserting fake first element! Query time: {} Buffered start: {} First element available: {}. Increase query buffer to avoid.", query.time_interval, buffered_start, first.time);
-                parts.insert(0, GdalLoadingInfoTemporalSlice {
-                    time: TimeInterval::new(buffered_start, first.time.start()).expect("Condition is checked above"),
-                    params: None,
-                    cache_ttl: first.cache_ttl // TODO: maybe this needs to be zero.
-                });
+                parts.insert(
+                    0,
+                    GdalLoadingInfoTemporalSlice {
+                        time: TimeInterval::new(buffered_start, first.time.start())
+                            .expect("Condition is checked above"),
+                        params: None,
+                        cache_ttl: first.cache_ttl, // TODO: maybe this needs to be zero.
+                    },
+                );
             }
         }
 
@@ -502,21 +507,22 @@ impl SentinelS2L2aCogsMetaData {
             if last.time.end() < query.time_interval.end() {
                 log::debug!("Missing temporal slice information to provide loading info for the whole query rectangle. Inserting fake last element! Query time: {} Buffered end: {} Last element available: {}. Increase query buffer to avoid.", query.time_interval, buffered_end, last.time);
                 parts.push(GdalLoadingInfoTemporalSlice {
-                    time: TimeInterval::new(last.time.end(), buffered_end).expect("Condition is checked above"),
+                    time: TimeInterval::new(last.time.end(), buffered_end)
+                        .expect("Condition is checked above"),
                     params: None,
-                    cache_ttl: last.cache_ttl // TODO: maybe this needs to be zero.
+                    cache_ttl: last.cache_ttl, // TODO: maybe this needs to be zero.
                 });
             }
         }
-        
+
         if parts.is_empty() {
             log::debug!("NO temporal slice information to provide loading info for the query rectangle. Inserting no data element! Query time: {} Buffered start: {} Bufferend end: {}. Increase query buffer to avoid.", query.time_interval, buffered_start, buffered_end);
             parts.push(GdalLoadingInfoTemporalSlice {
-                time: TimeInterval::new(buffered_start, buffered_end).expect("Condition is checked above"),
+                time: TimeInterval::new(buffered_start, buffered_end)
+                    .expect("Condition is checked above"),
                 params: None,
-                cache_ttl: CacheTtlSeconds::new(0) // Could this be larger?
+                cache_ttl: CacheTtlSeconds::new(0), // Could this be larger?
             });
-        
         }
 
         Ok(GdalLoadingInfo {
@@ -804,7 +810,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             stac_api_retries: self.stac_api_retries,
             gdal_retries: self.gdal_retries,
             cache_ttl: self.cache_ttl,
-            stac_query_buffer: self.query_buffer
+            stac_query_buffer: self.query_buffer,
         }))
     }
 }

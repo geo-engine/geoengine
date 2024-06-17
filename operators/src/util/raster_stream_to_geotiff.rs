@@ -1662,7 +1662,6 @@ mod tests {
 
         let query_time = TimeInterval::new(data[0].time.start(), data[1].time.end()).unwrap();
 
-
         let ctx = MockQueryContext::test_default();
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());

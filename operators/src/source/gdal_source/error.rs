@@ -7,7 +7,7 @@ use snafu::Snafu;
 pub enum GdalSourceError {
     #[snafu(display("Unsupported raster type: {raster_type:?}"))]
     UnsupportedRasterType { raster_type: RasterDataType },
-    
+
     #[snafu(display("Missing metadata from a data provider to fill the query time interval. Query time {query_time} < First element time {first_element_time}"))]
     MissingTemporalDataAtQueryStart {
         query_time: TimeInterval,
@@ -23,5 +23,4 @@ pub enum GdalSourceError {
         query_time: TimeInterval,
         only_element_time: TimeInterval,
     },
-
 }

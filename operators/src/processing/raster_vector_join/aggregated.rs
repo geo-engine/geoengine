@@ -741,7 +741,7 @@ mod tests {
                 (0.5, -0.5).into(),
             ]]])
             .unwrap()],
-            vec![TimeInterval::new(0,20).unwrap(); 1],
+            vec![TimeInterval::new(0, 20).unwrap(); 1],
             Default::default(),
             CacheHint::default(),
         )
@@ -992,7 +992,7 @@ mod tests {
                 (0.5, -0.5).into(),
             ]]])
             .unwrap()],
-            vec![TimeInterval::new(0,20).unwrap(); 1],
+            vec![TimeInterval::new(0, 20).unwrap(); 1],
             Default::default(),
             CacheHint::default(),
         )
@@ -1056,7 +1056,6 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         let result = result.remove(0);
-        
 
         assert!(result.chunks_equal_ignoring_cache_hint(
             &MultiPolygonCollection::from_slices(
@@ -1067,7 +1066,7 @@ mod tests {
                     (0.5, -0.5).into(),
                 ]]])
                 .unwrap(),],
-                &[TimeInterval::new(0,20).unwrap()],
+                &[TimeInterval::new(0, 20).unwrap()],
                 &[
                     (
                         "foo",
@@ -1088,6 +1087,6 @@ mod tests {
                 ],
             )
             .unwrap()
-        )); 
+        ));
     }
 }

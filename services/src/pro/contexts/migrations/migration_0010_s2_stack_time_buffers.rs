@@ -9,7 +9,7 @@ impl ProMigration for ProMigrationImpl<Migration0010S2StacTimeBuffers> {
     async fn pro_migrate(&self, tx: &Transaction<'_>) -> Result<()> {
         // add priority column to layer_providers table and move description column to the definition types
         tx.batch_execute(
-        r#"
+            r#"
             CREATE TYPE "StacQueryBuffer" AS (start_seconds bigint, end_seconds bigint);
 
             ALTER TYPE "SentinelS2L2ACogsProviderDefinition"
@@ -29,5 +29,4 @@ impl ProMigration for ProMigrationImpl<Migration0010S2StacTimeBuffers> {
         ).await?;
         Ok(())
     }
-       
 }

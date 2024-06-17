@@ -740,7 +740,6 @@ where
                 (Ok(e), Position::First) if q_time.start() < e.time.start() => {
                     warn!("The data provider does not cover the query start. Query time {}, First element time {}", q_time, e.time);
                     Err(error::GdalSourceError::MissingTemporalDataAtQueryStart{query_time: q_time, first_element_time: e.time}.into())
-                    
                 },
                 (Ok(e), Position::Last) if q_time.end() > e.time.end() => {
                     warn!("The data provider does not cover the query end. Query time {}, Last element time {}", q_time, e.time);

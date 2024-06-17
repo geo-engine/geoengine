@@ -197,7 +197,10 @@ mod tests {
                         number_of_retries: 3,
                     },
                     cache_ttl: CacheTtlSeconds::new(60),
-                    query_buffer: StacQueryBuffer { start_seconds: -1, end_seconds: 1 }
+                    query_buffer: StacQueryBuffer {
+                        start_seconds: -1,
+                        end_seconds: 1,
+                    },
                 }],
             )
             .await;
@@ -231,9 +234,10 @@ mod tests {
                                 number_of_retries: 3,
                             },
                             cache_ttl: CacheTtlSeconds::new(60),
-                            query_buffer: StacQueryBuffer { start_seconds: -1, end_seconds: 1 }
-
-
+                            query_buffer: StacQueryBuffer {
+                                start_seconds: -1,
+                                end_seconds: 1,
+                            },
                         },
                     ),
                 ],

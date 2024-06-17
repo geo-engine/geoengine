@@ -1,7 +1,11 @@
 use std::ops::Add;
 
 use super::{
-    empty_grid::EmptyGrid, grid_traits::{ChangeGridBounds, GridShapeAccess}, masked_grid::MaskedGrid, Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D, GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, Pixel
+    empty_grid::EmptyGrid,
+    grid_traits::{ChangeGridBounds, GridShapeAccess},
+    masked_grid::MaskedGrid,
+    Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
+    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, Pixel,
 };
 
 use crate::util::{ByteSize, Result};
@@ -28,7 +32,7 @@ where
         Self::Empty(EmptyGrid::new(grid_shape))
     }
 
-    pub fn new_empty(grid: EmptyGrid<D,T>) -> Self {
+    pub fn new_empty(grid: EmptyGrid<D, T>) -> Self {
         Self::Empty(grid)
     }
 
