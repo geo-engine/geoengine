@@ -44,11 +44,12 @@ use geoengine_datatypes::{
     primitives::TimeInterval,
     raster::{Grid, GridBlit, GridBoundingBox2D, GridIdx, GridSize, TilingSpecification},
 };
+use itertools::{Itertools, Position};
 pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
-use log::debug;
+use log::{debug, warn};
 use num::FromPrimitive;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -733,7 +734,28 @@ where
             loading_info.info
         };
 
-        let source_stream = stream::iter(loading_iter);
+        let loading_inter_checked = loading_iter.with_position().map(move |(pos, ele)| {
+            let q_time = query.time_interval;
+            match (ele, &pos) {
+                (Ok(e), Position::First) if q_time.start() < e.time.start() => {
+                    warn!("The data provider does not cover the query start. Query time {}, First element time {}", q_time, e.time);
+                    Err(error::GdalSourceError::MissingTemporalDataAtQueryStart{query_time: q_time, first_element_time: e.time}.into())
+                    
+                },
+                (Ok(e), Position::Last) if q_time.end() > e.time.end() => {
+                    warn!("The data provider does not cover the query end. Query time {}, Last element time {}", q_time, e.time);
+                    Err(error::GdalSourceError::MissingTemporalDataAtQueryEnd{query_time: q_time, last_element_time: e.time}.into())
+                },
+                (Ok(e), Position::Only) if q_time.start() < e.time.start() || q_time.end() > e.time.end() => {
+                    warn!("The data provider does not cover the query end. Query time {}, Only element time {}", q_time, e.time);
+                    Err(error::GdalSourceError::MissingTemporalDataOnlyElement{query_time: q_time, only_element_time: e.time}.into())
+                },
+                (Ok(e), _) => {Ok(e)},
+                (Err(e), _) => {Err(e)}
+            }
+        });
+
+        let source_stream = stream::iter(loading_inter_checked);
 
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
             source_stream,
