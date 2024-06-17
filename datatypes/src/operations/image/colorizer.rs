@@ -20,9 +20,6 @@ pub enum RasterColorizer {
     },
     #[serde(rename_all = "camelCase")]
     MultiBand {
-        /// Unmapped values results in the NO DATA color.
-        no_data_color: RgbaColor,
-
         /// The band index of the red channel.
         red_band: u32,
         /// The minimum value for the red channel.
@@ -56,6 +53,15 @@ pub enum RasterColorizer {
 }
 
 impl Eq for RasterColorizer {}
+
+impl From<Colorizer> for RasterColorizer {
+    fn from(value: Colorizer) -> Self {
+        Self::SingleBand {
+            band: 0,
+            band_colorizer: value,
+        }
+    }
+}
 
 /// A colorizer specifies a mapping between raster values and an output image
 /// There are different variants that perform different kinds of mapping.

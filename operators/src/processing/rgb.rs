@@ -316,7 +316,7 @@ impl QueryProcessor for RgbQueryProcessor {
         let params = self.params;
 
         let stream = RasterArrayTimeAdapter::new([red, green, blue], query)
-            .map(move |tiles| Ok(compute_tile(tiles?, &params)));
+            .map(move |tiles| Ok(compute_rgb_tile(tiles?, &params)));
 
         Ok(Box::pin(stream))
     }
@@ -326,7 +326,7 @@ impl QueryProcessor for RgbQueryProcessor {
     }
 }
 
-fn compute_tile(
+pub fn compute_rgb_tile(
     [red, green, blue]: [RasterTile2D<f64>; 3],
     params: &RgbParams,
 ) -> RasterTile2D<u32> {

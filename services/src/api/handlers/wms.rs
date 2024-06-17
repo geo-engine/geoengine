@@ -350,13 +350,10 @@ async fn wms_map_handler<C: ApplicationContext>(
 
         let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
 
-        let (attributes, colorizer) = match raster_colorizer {
-            Some(RasterColorizer::SingleBand {
-                band,
-                band_colorizer,
-            }) => (BandSelection::new_single(band), Some(band_colorizer.into())),
-            _ => (BandSelection::new_single(0), None),
-        };
+        let attributes = raster_colorizer.as_ref().map_or_else(
+            || BandSelection::new_single(0),
+            |o| RasterColorizer::band_selection(o).try_into().unwrap(),
+        );
 
         let query_rect = RasterQueryRectangle {
             spatial_bounds: query_bbox,
@@ -373,7 +370,7 @@ async fn wms_map_handler<C: ApplicationContext>(
         call_on_generic_raster_processor!(
             processor,
             p =>
-                raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), colorizer, conn_closed).await
+                raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), raster_colorizer.map(Into::into), conn_closed).await
         ).map_err(error::Error::from)
     }
 

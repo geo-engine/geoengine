@@ -49,7 +49,7 @@ pub use raster_vector_join::{
 pub use reprojection::{
     InitializedRasterReprojection, InitializedVectorReprojection, Reprojection, ReprojectionParams,
 };
-pub use rgb::{Rgb, RgbOperatorError, RgbParams, RgbSources};
+pub use rgb::{compute_rgb_tile, Rgb, RgbOperatorError, RgbParams, RgbSources};
 pub use temporal_raster_aggregation::{
     Aggregation, TemporalRasterAggregation, TemporalRasterAggregationParameters,
 };

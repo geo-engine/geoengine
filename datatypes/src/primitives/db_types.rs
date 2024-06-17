@@ -216,7 +216,6 @@ pub struct RasterColorizerDbType {
     blue_min: Option<f64>,
     blue_max: Option<f64>,
     blue_scale: Option<f64>,
-    no_data_color: Option<RgbaColor>,
 }
 
 #[derive(Debug, PartialEq, ToSql, FromSql)]
@@ -237,7 +236,6 @@ impl From<&RasterColorizer> for RasterColorizerDbType {
                 r#type: RasterColorizerDbTypeType::SingleBand,
                 band: Some(i64::from(*band)),
                 band_colorizer: Some(band_colorizer.into()),
-                no_data_color: None,
                 red_band: None,
                 red_min: None,
                 red_max: None,
@@ -252,7 +250,6 @@ impl From<&RasterColorizer> for RasterColorizerDbType {
                 blue_scale: None,
             },
             RasterColorizer::MultiBand {
-                no_data_color,
                 red_band,
                 red_min,
                 red_max,
@@ -269,7 +266,6 @@ impl From<&RasterColorizer> for RasterColorizerDbType {
                 r#type: RasterColorizerDbTypeType::SingleBand,
                 band: None,
                 band_colorizer: None,
-                no_data_color: Some(*no_data_color),
                 red_band: Some(i64::from(*red_band)),
                 red_min: Some(*red_min),
                 red_max: Some(*red_max),
@@ -303,7 +299,6 @@ impl TryFrom<RasterColorizerDbType> for RasterColorizer {
             }),
             RasterColorizerDbType {
                 r#type: RasterColorizerDbTypeType::MultiBand,
-                no_data_color: Some(no_data_color),
                 red_band: Some(red_band),
                 red_min: Some(red_min),
                 red_max: Some(red_max),
@@ -318,7 +313,6 @@ impl TryFrom<RasterColorizerDbType> for RasterColorizer {
                 blue_scale: Some(blue_scale),
                 ..
             } => Ok(Self::MultiBand {
-                no_data_color,
                 red_band: u32::try_from(red_band)
                     .map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,
                 red_min,

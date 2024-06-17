@@ -1579,9 +1579,6 @@ pub enum RasterColorizer {
     },
     #[serde(rename_all = "camelCase")]
     MultiBand {
-        /// Unmapped values results in the NO DATA color.
-        no_data_color: RgbaColor,
-
         /// The band index of the red channel.
         red_band: u32,
         /// The minimum value for the red channel.
@@ -1645,7 +1642,6 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
                 band_colorizer: colorizer.into(),
             },
             geoengine_datatypes::operations::image::RasterColorizer::MultiBand {
-                no_data_color,
                 red_band,
                 red_min,
                 red_max,
@@ -1659,7 +1655,6 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
                 blue_max,
                 blue_scale,
             } => Self::MultiBand {
-                no_data_color: no_data_color.into(),
                 red_band,
                 red_min,
                 red_max,
@@ -1676,6 +1671,48 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
         }
     }
 }
+
+impl From<RasterColorizer> for geoengine_datatypes::operations::image::RasterColorizer {
+    fn from(v: RasterColorizer) -> Self {
+        match v {
+            RasterColorizer::SingleBand {
+                band,
+                band_colorizer: colorizer,
+            } => Self::SingleBand {
+                band,
+                band_colorizer: colorizer.into(),
+            },
+            RasterColorizer::MultiBand {
+                red_band,
+                red_min,
+                red_max,
+                red_scale,
+                green_band,
+                green_min,
+                green_max,
+                green_scale,
+                blue_band,
+                blue_min,
+                blue_max,
+                blue_scale,
+            } => Self::MultiBand {
+                red_band,
+                red_min,
+                red_max,
+                red_scale,
+                green_band,
+                green_min,
+                green_max,
+                green_scale,
+                blue_band,
+                blue_min,
+                blue_max,
+                blue_scale,
+            },
+        }
+    }
+}
+
 /// A map from value to color
 ///
 /// It is assumed that is has at least one and at most 256 entries.

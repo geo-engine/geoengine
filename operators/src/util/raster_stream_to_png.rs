@@ -1,15 +1,18 @@
 use futures::{future::BoxFuture, StreamExt};
 use geoengine_datatypes::{
-    operations::image::{Colorizer, RgbaColor, ToPng},
+    operations::image::{Colorizer, RasterColorizer, RgbaColor, ToPng},
     primitives::{AxisAlignedRectangle, CacheHint, RasterQueryRectangle, TimeInterval},
-    raster::{Blit, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
+    raster::{Blit, ConvertDataType, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
 use snafu::ensure;
 use std::convert::TryInto;
 use tracing::{span, Level};
 
-use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor};
+use crate::{
+    engine::{QueryContext, QueryProcessor, RasterQueryProcessor},
+    processing::{compute_rgb_tile, RgbParams},
+};
 use crate::{error, util::Result};
 
 use super::abortable_query_execution;
@@ -22,7 +25,7 @@ pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
     width: u32,
     height: u32,
     time: Option<TimeInterval>,
-    colorizer: Option<Colorizer>,
+    raster_colorizer: Option<RasterColorizer>,
     conn_closed: BoxFuture<'_, ()>,
 ) -> Result<(Vec<u8>, CacheHint)>
 where
@@ -54,40 +57,123 @@ where
         -y_query_resolution, // TODO: negative, s.t. geo transform fits...
     );
 
-    let output_tile = Ok(RasterTile2D::new_without_offset(
+    let tile_template: Result<RasterTile2D<T>> = Ok(RasterTile2D::new_without_offset(
         time.unwrap_or_default(),
         query_geo_transform,
         GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
         CacheHint::max_duration(),
     ));
 
-    let output_tile: BoxFuture<Result<RasterTile2D<T>>> =
-        Box::pin(tile_stream.fold(output_tile, |raster2d, tile| {
-            let result: Result<RasterTile2D<T>> = match (raster2d, tile) {
-                (Ok(mut raster2d), Ok(tile)) if tile.is_empty() => {
-                    raster2d.cache_hint.merge_with(&tile.cache_hint);
-                    Ok(raster2d)
-                }
-                (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
-                    Ok(()) => Ok(raster2d),
-                    Err(error) => Err(error.into()),
-                },
-                (Err(error), _) | (_, Err(error)) => Err(error),
+    let colorizer = match raster_colorizer {
+        Some(RasterColorizer::MultiBand { .. }) => Colorizer::rgba(),
+        Some(RasterColorizer::SingleBand {
+            ref band_colorizer, ..
+        }) => band_colorizer.clone(),
+        None => default_colorizer_gradient::<T>()?,
+    };
+
+    match raster_colorizer {
+        Some(RasterColorizer::MultiBand {
+            red_min,
+            red_max,
+            red_scale,
+            green_min,
+            green_max,
+            green_scale,
+            blue_min,
+            blue_max,
+            blue_scale,
+            ..
+        }) => {
+            let rgb_params = RgbParams {
+                red_min,
+                red_max,
+                red_scale,
+                green_min,
+                green_max,
+                green_scale,
+                blue_min,
+                blue_max,
+                blue_scale,
             };
+            const RGB_CHANNEL_COUNT: usize = 3;
+            let tile_template: Result<RasterTile2D<u32>> =
+                Ok(tile_template.unwrap().convert_data_type());
+            let output_tile = Box::pin(tile_stream.chunks(RGB_CHANNEL_COUNT).fold(
+                tile_template,
+                |raster2d, chunk| {
+                    if chunk.len() != RGB_CHANNEL_COUNT {
+                        // if there are not exactly N tiles, it should mean the last tile was an error and the chunker ended prematurely
+                        if let Some(Err(e)) = chunk.into_iter().last() {
+                            return futures::future::err(e);
+                        }
+                        // if there is no error, the source did not produce all bands, which likely means a bug in an operator
+                        unreachable!("the source did not produce all bands");
+                    }
 
-            match result {
-                Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
-                Err(error) => futures::future::err(error),
-            }
-        }));
+                    let mut ok_tiles: Vec<RasterTile2D<f64>> =
+                        Vec::with_capacity(RGB_CHANNEL_COUNT);
 
-    let result = abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
+                    for tile in chunk {
+                        match tile {
+                            Ok(tile) => ok_tiles.push(tile.convert_data_type()),
+                            Err(e) => return futures::future::err(e),
+                        }
+                    }
 
-    let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
-    Ok((
-        result.grid_array.to_png(width, height, &colorizer)?,
-        result.cache_hint,
-    ))
+                    let tuple: [RasterTile2D<f64>; RGB_CHANNEL_COUNT] = ok_tiles.try_into().expect(
+                        "all chunks should be of the expected length because it was checked above",
+                    );
+
+                    let rgb_tile = compute_rgb_tile(tuple, &rgb_params);
+
+                    blit_tile(raster2d, Ok(rgb_tile))
+                },
+            ));
+
+            let result =
+                abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
+            Ok((
+                result.grid_array.to_png(width, height, &colorizer)?,
+                result.cache_hint,
+            ))
+        }
+        _ => {
+            let output_tile = Box::pin(tile_stream.fold(tile_template, blit_tile));
+
+            let result =
+                abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
+            Ok((
+                result.grid_array.to_png(width, height, &colorizer)?,
+                result.cache_hint,
+            ))
+        }
+    }
+}
+
+fn blit_tile<T>(
+    raster2d: Result<RasterTile2D<T>>,
+    tile: Result<RasterTile2D<T>>,
+) -> futures::future::Ready<Result<RasterTile2D<T>>>
+where
+    T: Pixel,
+{
+    let result: Result<RasterTile2D<T>> = match (raster2d, tile) {
+        (Ok(mut raster2d), Ok(tile)) if tile.is_empty() => {
+            raster2d.cache_hint.merge_with(&tile.cache_hint);
+            Ok(raster2d)
+        }
+        (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
+            Ok(()) => Ok(raster2d),
+            Err(error) => Err(error.into()),
+        },
+        (Err(error), _) | (_, Err(error)) => Err(error),
+    };
+
+    match result {
+        Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
+        Err(error) => futures::future::err(error),
+    }
 }
 
 /// Method to generate a default `Colorizer`.
