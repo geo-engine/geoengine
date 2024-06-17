@@ -8,10 +8,10 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::CacheExpiration;
+use geoengine_datatypes::primitives::{CacheExpiration, CacheHint, TimeInterval};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
-    GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification,
+    GridOrEmpty2D, GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -109,17 +109,82 @@ where
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<crate::util::Result<RasterTile2D<Self::RasterType>>>>
     {
+        let mut parts: Vec<RasterTile2D<T>> = self.data
+        .iter()
+        .filter(move |t| {
+            t.time.intersects(&query.time_interval)
+                && t.tile_information()
+                    .spatial_partition()
+                    .intersects(&query.spatial_bounds)
+        })
+        .cloned().collect();
+
+        // This is a workaround to avoid errors when a provider does not fill the complete query rectangle.
+        if let Some(first) = parts.first() {
+            if first.time.start() > query.time_interval.start() {
+
+                // try to find an element before
+                let element_before = self.data.iter().filter(|item| item.time.end() < query.time_interval.start()).last();
+                
+                let (no_data_start, no_data_cache) = if let Some(eb) = element_before {
+                    if eb.time.is_instant() {
+                        (eb.time.end() +1, eb.cache_hint)    
+                    } else {
+                        (eb.time.end(), eb.cache_hint)
+                    }
+               
+                 } else {
+                    (query.time_interval.start(), CacheHint::max_duration()) // TODO: if there is no data before can we assume that it is MIN?
+                 };
+
+                parts.insert(0, RasterTile2D::new(
+                    TimeInterval::new(no_data_start, first.time.start()).expect("Only insert element thats before start"),
+                    first.tile_position, // we can use any tile position inside the query. the Fill adapter will take care of the rest.
+                    first.band,
+                    first.global_geo_transform,
+                    GridOrEmpty2D::new_empty_shape(first.grid_shape()),
+                    no_data_cache
+                ));
+            }
+        }
+
+        if let Some(last) = parts.last() {
+            if (
+               !last.time.is_instant() && last.time.end() < query.time_interval.end()
+            ) || (
+                last.time.is_instant() && last.time.end() +1 < query.time_interval.end()
+            ) {                
+
+                 // try to find an element following
+                 let element_following = self.data.iter().find(|item| item.time.start() > query.time_interval.end());
+
+                let no_data_start = if last.time.is_instant() {
+                    last.time.end() +1
+                } else {
+                    last.time.end()
+                };
+
+                 let (no_data_end, no_data_cache) = if let Some(ef) = element_following {
+                    (ef.time.start(), ef.cache_hint)
+                 } else {
+                    (query.time_interval.end(), CacheHint::max_duration()) 
+                 };
+
+                parts.push(RasterTile2D::new(
+                    TimeInterval::new(no_data_start, no_data_end).expect("Only insert element thats before start"),
+                    last.tile_position, // we can use any tile position inside the query. the Fill adapter will take care of the rest.
+                    last.band,
+                    last.global_geo_transform,
+                    GridOrEmpty2D::new_empty_shape(last.grid_shape()),
+                    no_data_cache
+                ));
+            }
+        }
+
+        // TODO: if there is no data at all the fill adapter will take care and produce a inf no data tile
+        
         let inner_stream = stream::iter(
-            self.data
-                .iter()
-                .filter(move |t| {
-                    t.time.intersects(&query.time_interval)
-                        && t.tile_information()
-                            .spatial_partition()
-                            .intersects(&query.spatial_bounds)
-                })
-                .cloned()
-                .map(Result::Ok),
+            parts.into_iter().map(Result::Ok),
         );
 
         // TODO: evaluate if there are GeoTransforms with positive y-axis
