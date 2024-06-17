@@ -27,6 +27,7 @@ actix-rt = "2.9"
 actix-web = "4.5"
 actix-web-actors = "4.3"
 actix-web-httpauth = "0.8"
+aes-gcm = "0.10.3"
 aruna-rust-api = { version = "2.0.0-beta.12" }
 async-trait = "0.1"
 base64 = "0.21"
@@ -63,6 +64,7 @@ opentelemetry = { version = "0.21", default-features = false, features = [
 opentelemetry-jaeger = "0.20"
 ordered-float = { version = "4.2", features = ["serde"] }
 num-traits = "0.2"
+pbkdf2 = "0.12.2"
 postgres-types = { version = "0.2", features = ["derive", "array-impls"] }
 proj = "0.22" # needs to stay fixed to use fixed proj version
 proj-sys = "0.19" # needs to stay fixed to use fixed proj version
@@ -117,6 +119,7 @@ walkdir = "2.4"
 xgboost-rs = { version = "0.3", optional = true, features = ["use_serde"] }
 zip = "0.6"
 assert-json-diff = "2.0.2"
+sha2 = "0.10.8"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nix = { version = "0.27", features = ["socket"] }

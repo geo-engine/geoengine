@@ -1,4 +1,5 @@
 use crate::util::statistics::StatisticsError;
+use bb8_postgres::bb8;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{FeatureDataType, TimeInterval};
@@ -488,6 +489,16 @@ pub enum Error {
     #[snafu(display("Band {band_idx} does not exist."))]
     BandDoesNotExist {
         band_idx: u32,
+    },
+
+    #[snafu(display("PostgresError: {}", source))]
+    Postgres {
+        source: tokio_postgres::Error,
+    },
+
+    #[snafu(display("Bb8PostgresError: {}", source))]
+    Bb8Postgres {
+        source: bb8::RunError<tokio_postgres::Error>,
     },
 }
 
