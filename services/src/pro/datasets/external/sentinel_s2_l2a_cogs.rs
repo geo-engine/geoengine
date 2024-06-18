@@ -934,7 +934,7 @@ mod tests {
             .unwrap();
 
         let expected = vec![GdalLoadingInfoTemporalSlice {
-            time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_747_000),
+            time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_758_000),
             params: Some(GdalDatasetParameters {
                 file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/R/PU/2021/1/S2B_32RPU_20210102_0_L2A/B01.tif".into(),
                 rasterband_channel: 1,
