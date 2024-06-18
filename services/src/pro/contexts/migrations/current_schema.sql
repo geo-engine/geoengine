@@ -21,6 +21,11 @@ CREATE TYPE "GdalRetries" AS (
     number_of_retries bigint
 );
 
+CREATE TYPE "StacQueryBuffer" AS (
+    start_seconds bigint,
+    end_seconds bigint
+);
+
 CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     "name" text,
     id uuid,
@@ -31,7 +36,8 @@ CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     gdal_retries "GdalRetries",
     cache_ttl int,
     description text,
-    priority smallint
+    priority smallint,
+    query_buffer "StacQueryBuffer"
 );
 
 CREATE TYPE "ProDataProviderDefinition" AS (

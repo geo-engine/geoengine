@@ -7,7 +7,8 @@ use crate::layers::external::{DataProvider, DataProviderDefinition};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataProviderId;
 pub use sentinel_s2_l2a_cogs::{
-    GdalRetries, SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacBand, StacZone,
+    GdalRetries, SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacBand, StacQueryBuffer,
+    StacZone,
 };
 use serde::{Deserialize, Serialize};
 

@@ -28,6 +28,18 @@ where
     D: GridSize + PartialEq + Clone,
     T: Clone + Default,
 {
+    pub fn new_empty_shape(grid_shape: D) -> Self {
+        Self::Empty(EmptyGrid::new(grid_shape))
+    }
+
+    pub fn new_empty(grid: EmptyGrid<D, T>) -> Self {
+        Self::Empty(grid)
+    }
+
+    pub fn new_grid(grid: MaskedGrid<D, T>) -> Self {
+        Self::Grid(grid)
+    }
+
     pub fn is_empty(&self) -> bool {
         matches!(self, GridOrEmpty::Empty(_))
     }
