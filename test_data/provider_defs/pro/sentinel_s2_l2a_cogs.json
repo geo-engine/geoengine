@@ -61,7 +61,7 @@
     }
   ],
   "query_buffer": {
-    "start_seconds": -1,
-    "end_seconds": 1
+    "start_seconds": -60,
+    "end_seconds": 60
   }
 }

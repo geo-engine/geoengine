@@ -81,8 +81,8 @@ pub struct StacQueryBuffer {
 impl Default for StacQueryBuffer {
     fn default() -> Self {
         Self {
-            start_seconds: -1,
-            end_seconds: 1,
+            start_seconds: -60,
+            end_seconds: 60,
         }
     }
 }
@@ -1087,8 +1087,8 @@ mod tests {
                 )))),
                 request::query(url_decoded(contains((
                     "datetime",
-                    // TODO: why do we request with one minute earlier?
-                    "2021-09-23T08:09:44+00:00/2021-09-23T08:10:44+00:00"
+                    // default case adds one minute to the start/end of the query to catch elements before/after 
+                    "2021-09-23T08:09:44+00:00/2021-09-23T08:11:44+00:00"
                 )))),
             ])
             .times(2)
