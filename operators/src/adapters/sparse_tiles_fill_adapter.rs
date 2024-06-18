@@ -2,7 +2,7 @@ use crate::util::Result;
 use futures::{ready, Stream};
 use geoengine_datatypes::{
     primitives::{
-        CacheExpiration, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInterval
+        CacheExpiration, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInterval,
     },
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
@@ -344,15 +344,17 @@ where
                         )));
                         }
                         // 1. b) This is a new grid run but the time is not increased
-                        if this.sc.current_idx_and_band_is_first_in_grid_run() && this.sc.time_equals_current_state(tile.time) {
+                        if this.sc.current_idx_and_band_is_first_in_grid_run()
+                            && this.sc.time_equals_current_state(tile.time)
+                        {
                             this.sc.state = State::Ended;
                             return Poll::Ready(Some(Err(
-                            SparseTilesFillAdapterError::GridWrapMustDoTimeProgress  {
-                                current_interval: this.sc.current_time,
-                                tile_interval: tile.time,
-                             }
-                            .into(),
-                         )));
+                                SparseTilesFillAdapterError::GridWrapMustDoTimeProgress {
+                                    current_interval: this.sc.current_time,
+                                    tile_interval: tile.time,
+                                }
+                                .into(),
+                            )));
                         }
 
                         // 2. a) The received TimeInterval with start EQUAL to the current TimeInterval MUST NOT have a different duration / end.
@@ -379,9 +381,9 @@ where
                                 tile.tile_position,
                                 tile.band,
                             ) {
-                                // the tile is the next to produce. Return it and set state to polling for the next tile.                                
+                                // the tile is the next to produce. Return it and set state to polling for the next tile.
                                 this.sc.state = State::PollingForNextTile;
-                                
+
                                 tile
                             } else {
                                 // the tile is not the next to produce. Save it and go to fill mode.
@@ -473,7 +475,11 @@ where
                         let stored_tile_time = tile.time;
                         // TODO: encapsulate this in a function, or: reuse in FillAndProduceNextTile
 
-                        debug_assert_ne!(this.sc.current_time, stored_tile_time, "Wrap around requires an increase in time! Current: {:?}, Tile: {:?}", this.sc.current_time, stored_tile_time);
+                        debug_assert_ne!(
+                            this.sc.current_time, stored_tile_time,
+                            "Wrap around requires an increase in time! Current: {:?}, Tile: {:?}",
+                            this.sc.current_time, stored_tile_time
+                        );
 
                         this.sc.current_time = if this
                             .sc
@@ -1962,7 +1968,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_detects_non_increasing_intervals(){
+    async fn it_detects_non_increasing_intervals() {
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -2066,11 +2072,10 @@ mod tests {
 
         assert_eq!(tiles.len(), 5);
         assert!(tiles[4].is_err());
-        
     }
 
     #[tokio::test]
-    async fn it_detects_non_increasing_instants(){
+    async fn it_detects_non_increasing_instants() {
         let data = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 0),
@@ -2174,7 +2179,5 @@ mod tests {
 
         assert_eq!(tiles.len(), 5);
         assert!(tiles[4].is_err());
-        
     }
-
 }
