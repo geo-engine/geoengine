@@ -2,7 +2,7 @@ use crate::util::Result;
 use futures::{ready, Stream};
 use geoengine_datatypes::{
     primitives::{
-        CacheExpiration, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInterval,
+        CacheExpiration, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInterval
     },
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
@@ -343,6 +343,18 @@ where
                             .into(),
                         )));
                         }
+                        // 1. b) This is a new grid run but the time is not increased
+                        if this.sc.current_idx_and_band_is_first_in_grid_run() && this.sc.time_equals_current_state(tile.time) {
+                            this.sc.state = State::Ended;
+                            return Poll::Ready(Some(Err(
+                            SparseTilesFillAdapterError::GridWrapMustDoTimeProgress  {
+                                current_interval: this.sc.current_time,
+                                tile_interval: tile.time,
+                             }
+                            .into(),
+                         )));
+                        }
+
                         // 2. a) The received TimeInterval with start EQUAL to the current TimeInterval MUST NOT have a different duration / end.
                         if this.sc.time_starts_equals_current_state(tile.time)
                             && !this.sc.time_duration_equals_current_state(tile.time)
@@ -367,8 +379,9 @@ where
                                 tile.tile_position,
                                 tile.band,
                             ) {
-                                // the tile is the next to produce. Return it and set state to polling for the next tile.
+                                // the tile is the next to produce. Return it and set state to polling for the next tile.                                
                                 this.sc.state = State::PollingForNextTile;
+                                
                                 tile
                             } else {
                                 // the tile is not the next to produce. Save it and go to fill mode.
@@ -459,6 +472,8 @@ where
                     if let Some(tile) = &this.sc.next_tile {
                         let stored_tile_time = tile.time;
                         // TODO: encapsulate this in a function, or: reuse in FillAndProduceNextTile
+
+                        debug_assert_ne!(this.sc.current_time, stored_tile_time, "Wrap around requires an increase in time! Current: {:?}, Tile: {:?}", this.sc.current_time, stored_tile_time);
 
                         this.sc.current_time = if this
                             .sc
@@ -1945,4 +1960,221 @@ mod tests {
 
         assert_eq!(tiles.len(), 8);
     }
+
+    #[tokio::test]
+    async fn it_detects_non_increasing_intervals(){
+        let data = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        let result_data = data.into_iter().map(Ok);
+
+        let in_stream = stream::iter(result_data);
+        let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
+        let global_geo_transform = GeoTransform::test_default();
+        let tile_shape = [2, 2].into();
+
+        let adapter = SparseTilesFillAdapter::new(
+            in_stream,
+            grid_bounding_box,
+            1,
+            global_geo_transform,
+            tile_shape,
+            FillerTileCacheExpirationStrategy::NoCache,
+        );
+
+        let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
+
+        assert_eq!(tiles.len(), 5);
+        assert!(tiles[4].is_err());
+        
+    }
+
+    #[tokio::test]
+    async fn it_detects_non_increasing_instants(){
+        let data = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 0),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 0),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 0),
+                tile_position: [0, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 0),
+                tile_position: [0, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 0),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 0),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 0),
+                tile_position: [0, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 0),
+                tile_position: [0, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        let result_data = data.into_iter().map(Ok);
+
+        let in_stream = stream::iter(result_data);
+        let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
+        let global_geo_transform = GeoTransform::test_default();
+        let tile_shape = [2, 2].into();
+
+        let adapter = SparseTilesFillAdapter::new(
+            in_stream,
+            grid_bounding_box,
+            1,
+            global_geo_transform,
+            tile_shape,
+            FillerTileCacheExpirationStrategy::NoCache,
+        );
+
+        let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
+
+        assert_eq!(tiles.len(), 5);
+        assert!(tiles[4].is_err());
+        
+    }
+
 }
