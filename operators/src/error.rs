@@ -533,6 +533,10 @@ pub enum Error {
         model_input_type: RasterDataType,
         source_type: RasterDataType,
     },
+    #[snafu(display("MustNotHappen: {message}, this is a bug"))]
+    MustNotHappen {
+        message: String,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

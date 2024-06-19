@@ -280,7 +280,9 @@ where
                         return Err(e);
                     }
                     // if there is no error, the source did not produce all bands, which likely means a bug in an operator
-                    unreachable!("the source did not produce all bands");
+                    return Err(error::Error::MustNotHappen {
+                        message: "source did not produce all bands".to_string(),
+                    });
                 }
 
                 let tiles = chunk.into_iter().collect::<Result<Vec<_>>>()?;
