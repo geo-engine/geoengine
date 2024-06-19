@@ -566,6 +566,22 @@ where
         Ok(())
     }
 
+    async fn update_dataset_loading_info(
+        &self,
+        dataset: DatasetId,
+        meta_data: &MetaDataDefinition,
+    ) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+
+        conn.execute(
+            "UPDATE datasets SET meta_data = $2 WHERE id = $1;",
+            &[&dataset, &meta_data],
+        )
+        .await?;
+
+        Ok(())
+    }
+
     async fn update_dataset_symbology(
         &self,
         dataset: DatasetId,

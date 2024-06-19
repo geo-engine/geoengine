@@ -491,6 +491,11 @@ pub enum Error {
         resource_type: String,
         resource_id: String,
     },
+
+    #[snafu(display("Unknown volume name: {}", volume_name))]
+    UnknownVolumeName {
+        volume_name: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
