@@ -6,7 +6,6 @@ use crate::error::Result;
 use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::permissions::{RoleDescription, RoleId};
-use crate::pro::users::OidcError::OidcDisabled;
 use crate::pro::users::UserAuth;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserId;
@@ -452,16 +451,14 @@ where
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
         crate::pro::users::OidcDisabled
     );
-    let request_db = app_ctx.oidc_request_db().ok_or(OidcDisabled)?;
-    let oidc_client = request_db.get_client().await?;
-
-    let result = app_ctx
-        .oidc_request_db()
-        .ok_or(OidcDisabled)?
-        .generate_request(oidc_client)
+    let auth_code_request_url = app_ctx
+        .oidc_manager()
+        .get_client()
+        .await?
+        .generate_request()
         .await?;
 
-    Ok::<web::Json<AuthCodeRequestURL>, crate::error::Error>(web::Json(result))
+    Ok::<web::Json<AuthCodeRequestURL>, crate::error::Error>(web::Json(auth_code_request_url))
 }
 
 /// Creates a session for a user via a login with Open Id Connect.
@@ -506,14 +503,19 @@ where
         config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
         crate::pro::users::OidcDisabled
     );
-    let request_db = app_ctx.oidc_request_db().ok_or(OidcDisabled)?;
-    let oidc_client = request_db.get_client().await?;
-
-    let (user, duration) = request_db
-        .resolve_request(oidc_client, response.into_inner())
+    let authentication_response = app_ctx
+        .oidc_manager()
+        .get_client()
+        .await?
+        .resolve_request(response.into_inner())
         .await?;
 
-    let session = app_ctx.login_external(user, duration).await?;
+    let session = app_ctx
+        .login_external(
+            authentication_response.user_claims,
+            authentication_response.oidc_tokens,
+        )
+        .await?;
 
     Ok(web::Json(session))
 }
@@ -758,10 +760,11 @@ mod tests {
     use crate::contexts::{Session, SessionContext};
     use crate::pro::ge_context;
     use crate::pro::permissions::Role;
-    use crate::pro::users::{AuthCodeRequestURL, OidcRequestDb, UserAuth};
+    use crate::pro::users::{AuthCodeRequestURL, OidcManager, UserAuth};
     use crate::pro::util::config::Oidc;
     use crate::pro::util::tests::mock_oidc::{
-        mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_STATE,
+        mock_refresh_server, mock_token_response, mock_valid_provider_discovery,
+        MockRefreshServerConfig, MockTokenConfig, SINGLE_STATE,
     };
     use crate::pro::util::tests::{
         admin_login, create_project_helper, create_session_helper, register_ndvi_workflow_helper,
@@ -773,6 +776,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use core::time::Duration;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
     use httptest::matchers::request;
@@ -1160,7 +1164,7 @@ mod tests {
 
         assert_eq!(
             app_ctx
-                .user_session_by_id(session.id)
+                .user_session_by_id(session.id,)
                 .await
                 .unwrap()
                 .project,
@@ -1179,7 +1183,11 @@ mod tests {
         assert_eq!(res.status(), 200);
 
         assert_eq!(
-            app_ctx.user_session_by_id(session.id()).await.unwrap().view,
+            app_ctx
+                .user_session_by_id(session.id(),)
+                .await
+                .unwrap()
+                .view,
             Some(rect)
         );
     }
@@ -1250,7 +1258,7 @@ mod tests {
 
     const MOCK_CLIENT_ID: &str = "";
 
-    fn single_state_nonce_request_db(issuer: String) -> OidcRequestDb {
+    fn single_state_nonce_request_db(issuer: String) -> OidcManager {
         let oidc_config = Oidc {
             enabled: true,
             issuer,
@@ -1258,40 +1266,10 @@ mod tests {
             client_secret: None,
             redirect_uri: "https://dummy-redirect.com/".into(),
             scopes: vec!["profile".to_string(), "email".to_string()],
+            token_encryption_password: None,
         };
 
-        OidcRequestDb::from_oidc_with_static_tokens(oidc_config)
-    }
-
-    fn mock_valid_provider_discovery(expected_discoveries: usize) -> Server {
-        let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
-
-        let provider_metadata = mock_provider_metadata(server_url.as_str());
-        let jwks = mock_jwks();
-
-        server.expect(
-            Expectation::matching(request::method_path(
-                "GET",
-                "/.well-known/openid-configuration",
-            ))
-            .times(expected_discoveries)
-            .respond_with(
-                status_code(200)
-                    .insert_header("content-type", "application/json")
-                    .body(serde_json::to_string(&provider_metadata).unwrap()),
-            ),
-        );
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/jwk"))
-                .times(expected_discoveries)
-                .respond_with(
-                    status_code(200)
-                        .insert_header("content-type", "application/json")
-                        .body(serde_json::to_string(&jwks).unwrap()),
-                ),
-        );
-        server
+        OidcManager::from_oidc_with_static_tokens(oidc_config)
     }
 
     async fn oidc_init_test_helper(
@@ -1318,7 +1296,7 @@ mod tests {
         send_pro_test_request(req, ctx).await
     }
 
-    fn oidc_attr_for_test() -> (Server, impl Fn() -> OidcRequestDb) {
+    fn oidc_attr_for_test() -> (Server, impl Fn() -> OidcManager) {
         let server = mock_valid_provider_discovery(1);
         let server_url = format!("http://{}", server.addr());
 
@@ -1335,7 +1313,7 @@ mod tests {
         let _auth_code_url: AuthCodeRequestURL = test::read_body_json(res).await;
     }
 
-    fn oidc_bad_server() -> (Server, impl Fn() -> OidcRequestDb) {
+    fn oidc_bad_server() -> (Server, impl Fn() -> OidcManager) {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
 
@@ -1383,7 +1361,7 @@ mod tests {
         .await;
     }
 
-    fn oidc_login_oidc_db() -> (Server, impl Fn() -> OidcRequestDb) {
+    fn oidc_login_oidc_db() -> (Server, impl Fn() -> OidcManager) {
         let server = mock_valid_provider_discovery(2);
         let server_url = format!("http://{}", server.addr());
 
@@ -1413,11 +1391,13 @@ mod tests {
             state: SINGLE_STATE.to_string(),
         };
 
-        let oidc_request_db = app_ctx.oidc_request_db();
-        let request_db = oidc_request_db.as_ref().as_ref().unwrap();
-
-        let client = request_db.get_client().await.unwrap();
-        let request = request_db.generate_request(client).await;
+        let request = app_ctx
+            .oidc_manager()
+            .get_client()
+            .await
+            .unwrap()
+            .generate_request()
+            .await;
 
         assert!(request.is_ok());
 
@@ -1428,7 +1408,7 @@ mod tests {
         let _id: UserSession = test::read_body_json(res).await;
     }
 
-    fn oidc_login_illegal_request_oidc_db() -> (Server, impl Fn() -> OidcRequestDb) {
+    fn oidc_login_illegal_request_oidc_db() -> (Server, impl Fn() -> OidcManager) {
         let server = mock_valid_provider_discovery(1);
         let server_url = format!("http://{}", server.addr());
 
@@ -1450,7 +1430,7 @@ mod tests {
         ErrorResponse::assert(res, 400, "Oidc", "OidcError: Login failed: Request unknown").await;
     }
 
-    fn oidc_login_fail_oidc_db() -> (Server, impl Fn() -> OidcRequestDb) {
+    fn oidc_login_fail_oidc_db() -> (Server, impl Fn() -> OidcManager) {
         let server = mock_valid_provider_discovery(2);
         let server_url = format!("http://{}", server.addr());
 
@@ -1481,10 +1461,13 @@ mod tests {
             state: SINGLE_STATE.to_string(),
         };
 
-        let oidc_request_db = app_ctx.oidc_request_db();
-        let request_db = oidc_request_db.as_ref().as_ref().unwrap();
-        let client = request_db.get_client().await.unwrap();
-        let request = request_db.generate_request(client).await;
+        let request = app_ctx
+            .oidc_manager()
+            .get_client()
+            .await
+            .unwrap()
+            .generate_request()
+            .await;
 
         assert!(request.is_ok());
 
@@ -1570,6 +1553,128 @@ mod tests {
             "Unsupported content type header.",
         )
         .await;
+    }
+
+    pub fn oidc_refresh() -> (Server, impl Fn() -> OidcManager) {
+        let mock_refresh_server_config = MockRefreshServerConfig {
+            expected_discoveries: 3,
+            token_duration: Duration::from_secs(1),
+            creates_first_token: true,
+            first_access_token: "FIRST_ACCESS_TOKEN".to_string(),
+            first_refresh_token: "FIRST_REFRESH_TOKEN".to_string(),
+            second_access_token: "SECOND_ACCESS_TOKEN".to_string(),
+            second_refresh_token: "SECOND_REFRESH_TOKEN".to_string(),
+            client_side_password: None,
+        };
+
+        let (server, oidc_manager) = mock_refresh_server(mock_refresh_server_config);
+
+        (server, move || {
+            OidcManager::from_oidc_with_static_tokens(oidc_manager.clone())
+        })
+    }
+
+    #[ge_context::test(oidc_db = "oidc_refresh")]
+    async fn oidc_login_refresh_session(app_ctx: ProPostgresContext<NoTls>) {
+        let auth_code_response = AuthCodeResponse {
+            session_state: String::new(),
+            code: String::new(),
+            state: SINGLE_STATE.to_string(),
+        };
+
+        let request = app_ctx
+            .oidc_manager()
+            .get_client()
+            .await
+            .unwrap()
+            .generate_request()
+            .await;
+
+        assert!(request.is_ok());
+
+        let res = oidc_login_test_helper(Method::POST, app_ctx.clone(), auth_code_response).await;
+
+        assert_eq!(res.status(), 200);
+
+        let original_session: UserSession = test::read_body_json(res).await;
+
+        //Access token duration oidc_login_refresh is 1 sec, i.e., session times out after 1 sec.
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        let req = actix_web::test::TestRequest::get()
+            .uri("/session")
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(original_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        let updated_session: UserSession = test::read_body_json(res).await;
+
+        assert!(original_session.valid_until < updated_session.valid_until);
+    }
+
+    fn oidc_short_duration() -> (Server, impl Fn() -> OidcManager) {
+        let server = mock_valid_provider_discovery(2);
+        let server_url = format!("http://{}", server.addr());
+
+        let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
+            server_url.clone(),
+            MOCK_CLIENT_ID.to_string(),
+        );
+        mock_token_config.duration = Some(Duration::from_secs(1));
+        let token_response = mock_token_response(mock_token_config);
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token")).respond_with(
+                status_code(200)
+                    .insert_header("content-type", "application/json")
+                    .body(serde_json::to_string(&token_response).unwrap()),
+            ),
+        );
+
+        (server, move || {
+            single_state_nonce_request_db(server_url.clone())
+        })
+    }
+
+    #[ge_context::test(oidc_db = "oidc_short_duration")]
+    async fn oidc_login_no_refresh(app_ctx: ProPostgresContext<NoTls>) {
+        let auth_code_response = AuthCodeResponse {
+            session_state: String::new(),
+            code: String::new(),
+            state: SINGLE_STATE.to_string(),
+        };
+
+        let request = app_ctx
+            .oidc_manager()
+            .get_client()
+            .await
+            .unwrap()
+            .generate_request()
+            .await;
+
+        assert!(request.is_ok());
+
+        let res = oidc_login_test_helper(Method::POST, app_ctx.clone(), auth_code_response).await;
+
+        assert_eq!(res.status(), 200);
+
+        let original_session: UserSession = test::read_body_json(res).await;
+
+        //Access token duration oidc_login_refresh is 1 sec, i.e., session times out after 1 sec.
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        let req = actix_web::test::TestRequest::get()
+            .uri("/session")
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(original_session.id.to_string()),
+            ));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 401);
     }
 
     #[ge_context::test]

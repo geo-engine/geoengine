@@ -1,4 +1,5 @@
 use crate::util::statistics::StatisticsError;
+use bb8_postgres::bb8;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{FeatureDataType, TimeInterval};
@@ -322,7 +323,7 @@ pub enum Error {
     SparseTilesFillAdapter {
         source: crate::adapters::SparseTilesFillAdapterError,
     },
-    #[snafu(context(false))]
+    #[snafu(context(false), display("Expression: {}", source))]
     ExpressionOperator {
         source: crate::processing::RasterExpressionError,
     },
@@ -536,6 +537,16 @@ pub enum Error {
     #[snafu(display("MustNotHappen: {message}, this is a bug"))]
     MustNotHappen {
         message: String,
+    },
+
+    #[snafu(display("PostgresError: {}", source))]
+    Postgres {
+        source: tokio_postgres::Error,
+    },
+
+    #[snafu(display("Bb8PostgresError: {}", source))]
+    Bb8Postgres {
+        source: bb8::RunError<tokio_postgres::Error>,
     },
 }
 

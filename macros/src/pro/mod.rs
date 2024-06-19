@@ -56,7 +56,7 @@ pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::E
             let tiling_spec = #tiling_spec;
             let query_ctx_chunk_size = #query_ctx_chunk_size;
             let quota_config = #quota_config;
-            let (server, oidc_db) = #oidc_db.unzip();
+            let (server, oidc_db) = #oidc_db;
 
             #before;
 
@@ -93,7 +93,7 @@ impl ProTestConfig {
 
         if let Some(lit) = args.remove("oidc_db") {
             let oidc_db_fn = literal_to_fn(&lit)?;
-            this.oidc_db = Some(quote!(Some(#oidc_db_fn)));
+            this.oidc_db = Some(quote!(#oidc_db_fn));
         }
 
         Ok(this)
@@ -131,7 +131,7 @@ impl ProTestConfig {
     pub fn oidc_db(&self) -> TokenStream {
         self.oidc_db
             .clone()
-            .unwrap_or_else(|| quote!(None::<((), fn() -> crate::pro::users::OidcRequestDb)>))
+            .unwrap_or_else(|| quote!(((), crate::pro::users::OidcManager::default)))
     }
 }
 
@@ -160,7 +160,7 @@ mod tests {
                 let query_ctx_chunk_size = geoengine_datatypes::util::test::TestDefault::test_default();
                 let quota_config = crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
                     .unwrap();
-                let (server, oidc_db) = None::<((), fn() -> crate::pro::users::OidcRequestDb)>.unzip();
+                let (server, oidc_db) = ((), crate::pro::users::OidcManager::default);
 
                 (|| {})();
 
@@ -208,7 +208,7 @@ mod tests {
                 let tiling_spec = foo();
                 let query_ctx_chunk_size = bar();
                 let quota_config = baz();
-                let (server, oidc_db) = Some(qux()).unzip();
+                let (server, oidc_db) = qux();
 
                 before_fn();
 

@@ -1,3 +1,4 @@
+use crate::pro::users::OidcManager;
 use crate::{
     api::handlers,
     contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
@@ -10,10 +11,7 @@ use crate::{
     pro::{
         contexts::{ProApplicationContext, ProGeoEngineDb, ProPostgresContext},
         permissions::{Permission, PermissionDb, Role},
-        users::{
-            OidcRequestDb, UserAuth, UserCredentials, UserId, UserInfo, UserRegistration,
-            UserSession,
-        },
+        users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
     util::config::get_config_element,
@@ -343,7 +341,7 @@ where
         TestDefault::test_default(),
         TestDefault::test_default(),
         get_config_element::<Quota>().unwrap(),
-        None::<fn() -> OidcRequestDb>,
+        OidcManager::default,
         f,
     )
     .await
@@ -359,7 +357,7 @@ pub async fn with_pro_temp_context_from_spec<F, Fut, R>(
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
     quota_config: Quota,
-    oidc_db: Option<impl FnOnce() -> OidcRequestDb + std::panic::UnwindSafe + Send + 'static>,
+    oidc_db: impl FnOnce() -> OidcManager + std::panic::UnwindSafe + Send + 'static,
     f: F,
 ) -> R
 where
@@ -383,7 +381,7 @@ where
                         exe_ctx_tiling_spec,
                         query_ctx_chunk_size,
                         quota_config,
-                        oidc_db.map(|oidc_db| oidc_db()),
+                        oidc_db(),
                     )
                     .await
                     .unwrap();
@@ -414,7 +412,7 @@ pub async fn with_pro_temp_context_and_oidc<O, F, Fut, R>(
     f: F,
 ) -> R
 where
-    O: FnOnce() -> OidcRequestDb + std::panic::UnwindSafe + Send + 'static,
+    O: FnOnce() -> OidcManager + std::panic::UnwindSafe + Send + 'static,
     F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
         + std::panic::UnwindSafe
         + Send
@@ -455,10 +453,15 @@ where
 #[cfg(test)]
 pub(in crate::pro) mod mock_oidc {
     use crate::pro::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
+    use crate::pro::util::config::Oidc;
     use chrono::{Duration, Utc};
+    use httptest::matchers::{matches, request};
+    use httptest::responders::status_code;
+    use httptest::{all_of, Expectation, Server};
     use oauth2::basic::BasicTokenType;
     use oauth2::{
-        AccessToken, AuthUrl, EmptyExtraTokenFields, Scope, StandardTokenResponse, TokenUrl,
+        AccessToken, AuthUrl, EmptyExtraTokenFields, RefreshToken, Scope, StandardTokenResponse,
+        TokenUrl,
     };
     use openidconnect::core::{
         CoreClaimName, CoreIdToken, CoreIdTokenClaims, CoreIdTokenFields, CoreJsonWebKey,
@@ -531,6 +534,7 @@ pub(in crate::pro) mod mock_oidc {
         pub duration: Option<core::time::Duration>,
         pub access: String,
         pub access_for_id: String,
+        pub refresh: Option<String>,
     }
 
     impl MockTokenConfig {
@@ -548,6 +552,31 @@ pub(in crate::pro) mod mock_oidc {
                 duration: Some(core::time::Duration::from_secs(1800)),
                 access: ACCESS_TOKEN.to_string(),
                 access_for_id: ACCESS_TOKEN.to_string(),
+                refresh: None,
+            }
+        }
+
+        pub fn create_from_tokens(
+            issuer: String,
+            client_id: String,
+            duration: core::time::Duration,
+            access_token: String,
+            refresh_token: String,
+        ) -> Self {
+            let mut name = LocalizedClaim::new();
+            name.insert(None, EndUserName::new("Robin".to_string()));
+            let name = Some(name);
+
+            MockTokenConfig {
+                issuer,
+                client_id,
+                email: Some(EndUserEmail::new("robin@dummy_db.com".to_string())),
+                name,
+                nonce: Some(Nonce::new(SINGLE_NONCE.to_string())),
+                duration: Some(duration),
+                access: access_token.clone(),
+                access_for_id: access_token,
+                refresh: Some(refresh_token),
             }
         }
     }
@@ -621,6 +650,114 @@ pub(in crate::pro) mod mock_oidc {
 
         result.set_expires_in(mock_token_config.duration.as_ref());
 
+        if let Some(refresh) = mock_token_config.refresh {
+            result.set_refresh_token(Some(RefreshToken::new(refresh)));
+        }
+
         result
+    }
+
+    pub fn mock_valid_provider_discovery(expected_discoveries: usize) -> Server {
+        let server = Server::run();
+        let server_url = format!("http://{}", server.addr());
+
+        let provider_metadata = mock_provider_metadata(server_url.as_str());
+        let jwks = mock_jwks();
+
+        server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/.well-known/openid-configuration",
+            ))
+            .times(expected_discoveries)
+            .respond_with(
+                status_code(200)
+                    .insert_header("content-type", "application/json")
+                    .body(serde_json::to_string(&provider_metadata).unwrap()),
+            ),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/jwk"))
+                .times(expected_discoveries)
+                .respond_with(
+                    status_code(200)
+                        .insert_header("content-type", "application/json")
+                        .body(serde_json::to_string(&jwks).unwrap()),
+                ),
+        );
+        server
+    }
+
+    pub struct MockRefreshServerConfig {
+        pub expected_discoveries: usize,
+        pub token_duration: core::time::Duration,
+        pub creates_first_token: bool,
+        pub first_access_token: String,
+        pub first_refresh_token: String,
+        pub second_access_token: String,
+        pub second_refresh_token: String,
+        pub client_side_password: Option<String>,
+    }
+
+    pub fn mock_refresh_server(config: MockRefreshServerConfig) -> (Server, Oidc) {
+        let client_id = "";
+
+        let server = mock_valid_provider_discovery(config.expected_discoveries);
+        let server_url = format!("http://{}", server.addr());
+
+        if config.creates_first_token {
+            let mock_token_config = MockTokenConfig::create_from_tokens(
+                server_url.clone(),
+                client_id.into(),
+                config.token_duration,
+                config.first_access_token,
+                config.first_refresh_token,
+            );
+            let token_response = mock_token_response(mock_token_config);
+            server.expect(
+                Expectation::matching(all_of![
+                    request::method_path("POST", "/token"),
+                    request::body(matches("^grant_type=authorization_code.*$")),
+                ])
+                .respond_with(
+                    status_code(200)
+                        .insert_header("content-type", "application/json")
+                        .body(serde_json::to_string(&token_response).unwrap()),
+                ),
+            );
+        }
+
+        let mock_refresh_response = MockTokenConfig::create_from_tokens(
+            server_url.clone(),
+            client_id.into(),
+            config.token_duration,
+            config.second_access_token,
+            config.second_refresh_token,
+        );
+        let refresh_response = mock_token_response(mock_refresh_response);
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("POST", "/token"),
+                request::body(matches("^grant_type=refresh_token.*$"))
+            ])
+            .respond_with(
+                status_code(200)
+                    .insert_header("content-type", "application/json")
+                    .body(serde_json::to_string(&refresh_response).unwrap()),
+            ),
+        );
+
+        (
+            server,
+            Oidc {
+                enabled: true,
+                issuer: server_url.clone(),
+                client_id: client_id.into(),
+                client_secret: None,
+                redirect_uri: "https://dummy-redirect.com/".into(),
+                scopes: vec!["profile".to_string(), "email".to_string()],
+                token_encryption_password: config.client_side_password,
+            },
+        )
     }
 }
