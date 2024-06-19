@@ -44,7 +44,7 @@ pub fn test(
 /// - `quota_config` - a function that returns a [`crate::pro::util::config::Quota`] to use for the test
 /// - `oidc_db` - a tuple `(handle, f)` with
 ///     - `handle` being a handle of an OpenID-Connect endpoint, preventing it from dropping too early, and
-///     - `f` begin function that returns a [`crate::pro::users::OidcRequestDb`] to use for the test
+///     - `f` begin function that returns a [`crate::pro::users::OidcManager`] to use for the test
 ///
 #[proc_macro_attribute]
 pub fn pro_test(

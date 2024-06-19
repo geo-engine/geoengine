@@ -1,18 +1,20 @@
 use super::aggregators::{
     CountPixelAggregator, CountPixelAggregatorIngoringNoData, FirstPixelAggregatorIngoringNoData,
-    LastPixelAggregatorIngoringNoData, MaxPixelAggregator, MaxPixelAggregatorIngoringNoData,
-    MeanPixelAggregator, MeanPixelAggregatorIngoringNoData, MinPixelAggregator,
+    GlobalStateTemporalRasterPixelAggregator, LastPixelAggregatorIngoringNoData,
+    MaxPixelAggregator, MaxPixelAggregatorIngoringNoData, MeanPixelAggregator, MinPixelAggregator,
     MinPixelAggregatorIngoringNoData, SumPixelAggregator, SumPixelAggregatorIngoringNoData,
     TemporalRasterPixelAggregator,
 };
 use super::first_last_subquery::{
     first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
 };
+use super::subquery::GlobalStateTemporalRasterAggregationSubQuery;
 use crate::adapters::stack_individual_aligned_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
     RasterOperator, SingleRasterSource, WorkflowOperatorPath,
 };
+use crate::processing::temporal_raster_aggregation::aggregators::PercentileEstimateAggregator;
 use crate::{
     adapters::SubQueryTileAggregator,
     engine::{
@@ -32,6 +34,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use typetag;
 
@@ -66,6 +69,12 @@ pub enum Aggregation {
     Sum { ignore_no_data: bool },
     #[serde(rename_all = "camelCase")]
     Count { ignore_no_data: bool },
+    #[serde(rename_all = "camelCase")]
+    PercentileEstimate {
+        ignore_no_data: bool,
+        /// Must in in range [0, 1]
+        percentile: f64,
+    },
 }
 
 pub type TemporalRasterAggregation =
@@ -230,6 +239,23 @@ where
         }
     }
 
+    fn create_global_state_subquery<
+        F: GlobalStateTemporalRasterPixelAggregator<P> + 'static,
+        FoldFn,
+    >(
+        &self,
+        aggregator: F,
+        fold_fn: FoldFn,
+    ) -> GlobalStateTemporalRasterAggregationSubQuery<FoldFn, P, F> {
+        GlobalStateTemporalRasterAggregationSubQuery {
+            aggregator: Arc::new(aggregator),
+            fold_fn,
+            step: self.window,
+            step_reference: self.window_reference,
+            _phantom_pixel_type: PhantomData,
+        }
+    }
+
     fn create_subquery_first<F>(
         &self,
         fold_fn: F,
@@ -348,10 +374,7 @@ where
                 ignore_no_data: true,
             } => self
                 .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<
-                        P,
-                        MeanPixelAggregatorIngoringNoData,
-                    >,
+                    super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator<true>>,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Mean"),
@@ -360,7 +383,7 @@ where
                 ignore_no_data: false,
             } => self
                 .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator>,
+                    super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator<false>>,
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Mean"),
@@ -406,6 +429,26 @@ where
                 )
                 .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
                 .expect("no tiles must be skipped in Aggregation::Sum"),
+            Aggregation::PercentileEstimate {
+                ignore_no_data: true,
+                percentile,
+            } => self
+                .create_global_state_subquery(
+                    PercentileEstimateAggregator::<true>::new(percentile),
+                    super::subquery::subquery_all_tiles_global_state_fold_fn,
+                )
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .expect("no tiles must be skipped in Aggregation::PercentileEstimate"),
+            Aggregation::PercentileEstimate {
+                ignore_no_data: false,
+                percentile,
+            } => self
+                .create_global_state_subquery(
+                    PercentileEstimateAggregator::<false>::new(percentile),
+                    super::subquery::subquery_all_tiles_global_state_fold_fn,
+                )
+                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
+                .expect("no tiles must be skipped in Aggregation::PercentileEstimate"),
         })
     }
 }
@@ -2912,5 +2955,78 @@ mod tests {
                 CacheHint::default()
             )
         ]));
+    }
+
+    #[tokio::test]
+    async fn it_estimates_a_median() {
+        let raster_tiles = make_raster();
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: raster_tiles,
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .boxed();
+
+        let agg = TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: Aggregation::PercentileEstimate {
+                    percentile: 0.5,
+                    ignore_no_data: false,
+                },
+                window: TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Millis,
+                    step: 40,
+                },
+                window_reference: None,
+                output_type: None,
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            (0., 0.).into(),
+            [3, 2].into(),
+        ));
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 40),
+            spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::first(),
+        };
+        let query_ctx = MockQueryContext::test_default();
+
+        let qp = agg
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let result = qp
+            .query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(result.len(), 2);
+
+        assert_eq!(
+            result[0].grid_array,
+            GridOrEmpty::from(Grid2D::new([3, 2].into(), vec![6, 6, 6, 6, 6, 6]).unwrap())
+        );
     }
 }
