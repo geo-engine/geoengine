@@ -1000,8 +1000,6 @@ fn auto_detect_vector_meta_data_definition_from_dataset(
     main_file_path: &Path,
     layer_name: &Option<String>,
 ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>> {
-    // TODO: handle Raster datasets as well
-
     let layer = select_layer_from_dataset(dataset, layer_name)?;
 
     let columns_map = detect_columns(&layer);
