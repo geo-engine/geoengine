@@ -1,6 +1,7 @@
 use crate::util::Result;
 use geoengine_datatypes::pro::MlModelId;
 
+pub mod onnx;
 pub mod xg_error;
 pub mod xgboost;
 
