@@ -10,6 +10,7 @@ pub mod config;
 pub mod extractors;
 pub mod identifiers;
 pub mod openapi_examples;
+pub mod openapi_visitor;
 pub mod operators;
 pub mod parsing;
 pub mod postgres;
