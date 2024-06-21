@@ -2,10 +2,10 @@ use crate::define_operator;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSingleRasterOrVectorOperator, InitializedSources, InitializedVectorOperator,
-    OperatorName, QueryContext, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath,
+    OperatorName, QueryContext, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    ResultDescriptor, SingleRasterOrVectorSource, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;

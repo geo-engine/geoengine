@@ -5,13 +5,17 @@ use crate::{
     adapters::{
         fold_by_coordinate_lookup_future, FillerTileCacheExpirationStrategy, RasterSubQueryAdapter,
         SparseTilesFillAdapter, TileReprojectionSubQuery,
-    }, define_operator, engine::{
+    },
+    define_operator,
+    engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-        InitializedVectorOperator, OperatorName, QueryContext, QueryProcessor,
-        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
+        InitializedVectorOperator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
+        RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
         TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
         VectorResultDescriptor, WorkflowOperatorPath,
-    }, error::{self, Error}, util::Result
+    },
+    error::{self, Error},
+    util::Result,
 };
 use async_trait::async_trait;
 use futures::stream::BoxStream;

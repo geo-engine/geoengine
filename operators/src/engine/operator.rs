@@ -11,7 +11,10 @@ use tracing::debug;
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::{dataset::NamedData, util::{helpers::json_schema_help_link, ByteSize}};
+use geoengine_datatypes::{
+    dataset::NamedData,
+    util::{helpers::json_schema_help_link, ByteSize},
+};
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},

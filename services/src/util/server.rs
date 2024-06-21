@@ -448,6 +448,6 @@ pub(crate) fn configure_cors() -> Cors {
                     || origin.starts_with("vscode-webview")
             )
         })
-        .allowed_methods(vec!["GET"])
-        .allowed_header(http::header::AUTHORIZATION)
+        .allowed_methods(["GET", "POST"])
+        .allowed_headers([http::header::AUTHORIZATION, http::header::CONTENT_TYPE])
 }

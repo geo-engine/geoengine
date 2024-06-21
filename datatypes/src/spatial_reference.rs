@@ -70,9 +70,7 @@ impl JsonSchema for SpatialReference {
         use schemars::schema::*;
         Schema::Object(SchemaObject {
             instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::String))),
-            extensions: schemars::Map::from([
-                json_schema_help_link("https://epsg.io")
-            ]),
+            extensions: schemars::Map::from([json_schema_help_link("https://epsg.io")]),
             ..Default::default()
         })
     }

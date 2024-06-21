@@ -2,9 +2,8 @@ use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
 use crate::define_operator;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    MultipleRasterSources, OperatorName, QueryContext, RasterBandDescriptor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    MultipleRasterSources, OperatorName, QueryContext, RasterBandDescriptor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::{
     InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,

@@ -1,10 +1,7 @@
 use std::borrow::Cow;
 
 use crate::{identifier, util::helpers::json_schema_help_link};
-use schemars::{
-    gen::SchemaGenerator,
-    schema::Schema, JsonSchema,
-};
+use schemars::{gen::SchemaGenerator, schema::Schema, JsonSchema};
 use serde::{de::Visitor, Deserialize, Serialize};
 
 identifier!(DataProviderId);

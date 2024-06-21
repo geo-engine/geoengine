@@ -53,16 +53,18 @@ impl JsonSchema for TimeInstance {
                     Schema::Object(SchemaObject {
                         metadata: Some(Box::new(Metadata {
                             title: Some("Datetime String".to_owned()),
-                            description: Some("Date and time as defined in RFC 3339, section 5.6".to_owned()),
+                            description: Some(
+                                "Date and time as defined in RFC 3339, section 5.6".to_owned(),
+                            ),
                             ..Default::default()
                         })),
                         instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::String))),
                         format: Some("date-time".to_owned()),
-                        extensions: schemars::Map::from([
-                            json_schema_help_link("http://tools.ietf.org/html/rfc3339")
-                        ]),
+                        extensions: schemars::Map::from([json_schema_help_link(
+                            "http://tools.ietf.org/html/rfc3339",
+                        )]),
                         ..Default::default()
-                    })
+                    }),
                 ]),
                 ..Default::default()
             })),

@@ -91,6 +91,53 @@ fn odd_usize2_schema(_gen: &mut SchemaGenerator) -> Schema {
     })
 }
 
+// At the moment it is impossible to check an array has an odd item
+// count using JSON Schema (see https://stackoverflow.com/a/77910644).
+// Workaround using min length 1 for now.
+fn weights_matrix_schema(_gen: &mut SchemaGenerator) -> Schema {
+    use schemars::schema::*;
+    Schema::Object(SchemaObject {
+        metadata: Some(Box::new(Metadata {
+            title: Some("Columns".to_owned()),
+            ..Default::default()
+        })),
+        instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::Array))),
+        array: Some(Box::new(ArrayValidation {
+            items: Some(SingleOrVec::Single(Box::new(Schema::Object(
+                SchemaObject {
+                    metadata: Some(Box::new(Metadata {
+                        title: Some("Column".to_owned()),
+                        ..Default::default()
+                    })),
+                    instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::Array))),
+                    format: Some("table".to_owned()),
+                    array: Some(Box::new(ArrayValidation {
+                        items: Some(SingleOrVec::Single(Box::new(Schema::Object(
+                            SchemaObject {
+                                metadata: Some(Box::new(Metadata {
+                                    title: Some("Cell".to_owned()),
+                                    ..Default::default()
+                                })),
+                                instance_type: Some(SingleOrVec::Single(Box::new(
+                                    InstanceType::Number,
+                                ))),
+                                format: Some("double".to_owned()),
+                                ..Default::default()
+                            },
+                        )))),
+                        min_items: Some(1),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+            )))),
+            min_items: Some(1),
+            ..Default::default()
+        })),
+        ..Default::default()
+    })
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum NeighborhoodParams {
@@ -101,10 +148,7 @@ pub enum NeighborhoodParams {
     },
     #[schemars(title = "WeightsMatrix")]
     WeightsMatrix {
-        // At the moment it is impossible to check an array has an odd item
-        // count using JSON Schema (see https://stackoverflow.com/a/77910644).
-        // Workaround using min length 1 for now.
-        #[schemars(length(min = 1), inner(length(min = 1)))]
+        #[schemars(schema_with = "weights_matrix_schema")]
         weights: Vec<Vec<f64>>,
     },
 }
