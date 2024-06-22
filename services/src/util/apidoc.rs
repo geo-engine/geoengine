@@ -5,6 +5,8 @@ use utoipa::{
     Modify,
 };
 
+use super::openapi_visitors::get_schema_use_counts;
+
 pub struct OpenApiServerInfo;
 
 impl Modify for OpenApiServerInfo {
@@ -116,6 +118,7 @@ impl Modify for TransformSchemasWithTag {
             debug_assert!(openapi.components.as_ref().is_some());
             return;
         };
+        let schema_uses = get_schema_use_counts(openapi);
         let old_schemas = &old_components.schemas;
         let mut new_schemas = old_schemas.clone();
 
@@ -148,11 +151,30 @@ impl Modify for TransformSchemasWithTag {
                 let Some(variant_tag) = Self::get_variant_tag(item, discriminator) else {
                     continue 'outer;
                 };
-                let variant_schema_name = format!(
-                    "{}{}",
-                    schema_name,
-                    Self::uppercase_first_letter(variant_tag)
-                );
+
+                let variant_schema_name = match Self::get_base_type_name(item) {
+                    Some(base_type_name) => match schema_uses.get(base_type_name) {
+                        // When the payload type is only used in this enum, adding
+                        // a "type" field to the payload does not break anything.
+                        Some(1) => base_type_name.to_owned(),
+                        Some(_) => panic!("The type {base_type_name} is used in the enum {schema_name} as payload, but also in other places. \
+You have to use a newly created struct or anonymous struct variant."),
+                        None => panic!("The enum {schema_name} is never used in a handler. \
+Remove it from the schema."),
+                    },
+                    // When the payload is a pure inline schema, extract it as a
+                    // new component with an automatically generated name. This needs
+                    // to be done to comply with the OpenAPI spec, wich forbids inline
+                    // schemas in combination with a discriminator.
+                    // If the generated name sounds bad in some cases, you can manually
+                    // create a new struct type and use it as tuple variant. Then the
+                    // hardcoded name of the struct will be used.
+                    None => format!(
+                        "{}{}",
+                        schema_name,
+                        Self::uppercase_first_letter(variant_tag)
+                    )
+                };
 
                 if let Some(flattened) = Self::flatten_allof(item, old_schemas) {
                     new_schemas.insert(variant_schema_name.clone(), flattened.into());
@@ -180,6 +202,7 @@ impl Modify for TransformSchemasWithTag {
 mod tests {
     use crate::util::apidoc::TransformSchemasWithTag;
     use assert_json_diff::assert_json_eq;
+    use path::{OperationBuilder, ParameterBuilder, PathItemBuilder};
     use serde::Serialize;
     use serde_json::json;
     use utoipa::{openapi::*, Modify, ToSchema};
@@ -204,6 +227,20 @@ mod tests {
                     .schema_from::<MyStruct>()
                     .into(),
             ))
+            .paths(
+                PathsBuilder::new().path(
+                    "",
+                    PathItemBuilder::new()
+                        .operation(
+                            PathItemType::Post,
+                            OperationBuilder::new().parameter(
+                                ParameterBuilder::new()
+                                    .schema(Some(Ref::from_schema_name("MyEnum"))),
+                            ),
+                        )
+                        .into(),
+                ),
+            )
             .build();
         let transformer = TransformSchemasWithTag;
         transformer.modify(&mut openapi);
@@ -217,29 +254,18 @@ mod tests {
                             "$ref": "#/components/schemas/MyEnumInlined"
                         },
                         {
-                            "$ref": "#/components/schemas/MyEnumB"
+                            "$ref": "#/components/schemas/MyStruct"
                         }
                     ],
                     "discriminator": {
                         "propertyName": "type",
                         "mapping": {
                             "inlined": "#/components/schemas/MyEnumInlined",
-                            "b": "#/components/schemas/MyEnumB"
+                            "b": "#/components/schemas/MyStruct"
                         }
                     }
                 },
                 "MyStruct": {
-                    "type": "object",
-                    "required": [
-                        "text"
-                    ],
-                    "properties": {
-                        "text": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "MyEnumB": {
                     "type": "object",
                     "required": [
                         "text",
@@ -299,6 +325,20 @@ mod tests {
                     .schema_from::<MyStruct>()
                     .into(),
             ))
+            .paths(
+                PathsBuilder::new().path(
+                    "",
+                    PathItemBuilder::new()
+                        .operation(
+                            PathItemType::Post,
+                            OperationBuilder::new().parameter(
+                                ParameterBuilder::new()
+                                    .schema(Some(Ref::from_schema_name("MyEnum"))),
+                            ),
+                        )
+                        .into(),
+                ),
+            )
             .build();
         let transformer = TransformSchemasWithTag;
         transformer.modify(&mut openapi);
@@ -309,28 +349,17 @@ mod tests {
                 "MyEnum": {
                     "oneOf": [
                         {
-                            "$ref": "#/components/schemas/MyEnumX"
+                            "$ref": "#/components/schemas/MyStruct"
                         }
                     ],
                     "discriminator": {
                         "propertyName": "type",
                         "mapping": {
-                            "x": "#/components/schemas/MyEnumX",
+                            "x": "#/components/schemas/MyStruct",
                         }
                     }
                 },
                 "MyStruct": {
-                    "type": "object",
-                    "required": [
-                        "name"
-                    ],
-                    "properties": {
-                        "name": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "MyEnumX": {
                     "type": "object",
                     "required": [
                         "name",
