@@ -23,10 +23,10 @@ impl OpenapiVisitor for CanResolveVisitor {
 ///
 pub fn can_resolve_api(api: &OpenApi) {
     let mut visitor = CanResolveVisitor { unknown_ref: None };
-    visit_api(&api, &mut visitor);
+    visit_api(api, &mut visitor);
 
     if let Some(unknown_ref) = visitor.unknown_ref {
-        panic!("Cannot resolve reference {}", unknown_ref);
+        panic!("Cannot resolve reference {unknown_ref}");
     }
 }
 
