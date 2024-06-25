@@ -199,39 +199,36 @@ where
 
         // process in a loop, as it may be necessary to consume multiple input bands to produce a single output band
         loop {
-            if *current_input_band_idx > *num_bands - 1 {
-                // all bands of the current tile have been consumed
+            // if there is a tile from the accu, return it
+            if let Some(next_band_tile) = accu.next_band_tile() {
+                debug_assert!(
+                    next_band_tile.band == *current_output_band_idx,
+                    "unexpected output band index"
+                );
+                *current_output_band_idx += 1;
+                return Poll::Ready(Some(Ok(next_band_tile)));
+            }
 
-                if *current_output_band_idx < *num_bands - 1 {
-                    // there are still bands left to produce for the current tile, so consume the accu
-                    // TODO: compute next band asynchronously
-                    let Some(next_band_tile) = accu.next_band_tile() else {
-                        *finished = true;
-                        return Poll::Ready(Some(Err(crate::error::Error::MustNotHappen {
-                            message: "Unexpected end of accu".to_string(), // if the accu does not produce a band, there is a bug in the accu
-                        })));
-                    };
-
-                    *current_output_band_idx += 1;
-                    return Poll::Ready(Some(Ok(next_band_tile)));
-                }
-
-                // all bands of the current tile have been produced
+            // if all bands are consumed, reset the accu and start over with the next tile
+            if *current_input_band_idx >= *num_bands {
+                debug_assert!(
+                    *current_output_band_idx == *num_bands,
+                    "not all bands were produced before resetting the accu"
+                );
                 *current_input_band_idx = 0;
                 *current_output_band_idx = 0;
                 accu.reset();
             }
 
-            // TODO: first try to consume accu before getting the next band from the input stream?
-
-            // get next band from input stream
+            // otherwise, get next band from the input stream and add it to the accu
             let tile = ready!(input_stream.as_mut().poll_next(cx));
 
             let tile = match tile {
                 Some(Ok(tile)) => tile,
                 Some(Err(e)) => return Poll::Ready(Some(Err(e))),
                 None => {
-                    if *current_input_band_idx > 0 {
+                    if *current_input_band_idx > 0 && *current_input_band_idx < *num_bands - 1 {
+                        *finished = true;
                         // stream must not end in the middle of a tile
                         return Poll::Ready(Some(Err(crate::error::Error::MustNotHappen {
                             message: "Unexpected end of stream".to_string(),
@@ -244,19 +241,15 @@ where
                 }
             };
 
-            *current_input_band_idx += 1;
+            debug_assert!(
+                tile.band == *current_input_band_idx,
+                "unexpected input band index"
+            );
 
             // TODO: add asynchronously
             accu.add_tile(tile);
 
-            // TODO: compute next band asynchrously
-            if let Some(next_band_tile) = accu.next_band_tile() {
-                // if the accu already generates a new band, return it
-                *current_output_band_idx += 1;
-                return Poll::Ready(Some(Ok(next_band_tile)));
-            }
-
-            // the accu may need more input bands to produce the next output band, so continue the loop
+            *current_input_band_idx += 1;
         }
     }
 }
@@ -336,7 +329,9 @@ impl Accu for FirstDerivativeAccu {
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{
+            BandSelection, CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval,
+        },
         raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
