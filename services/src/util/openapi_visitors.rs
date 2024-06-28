@@ -83,7 +83,7 @@ mod tests {
         visit_schema(schema, components, &mut visitor, "root");
 
         if let Some(unknown_ref) = visitor.unknown_ref {
-            panic!("Cannot resolve reference {}", unknown_ref);
+            panic!("Cannot resolve reference {unknown_ref}");
         }
     }
 
