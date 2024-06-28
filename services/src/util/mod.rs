@@ -11,6 +11,8 @@ pub mod encryption;
 pub mod extractors;
 pub mod identifiers;
 pub mod openapi_examples;
+pub mod openapi_visitor;
+pub mod openapi_visitors;
 pub mod operators;
 pub mod parsing;
 pub mod postgres;

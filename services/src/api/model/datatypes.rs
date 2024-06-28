@@ -37,6 +37,7 @@ impl From<DatasetId> for geoengine_datatypes::dataset::DatasetId {
 /// for accessing the data. Internal data is loaded from datasets, external from `DataProvider`s.
 pub enum DataId {
     #[serde(rename_all = "camelCase")]
+    #[schema(title = "InternalDataId")]
     Internal {
         dataset_id: DatasetId,
     },
@@ -799,6 +800,7 @@ impl From<FeatureDataType> for geoengine_datatypes::primitives::FeatureDataType 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
+    #[schema(title = "UnitlessMeasurement")]
     Unitless,
     Continuous(ContinuousMeasurement),
     Classification(ClassificationMeasurement),
