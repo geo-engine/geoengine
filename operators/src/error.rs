@@ -500,6 +500,10 @@ pub enum Error {
     Bb8Postgres {
         source: bb8::RunError<tokio_postgres::Error>,
     },
+
+    DatasetDeleted {
+        id: String,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {

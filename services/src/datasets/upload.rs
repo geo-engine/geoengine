@@ -1,3 +1,4 @@
+use actix_multipart::Multipart;
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 
@@ -9,7 +10,12 @@ use crate::{
     util::config::{self, get_config_element},
 };
 use async_trait::async_trait;
+use futures_util::StreamExt;
+use geoengine_datatypes::util::Identifier;
 use serde::{Deserialize, Deserializer, Serialize};
+use snafu::ResultExt;
+use tokio::fs;
+use tokio::io::AsyncWriteExt;
 use utoipa::ToSchema;
 
 identifier!(UploadId);
@@ -117,6 +123,52 @@ pub struct FileUpload {
 pub struct UploadListing {
     pub id: UploadId,
     pub num_files: usize,
+}
+
+pub async fn create_upload(mut body: Multipart) -> Result<(UploadId, Vec<FileUpload>)> {
+    let upload_id = UploadId::new();
+
+    let root = upload_id.root_path()?;
+
+    fs::create_dir_all(&root).await.context(error::Io)?;
+
+    let mut files: Vec<FileUpload> = vec![];
+    while let Some(item) = body.next().await {
+        let mut field = item?;
+        let file_name = field
+            .content_disposition()
+            .get_filename()
+            .ok_or(error::Error::UploadFieldMissingFileName)?
+            .to_owned();
+
+        let file_id = FileId::new();
+        let mut file = fs::File::create(root.join(&file_name))
+            .await
+            .context(error::Io)?;
+
+        let mut byte_size = 0_u64;
+        while let Some(chunk) = field.next().await {
+            let bytes = chunk?;
+            file.write_all(&bytes).await.context(error::Io)?;
+            byte_size += bytes.len() as u64;
+        }
+        file.flush().await.context(error::Io)?;
+
+        files.push(FileUpload {
+            id: file_id,
+            name: file_name,
+            byte_size,
+        });
+    }
+
+    Ok((upload_id, files))
+}
+
+pub async fn delete_upload(upload_id: UploadId) -> Result<()> {
+    let root = upload_id.root_path()?;
+    log::debug!("Deleting {upload_id}");
+    fs::remove_dir_all(&root).await.context(error::Io)?;
+    Ok(())
 }
 
 #[async_trait]

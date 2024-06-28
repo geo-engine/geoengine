@@ -1,19 +1,16 @@
 use crate::api::model::responses::IdResponse;
 use crate::contexts::{ApplicationContext, SessionContext};
-use crate::datasets::upload::{FileId, FileUpload, Upload, UploadDb, UploadId, UploadRootPath};
+use crate::datasets::upload::{create_upload, Upload, UploadDb, UploadId, UploadRootPath};
+use crate::error::Error;
 use crate::error::Result;
-use crate::error::{self, Error};
 use crate::util::path_with_base_path;
 use actix_multipart::Multipart;
 use actix_web::{web, FromRequest, Responder};
-use futures::StreamExt;
 use gdal::vector::LayerAccess;
-use geoengine_datatypes::util::Identifier;
 use geoengine_operators::util::gdal::gdal_open_dataset;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use std::path::Path;
-use tokio::{fs, io::AsyncWriteExt};
+use tokio::fs;
 use utoipa::{ToResponse, ToSchema};
 
 pub(crate) fn init_upload_routes<C>(cfg: &mut web::ServiceConfig)
@@ -70,42 +67,9 @@ impl<'a> ToSchema<'a> for FileUploadRequest {
 async fn upload_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    mut body: Multipart,
+    body: Multipart,
 ) -> Result<web::Json<IdResponse<UploadId>>> {
-    let upload_id = UploadId::new();
-
-    let root = upload_id.root_path()?;
-
-    fs::create_dir_all(&root).await.context(error::Io)?;
-
-    let mut files: Vec<FileUpload> = vec![];
-    while let Some(item) = body.next().await {
-        let mut field = item?;
-        let file_name = field
-            .content_disposition()
-            .get_filename()
-            .ok_or(error::Error::UploadFieldMissingFileName)?
-            .to_owned();
-
-        let file_id = FileId::new();
-        let mut file = fs::File::create(root.join(&file_name))
-            .await
-            .context(error::Io)?;
-
-        let mut byte_size = 0_u64;
-        while let Some(chunk) = field.next().await {
-            let bytes = chunk?;
-            file.write_all(&bytes).await.context(error::Io)?;
-            byte_size += bytes.len() as u64;
-        }
-        file.flush().await.context(error::Io)?;
-
-        files.push(FileUpload {
-            id: file_id,
-            name: file_name,
-            byte_size,
-        });
-    }
+    let (upload_id, files) = create_upload(body).await?;
 
     app_ctx
         .session_context(session)

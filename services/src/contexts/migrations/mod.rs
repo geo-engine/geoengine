@@ -9,6 +9,7 @@ pub use crate::contexts::migrations::{
     migration_0007_owner_role::Migration0007OwnerRole,
     migration_0008_band_names::Migration0008BandNames,
     migration_0009_oidc_tokens::Migration0009OidcTokens,
+    migration_0010_delete_uploaded_datasets::Migration0010DeleteUploadedDatasets,
 };
 pub use database_migration::{
     initialize_database, migrate_database, DatabaseVersion, Migration, MigrationResult,
@@ -26,6 +27,7 @@ mod migration_0006_ebv_provider;
 pub mod migration_0007_owner_role;
 pub mod migration_0008_band_names;
 pub mod migration_0009_oidc_tokens;
+pub mod migration_0010_delete_uploaded_datasets;
 
 #[cfg(test)]
 mod schema_info;
@@ -49,6 +51,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0007OwnerRole),
         Box::new(Migration0008BandNames),
         Box::new(Migration0009OidcTokens),
+        Box::new(Migration0010DeleteUploadedDatasets),
     ]
 }
 

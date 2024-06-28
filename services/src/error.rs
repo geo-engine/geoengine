@@ -491,6 +491,14 @@ pub enum Error {
         resource_type: String,
         resource_id: String,
     },
+
+    ExpirationTimestampInPast,
+    IllegalExpirationUpdate {
+        reason: String,
+    },
+    IllegalDatasetStatus {
+        status: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

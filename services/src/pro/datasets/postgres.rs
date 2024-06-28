@@ -4,11 +4,19 @@ use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvid
 use crate::datasets::listing::{OrderBy, ProvenanceOutput};
 use crate::datasets::postgres::resolve_dataset_name_to_id;
 use crate::datasets::storage::{Dataset, DatasetDb, DatasetStore, MetaDataDefinition};
-use crate::datasets::upload::FileId;
+use crate::datasets::upload::{delete_upload, FileId};
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
+use crate::error::Error::{
+    ExpirationTimestampInPast, IllegalDatasetStatus, IllegalExpirationUpdate, UnknownDatasetId,
+};
 use crate::error::{self, Error, Result};
 use crate::pro::contexts::ProPostgresDb;
+use crate::pro::datasets::storage::{
+    ChangeDatasetExpiration, InternalUploadedDatasetStatus, UploadedDatasetStatus,
+    UploadedUserDatasetStore,
+};
+use crate::pro::datasets::{Expiration, ExpirationChange};
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Permission, RoleId};
 use crate::projects::Symbology;
@@ -28,6 +36,8 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use postgres_types::{FromSql, ToSql};
+use snafu::ensure;
+use tokio_postgres::Transaction;
 
 impl<Tls> DatasetDb for ProPostgresDb<Tls>
 where
@@ -48,6 +58,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn list_datasets(&self, options: DatasetListOptions) -> Result<Vec<DatasetListing>> {
+        self.update_datasets_status().await?;
         let conn = self.conn_pool.get().await?;
 
         let mut pos = 3;
@@ -68,7 +79,7 @@ where
             pos += 1;
             (format!("AND d.tags @> ${pos}::text[]"), filter_tags.clone())
         } else {
-            (String::new(), vec![])
+            ("AND NOT d.tags @> '{deleted}'::text[]".to_string(), vec![])
         };
 
         let stmt = conn
@@ -167,6 +178,7 @@ where
     }
 
     async fn load_dataset(&self, dataset: &DatasetId) -> Result<Dataset> {
+        self.update_dataset_status(dataset).await?;
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare(
@@ -211,6 +223,7 @@ where
     }
 
     async fn load_provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
+        self.update_dataset_status(dataset).await?;
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
@@ -239,6 +252,7 @@ where
     }
 
     async fn load_loading_info(&self, dataset: &DatasetId) -> Result<MetaDataDefinition> {
+        self.update_dataset_status(dataset).await?;
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
@@ -265,6 +279,7 @@ where
         &self,
         dataset_name: &DatasetName,
     ) -> Result<Option<DatasetId>> {
+        self.update_datasets_status().await?;
         let conn = self.conn_pool.get().await?;
         resolve_dataset_name_to_id(&conn, dataset_name).await
     }
@@ -276,6 +291,7 @@ where
         limit: u32,
         offset: u32,
     ) -> Result<Vec<String>> {
+        self.update_datasets_status().await?;
         let connection = self.conn_pool.get().await?;
 
         let limit = i64::from(limit);
@@ -384,6 +400,15 @@ where
             return Err(geoengine_operators::error::Error::PermissionDenied);
         };
 
+        let uploaded_status = self.uploaded_dataset_status_in_tx(&id, &tx).await;
+        if let Ok(status) = uploaded_status {
+            if matches!(status, UploadedDatasetStatus::Deleted) {
+                return Err(geoengine_operators::error::Error::DatasetDeleted {
+                    id: id.to_string(),
+                });
+            }
+        }
+
         let stmt = tx
             .prepare(
                 "
@@ -467,6 +492,15 @@ where
         {
             return Err(geoengine_operators::error::Error::PermissionDenied);
         };
+
+        let uploaded_status = self.uploaded_dataset_status_in_tx(&id, &tx).await;
+        if let Ok(status) = uploaded_status {
+            if matches!(status, UploadedDatasetStatus::Deleted) {
+                return Err(geoengine_operators::error::Error::DatasetDeleted {
+                    id: id.to_string(),
+                });
+            }
+        }
 
         let stmt = tx
             .prepare(
@@ -721,36 +755,53 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        self.ensure_permission_in_tx(dataset_id.into(), Permission::Owner, &tx)
-            .await
-            .boxed_context(crate::error::PermissionDb)?;
+        let _uploaded = self.uploaded_dataset_status_in_tx(&dataset_id, &tx).await;
+        if let Err(error) = _uploaded {
+            if matches!(error, UnknownDatasetId) {
+                self.ensure_permission_in_tx(dataset_id.into(), Permission::Owner, &tx)
+                    .await
+                    .boxed_context(crate::error::PermissionDb)?;
 
-        let stmt = tx
-            .prepare(
-                "
-        SELECT 
-            TRUE
-        FROM 
-            user_permitted_datasets p JOIN datasets d 
-                ON (p.dataset_id = d.id)
-        WHERE 
-            d.id = $1 AND p.user_id = $2 AND p.permission = 'Owner';",
-            )
-            .await?;
+                let stmt = tx
+                    .prepare(
+                        "
+                SELECT
+                    TRUE
+                FROM
+                    user_permitted_datasets p JOIN datasets d
+                        ON (p.dataset_id = d.id)
+                WHERE
+                    d.id = $1 AND p.user_id = $2 AND p.permission = 'Owner';",
+                    )
+                    .await?;
 
-        let rows = tx
-            .query(&stmt, &[&dataset_id, &self.session.user.id])
-            .await?;
+                let rows = tx
+                    .query(&stmt, &[&dataset_id, &self.session.user.id])
+                    .await?;
 
-        if rows.is_empty() {
-            return Err(Error::OperationRequiresOwnerPermission);
+                if rows.is_empty() {
+                    return Err(Error::OperationRequiresOwnerPermission);
+                }
+
+                let stmt = tx.prepare("DELETE FROM datasets WHERE id = $1;").await?;
+
+                tx.execute(&stmt, &[&dataset_id]).await?;
+
+                tx.commit().await?;
+
+                return Ok(());
+            }
         }
 
-        let stmt = tx.prepare("DELETE FROM datasets WHERE id = $1;").await?;
-
-        tx.execute(&stmt, &[&dataset_id]).await?;
-
-        tx.commit().await?;
+        let expire_dataset = ChangeDatasetExpiration {
+            dataset_id,
+            expiration_change: ExpirationChange::SetExpire(Expiration {
+                deletion_timestamp: None,
+                delete_record: true,
+                delete_data: false,
+            }),
+        };
+        self.expire_uploaded_dataset(expire_dataset).await?;
 
         Ok(())
     }
@@ -861,11 +912,630 @@ impl From<FileUpload> for crate::datasets::upload::FileUpload {
     }
 }
 
+#[async_trait]
+impl<Tls> UploadedUserDatasetStore for ProPostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn add_uploaded_dataset(
+        &self,
+        upload_id: UploadId,
+        dataset: AddDataset,
+        meta_data: MetaDataDefinition,
+    ) -> Result<DatasetIdAndName> {
+        let id = DatasetId::new();
+        let name = dataset.name.unwrap_or_else(|| DatasetName {
+            namespace: Some(self.session.user.id.to_string()),
+            name: id.to_string(),
+        });
+
+        log::info!(
+            "Adding dataset with name: {:?}, tags: {:?}",
+            name,
+            dataset.tags
+        );
+
+        if let Some(tags) = &dataset.tags {
+            if tags.contains(&"deleted".to_string()) {
+                log::warn!("Adding a new dataset with a deleted tag");
+            }
+        }
+
+        self.check_namespace(&name)?;
+
+        let typed_meta_data = meta_data.to_typed_metadata();
+
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        tx.execute(
+            "
+                INSERT INTO datasets (
+                    id,
+                    name,
+                    display_name,
+                    description,
+                    source_operator,
+                    result_descriptor,
+                    meta_data,
+                    symbology,
+                    provenance,
+                    tags
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[])",
+            &[
+                &id,
+                &name,
+                &dataset.display_name,
+                &dataset.description,
+                &dataset.source_operator,
+                &typed_meta_data.result_descriptor,
+                typed_meta_data.meta_data,
+                &dataset.symbology,
+                &dataset.provenance,
+                &dataset.tags,
+            ],
+        )
+        .await
+        .map_unique_violation("datasets", "name", || error::Error::InvalidDatasetName)?;
+
+        let stmt = tx
+            .prepare(
+                "
+            INSERT INTO permissions (
+                role_id,
+                dataset_id,
+                permission
+            )
+            VALUES ($1, $2, $3)",
+            )
+            .await?;
+
+        tx.execute(
+            &stmt,
+            &[&RoleId::from(self.session.user.id), &id, &Permission::Owner],
+        )
+        .await?;
+
+        let stmt = tx
+            .prepare(
+                "
+            INSERT INTO uploaded_user_datasets (
+                user_id,
+                upload_id,
+                dataset_id,
+                status,
+                created,
+                expiration,
+                deleted,
+                delete_data,
+                delete_record
+            )
+            VALUES ($1, $2, $3, 'Available', CURRENT_TIMESTAMP, NULL, NULL, false, false)",
+            )
+            .await?;
+
+        tx.execute(
+            &stmt,
+            &[&RoleId::from(self.session.user.id), &upload_id, &id],
+        )
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(DatasetIdAndName { id, name })
+    }
+
+    async fn expire_uploaded_dataset(&self, expire_dataset: ChangeDatasetExpiration) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(expire_dataset.dataset_id.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        self.update_dataset_status_in_tx(&tx, &expire_dataset.dataset_id)
+            .await?;
+
+        match expire_dataset.expiration_change {
+            ExpirationChange::SetExpire(expiration) => {
+                let num_changes = if let Some(delete_timestamp) = expiration.deletion_timestamp {
+                    let stmt = tx
+                        .prepare("
+                        UPDATE uploaded_user_datasets
+                        SET status = 'Expires', expiration = $2, delete_data = $3, delete_record = $4
+                        WHERE dataset_id = $1 AND $2 >= CURRENT_TIMESTAMP AND (status = 'Available' OR status = 'Expires');",
+                    ).await?;
+                    tx.execute(
+                        &stmt,
+                        &[
+                            &expire_dataset.dataset_id,
+                            &delete_timestamp,
+                            &expiration.delete_data,
+                            &expiration.delete_record,
+                        ],
+                    )
+                    .await?
+                } else {
+                    let stmt = tx.prepare("
+                        UPDATE uploaded_user_datasets
+                        SET status = 'Expires', expiration = CURRENT_TIMESTAMP, delete_data = $2, delete_record = $3
+                        WHERE dataset_id = $1 AND (status = 'Available' OR status = 'Expires');",
+                    ).await?;
+                    let num_expired = tx
+                        .execute(
+                            &stmt,
+                            &[
+                                &expire_dataset.dataset_id,
+                                &expiration.delete_data,
+                                &expiration.delete_record,
+                            ],
+                        )
+                        .await?;
+
+                    if num_expired == 0 {
+                        let stmt = tx
+                            .prepare(
+                                "
+                            UPDATE uploaded_user_datasets
+                            SET delete_data = (CASE WHEN NOT delete_data THEN $2 ELSE true END),
+                                delete_record = (CASE WHEN NOT delete_record THEN $3 ELSE true END),
+                                status = 'UpdateExpired'
+                            WHERE dataset_id = $1 AND (status = 'Expired' OR status = 'Deleted')
+                                    AND (delete_data = false OR delete_record = false);",
+                            )
+                            .await?;
+                        tx.execute(
+                            &stmt,
+                            &[
+                                &expire_dataset.dataset_id,
+                                &expiration.delete_data,
+                                &expiration.delete_record,
+                            ],
+                        )
+                        .await?
+                    } else {
+                        num_expired
+                    }
+                };
+
+                if num_changes == 0 {
+                    self.validate_expiration_request_in_tx(
+                        &tx,
+                        &expire_dataset.dataset_id,
+                        &expiration,
+                    )
+                    .await?;
+                };
+            }
+            ExpirationChange::UnsetExpire => {
+                let stmt = tx.prepare("
+                    UPDATE uploaded_user_datasets
+                    SET status = 'Available', expiration = NULL, delete_data = false, delete_record = false
+                    WHERE dataset_id = $1 AND status = 'Expires';",
+                ).await?;
+                let set_changes = tx.execute(&stmt, &[&expire_dataset.dataset_id]).await?;
+                if set_changes == 0 {
+                    return Err(IllegalDatasetStatus {
+                        status: "Requested dataset does not exist or does not have an expiration"
+                            .to_string(),
+                    });
+                }
+            }
+        }
+        self.update_dataset_status_in_tx(&tx, &expire_dataset.dataset_id)
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn validate_expiration_request_in_tx(
+        &self,
+        tx: &Transaction,
+        dataset_id: &DatasetId,
+        expiration: &Expiration,
+    ) -> Result<()> {
+        let (status, delete_data, delete_record, legal_expiration) =
+            if let Some(timestamp) = expiration.deletion_timestamp {
+                let stmt = tx
+                    .prepare(
+                        "
+                    SELECT
+                        status,
+                        delete_data,
+                        delete_record,
+                        $2 >= CURRENT_TIMESTAMP as legal_expiration
+                    FROM
+                        uploaded_user_datasets
+                    WHERE
+                        dataset_id = $1;",
+                    )
+                    .await?;
+                let row = tx
+                    .query_opt(&stmt, &[&dataset_id, &timestamp])
+                    .await?
+                    .ok_or(UnknownDatasetId)?;
+                (
+                    row.get(0),
+                    row.get(1),
+                    row.get(2),
+                    row.get::<usize, bool>(3),
+                )
+            } else {
+                let stmt = tx
+                    .prepare(
+                        "
+                    SELECT
+                        status,
+                        delete_data,
+                        delete_record,
+                        TRUE as legal_expiration
+                    FROM
+                        uploaded_user_datasets
+                    WHERE
+                        dataset_id = $1;",
+                    )
+                    .await?;
+                let row = tx
+                    .query_opt(&stmt, &[&dataset_id])
+                    .await?
+                    .ok_or(UnknownDatasetId)?;
+                (
+                    row.get(0),
+                    row.get(1),
+                    row.get(2),
+                    row.get::<usize, bool>(3),
+                )
+            };
+
+        match status {
+            InternalUploadedDatasetStatus::Available | InternalUploadedDatasetStatus::Expires => {
+                if !legal_expiration {
+                    return Err(ExpirationTimestampInPast);
+                }
+            }
+            InternalUploadedDatasetStatus::Expired
+            | InternalUploadedDatasetStatus::UpdateExpired
+            | InternalUploadedDatasetStatus::Deleted => {
+                let data_downgrade = delete_data && !expiration.delete_data;
+                let record_downgrade = delete_record && !expiration.delete_record;
+                if data_downgrade || record_downgrade {
+                    let data = if data_downgrade { " data" } else { "" };
+                    let record = if record_downgrade { " record" } else { "" };
+                    return Err(IllegalExpirationUpdate {
+                        reason: format!("Prior expiration deleted: {data} {record}"),
+                    });
+                }
+                if expiration.deletion_timestamp.is_some() {
+                    return Err(IllegalExpirationUpdate {
+                        reason: "Setting expiration after deletion".to_string(),
+                    });
+                }
+            }
+            InternalUploadedDatasetStatus::DeletedWithError => {
+                return Err(IllegalDatasetStatus {
+                    status: "Dataset was deleted, but an error occurred during deletion"
+                        .to_string(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    async fn uploaded_dataset_status_in_tx(
+        &self,
+        dataset_id: &DatasetId,
+        tx: &Transaction,
+    ) -> Result<UploadedDatasetStatus> {
+        self.ensure_permission_in_tx((*dataset_id).into(), Permission::Read, tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        self.update_dataset_status_in_tx(tx, dataset_id).await?;
+
+        let stmt = tx
+            .prepare(
+                "
+            SELECT
+                status
+            FROM
+                uploaded_user_datasets
+            WHERE
+                dataset_id = $1;",
+            )
+            .await?;
+
+        let result = tx
+            .query_opt(&stmt, &[&dataset_id])
+            .await?
+            .ok_or(error::Error::UnknownDatasetId)?;
+
+        let internal_status: InternalUploadedDatasetStatus = result.get(0);
+
+        Ok(internal_status.into())
+    }
+
+    async fn update_dataset_status(&self, dataset_id: &DatasetId) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+        self.update_dataset_status_in_tx(&tx, dataset_id).await?;
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn update_dataset_status_in_tx(
+        &self,
+        tx: &Transaction,
+        dataset_id: &DatasetId,
+    ) -> Result<()> {
+        let mut newly_expired_datasets = 0;
+
+        let delete_records = tx
+            .prepare(
+                "
+                DELETE FROM
+                    datasets
+                USING
+                    user_permitted_datasets p, uploaded_user_datasets u
+                WHERE
+                    p.user_id = $1 AND datasets.id = $2
+                        AND p.dataset_id = datasets.id AND u.dataset_id = datasets.id
+                        AND (u.status = 'Expires' OR u.status = 'UpdateExpired') AND u.expiration <= CURRENT_TIMESTAMP
+                        AND u.delete_record;",
+            )
+            .await?;
+        newly_expired_datasets += tx
+            .execute(&delete_records, &[&self.session.user.id, &dataset_id])
+            .await?;
+
+        let tag_deletion = tx
+            .prepare(
+                "
+            UPDATE
+                datasets
+            SET
+                tags = tags || '{deleted}'
+            FROM
+                user_permitted_datasets p, uploaded_user_datasets u
+            WHERE
+                p.user_id = $1 AND datasets.id = $2
+                    AND p.dataset_id = datasets.id AND u.dataset_id = datasets.id
+                    AND u.status = 'Expires' AND u.expiration <= CURRENT_TIMESTAMP
+                    AND NOT u.delete_record;",
+            )
+            .await?;
+        newly_expired_datasets += tx
+            .execute(&tag_deletion, &[&self.session.user.id, &dataset_id])
+            .await?;
+
+        if newly_expired_datasets > 0 {
+            let mark_deletion = tx
+                .prepare(
+                    "
+                UPDATE
+                    uploaded_user_datasets
+                SET
+                    status = 'Expired'
+                FROM
+                    user_permitted_datasets p
+                WHERE
+                    p.user_id = $1 AND uploaded_user_datasets.dataset_id = $2
+                        AND uploaded_user_datasets.dataset_id = p.dataset_id
+                        AND (status = 'Expires' OR status = 'UpdateExpired') AND expiration <= CURRENT_TIMESTAMP;",
+                )
+                .await?;
+
+            tx.execute(&mark_deletion, &[&self.session.user.id, &dataset_id])
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn update_datasets_status(&self) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+        self.update_datasets_status_in_tx(&tx).await?;
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn update_datasets_status_in_tx(&self, tx: &Transaction) -> Result<()> {
+        if self.session.is_admin() {
+            let delete_records = tx
+                .prepare(
+                    "
+                DELETE FROM
+                    datasets
+                USING
+                    user_permitted_datasets p, uploaded_user_datasets u
+                WHERE
+                    u.dataset_id = datasets.id
+                        AND u.status = 'Expires' AND u.expiration <= CURRENT_TIMESTAMP
+                        AND u.delete_record;",
+                )
+                .await?;
+            tx.execute(&delete_records, &[]).await?;
+
+            let tag_deletion = tx
+                .prepare(
+                    "
+                UPDATE
+                    datasets
+                SET
+                    tags = tags || '{deleted}'
+                FROM
+                    uploaded_user_datasets u
+                WHERE
+                    u.dataset_id = datasets.id
+                        AND u.status = 'Expires' AND u.expiration <= CURRENT_TIMESTAMP
+                        AND NOT u.delete_record;",
+                )
+                .await?;
+            tx.execute(&tag_deletion, &[]).await?;
+
+            let mark_deletion = tx
+                .prepare(
+                    "
+                UPDATE
+                    uploaded_user_datasets
+                SET
+                    status = 'Expired'
+                WHERE
+                    (status = 'Expires' or status = 'UpdateExpired') AND expiration <= CURRENT_TIMESTAMP;",
+                )
+                .await?;
+
+            tx.execute(&mark_deletion, &[]).await?;
+        } else {
+            let delete_records = tx
+                .prepare(
+                    "
+                DELETE FROM
+                    datasets
+                USING
+                    user_permitted_datasets p, uploaded_user_datasets u
+                WHERE
+                    p.user_id = $1 AND p.dataset_id = datasets.id AND u.dataset_id = datasets.id
+                        AND u.status = 'Expires' AND u.expiration <= CURRENT_TIMESTAMP
+                        AND u.delete_record;",
+                )
+                .await?;
+            tx.execute(&delete_records, &[&self.session.user.id])
+                .await?;
+
+            let tag_deletion = tx
+                .prepare(
+                    "
+                UPDATE
+                    datasets
+                SET
+                    tags = tags || '{deleted}'
+                FROM
+                    user_permitted_datasets p, uploaded_user_datasets u
+                WHERE
+                    p.user_id = $1 AND p.dataset_id = datasets.id AND u.dataset_id = datasets.id
+                        AND u.status = 'Expires' AND u.expiration <= CURRENT_TIMESTAMP
+                        AND NOT u.delete_record;",
+                )
+                .await?;
+            tx.execute(&tag_deletion, &[&self.session.user.id]).await?;
+
+            let mark_deletion = tx
+                .prepare(
+                    "
+                UPDATE
+                    uploaded_user_datasets
+                SET
+                    status = 'Expired'
+                FROM
+                    user_permitted_datasets p
+                WHERE
+                    p.user_id = $1 AND uploaded_user_datasets.dataset_id = p.dataset_id
+                        AND (status = 'Expires' OR status = 'UpdateExpired') AND expiration <= CURRENT_TIMESTAMP;",
+                )
+                .await?;
+
+            tx.execute(&mark_deletion, &[&self.session.user.id]).await?;
+        }
+        Ok(())
+    }
+
+    async fn clear_expired_datasets(&self) -> Result<usize> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.update_datasets_status_in_tx(&tx).await?;
+
+        let marked_datasets = tx
+            .prepare(
+                "
+                SELECT
+                    dataset_id, upload_id
+                FROM
+                    uploaded_user_datasets
+                WHERE
+                    status = 'Expired' AND delete_data;",
+            )
+            .await?;
+
+        let rows = tx.query(&marked_datasets, &[]).await?;
+
+        let mut deleted = vec![];
+        let mut deleted_with_error = vec![];
+
+        for row in rows {
+            let dataset_id: DatasetId = row.get(0);
+            let upload_id = row.get(1);
+            let res = delete_upload(upload_id).await;
+            if let Err(error) = res {
+                log::error!("Error during deletion of upload {upload_id} from dataset {dataset_id}: {error}, marking as DeletedWithError");
+                deleted_with_error.push(upload_id);
+            } else {
+                deleted.push(upload_id);
+            }
+        }
+
+        if !deleted.is_empty() {
+            let mark_deletion = tx
+                .prepare(
+                    "
+                UPDATE
+                    uploaded_user_datasets
+                SET
+                    status = 'Deleted'
+                WHERE
+                    status = 'Expired' AND delete_data AND upload_id = ANY($1);",
+                )
+                .await?;
+            tx.execute(&mark_deletion, &[&deleted]).await?;
+        }
+
+        if !deleted_with_error.is_empty() {
+            let mark_error = tx
+                .prepare(
+                    "
+                UPDATE
+                    uploaded_user_datasets
+                SET
+                    status = 'DeletedWithError'
+                WHERE
+                    status = 'Expired' AND delete_data AND upload_id = ANY($1);",
+                )
+                .await?;
+            tx.execute(&mark_error, &[&deleted_with_error]).await?;
+        }
+
+        tx.commit().await?;
+
+        Ok(deleted.len())
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::ops::{Add, Sub};
     use std::path::PathBuf;
 
     use super::*;
+    use crate::api::model::responses::IdResponse;
+    use crate::contexts::SessionId;
+    use crate::datasets::upload::UploadRootPath;
+    use crate::error::Error::PermissionDenied;
+    use crate::pro::users::{UserCredentials, UserRegistration};
+    use crate::pro::util::tests::{admin_login, send_pro_test_request};
+    use crate::util::tests::{get_db_timestamp, SetMultipartBody, TestDataUploads};
     use crate::{
         contexts::{ApplicationContext, SessionContext},
         pro::{
@@ -874,11 +1544,16 @@ mod tests {
             users::{UserAuth, UserSession},
         },
     };
+    use actix_web::http::header;
+    use actix_web::test;
+    use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::primitives::Duration;
     use geoengine_datatypes::{
         collections::VectorDataType,
         primitives::{CacheTtlSeconds, FeatureDataType, Measurement},
         spatial_reference::SpatialReference,
     };
+    use geoengine_operators::error::Error::DatasetDeleted;
     use geoengine_operators::{
         engine::{StaticMetaData, VectorColumnInfo},
         source::{
@@ -1002,5 +1677,609 @@ mod tests {
         )
         .await
         .unwrap();
+    }
+
+    const TEST_POINT_DATASET_SOURCE_PATH: &str = "vector/data/points.fgb";
+
+    struct TestDatasetDefinition {
+        meta_data: MetaDataDefinition,
+        dataset_name: DatasetName,
+    }
+
+    struct UploadedTestDataset {
+        dataset_name: DatasetName,
+        dataset_id: DatasetId,
+        upload_id: UploadId,
+    }
+
+    fn test_point_dataset(name_space: String, name: &str) -> TestDatasetDefinition {
+        let local_path = PathBuf::from(TEST_POINT_DATASET_SOURCE_PATH);
+        let file_name = local_path.file_name().unwrap().to_str().unwrap();
+        let loading_info = OgrSourceDataset {
+            file_name: PathBuf::from(file_name),
+            layer_name: file_name.to_owned(),
+            data_type: Some(VectorDataType::MultiPoint),
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: None,
+                x: "x".to_owned(),
+                y: Some("y".to_owned()),
+                int: vec!["num".to_owned()],
+                float: vec![],
+                text: vec!["txt".to_owned()],
+                bool: vec![],
+                datetime: vec![],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Ignore,
+            sql_query: None,
+            attribute_query: None,
+            cache_ttl: CacheTtlSeconds::default(),
+        };
+
+        let meta_data = MetaDataDefinition::OgrMetaData(StaticMetaData::<
+            OgrSourceDataset,
+            VectorResultDescriptor,
+            VectorQueryRectangle,
+        > {
+            loading_info: loading_info.clone(),
+            result_descriptor: VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: [
+                    (
+                        "num".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Int,
+                            measurement: Measurement::Unitless,
+                        },
+                    ),
+                    (
+                        "txt".to_owned(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless,
+                        },
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+                time: None,
+                bbox: None,
+            },
+            phantom: Default::default(),
+        });
+
+        let dataset_name = DatasetName::new(Some(name_space), name);
+
+        TestDatasetDefinition {
+            meta_data,
+            dataset_name,
+        }
+    }
+
+    async fn upload_point_dataset(
+        app_ctx: &ProPostgresContext<NoTls>,
+        session_id: SessionId,
+    ) -> UploadId {
+        let files =
+            vec![geoengine_datatypes::test_data!(TEST_POINT_DATASET_SOURCE_PATH).to_path_buf()];
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/upload")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_multipart_files(&files);
+
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200);
+        let upload: IdResponse<UploadId> = test::read_body_json(res).await;
+
+        upload.id
+    }
+
+    async fn upload_and_add_point_dataset(
+        app_ctx: &ProPostgresContext<NoTls>,
+        user_session: &UserSession,
+        name: &str,
+        upload_dir: &mut TestDataUploads,
+    ) -> UploadedTestDataset {
+        let test_dataset = test_point_dataset(user_session.user.id.to_string(), name);
+        let upload_id = upload_point_dataset(app_ctx, user_session.id).await;
+
+        let res = app_ctx
+            .session_context(user_session.clone())
+            .db()
+            .add_uploaded_dataset(
+                upload_id,
+                AddDataset {
+                    name: Some(test_dataset.dataset_name.clone()),
+                    display_name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                test_dataset.meta_data.clone(),
+            )
+            .await
+            .unwrap();
+
+        upload_dir.uploads.push(upload_id);
+
+        UploadedTestDataset {
+            dataset_name: test_dataset.dataset_name,
+            dataset_id: res.id,
+            upload_id,
+        }
+    }
+
+    fn listing_not_deleted(dataset: &DatasetListing, origin: &UploadedTestDataset) -> bool {
+        dataset.name == origin.dataset_name && !dataset.tags.contains(&"deleted".to_owned())
+    }
+
+    fn dataset_deleted(dataset: &Dataset, origin: &UploadedTestDataset) -> bool {
+        let tags = dataset.tags.clone().unwrap();
+        let mut num_deleted = 0;
+        for tag in tags {
+            if tag == *"deleted" {
+                num_deleted += 1;
+            }
+        }
+        dataset.name == origin.dataset_name && num_deleted == 1
+    }
+
+    fn dir_exists(origin: &UploadedTestDataset) -> bool {
+        let path = origin.upload_id.root_path().unwrap();
+        fs::read_dir(path).is_ok()
+    }
+
+    async fn register_test_user(app_ctx: &ProPostgresContext<NoTls>) -> UserSession {
+        let _user_id = app_ctx
+            .register_user(UserRegistration {
+                email: "test@localhost".to_string(),
+                real_name: "Foo Bar".to_string(),
+                password: "test".to_string(),
+            })
+            .await
+            .unwrap();
+
+        app_ctx
+            .login(UserCredentials {
+                email: "test@localhost".to_string(),
+                password: "test".to_string(),
+            })
+            .await
+            .unwrap()
+    }
+
+    #[ge_context::test]
+    async fn it_deletes_datasets(app_ctx: ProPostgresContext<NoTls>) {
+        let mut test_data = TestDataUploads::default();
+        let user_session = register_test_user(&app_ctx).await;
+
+        let available =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "available", &mut test_data)
+                .await;
+        let fair =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "fair", &mut test_data).await;
+        let full =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "full", &mut test_data).await;
+        let none =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "none", &mut test_data).await;
+
+        let db = app_ctx.session_context(user_session.clone()).db();
+
+        let default_list_options = DatasetListOptions {
+            filter: None,
+            order: OrderBy::NameAsc,
+            offset: 0,
+            limit: 10,
+            tags: None,
+        };
+
+        let listing = db
+            .list_datasets(default_list_options.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(listing.len(), 4);
+        assert!(listing_not_deleted(listing.first().unwrap(), &available));
+        assert!(listing_not_deleted(listing.get(1).unwrap(), &fair));
+        assert!(listing_not_deleted(listing.get(2).unwrap(), &full));
+        assert!(listing_not_deleted(listing.get(3).unwrap(), &none));
+
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::delete_fair(fair.dataset_id))
+            .await
+            .unwrap();
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::delete_none(none.dataset_id))
+            .await
+            .unwrap();
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::delete_full(full.dataset_id))
+            .await
+            .unwrap();
+
+        let listing = db
+            .list_datasets(default_list_options.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(listing.len(), 1);
+        assert!(listing_not_deleted(listing.first().unwrap(), &available));
+        assert!(dataset_deleted(
+            &db.load_dataset(&fair.dataset_id).await.unwrap(),
+            &fair
+        ));
+        assert!(matches!(
+            db.load_dataset(&full.dataset_id).await.unwrap_err(),
+            UnknownDatasetId
+        ));
+        assert!(dataset_deleted(
+            &db.load_dataset(&none.dataset_id).await.unwrap(),
+            &none
+        ));
+
+        assert!(dir_exists(&available));
+        assert!(dir_exists(&fair));
+        assert!(dir_exists(&full));
+        assert!(dir_exists(&none));
+
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_ctx = app_ctx.session_context(admin_session.clone());
+        let deleted = admin_ctx.db().clear_expired_datasets().await.unwrap();
+
+        assert_eq!(deleted, 2);
+        assert!(dir_exists(&available));
+        assert!(!dir_exists(&fair));
+        assert!(!dir_exists(&full));
+        assert!(dir_exists(&none));
+
+        let deleted = admin_ctx.db().clear_expired_datasets().await.unwrap();
+        assert_eq!(deleted, 0);
+    }
+
+    #[ge_context::test]
+    async fn it_expires_dataset(app_ctx: ProPostgresContext<NoTls>) {
+        let mut test_data = TestDataUploads::default();
+        let user_session = register_test_user(&app_ctx).await;
+
+        let current_time = get_db_timestamp(&app_ctx).await;
+        let future_time = current_time.add(Duration::seconds(3));
+
+        let fair =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "fair", &mut test_data).await;
+
+        let db = app_ctx.session_context(user_session.clone()).db();
+
+        let default_list_options = DatasetListOptions {
+            filter: None,
+            order: OrderBy::NameAsc,
+            offset: 0,
+            limit: 10,
+            tags: None,
+        };
+
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+            fair.dataset_id,
+            future_time,
+        ))
+        .await
+        .unwrap();
+
+        let listing = db
+            .list_datasets(default_list_options.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(listing.len(), 1);
+        assert!(listing_not_deleted(listing.first().unwrap(), &fair));
+
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        let listing = db
+            .list_datasets(default_list_options.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(listing.len(), 0);
+        assert!(dataset_deleted(
+            &db.load_dataset(&fair.dataset_id).await.unwrap(),
+            &fair
+        ));
+    }
+
+    #[ge_context::test]
+    async fn it_updates_expiring_dataset(app_ctx: ProPostgresContext<NoTls>) {
+        let mut test_data = TestDataUploads::default();
+        let user_session = register_test_user(&app_ctx).await;
+
+        let current_time = get_db_timestamp(&app_ctx).await;
+        let future_time_1 = current_time.add(Duration::seconds(2));
+        let future_time_2 = current_time.add(Duration::seconds(5));
+
+        let fair =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "fair", &mut test_data).await;
+        let fair2full =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "fair2full", &mut test_data)
+                .await;
+
+        let db = app_ctx.session_context(user_session.clone()).db();
+
+        let default_list_options = DatasetListOptions {
+            filter: None,
+            order: OrderBy::NameAsc,
+            offset: 0,
+            limit: 10,
+            tags: None,
+        };
+
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+            fair.dataset_id,
+            future_time_1,
+        ))
+        .await
+        .unwrap();
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+            fair.dataset_id,
+            future_time_2,
+        ))
+        .await
+        .unwrap();
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+            fair2full.dataset_id,
+            future_time_1,
+        ))
+        .await
+        .unwrap();
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_none(
+            fair2full.dataset_id,
+            future_time_1,
+        ))
+        .await
+        .unwrap();
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_meta(
+            fair2full.dataset_id,
+            future_time_1,
+        ))
+        .await
+        .unwrap();
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+            fair2full.dataset_id,
+            future_time_1,
+        ))
+        .await
+        .unwrap();
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_full(
+            fair2full.dataset_id,
+            future_time_1,
+        ))
+        .await
+        .unwrap();
+
+        let listing = db
+            .list_datasets(default_list_options.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(listing.len(), 2);
+        assert!(listing_not_deleted(listing.first().unwrap(), &fair));
+        assert!(listing_not_deleted(listing.get(1).unwrap(), &fair2full));
+
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+        let listing = db
+            .list_datasets(default_list_options.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(listing.len(), 1);
+        assert!(listing_not_deleted(listing.first().unwrap(), &fair));
+        assert!(matches!(
+            db.load_dataset(&fair2full.dataset_id).await.unwrap_err(),
+            UnknownDatasetId
+        ));
+
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+        let listing = db
+            .list_datasets(default_list_options.clone())
+            .await
+            .unwrap();
+        assert_eq!(listing.len(), 0);
+        assert!(dataset_deleted(
+            &db.load_dataset(&fair.dataset_id).await.unwrap(),
+            &fair
+        ));
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_updates_expired_dataset(app_ctx: ProPostgresContext<NoTls>) {
+        let mut test_data = TestDataUploads::default();
+        let user_session = register_test_user(&app_ctx).await;
+
+        let db = app_ctx.session_context(user_session.clone()).db();
+        let default_list_options = DatasetListOptions {
+            filter: None,
+            order: OrderBy::NameAsc,
+            offset: 0,
+            limit: 10,
+            tags: None,
+        };
+
+        let fair2full =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "fair2full", &mut test_data)
+                .await;
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::delete_fair(fair2full.dataset_id))
+            .await
+            .unwrap();
+        assert!(dataset_deleted(
+            &db.load_dataset(&fair2full.dataset_id).await.unwrap(),
+            &fair2full
+        ));
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::delete_full(fair2full.dataset_id))
+            .await
+            .unwrap();
+        assert!(matches!(
+            db.load_dataset(&fair2full.dataset_id).await.unwrap_err(),
+            UnknownDatasetId
+        ));
+
+        let none2fair =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "none2fair", &mut test_data)
+                .await;
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::delete_none(none2fair.dataset_id))
+            .await
+            .unwrap();
+        assert!(dataset_deleted(
+            &db.load_dataset(&none2fair.dataset_id).await.unwrap(),
+            &none2fair
+        ));
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::delete_fair(none2fair.dataset_id))
+            .await
+            .unwrap();
+        assert!(dataset_deleted(
+            &db.load_dataset(&none2fair.dataset_id).await.unwrap(),
+            &none2fair
+        ));
+
+        let none2meta =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "none2meta", &mut test_data)
+                .await;
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::delete_none(none2meta.dataset_id))
+            .await
+            .unwrap();
+        assert!(dataset_deleted(
+            &db.load_dataset(&none2meta.dataset_id).await.unwrap(),
+            &none2meta
+        ));
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::delete_meta(none2meta.dataset_id))
+            .await
+            .unwrap();
+        assert!(matches!(
+            db.load_dataset(&none2meta.dataset_id).await.unwrap_err(),
+            UnknownDatasetId
+        ));
+
+        assert!(db
+            .expire_uploaded_dataset(ChangeDatasetExpiration::delete_none(none2fair.dataset_id))
+            .await
+            .is_err());
+        assert!(db
+            .expire_uploaded_dataset(ChangeDatasetExpiration::delete_none(fair2full.dataset_id))
+            .await
+            .is_err());
+        assert!(db
+            .expire_uploaded_dataset(ChangeDatasetExpiration::delete_fair(fair2full.dataset_id))
+            .await
+            .is_err());
+
+        let current_time = get_db_timestamp(&app_ctx).await;
+        let future_time = current_time.add(Duration::seconds(2));
+        let fair2available =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "fair2available", &mut test_data)
+                .await;
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+            fair2available.dataset_id,
+            future_time,
+        ))
+        .await
+        .unwrap();
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::unset_expire(
+            fair2available.dataset_id,
+        ))
+        .await
+        .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_ctx = app_ctx.session_context(admin_session.clone());
+        let deleted = admin_ctx.db().clear_expired_datasets().await.unwrap();
+        assert_eq!(deleted, 2);
+
+        let listing = db
+            .list_datasets(default_list_options.clone())
+            .await
+            .unwrap();
+        assert_eq!(listing.len(), 1);
+        assert!(listing_not_deleted(
+            listing.first().unwrap(),
+            &fair2available
+        ));
+
+        assert!(dir_exists(&fair2available));
+        assert!(!dir_exists(&fair2full));
+        assert!(!dir_exists(&none2fair));
+        assert!(dir_exists(&none2meta));
+    }
+
+    #[ge_context::test]
+    async fn it_handles_expiration_errors(app_ctx: ProPostgresContext<NoTls>) {
+        let mut test_data = TestDataUploads::default();
+        let user_session = register_test_user(&app_ctx).await;
+
+        let current_time = get_db_timestamp(&app_ctx).await;
+        let future_time = current_time.add(Duration::hours(1));
+        let past_time = current_time.sub(Duration::hours(1));
+
+        let db = app_ctx.session_context(user_session.clone()).db();
+
+        //Expire before current time
+        let test_dataset =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "fair2full", &mut test_data)
+                .await;
+        let err = db
+            .expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+                test_dataset.dataset_id,
+                past_time,
+            ))
+            .await;
+        assert!(err.is_err());
+        assert!(matches!(err.unwrap_err(), ExpirationTimestampInPast));
+
+        //Unset expire for not-expiring dataset
+        let err = db
+            .expire_uploaded_dataset(ChangeDatasetExpiration::unset_expire(
+                test_dataset.dataset_id,
+            ))
+            .await;
+        assert!(err.is_err());
+        assert!(matches!(err.unwrap_err(), IllegalDatasetStatus { .. }));
+
+        //Expire already deleted
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::delete_fair(
+            test_dataset.dataset_id,
+        ))
+        .await
+        .unwrap();
+        let err = db
+            .expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+                test_dataset.dataset_id,
+                future_time,
+            ))
+            .await;
+        assert!(err.is_err());
+        assert!(matches!(err.unwrap_err(), IllegalExpirationUpdate { .. }));
+
+        // Call meta data for deleted
+        let err: std::result::Result<
+            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+            geoengine_operators::error::Error,
+        > = db
+            .meta_data(&DataId::Internal {
+                dataset_id: test_dataset.dataset_id,
+            })
+            .await;
+        assert!(err.is_err());
+        assert!(matches!(err.unwrap_err(), DatasetDeleted { .. }));
+
+        //Clear without admin permission
+        let err = db.clear_expired_datasets().await;
+        assert!(err.is_err());
+        assert!(matches!(err.unwrap_err(), PermissionDenied));
     }
 }

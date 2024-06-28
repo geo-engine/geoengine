@@ -227,3 +227,25 @@ CREATE TABLE oidc_session_tokens (
     refresh_token bytea,
     refresh_token_encryption_nonce bytea
 );
+
+CREATE TYPE "InternalUploadedDatasetStatus" AS ENUM (
+    'Available',
+    'Expires',
+    'Expired',
+    'UpdateExpired',
+    'Deleted',
+    'DeletedWithError'
+);
+
+CREATE TABLE uploaded_user_datasets (
+    user_id uuid,
+    upload_id uuid,
+    dataset_id uuid,
+    status "InternalUploadedDatasetStatus" NOT NULL,
+    created timestamp with time zone NOT NULL,
+    expiration timestamp with time zone,
+    deleted timestamp with time zone,
+    delete_data boolean NOT NULL,
+    delete_record boolean NOT NULL,
+    PRIMARY KEY (user_id, dataset_id, upload_id)
+);
