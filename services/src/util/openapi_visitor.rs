@@ -14,11 +14,11 @@ pub trait OpenapiVisitor {
     }
 }
 
-/// Recursively checks that schemas referenced in the given schema object exist in the provided map.
+/// Recursively walks through the given schema object and calls corresponding events on the visitor.
 ///
 /// # Panics
 ///
-/// Panics if the schema has an unknown type.
+/// Panics if a schema has an unknown type.
 pub fn visit_schema<T: OpenapiVisitor>(
     schema: &RefOr<Schema>,
     components: &Components,
@@ -60,7 +60,11 @@ pub fn visit_schema<T: OpenapiVisitor>(
     }
 }
 
-/// Recursively checks that schemas referenced in the given response object exist in the provided map.
+/// Recursively walks through the given response object and calls corresponding events on the visitor.
+///
+/// # Panics
+///
+/// Panics if a schema has an unknown type.
 fn visit_response<T: OpenapiVisitor>(
     response: &RefOr<Response>,
     components: &Components,
@@ -79,7 +83,12 @@ fn visit_response<T: OpenapiVisitor>(
     }
 }
 
-/// Checks that the given reference can be resolved using the provided map.
+/// Resolves the given reference, recursively walks through the target and
+/// calls corresponding events on the visitor.
+///
+/// # Panics
+///
+/// Panics if a schema has an unknown type.
 fn visit_reference<T: OpenapiVisitor>(
     reference: &Ref,
     components: &Components,
@@ -109,8 +118,13 @@ fn visit_reference<T: OpenapiVisitor>(
     }
 }
 
-/// Loops through all registered HTTP handlers and ensures that the referenced schemas
-/// (inside of request bodies, parameters or responses) exist and can be resolved.
+/// Recursively walks through all registered HTTP handlers and the referenced schemas
+/// (inside of request bodies, parameters or responses) and calls corresponding events
+/// on the visitor.
+///
+/// # Panics
+///
+/// Panics if a schema has an unknown type.
 pub fn visit_api<T: OpenapiVisitor>(api: &OpenApi, visitor: &mut T) {
     let Some(components) = api.components.as_ref() else {
         debug_assert!(api.components.as_ref().is_some());
