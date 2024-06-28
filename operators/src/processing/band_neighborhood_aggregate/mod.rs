@@ -11,13 +11,14 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use futures::{ready, Stream};
+use futures::{FutureExt, Stream};
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::raster::{
     GridIdx2D, GridIndexAccess, MapIndexedElements, RasterDataType, RasterTile2D,
 };
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
+use tokio::task::JoinHandle;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -141,11 +142,19 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
 struct BandNeighborhoodAggregateStream<S, A> {
     #[pin]
     input_stream: S,
-    accu: A,
     current_input_band_idx: u32,
     current_output_band_idx: u32,
     num_bands: u32,
-    finished: bool,
+    state: State<A>,
+}
+
+enum State<A> {
+    Invalid,
+    Initial(A),
+    NextBandTile(JoinHandle<(Option<RasterTile2D<f64>>, A)>),
+    ConsumeNext(A),
+    Accumulate(JoinHandle<(Result<()>, A)>),
+    Finished,
 }
 
 impl<S, A> BandNeighborhoodAggregateStream<S, A>
@@ -156,11 +165,10 @@ where
     pub fn new(input_stream: S, num_bands: u32) -> Self {
         Self {
             input_stream,
-            accu: A::new(num_bands),
             current_input_band_idx: 0,
             current_output_band_idx: 0,
             num_bands,
-            finished: false,
+            state: State::Initial(A::new(num_bands)),
         }
     }
 }
@@ -171,6 +179,7 @@ trait Accu {
     fn add_tile(&mut self, tile: RasterTile2D<f64>) -> Result<()>;
     // try to produce the next band, returns None when the accu is not yet ready (needs more bands)
     // this method also removes all bands that are not longer needed for future bands
+
     fn next_band_tile(&mut self) -> Option<RasterTile2D<f64>>;
 }
 
@@ -179,77 +188,142 @@ trait Accu {
 impl<S, A> Stream for BandNeighborhoodAggregateStream<S, A>
 where
     S: Stream<Item = Result<RasterTile2D<f64>>> + Unpin,
-    A: Accu,
+    A: Accu + Send + 'static,
 {
     type Item = Result<RasterTile2D<f64>>;
 
+    #[allow(clippy::too_many_lines)] // TODO
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.finished {
-            return Poll::Ready(None);
-        }
-
         let BandNeighborhoodAggregateStreamProjection {
             mut input_stream,
-            accu,
             current_input_band_idx,
             current_output_band_idx,
             num_bands,
-            finished,
+            state,
         } = self.as_mut().project();
 
         // process in a loop, as it may be necessary to consume multiple input bands to produce a single output band
         loop {
-            // if there is a tile from the accu, return it
-            if let Some(next_band_tile) = accu.next_band_tile() {
-                debug_assert!(
-                    next_band_tile.band == *current_output_band_idx,
-                    "unexpected output band index"
-                );
-                *current_output_band_idx += 1;
-                return Poll::Ready(Some(Ok(next_band_tile)));
-            }
+            match std::mem::replace(state, State::Invalid) {
+                State::Initial(mut accu) => {
+                    let fut = crate::util::spawn_blocking(move || (accu.next_band_tile(), accu));
 
-            // if all bands are consumed, reset the accu and start over with the next tile
-            if *current_input_band_idx >= *num_bands {
-                debug_assert!(
-                    *current_output_band_idx == *num_bands,
-                    "not all bands were produced before resetting the accu"
-                );
-                *current_input_band_idx = 0;
-                *current_output_band_idx = 0;
-                accu.reset();
-            }
+                    *state = State::NextBandTile(fut);
+                }
+                State::NextBandTile(mut fut) => {
+                    let next = match fut.poll_unpin(cx) {
+                        Poll::Ready(next) => next,
+                        Poll::Pending => {
+                            *state = State::NextBandTile(fut);
+                            return Poll::Pending;
+                        }
+                    };
 
-            // otherwise, get next band from the input stream and add it to the accu
-            let tile = ready!(input_stream.as_mut().poll_next(cx));
+                    let (next_band_tile, mut accu) = match next {
+                        Ok(next) => next,
+                        Err(e) => {
+                            *state = State::Finished;
+                            return Poll::Ready(Some(Err(e.into())));
+                        }
+                    };
 
-            let tile = match tile {
-                Some(Ok(tile)) => tile,
-                Some(Err(e)) => return Poll::Ready(Some(Err(e))),
-                None => {
-                    if *current_input_band_idx > 0 && *current_input_band_idx < *num_bands - 1 {
-                        *finished = true;
-                        // stream must not end in the middle of a tile
-                        return Poll::Ready(Some(Err(crate::error::Error::MustNotHappen {
-                            message: "Unexpected end of stream".to_string(),
-                        })));
+                    if let Some(next_band_tile) = next_band_tile {
+                        debug_assert!(
+                            next_band_tile.band == *current_output_band_idx,
+                            "unexpected output band index"
+                        );
+                        *current_output_band_idx += 1;
+                        *state = State::Initial(accu);
+                        return Poll::Ready(Some(Ok(next_band_tile)));
                     }
 
-                    // stream ended properly
-                    *finished = true;
+                    // nothing in the accu
+                    if *current_output_band_idx >= *num_bands {
+                        // all output bands were produced
+                        debug_assert!(
+                            *current_input_band_idx == *num_bands,
+                            "not all bands were consumed before finishing"
+                        );
+
+                        accu.reset();
+                        *current_input_band_idx = 0;
+                        *current_output_band_idx = 0;
+                    }
+
+                    *state = State::ConsumeNext(accu);
+                }
+                State::ConsumeNext(mut accu) => {
+                    let tile = match input_stream.as_mut().poll_next(cx) {
+                        Poll::Ready(tile) => tile,
+                        Poll::Pending => {
+                            *state = State::ConsumeNext(accu);
+                            return Poll::Pending;
+                        }
+                    };
+
+                    let tile = match tile {
+                        Some(Ok(tile)) => tile,
+                        Some(Err(e)) => {
+                            *state = State::Finished;
+                            return Poll::Ready(Some(Err(e)));
+                        }
+                        None => {
+                            if *current_input_band_idx > 0
+                                && *current_input_band_idx < *num_bands - 1
+                            {
+                                *state = State::Finished;
+                                // stream must not end in the middle of a tile
+                                return Poll::Ready(Some(Err(
+                                    crate::error::Error::MustNotHappen {
+                                        message: "Unexpected end of stream".to_string(),
+                                    },
+                                )));
+                            }
+
+                            // stream ended properly
+                            *state = State::Finished;
+                            return Poll::Ready(None);
+                        }
+                    };
+
+                    debug_assert!(
+                        tile.band == *current_input_band_idx,
+                        "unexpected input band index"
+                    );
+
+                    let fut = crate::util::spawn_blocking(move || (accu.add_tile(tile), accu));
+                    *state = State::Accumulate(fut);
+                    *current_input_band_idx += 1;
+                }
+                State::Accumulate(mut fut) => {
+                    match fut.poll_unpin(cx) {
+                        Poll::Ready(Ok((Ok(()), accu))) => *state = State::Initial(accu),
+                        Poll::Ready(Ok((Err(e), _))) => {
+                            *state = State::Finished;
+                            return Poll::Ready(Some(Err(e)));
+                        }
+                        Poll::Ready(Err(e)) => {
+                            *state = State::Finished;
+                            return Poll::Ready(Some(Err(e.into())));
+                        }
+                        Poll::Pending => {
+                            *state = State::Accumulate(fut);
+                            return Poll::Pending;
+                        }
+                    };
+                }
+                State::Finished => {
+                    *state = State::Finished;
                     return Poll::Ready(None);
                 }
+                State::Invalid => {
+                    debug_assert!(false, "Invalid state reached");
+                    *state = State::Finished;
+                    return Poll::Ready(Some(Err(crate::error::Error::MustNotHappen {
+                        message: "Invalid state reached".to_string(),
+                    })));
+                }
             };
-
-            debug_assert!(
-                tile.band == *current_input_band_idx,
-                "unexpected input band index"
-            );
-
-            // TODO: add asynchronously
-            accu.add_tile(tile);
-
-            *current_input_band_idx += 1;
         }
     }
 }
@@ -616,8 +690,6 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
-
-        dbg!(&result);
 
         assert!(result.tiles_equal_ignoring_cache_hint(&expected));
     }
