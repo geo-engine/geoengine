@@ -14,7 +14,7 @@ use futures::stream::BoxStream;
 use futures::{FutureExt, Stream};
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::raster::{
-    GridIdx2D, GridIndexAccess, MapIndexedElements, RasterDataType, RasterTile2D,
+    GridIdx2D, GridIndexAccess, MapElements, MapIndexedElements, RasterDataType, RasterTile2D,
 };
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
@@ -30,9 +30,9 @@ pub struct BandNeighborhoodAggregateParams {
 #[serde(rename_all = "camelCase")]
 pub enum NeighborHoodAggregate {
     FirstDerivative, // approximate the first derivative using the central difference method
-                     // TODO: SecondDerivative,
-                     // TODO: Average { window_size: usize },
-                     // TODO: Savitzky-Golay Filter
+    // TODO: SecondDerivative,
+    Average { window_size: u32 },
+    // TODO: Savitzky-Golay Filter
 }
 
 /// This `QueryProcessor` performs a pixel-wise aggregate over surrounding bands.
@@ -59,12 +59,15 @@ impl RasterOperator for BandNeighborhoodAggregate {
 
         // TODO: ensure min. amound of bands
 
+        // TODO: check window size of moving average is odd
+
         let result_descriptor = in_descriptor.map_data_type(|_| RasterDataType::F64);
 
         Ok(Box::new(InitializedBandNeighborhoodAggregate {
             name,
             result_descriptor,
             source,
+            aggregate: self.params.aggregate,
         }))
     }
 
@@ -75,6 +78,7 @@ pub struct InitializedBandNeighborhoodAggregate {
     name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
+    aggregate: NeighborHoodAggregate,
 }
 
 impl InitializedRasterOperator for InitializedBandNeighborhoodAggregate {
@@ -87,6 +91,7 @@ impl InitializedRasterOperator for InitializedBandNeighborhoodAggregate {
             BandNeighborhoodAggregateProcessor::new(
                 self.source.query_processor()?.into_f64(),
                 self.result_descriptor.clone(),
+                self.aggregate.clone(),
             )
             .boxed(),
         ))
@@ -100,16 +105,19 @@ impl InitializedRasterOperator for InitializedBandNeighborhoodAggregate {
 pub(crate) struct BandNeighborhoodAggregateProcessor {
     source: Box<dyn RasterQueryProcessor<RasterType = f64>>,
     result_descriptor: RasterResultDescriptor,
+    aggregate: NeighborHoodAggregate,
 }
 
 impl BandNeighborhoodAggregateProcessor {
     pub fn new(
         source: Box<dyn RasterQueryProcessor<RasterType = f64>>,
         result_descriptor: RasterResultDescriptor,
+        aggregate: NeighborHoodAggregate,
     ) -> Self {
         Self {
             source,
             result_descriptor,
+            aggregate,
         }
     }
 }
@@ -124,13 +132,27 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<f64>>>> {
         // TODO: ensure min amount of bands in query
-        Ok(Box::pin(BandNeighborhoodAggregateStream::<
-            _,
-            FirstDerivativeAccu, // TODO: make interchangable
-        >::new(
-            self.source.raster_query(query, ctx).await?,
-            self.result_descriptor.bands.count(),
-        )))
+
+        Ok(match self.aggregate {
+            NeighborHoodAggregate::FirstDerivative => {
+                Box::pin(
+                    BandNeighborhoodAggregateStream::<_, FirstDerivativeAccu, _>::new(
+                        self.source.raster_query(query, ctx).await?,
+                        self.result_descriptor.bands.count(),
+                        || FirstDerivativeAccu::new(self.result_descriptor.bands.count()),
+                    ),
+                )
+            }
+            NeighborHoodAggregate::Average { window_size } => Box::pin(
+                BandNeighborhoodAggregateStream::<_, MovingAverageAccu, _>::new(
+                    self.source.raster_query(query, ctx).await?,
+                    self.result_descriptor.bands.count(),
+                    move || {
+                        MovingAverageAccu::new(self.result_descriptor.bands.count(), window_size)
+                    },
+                ),
+            ),
+        })
     }
 
     fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
@@ -139,13 +161,14 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
 }
 
 #[pin_project(project = BandNeighborhoodAggregateStreamProjection)]
-struct BandNeighborhoodAggregateStream<S, A> {
+struct BandNeighborhoodAggregateStream<S, A, AF> {
     #[pin]
     input_stream: S,
     current_input_band_idx: u32,
     current_output_band_idx: u32,
     num_bands: u32,
     state: State<A>,
+    new_accu_fn: AF,
 }
 
 enum State<A> {
@@ -157,25 +180,25 @@ enum State<A> {
     Finished,                                // the stream is finished
 }
 
-impl<S, A> BandNeighborhoodAggregateStream<S, A>
+impl<S, A, AF> BandNeighborhoodAggregateStream<S, A, AF>
 where
     S: Stream<Item = Result<RasterTile2D<f64>>> + Unpin,
     A: Accu,
+    AF: Fn() -> A,
 {
-    pub fn new(input_stream: S, num_bands: u32) -> Self {
+    pub fn new(input_stream: S, num_bands: u32, new_accu_fn: AF) -> Self {
         Self {
             input_stream,
             current_input_band_idx: 0,
             current_output_band_idx: 0,
             num_bands,
-            state: State::Initial(A::new(num_bands)),
+            state: State::Initial(new_accu_fn()),
+            new_accu_fn,
         }
     }
 }
 
 trait Accu {
-    fn new(num_bands: u32) -> Self;
-    fn reset(&mut self);
     fn add_tile(&mut self, tile: RasterTile2D<f64>) -> Result<()>;
     // try to produce the next band, returns None when the accu is not yet ready (needs more bands)
     // this method also removes all bands that are not longer needed for future bands
@@ -185,10 +208,11 @@ trait Accu {
 
 // this stream consumes an input stream, collects bands of a tile and aggregates them
 // it outputs the aggregated tile bands as soon as they are fully processed
-impl<S, A> Stream for BandNeighborhoodAggregateStream<S, A>
+impl<S, A, AF> Stream for BandNeighborhoodAggregateStream<S, A, AF>
 where
     S: Stream<Item = Result<RasterTile2D<f64>>> + Unpin,
     A: Accu + Send + 'static,
+    AF: Fn() -> A,
 {
     type Item = Result<RasterTile2D<f64>>;
 
@@ -200,6 +224,7 @@ where
             current_output_band_idx,
             num_bands,
             state,
+            new_accu_fn,
         } = self.as_mut().project();
 
         // process in a loop to step through the state machine until a `Poll` is returned
@@ -249,7 +274,7 @@ where
                             "not all bands were consumed before finishing"
                         );
 
-                        accu.reset();
+                        accu = new_accu_fn();
                         *current_input_band_idx = 0;
                         *current_output_band_idx = 0;
                     }
@@ -347,15 +372,17 @@ pub struct FirstDerivativeAccu {
     num_bands: u32,
 }
 
-impl Accu for FirstDerivativeAccu {
-    fn new(num_bands: u32) -> Self {
+impl FirstDerivativeAccu {
+    pub fn new(num_bands: u32) -> Self {
         Self {
             input_band_tiles: VecDeque::new(),
             output_band_idx: 0,
             num_bands,
         }
     }
+}
 
+impl Accu for FirstDerivativeAccu {
     fn add_tile(&mut self, tile: RasterTile2D<f64>) -> Result<()> {
         let next_idx = self.input_band_tiles.back().map_or(0, |t| t.0 + 1);
         self.input_band_tiles.push_back((next_idx, tile));
@@ -404,10 +431,95 @@ impl Accu for FirstDerivativeAccu {
 
         Some(out)
     }
+}
 
-    fn reset(&mut self) {
-        self.input_band_tiles.clear();
-        self.output_band_idx = 0;
+// Compute the moving average of the bands with a given window size
+// For the borders, the window is reduced to the available bands
+pub struct MovingAverageAccu {
+    input_band_tiles: VecDeque<(u32, RasterTile2D<f64>)>,
+    output_band_idx: u32,
+    num_source_bands: u32,
+    window_size: u32,
+}
+
+impl MovingAverageAccu {
+    pub fn new(num_source_bands: u32, window_size: u32) -> Self {
+        debug_assert!(window_size % 2 == 1, "window size must be odd");
+        Self {
+            input_band_tiles: VecDeque::new(),
+            output_band_idx: 0,
+            num_source_bands,
+            window_size,
+        }
+    }
+}
+
+impl Accu for MovingAverageAccu {
+    fn add_tile(&mut self, tile: RasterTile2D<f64>) -> Result<()> {
+        let next_idx = self.input_band_tiles.back().map_or(0, |t| t.0 + 1);
+        self.input_band_tiles.push_back((next_idx, tile));
+        Ok(())
+    }
+
+    fn next_band_tile(&mut self) -> Option<RasterTile2D<f64>> {
+        if self.output_band_idx >= self.num_source_bands {
+            return None;
+        }
+
+        // compute actual bands required for the window
+        let first_band: i64 = i64::from(self.output_band_idx) - i64::from(self.window_size) / 2;
+        let last_band: u32 = self.output_band_idx + self.window_size / 2;
+
+        // compute indexes in the input band tiles queue, start is always at zero, but end depends on window size and borders
+        let window_end = if first_band < 0 {
+            // first bands have reduced window
+            self.window_size - self.output_band_idx
+        } else if last_band >= self.num_source_bands {
+            // last bands have reduced window
+            self.window_size - (self.num_source_bands - self.output_band_idx)
+        } else {
+            self.window_size
+        };
+
+        if window_end as usize > self.input_band_tiles.len() {
+            // not enough bands for the window
+            return None;
+        }
+
+        // sum up all the the tiles and divide by the window size afterwards.
+        // this is safe because we operate on f64 with a fixed (small) number of bands
+        let out =
+            self.input_band_tiles
+                .iter()
+                .take(window_end as usize)
+                .fold(None, |accu, (_, tile)| {
+                    let Some(accu) = accu else {
+                        // first tile becomes the accumulator
+                        return Some(tile.clone());
+                    };
+
+                    let accu = accu.map_indexed_elements(|idx: GridIdx2D, accu_value| {
+                        let tile_value = tile.get_at_grid_index(idx).unwrap_or(None);
+
+                        match (accu_value, tile_value) {
+                            (Some(accu), Some(tile)) => Some(accu + tile),
+                            _ => None,
+                        }
+                    });
+
+                    Some(accu)
+                });
+
+        let Some(out) = out else {
+            // must not happen
+            debug_assert!(false, "no output tile produced");
+            return None;
+        };
+
+        let out =
+            out.map_elements(|value: Option<f64>| value.map(|value| value / f64::from(window_end)));
+
+        Some(out)
     }
 }
 
