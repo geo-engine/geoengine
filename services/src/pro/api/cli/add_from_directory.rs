@@ -7,6 +7,7 @@ use crate::{error::Result, pro::permissions::PermissionDb};
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::error::BoxedResultExt;
 use log::warn;
+use snafu::Report;
 use std::{
     fs::{self, DirEntry, File},
     io::BufReader,
@@ -53,8 +54,9 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
         if let Ok(entry) = entry {
             if let Err(e) = add_dataset_definition_from_dir_entry(dataset_db, &entry).await {
                 warn!(
-                    "Skipped adding dataset from directory entry: {:?} error: {:?}",
-                    entry, e
+                    "Skipped adding dataset from directory entry: {:?} error: {}",
+                    entry,
+                    Report::from_error(e)
                 );
             }
         } else {

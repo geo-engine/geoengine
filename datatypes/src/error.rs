@@ -176,6 +176,7 @@ pub enum Error {
         collection_length: usize,
     },
 
+    #[snafu(display("Feature collection error: {source}"))]
     FeatureCollection {
         source: FeatureCollectionError,
     },
@@ -200,6 +201,7 @@ pub enum Error {
         details: String,
     },
 
+    #[snafu(display("Primitives error: {source}"))]
     Primitives {
         source: PrimitivesError,
     },
@@ -241,6 +243,7 @@ pub enum Error {
         time_instance: TimeInstance,
     },
 
+    #[snafu(display("The datetime {year}-{month:02}-{day:02} is out of bounds."))]
     DateTimeOutOfBounds {
         year: i32,
         month: u32,
@@ -268,17 +271,21 @@ pub enum Error {
 
     NoMatchingFeatureDataTypeForOgrFieldType,
 
+    #[snafu(display("The proj definition \"{proj_definition}\" is invalid."))]
     InvalidProjDefinition {
         proj_definition: String,
     },
+    #[snafu(display("The proj definition \"{proj_string}\" does not define an area of use."))]
     NoAreaOfUseDefined {
         proj_string: String,
     },
+    #[snafu(display("{bounds_a} does not intersect with {bounds_b}"))]
     SpatialBoundsDoNotIntersect {
         bounds_a: BoundingBox2D,
         bounds_b: BoundingBox2D,
     },
 
+    #[snafu(display("The output box {bbox} is empty"))]
     OutputBboxEmpty {
         bbox: BoundingBox2D,
     },
@@ -295,31 +302,38 @@ pub enum Error {
         lower_right_coordinate: Coordinate2D,
     },
 
-    #[snafu(display("MissingRasterProperty Error: {}", property))]
+    #[snafu(display("Missing raster property: {}", property))]
     MissingRasterProperty {
         property: String,
     },
 
     TimeStepIterStartMustNotBeBeginOfTime,
 
+    #[snafu(display(
+        "The number designated as minimum ({min}) is bigger than the maximum ({max})"
+    ))]
     MinMustBeSmallerThanMax {
         min: f64,
         max: f64,
     },
 
+    #[snafu(display("The colorizer cannot be rescaled: {colorizer}"))]
     ColorizerRescaleNotSupported {
         colorizer: String,
     },
 
+    #[snafu(display("The spatial reference {a} does not intersect with {b}"))]
     SpatialReferencesDoNotIntersect {
         a: SpatialReference,
         b: SpatialReference,
     },
 
+    #[snafu(display("Io error: {source}"))]
     Io {
         source: std::io::Error,
     },
 
+    #[snafu(display("The sub path '{}' escapes the base path '{}'", sub_path.display(), base.display()))]
     SubPathMustNotEscapeBasePath {
         base: PathBuf,
         sub_path: PathBuf,

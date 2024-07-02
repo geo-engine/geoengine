@@ -32,7 +32,7 @@ use geoengine_operators::{
 };
 use reqwest::Url;
 use serde_json::json;
-use snafu::{ensure, ResultExt};
+use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -153,11 +153,9 @@ where
 
     let operator = workflow
         .operator
-        .get_raster()
-        .context(error::Operator)?
+        .get_raster()?
         .initialize(workflow_operator_path_root, &exe_ctx)
-        .await
-        .context(error::Operator)?;
+        .await?;
 
     let result_descriptor = operator.result_descriptor();
 
@@ -286,7 +284,7 @@ async fn wms_map_handler<C: ApplicationContext>(
             .load_workflow(&WorkflowId::from_str(&request.layers)?)
             .await?;
 
-        let operator = workflow.operator.get_raster().context(error::Operator)?;
+        let operator = workflow.operator.get_raster()?;
 
         let execution_context = ctx.execution_context()?;
 
@@ -295,8 +293,7 @@ async fn wms_map_handler<C: ApplicationContext>(
         let initialized = operator
             .clone()
             .initialize(workflow_operator_path_root, &execution_context)
-            .await
-            .context(error::Operator)?;
+            .await?;
 
         // handle request and workflow crs matching
         let workflow_spatial_ref: SpatialReferenceOption =
@@ -336,13 +333,12 @@ async fn wms_map_handler<C: ApplicationContext>(
                 reprojection_params,
                 initialized,
                 execution_context.tiling_specification(),
-            )
-            .context(error::Operator)?;
+            )?;
 
             Box::new(irp)
         };
 
-        let processor = initialized.query_processor().context(error::Operator)?;
+        let processor = initialized.query_processor()?;
 
         let query_bbox: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
         let x_query_resolution = query_bbox.size_x() / f64::from(request.width);

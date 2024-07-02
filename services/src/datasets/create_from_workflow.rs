@@ -74,7 +74,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
     async fn process(&self) -> error::Result<RasterDatasetFromWorkflowResult> {
         let operator = self.workflow.operator.clone();
 
-        let operator = operator.get_raster().context(crate::error::Operator)?;
+        let operator = operator.get_raster()?;
 
         let execution_context = self.ctx.execution_context()?;
 
@@ -82,14 +82,11 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
 
         let initialized = operator
             .initialize(workflow_operator_path_root, &execution_context)
-            .await
-            .context(crate::error::Operator)?;
+            .await?;
 
         let result_descriptor = initialized.result_descriptor();
 
-        let processor = initialized
-            .query_processor()
-            .context(crate::error::Operator)?;
+        let processor = initialized.query_processor()?;
 
         let query_rect = self.info.query;
         let query_ctx = self.ctx.query_context()?;

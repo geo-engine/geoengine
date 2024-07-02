@@ -2,11 +2,10 @@ use crate::api::model::datatypes::{
     AxisLabels, BoundingBox2D, Coordinate2D, SpatialReference, SpatialReferenceAuthority,
 };
 use crate::contexts::ApplicationContext;
-use crate::{error, error::Error, error::Result};
+use crate::{error::Error, error::Result};
 use actix_web::{web, FromRequest, Responder};
 use proj_sys::PJ_PROJ_STRING_TYPE_PJ_PROJ_4;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use std::str::FromStr;
 use utoipa::ToSchema;
 
@@ -235,8 +234,7 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
     }
 
     let spatial_reference =
-        geoengine_datatypes::spatial_reference::SpatialReference::from_str(srs_string)
-            .context(error::DataType)?;
+        geoengine_datatypes::spatial_reference::SpatialReference::from_str(srs_string)?;
     let json = proj_json(srs_string).ok_or_else(|| Error::UnknownSrsString {
         srs_string: srs_string.to_owned(),
     })?;
@@ -244,9 +242,8 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
         srs_string: srs_string.to_owned(),
     })?;
 
-    let extent: geoengine_datatypes::primitives::BoundingBox2D = spatial_reference
-        .area_of_use_projected()
-        .context(error::DataType)?;
+    let extent: geoengine_datatypes::primitives::BoundingBox2D =
+        spatial_reference.area_of_use_projected()?;
 
     let axis_labels = json.coordinate_system.axis.as_ref().map(|axes| {
         let [a0, a1] = [0, 1].map(|i| axes.get(i).map_or(String::new(), |a| a.name.clone()));

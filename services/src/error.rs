@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{
-    DataProviderId, DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance,
+    DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance,
 };
 use crate::api::model::responses::ErrorResponse;
 use crate::datasets::external::aruna::error::ArunaProviderError;
@@ -20,43 +20,48 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum Error {
+    #[snafu(transparent)]
     DataType {
         source: geoengine_datatypes::error::Error,
     },
-    #[snafu(display("Operator: {}", source))]
+    #[snafu(transparent)]
     Operator {
         source: geoengine_operators::error::Error,
     },
+    #[snafu(display("Uuid error: {source}"))]
     Uuid {
         source: uuid::Error,
     },
+    #[snafu(display("Serde json error: {source}"))]
     SerdeJson {
         source: serde_json::Error,
     },
+    #[snafu(display("IO error: {source}"))]
     Io {
         source: std::io::Error,
     },
+    #[snafu(display("Error when joining task: {source}"))]
     TokioJoin {
         source: tokio::task::JoinError,
     },
-
+    #[snafu(display("Tokio signal error: {source}"))]
     TokioSignal {
         source: std::io::Error,
     },
-
+    #[snafu(display("Reqwest error: {source}"))]
     Reqwest {
         source: reqwest::Error,
     },
-
+    #[snafu(display("Unable to parse url: {source}"))]
     Url {
         source: url::ParseError,
     },
-
+    #[snafu(display("Proj error: {source}"))]
     Proj {
         source: proj::ProjError,
     },
 
-    #[snafu(context(false))]
+    #[snafu(display("OpenTelemtry tracing error: {source}"), context(false))]
     Trace {
         source: opentelemetry::trace::TraceError,
     },
@@ -129,6 +134,7 @@ pub enum Error {
 
     NoWorkflowForGivenId,
 
+    #[snafu(display("Postgres error: {source}"))]
     TokioPostgres {
         source: bb8_postgres::tokio_postgres::Error,
     },
@@ -149,14 +155,17 @@ pub enum Error {
 
     ConfigLockFailed,
 
+    #[snafu(display("Configuration error: {source}"))]
     Config {
         source: config::ConfigError,
     },
 
+    #[snafu(display("Unable to parse IP address: {source}"))]
     AddrParse {
         source: std::net::AddrParseError,
     },
 
+    #[snafu(display("Missing working directory: {source}"))]
     MissingWorkingDirectory {
         source: std::io::Error,
     },
@@ -212,6 +221,7 @@ pub enum Error {
     UnknownUploadId,
     UnknownModelId,
     PathIsNotAFile,
+    #[snafu(display("Actix multipart error: {reason}"))]
     Multipart {
         // TODO: this error is not send, so this does not work
         // source: actix_multipart::MultipartError,
@@ -230,6 +240,7 @@ pub enum Error {
         dataset_name: String,
     },
     InvalidDatasetName,
+    #[snafu(display("Layer name '{layer_name}' is invalid"))]
     DatasetInvalidLayerName {
         layer_name: String,
     },
@@ -242,17 +253,22 @@ pub enum Error {
     NoMainFileCandidateFound,
     NoFeatureDataTypeForColumnDataType,
 
+    #[snafu(display("Spatial reference '{srs_string}' is unknown"))]
     UnknownSpatialReference {
         srs_string: String,
     },
 
     NotYetImplemented,
 
+    #[snafu(display("Band '{band_name}' does not exist"))]
     StacNoSuchBand {
         band_name: String,
     },
     StacInvalidGeoTransform,
     StacInvalidBbox,
+    #[snafu(display(
+        "Failed to parse stac response from '{url}'. Error: {error}\nOriginal Response: {response}"
+    ))]
     StacJsonResponse {
         url: String,
         response: String,
@@ -274,22 +290,22 @@ pub enum Error {
     #[snafu(display("The response from the EDR server does not match the expected format."))]
     EdrInvalidMetadataFormat,
     ExpectedExternalDataId,
-    InvalidExternalDataId {
-        provider: DataProviderId,
-    },
     InvalidDataId,
 
     Nature40UnknownRasterDbname,
     Nature40WcsDatasetMissingLabelInMetadata,
 
+    #[snafu(display("FlexiLogger initialization error: {source}"))]
     Logger {
         source: flexi_logger::FlexiLoggerError,
     },
 
+    #[snafu(display("Spatial reference system '{srs_string}' is unknown"))]
     UnknownSrsString {
         srs_string: String,
     },
 
+    #[snafu(display("Axis ordering is unknown for SRS '{srs_string}'"))]
     AxisOrderingNotKnownForSrs {
         srs_string: String,
     },
@@ -339,12 +355,12 @@ pub enum Error {
         type_names: WorkflowId,
     },
 
-    #[snafu(context(false))]
+    #[snafu(display("Aruna Provider error: {source}"), context(false))]
     ArunaProvider {
         source: ArunaProviderError,
     },
 
-    #[snafu(context(false))]
+    #[snafu(display("NetCdfCf4D Provider error: {source}"), context(false))]
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
@@ -353,15 +369,17 @@ pub enum Error {
 
     BaseUrlMustEndWithSlash,
 
-    #[snafu(context(false))]
+    #[snafu(display("Layer DB error: {source}"), context(false))]
     LayerDb {
         source: crate::layers::LayerDbError,
     },
 
+    #[snafu(display("Operator '{operator}' is unknown"))]
     UnknownOperator {
         operator: String,
     },
 
+    #[snafu(display("The id is expected to be an uuid, but it is '{found}'."))]
     IdStringMustBeUuid {
         found: String,
     },
@@ -371,25 +389,29 @@ pub enum Error {
         source: crate::tasks::TaskError,
     },
 
+    #[snafu(display("'{id}' is not a known layer collection id"))]
     UnknownLayerCollectionId {
         id: LayerCollectionId,
     },
+    #[snafu(display("'{id}' is not a known layer id"))]
     UnknownLayerId {
         id: LayerId,
     },
     InvalidLayerCollectionId,
     InvalidLayerId,
 
-    #[snafu(context(false))]
+    #[snafu(display("Workflow API error: {source}"), context(false))]
     WorkflowApi {
         source: crate::api::handlers::workflows::WorkflowApiError,
     },
 
+    #[snafu(display("The sub path '{}' escapes the base path '{}'", sub_path.display(), base.display()))]
     SubPathMustNotEscapeBasePath {
         base: PathBuf,
         sub_path: PathBuf,
     },
 
+    #[snafu(display("The sub path '{}' contains references to the parent '{}'", sub_path.display(), base.display()))]
     PathMustNotContainParentReferences {
         base: PathBuf,
         sub_path: PathBuf,
@@ -455,7 +477,7 @@ pub enum Error {
 
     // TODO: refactor error
     #[cfg(feature = "pro")]
-    #[snafu(context(false))]
+    #[snafu(display("ML error: {source}"), context(false))]
     MachineLearning {
         source: crate::pro::machine_learning::ml_error::MachineLearningError,
     },
@@ -504,18 +526,6 @@ impl actix_web::error::ResponseError for Error {
             Error::Duplicate { reason: _ } => StatusCode::CONFLICT,
             _ => StatusCode::BAD_REQUEST,
         }
-    }
-}
-
-impl From<geoengine_datatypes::error::Error> for Error {
-    fn from(e: geoengine_datatypes::error::Error) -> Self {
-        Self::DataType { source: e }
-    }
-}
-
-impl From<geoengine_operators::error::Error> for Error {
-    fn from(e: geoengine_operators::error::Error) -> Self {
-        Self::Operator { source: e }
     }
 }
 

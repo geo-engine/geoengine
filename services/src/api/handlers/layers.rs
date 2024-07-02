@@ -21,6 +21,7 @@ use actix_web::{web, FromRequest, HttpResponse, Responder};
 use geoengine_datatypes::primitives::{BandSelection, QueryRectangle};
 use geoengine_operators::engine::WorkflowOperatorPath;
 use serde::{Deserialize, Serialize};
+use snafu::Report;
 use std::sync::Arc;
 use utoipa::IntoParams;
 
@@ -195,7 +196,7 @@ async fn get_layer_providers<C: ApplicationContext>(
         let provider = match external.load_layer_provider(provider_listing.id).await {
             Ok(provider) => provider,
             Err(err) => {
-                log::error!("Error loading provider: {}", snafu::Report::from_error(err));
+                log::error!("Error loading provider: {}", Report::from_error(err));
                 continue;
             }
         };
@@ -210,7 +211,7 @@ async fn get_layer_providers<C: ApplicationContext>(
                 log::error!(
                     "Error loading provider {}, could not get root collection id: {}",
                     provider_listing.id,
-                    snafu::Report::from_error(err)
+                    Report::from_error(err)
                 );
                 continue;
             }

@@ -26,7 +26,7 @@ use geoengine_operators::util::raster_stream_to_geotiff::{
     raster_stream_to_multiband_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
 };
 use log::info;
-use snafu::{ensure, ResultExt};
+use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 use url::Url;
@@ -210,11 +210,9 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
 
     let operator = workflow
         .operator
-        .get_raster()
-        .context(error::Operator)?
+        .get_raster()?
         .initialize(workflow_operator_path_root, &exe_ctx)
-        .await
-        .context(error::Operator)?;
+        .await?;
 
     let result_descriptor = operator.result_descriptor();
 
@@ -222,9 +220,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
 
     // TODO: give tighter bounds if possible
-    let area_of_use: SpatialPartition2D = spatial_reference
-        .area_of_use_projected()
-        .context(error::DataType)?;
+    let area_of_use: SpatialPartition2D = spatial_reference.area_of_use_projected()?;
 
     let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) =
         match spatial_reference_specification(&spatial_reference.proj_string()?)?
@@ -361,7 +357,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
 
     let workflow = ctx.db().load_workflow(&identifier).await?;
 
-    let operator = workflow.operator.get_raster().context(error::Operator)?;
+    let operator = workflow.operator.get_raster()?;
 
     let execution_context = ctx.execution_context()?;
 
@@ -370,8 +366,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
     let initialized = operator
         .clone()
         .initialize(workflow_operator_path_root, &execution_context)
-        .await
-        .context(error::Operator)?;
+        .await?;
 
     // handle request and workflow crs matching
     let workflow_spatial_ref: Option<SpatialReference> =
@@ -409,13 +404,12 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
             reprojection_params,
             initialized,
             execution_context.tiling_specification(),
-        )
-        .context(error::Operator)?;
+        )?;
 
         Box::new(irp)
     };
 
-    let processor = initialized.query_processor().context(error::Operator)?;
+    let processor = initialized.query_processor()?;
 
     let spatial_resolution: SpatialResolution =
         if let Some(spatial_resolution) = request.spatial_resolution() {

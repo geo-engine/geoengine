@@ -897,7 +897,7 @@ fn auto_detect_meta_data_definition(
 ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>> {
     // TODO: handle Raster datasets as well
 
-    let dataset = gdal_open_dataset(main_file_path).context(error::Operator)?;
+    let dataset = gdal_open_dataset(main_file_path)?;
 
     let layer = select_layer_from_dataset(&dataset, layer_name)?;
 
@@ -1135,7 +1135,7 @@ fn detect_vector_geometry(layer: &Layer) -> DetectedGeometry {
                     .spatial_ref()
                     .context(error::Gdal)
                     .and_then(|s| {
-                        let s: Result<SpatialReference> = s.try_into().context(error::DataType);
+                        let s: Result<SpatialReference> = s.try_into().map_err(Into::into);
                         s
                     })
                     .map(Into::into)

@@ -1,9 +1,9 @@
 use crate::error::Result;
 use crate::identifier;
 use crate::projects::error::ProjectDbError;
+use crate::util::config::get_config_element;
 use crate::util::config::ProjectService;
 use crate::workflows::workflow::WorkflowId;
-use crate::{error, util::config::get_config_element};
 use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer, RgbaColor};
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::primitives::TimeInstance;
@@ -18,7 +18,6 @@ use geoengine_datatypes::{
 use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use std::borrow::Cow;
 use std::{convert::TryInto, fmt::Debug};
 use utoipa::{IntoParams, ToSchema};
@@ -174,9 +173,8 @@ impl STRectangle {
             bounding_box: BoundingBox2D::new(
                 Coordinate2D::new(lower_left_x, lower_left_y),
                 Coordinate2D::new(upper_left_x, upper_left_y),
-            )
-            .context(error::DataType)?,
-            time_interval: TimeInterval::new(time_start, time_stop).context(error::DataType {})?,
+            )?,
+            time_interval: TimeInterval::new(time_start, time_stop)?,
         })
     }
 

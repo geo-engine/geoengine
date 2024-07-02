@@ -5,7 +5,6 @@ use crate::api::model::services::UpdateDataset;
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
-use crate::error;
 use crate::error::Result;
 use crate::projects::Symbology;
 use async_trait::async_trait;
@@ -17,7 +16,6 @@ use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use std::fmt::Debug;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
@@ -213,32 +211,32 @@ impl MetaDataDefinition {
                 .result_descriptor()
                 .await
                 .map(Into::into)
-                .context(error::Operator),
+                .map_err(Into::into),
             MetaDataDefinition::OgrMetaData(m) => m
                 .result_descriptor()
                 .await
                 .map(Into::into)
-                .context(error::Operator),
+                .map_err(Into::into),
             MetaDataDefinition::GdalMetaDataRegular(m) => m
                 .result_descriptor()
                 .await
                 .map(Into::into)
-                .context(error::Operator),
+                .map_err(Into::into),
             MetaDataDefinition::GdalStatic(m) => m
                 .result_descriptor()
                 .await
                 .map(Into::into)
-                .context(error::Operator),
+                .map_err(Into::into),
             MetaDataDefinition::GdalMetadataNetCdfCf(m) => m
                 .result_descriptor()
                 .await
                 .map(Into::into)
-                .context(error::Operator),
+                .map_err(Into::into),
             MetaDataDefinition::GdalMetaDataList(m) => m
                 .result_descriptor()
                 .await
                 .map(Into::into)
-                .context(error::Operator),
+                .map_err(Into::into),
         }
     }
 

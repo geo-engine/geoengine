@@ -4,6 +4,7 @@ use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{FeatureDataType, TimeInterval};
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+use itertools::join;
 use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::ops::Range;
@@ -40,7 +41,7 @@ pub enum Error {
         details: String,
     },
 
-    #[snafu(display("DataTypeError: {}", source))]
+    #[snafu(transparent)]
     DataType {
         source: geoengine_datatypes::error::Error,
     },
@@ -143,15 +144,18 @@ pub enum Error {
         right: FeatureDataType,
     },
 
+    #[snafu(display("Dataset '{name}' is unknown: {source}"))]
     UnknownDataset {
         name: String,
         source: std::io::Error,
     },
 
+    #[snafu(display("Dataset name '{name}' does not exist"))]
     UnknownDatasetName {
         name: NamedData,
     },
 
+    #[snafu(display("Cannot resolve dataset name '{name}': {source}"))]
     CannotResolveDatasetName {
         name: NamedData,
         source: Box<dyn ErrorSource>,
@@ -162,37 +166,39 @@ pub enum Error {
         id: String,
     },
 
+    #[snafu(display("Dataset spec '{name}' is invalid: {source}"))]
     InvalidDatasetSpec {
         name: String,
         source: serde_json::Error,
-    },
-
-    WorkerThread {
-        reason: String,
     },
 
     TimeIntervalColumnNameMissing,
 
     TimeIntervalDurationMissing,
 
+    #[snafu(display("Unable to parse time: {source}"))]
     TimeParse {
         source: Box<dyn ErrorSource>,
     },
 
     TimeInstanceNotDisplayable,
 
+    #[snafu(display("Time string placeholder '{name}' is invalid"))]
     InvalidTimeStringPlaceholder {
         name: String,
     },
 
+    #[snafu(display("Problem with dataset metadata: {source}"))]
     DatasetMetaData {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    #[snafu(display("Arrow error: {source}"))]
     Arrow {
         source: arrow::error::ArrowError,
     },
 
+    #[snafu(display("There is no data with id '{id:?}'"))]
     NoDataWithGivenId {
         id: DataId,
     },
@@ -220,6 +226,7 @@ pub enum Error {
 
     FilePathNotRepresentableAsString,
 
+    #[snafu(display("Error when joining task: {source}"))]
     TokioJoin {
         source: tokio::task::JoinError,
     },
@@ -231,6 +238,7 @@ pub enum Error {
     OgrFieldValueIsNotDateTime,
     OgrFieldValueIsNotString,
     OgrFieldValueIsNotValidForTimestamp,
+    #[snafu(display("Expected {expected} but got the value {field_value:?}"))]
     OgrColumnFieldTypeMismatch {
         expected: String,
         field_value: gdal::vector::FieldValue,
@@ -266,6 +274,7 @@ pub enum Error {
 
     NotImplemented,
 
+    #[snafu(display("Exceeded the tile limit {limit}"))]
     TileLimitExceeded {
         limit: usize,
     },
@@ -304,10 +313,6 @@ pub enum Error {
         name: String,
     },
 
-    InvalidGdalFilePath {
-        file_path: PathBuf,
-    },
-
     #[snafu(display(
         "Raster data sets with a different origin than upper left are currently not supported"
     ))]
@@ -322,17 +327,17 @@ pub enum Error {
     SparseTilesFillAdapter {
         source: crate::adapters::SparseTilesFillAdapterError,
     },
-    #[snafu(context(false))]
+    #[snafu(display("Expression error: {source}"), context(false))]
     ExpressionOperator {
         source: crate::processing::RasterExpressionError,
     },
 
-    #[snafu(context(false), display("VectorExpression: {}", source))]
+    #[snafu(context(false), display("VectorExpression error: {}", source))]
     VectorExpressionOperator {
         source: crate::processing::VectorExpressionError,
     },
 
-    #[snafu(context(false))]
+    #[snafu(display("TimeProjection error: {source}"), context(false))]
     TimeProjectionOperator {
         source: crate::processing::TimeProjectionError,
     },
@@ -340,11 +345,11 @@ pub enum Error {
     MockRasterSource {
         source: crate::mock::MockRasterSourceError,
     },
-    #[snafu(context(false))]
+    #[snafu(display("Interpolation error: {source}"), context(false))]
     InterpolationOperator {
         source: crate::processing::InterpolationError,
     },
-    #[snafu(context(false))]
+    #[snafu(display("TimeShift error: {source}"), context(false))]
     TimeShift {
         source: crate::processing::TimeShiftError,
     },
@@ -353,12 +358,12 @@ pub enum Error {
 
     SpatialReferenceMustNotBeUnreferenced,
 
-    #[snafu(context(false))]
+    #[snafu(display("RasterKernel error: {source}"), context(false))]
     RasterKernel {
         source: crate::processing::NeighborhoodAggregateError,
     },
 
-    #[snafu(context(false))]
+    #[snafu(display("GdalSource error: {source}"), context(false))]
     GdalSource {
         source: crate::source::GdalSourceError,
     },
@@ -367,6 +372,7 @@ pub enum Error {
 
     AbortTriggerAlreadyUsed,
 
+    #[snafu(display("The sub path '{}' escapes the base path '{}'", sub_path.display(), base.display()))]
     SubPathMustNotEscapeBasePath {
         base: PathBuf,
         sub_path: PathBuf,
@@ -392,12 +398,12 @@ pub enum Error {
     NoValidMlModelFileType,
 
     #[cfg(feature = "pro")]
-    #[snafu(context(false))]
+    #[snafu(display("XGBoost error: {source}"), context(false))]
     XGBoost {
         source: crate::pro::xg_error::XGBoostModuleError,
     },
 
-    #[snafu(context(false), display("PieChart: {}", source))]
+    #[snafu(context(false), display("PieChart error: {}", source))]
     PieChart {
         source: crate::plot::PieChartError,
     },
@@ -412,6 +418,7 @@ pub enum Error {
         found: usize,
     },
 
+    #[snafu(display("Querying processor failed: {source}"))]
     QueryingProcessorFailed {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
@@ -467,6 +474,7 @@ pub enum Error {
         found: u32,
     },
 
+    #[snafu(display("The raster inputs must have the same spatial reference and datatype, but they have the SRS's [{}] and datatypes {:?}.", join(spatial_references, ", "), datatypes))]
     RasterInputsMustHaveSameSpatialReferenceAndDatatype {
         datatypes: Vec<RasterDataType>,
         spatial_references: Vec<SpatialReferenceOption>,
@@ -511,14 +519,6 @@ mod requirements {
     trait RequiresSend: Send {}
 
     impl RequiresSend for Error {}
-}
-
-impl From<geoengine_datatypes::error::Error> for Error {
-    fn from(datatype_error: geoengine_datatypes::error::Error) -> Self {
-        Self::DataType {
-            source: datatype_error,
-        }
-    }
 }
 
 impl From<gdal::errors::GdalError> for Error {
