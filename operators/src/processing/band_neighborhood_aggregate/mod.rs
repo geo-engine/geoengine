@@ -466,58 +466,83 @@ impl Accu for MovingAverageAccu {
             return None;
         }
 
-        // compute actual bands required for the window
-        let first_band: i64 = i64::from(self.output_band_idx) - i64::from(self.window_size) / 2;
-        let last_band: u32 = self.output_band_idx + self.window_size / 2;
-
-        // compute indexes in the input band tiles queue, start is always at zero, but end depends on window size and borders
-        let window_end = if first_band < 0 {
-            // first bands have reduced window
-            self.window_size - self.output_band_idx
-        } else if last_band >= self.num_source_bands {
-            // last bands have reduced window
-            self.window_size - (self.num_source_bands - self.output_band_idx)
+        // compute bands required for the window
+        let window_radius = self.window_size / 2;
+        let first_band = if self.output_band_idx < window_radius {
+            0
         } else {
-            self.window_size
+            self.output_band_idx - window_radius
         };
 
-        if window_end as usize > self.input_band_tiles.len() {
+        debug_assert!(
+            self.input_band_tiles
+                .front()
+                .map_or(false, |t| t.0 == first_band),
+            "unexpected first band in queue"
+        );
+
+        let last_band = if self.output_band_idx + window_radius >= self.num_source_bands {
+            self.num_source_bands - 1
+        } else {
+            self.output_band_idx + window_radius
+        };
+
+        if self
+            .input_band_tiles
+            .back()
+            .map_or(true, |t| t.0 < last_band)
+        {
             // not enough bands for the window
             return None;
         }
 
-        // sum up all the the tiles and divide by the window size afterwards.
+        let window_len = self
+            .input_band_tiles
+            .iter()
+            .take_while(|t| t.0 <= last_band)
+            .count();
+
+        // sum up all the the tiles and divide by the window length afterwards.
         // this is safe because we operate on f64 with a fixed (small) number of bands
-        let out =
-            self.input_band_tiles
-                .iter()
-                .take(window_end as usize)
-                .fold(None, |accu, (_, tile)| {
-                    let Some(accu) = accu else {
-                        // first tile becomes the accumulator
-                        return Some(tile.clone());
-                    };
+        let out = self
+            .input_band_tiles
+            .iter()
+            .take_while(|t| t.0 <= last_band)
+            .fold(None, |accu, (_, tile)| {
+                let Some(accu) = accu else {
+                    // first tile becomes the accumulator
+                    return Some(tile.clone());
+                };
 
-                    let accu = accu.map_indexed_elements(|idx: GridIdx2D, accu_value| {
-                        let tile_value = tile.get_at_grid_index(idx).unwrap_or(None);
+                let accu = accu.map_indexed_elements(|idx: GridIdx2D, accu_value| {
+                    let tile_value = tile.get_at_grid_index(idx).unwrap_or(None);
 
-                        match (accu_value, tile_value) {
-                            (Some(accu), Some(tile)) => Some(accu + tile),
-                            _ => None,
-                        }
-                    });
-
-                    Some(accu)
+                    match (accu_value, tile_value) {
+                        (Some(accu), Some(tile)) => Some(accu + tile),
+                        _ => None,
+                    }
                 });
 
-        let Some(out) = out else {
+                Some(accu)
+            });
+
+        let Some(mut out) = out else {
             // must not happen
             debug_assert!(false, "no output tile produced");
             return None;
         };
 
+        out.band = self.output_band_idx;
+
+        // remove tile if we no longer need it
+        if self.output_band_idx >= self.window_size / 2 {
+            self.input_band_tiles.pop_front();
+        }
+
         let out =
-            out.map_elements(|value: Option<f64>| value.map(|value| value / f64::from(window_end)));
+            out.map_elements(|value: Option<f64>| value.map(|value| value / window_len as f64));
+
+        self.output_band_idx += 1;
 
         Some(out)
     }
@@ -625,6 +650,98 @@ mod tests {
                 band: 2,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            }));
+
+        assert!(accu.next_band_tile().is_none());
+    }
+
+    #[test]
+    fn it_computes_moving_average() {
+        let mut data: Vec<RasterTile2D<f64>> = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![0., 1., 2., 3.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 1,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![2., 3., 4., 5.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 2,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![4., 5., 6., 7.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        let mut accu = MovingAverageAccu::new(3, 3);
+
+        accu.add_tile(data.remove(0)).unwrap();
+        assert!(accu.next_band_tile().is_none());
+
+        accu.add_tile(data.remove(0)).unwrap();
+        assert!(accu
+            .next_band_tile()
+            .unwrap()
+            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1., 2., 3., 4.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            }));
+
+        accu.add_tile(data.remove(0)).unwrap();
+        assert!(accu
+            .next_band_tile()
+            .unwrap()
+            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 1,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![2., 3., 4., 5.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            }));
+        assert!(accu
+            .next_band_tile()
+            .unwrap()
+            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 2,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![3., 4., 5., 6.])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
