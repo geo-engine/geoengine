@@ -23,19 +23,27 @@ use tokio::task::JoinHandle;
 
 const MAX_WINDOW_SIZE: u32 = 8;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BandNeighborhoodAggregateParams {
     pub aggregate: NeighborHoodAggregate,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum NeighborHoodAggregate {
-    FirstDerivative, // approximate the first derivative using the central difference method
+    // approximate the first derivative using the central difference method
+    FirstDerivative { band_distance: BandDistance },
     // TODO: SecondDerivative,
     Average { window_size: u32 },
     // TODO: Savitzky-Golay Filter
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum BandDistance {
+    EquallySpaced { distance: f64 },
+    // TODO: give `RasterBandDescriptor` a dimensions and give the user the (default) option to use it here
 }
 
 /// This `QueryProcessor` performs a pixel-wise aggregate over surrounding bands.
@@ -57,6 +65,9 @@ pub enum BandNeighborhoodAggregateError {
         "First derivative needs at least two input bands. Input raster has only one band.",
     ))]
     FirstDerivativeNeedsAtLeastTwoBands,
+
+    #[snafu(display("The distance of the bands for computing the first derivative must be positive, found {distance}."))]
+    FirstDerivativeDistanceMustBePositive { distance: f64 },
 
     #[snafu(display("The window size for the average must be odd, found {window_size}."))]
     AverageWindowSizeMustBeOdd { window_size: u32 },
@@ -81,26 +92,38 @@ impl RasterOperator for BandNeighborhoodAggregate {
 
         let in_descriptor = source.result_descriptor();
 
-        match self.params.aggregate {
-            NeighborHoodAggregate::FirstDerivative => {
+        match &self.params.aggregate {
+            NeighborHoodAggregate::FirstDerivative { band_distance } => {
                 if in_descriptor.bands.count() <= 1 {
                     return Err(
                         BandNeighborhoodAggregateError::FirstDerivativeNeedsAtLeastTwoBands.into(),
                     );
                 }
+
+                match band_distance {
+                    BandDistance::EquallySpaced { distance } => {
+                        if *distance <= 0.0 {
+                            return Err(
+                        BandNeighborhoodAggregateError::FirstDerivativeDistanceMustBePositive{distance:*distance}
+                            .into(),
+                    );
+                        }
+                    }
+                }
             }
             NeighborHoodAggregate::Average { window_size } => {
                 if window_size % 2 == 0 {
                     return Err(BandNeighborhoodAggregateError::AverageWindowSizeMustBeOdd {
-                        window_size,
+                        window_size: *window_size,
                     }
                     .into());
                 }
 
-                if window_size > MAX_WINDOW_SIZE {
-                    return Err(
-                        BandNeighborhoodAggregateError::WindowSizeTooLarge { window_size }.into(),
-                    );
+                if *window_size > MAX_WINDOW_SIZE {
+                    return Err(BandNeighborhoodAggregateError::WindowSizeTooLarge {
+                        window_size: *window_size,
+                    }
+                    .into());
                 }
             }
         }
@@ -177,13 +200,19 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
     ) -> Result<BoxStream<'a, Result<RasterTile2D<f64>>>> {
         // TODO: ensure min amount of bands in query
 
-        Ok(match self.aggregate {
-            NeighborHoodAggregate::FirstDerivative => {
+        Ok(match &self.aggregate {
+            NeighborHoodAggregate::FirstDerivative { band_distance } => {
+                let band_distance = band_distance.clone();
                 Box::pin(
                     BandNeighborhoodAggregateStream::<_, FirstDerivativeAccu, _>::new(
                         self.source.raster_query(query, ctx).await?,
                         self.result_descriptor.bands.count(),
-                        || FirstDerivativeAccu::new(self.result_descriptor.bands.count()),
+                        move || {
+                            FirstDerivativeAccu::new(
+                                self.result_descriptor.bands.count(),
+                                &band_distance,
+                            )
+                        },
                     ),
                 )
             }
@@ -192,7 +221,7 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
                     self.source.raster_query(query, ctx).await?,
                     self.result_descriptor.bands.count(),
                     move || {
-                        MovingAverageAccu::new(self.result_descriptor.bands.count(), window_size)
+                        MovingAverageAccu::new(self.result_descriptor.bands.count(), *window_size)
                     },
                 ),
             ),
@@ -483,14 +512,25 @@ pub struct FirstDerivativeAccu {
     input_band_tiles: VecDeque<(u32, RasterTile2D<f64>)>,
     output_band_idx: u32,
     num_bands: u32,
+    band_distances: Vec<f64>,
 }
 
 impl FirstDerivativeAccu {
-    pub fn new(num_bands: u32) -> Self {
+    pub fn new(num_bands: u32, band_distances: &BandDistance) -> Self {
+        let band_distances = match band_distances {
+            BandDistance::EquallySpaced { distance } => vec![*distance; (num_bands - 1) as usize],
+        };
+
+        debug_assert!(
+            band_distances.len() == (num_bands - 1) as usize,
+            "unexpected number of band distances"
+        );
+
         Self {
             input_band_tiles: VecDeque::new(),
             output_band_idx: 0,
             num_bands,
+            band_distances,
         }
     }
 }
@@ -517,11 +557,14 @@ impl Accu for FirstDerivativeAccu {
         };
 
         // TODO: the divisor should be the difference of the bands on a spectrum. In order to compute this, bands first need a dimension.
-        let divisor = if self.output_band_idx == 0 || self.output_band_idx == self.num_bands - 1 {
+        let divisor = if self.output_band_idx == 0 {
+            self.band_distances[0]
+        } else if self.output_band_idx == self.num_bands - 1 {
             // special case because there is no predecessor or successor for the first and last band
-            1.0
+            self.band_distances[self.band_distances.len() - 1]
         } else {
-            2.0
+            self.band_distances[self.output_band_idx as usize - 1]
+                + self.band_distances[self.output_band_idx as usize]
         };
 
         let mut out = prev
@@ -722,7 +765,7 @@ mod tests {
             },
         ];
 
-        let mut accu = FirstDerivativeAccu::new(3);
+        let mut accu = FirstDerivativeAccu::new(3, &BandDistance::EquallySpaced { distance: 1. });
 
         accu.add_tile(data.remove(0)).unwrap();
         assert!(accu.next_band_tile().is_none());
@@ -767,6 +810,98 @@ mod tests {
                 band: 2,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            }));
+
+        assert!(std::panic::catch_unwind(move || accu.next_band_tile()).is_err());
+    }
+
+    #[test]
+    fn it_computes_first_derivative_distances() {
+        let mut data: Vec<RasterTile2D<f64>> = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![0., 1., 2., 3.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 1,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![2., 3., 4., 5.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 2,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![4., 5., 6., 7.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        let mut accu = FirstDerivativeAccu::new(3, &BandDistance::EquallySpaced { distance: 3. });
+
+        accu.add_tile(data.remove(0)).unwrap();
+        assert!(accu.next_band_tile().is_none());
+
+        accu.add_tile(data.remove(0)).unwrap();
+        assert!(accu
+            .next_band_tile()
+            .unwrap()
+            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            }));
+
+        accu.add_tile(data.remove(0)).unwrap();
+        assert!(accu
+            .next_band_tile()
+            .unwrap()
+            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 1,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            }),);
+        assert!(accu
+            .next_band_tile()
+            .unwrap()
+            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 2,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
@@ -1014,7 +1149,9 @@ mod tests {
 
         let band_neighborhood_aggregate: Box<dyn RasterOperator> = BandNeighborhoodAggregate {
             params: BandNeighborhoodAggregateParams {
-                aggregate: NeighborHoodAggregate::FirstDerivative,
+                aggregate: NeighborHoodAggregate::FirstDerivative {
+                    band_distance: BandDistance::EquallySpaced { distance: 1.0 },
+                },
             },
             sources: SingleRasterSource { raster: mrs1 },
         }
