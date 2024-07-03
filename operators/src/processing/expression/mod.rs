@@ -43,7 +43,7 @@ fn generate_expression_dependencies(
     ExpressionDependencies::new().map_err(Arc::new)
 }
 
-fn get_expression_dependencies(
+pub fn get_expression_dependencies(
 ) -> Result<&'static ExpressionDependencies, Arc<ExpressionExecutionError>> {
     EXPRESSION_DEPENDENCIES
         .get_or_init(generate_expression_dependencies)
