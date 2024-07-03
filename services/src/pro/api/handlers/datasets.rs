@@ -291,7 +291,7 @@ mod tests {
     use crate::datasets::DatasetName;
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::ge_context;
-    use crate::util::tests::get_db_timestamp;
+    use crate::pro::util::tests::get_db_timestamp;
     use crate::{
         api::model::services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
         contexts::{Session, SessionContext, SessionId},

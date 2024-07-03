@@ -589,13 +589,3 @@ where
         Err(err) => std::panic::resume_unwind(err),
     }
 }
-
-#[cfg(test)]
-#[allow(clippy::missing_panics_doc)]
-pub async fn get_db_timestamp(
-    app_ctx: &crate::pro::contexts::ProPostgresContext<NoTls>,
-) -> geoengine_datatypes::primitives::DateTime {
-    let conn = app_ctx.pool.get().await.unwrap();
-    let get_time_stmt = conn.prepare("SELECT CURRENT_TIMESTAMP;").await.unwrap();
-    conn.query_one(&get_time_stmt, &[]).await.unwrap().get(0)
-}

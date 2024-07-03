@@ -1534,8 +1534,9 @@ mod tests {
     use crate::datasets::upload::UploadRootPath;
     use crate::error::Error::PermissionDenied;
     use crate::pro::users::{UserCredentials, UserRegistration};
+    use crate::pro::util::tests::get_db_timestamp;
     use crate::pro::util::tests::{admin_login, send_pro_test_request};
-    use crate::util::tests::{get_db_timestamp, SetMultipartBody, TestDataUploads};
+    use crate::util::tests::{SetMultipartBody, TestDataUploads};
     use crate::{
         contexts::{ApplicationContext, SessionContext},
         pro::{

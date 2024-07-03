@@ -451,6 +451,14 @@ where
 }
 
 #[cfg(test)]
+#[allow(clippy::missing_panics_doc)]
+pub async fn get_db_timestamp(app_ctx: &ProPostgresContext<NoTls>) -> DateTime {
+    let conn = app_ctx.pool.get().await.unwrap();
+    let get_time_stmt = conn.prepare("SELECT CURRENT_TIMESTAMP;").await.unwrap();
+    conn.query_one(&get_time_stmt, &[]).await.unwrap().get(0)
+}
+
+#[cfg(test)]
 pub(in crate::pro) mod mock_oidc {
     use crate::pro::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
     use crate::pro::util::config::Oidc;
