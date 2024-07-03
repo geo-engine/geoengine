@@ -18,7 +18,10 @@ use geoengine_datatypes::raster::{
 };
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
+use snafu::Snafu;
 use tokio::task::JoinHandle;
+
+const MAX_WINDOW_SIZE: u32 = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,6 +46,27 @@ impl OperatorName for BandNeighborhoodAggregate {
     const TYPE_NAME: &'static str = "BandNeighborhoodAggregate";
 }
 
+#[derive(Debug, Snafu)]
+#[snafu(
+    visibility(pub(crate)),
+    context(suffix(false)), // disables default `Snafu` suffix
+    module(error))
+]
+pub enum BandNeighborhoodAggregateError {
+    #[snafu(display(
+        "First derivative needs at least two input bands. Input raster has only one band.",
+    ))]
+    FirstDerivativeNeedsAtLeastTwoBands,
+
+    #[snafu(display("The window size for the average must be odd, found {window_size}."))]
+    AverageWindowSizeMustBeOdd { window_size: u32 },
+
+    #[snafu(display(
+        "The window size for is too large (max. {MAX_WINDOW_SIZE}), found {window_size}."
+    ))]
+    WindowSizeTooLarge { window_size: u32 },
+}
+
 #[typetag::serde]
 #[async_trait]
 impl RasterOperator for BandNeighborhoodAggregate {
@@ -57,9 +81,29 @@ impl RasterOperator for BandNeighborhoodAggregate {
 
         let in_descriptor = source.result_descriptor();
 
-        // TODO: ensure min. amound of bands
+        match self.params.aggregate {
+            NeighborHoodAggregate::FirstDerivative => {
+                if in_descriptor.bands.count() <= 1 {
+                    return Err(
+                        BandNeighborhoodAggregateError::FirstDerivativeNeedsAtLeastTwoBands.into(),
+                    );
+                }
+            }
+            NeighborHoodAggregate::Average { window_size } => {
+                if window_size % 2 == 0 {
+                    return Err(BandNeighborhoodAggregateError::AverageWindowSizeMustBeOdd {
+                        window_size,
+                    }
+                    .into());
+                }
 
-        // TODO: check window size of moving average is odd
+                if window_size > MAX_WINDOW_SIZE {
+                    return Err(
+                        BandNeighborhoodAggregateError::WindowSizeTooLarge { window_size }.into(),
+                    );
+                }
+            }
+        }
 
         let result_descriptor = in_descriptor.map_data_type(|_| RasterDataType::F64);
 

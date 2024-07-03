@@ -1,3 +1,4 @@
+use crate::processing::BandNeighborhoodAggregateError;
 use crate::util::statistics::StatisticsError;
 use bb8_postgres::bb8;
 use geoengine_datatypes::dataset::{DataId, NamedData};
@@ -503,6 +504,10 @@ pub enum Error {
     #[snafu(display("MustNotHappen: {message}, this is a bug"))]
     MustNotHappen {
         message: String,
+    },
+    #[snafu(context(false), display("BandNeighborhoodAggregate: {source}"))]
+    BandNeighborhoodAggregate {
+        source: BandNeighborhoodAggregateError,
     },
 }
 
