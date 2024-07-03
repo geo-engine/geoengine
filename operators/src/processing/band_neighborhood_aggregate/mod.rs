@@ -172,12 +172,12 @@ struct BandNeighborhoodAggregateStream<S, A, AF> {
 }
 
 enum State<A> {
-    Invalid,    // invalid state, used only during transition
-    Initial(A), // initial state, where we query the accu for the next output band
-    NextBandTile(JoinHandle<(Option<RasterTile2D<f64>>, A)>), // the accu is queried for the next output band and the result is awaited
-    ConsumeNext(A),                                           // consume the next input band
-    Accumulate(JoinHandle<(Result<()>, A)>), // accumulate the next input band into the accu
-    Finished,                                // the stream is finished
+    Invalid,                // invalid state, used only during transition
+    ComputeNextBandTile(A), // initial state, where we query the accu for the next output band
+    AwaitNextBandTile(JoinHandle<(Option<RasterTile2D<f64>>, A)>), // the accu is queried for the next output band and the result is awaited
+    ConsumeNextSourceBandTile(A),                                  // consume the next input band
+    AwaitAccumulate(JoinHandle<(Result<()>, A)>), // accumulate the next input band into the accu
+    Finished,                                     // the stream is finished
 }
 
 impl<S, A, AF> BandNeighborhoodAggregateStream<S, A, AF>
@@ -192,7 +192,7 @@ where
             current_input_band_idx: 0,
             current_output_band_idx: 0,
             num_bands,
-            state: State::Initial(new_accu_fn()),
+            state: State::ConsumeNextSourceBandTile(new_accu_fn()),
             new_accu_fn,
         }
     }
@@ -202,7 +202,6 @@ trait Accu {
     fn add_tile(&mut self, tile: RasterTile2D<f64>) -> Result<()>;
     // try to produce the next band, returns None when the accu is not yet ready (needs more bands)
     // this method also removes all bands that are not longer needed for future bands
-
     fn next_band_tile(&mut self) -> Option<RasterTile2D<f64>>;
 }
 
@@ -216,7 +215,6 @@ where
 {
     type Item = Result<RasterTile2D<f64>>;
 
-    #[allow(clippy::too_many_lines)] // TODO: refactor
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let BandNeighborhoodAggregateStreamProjection {
             mut input_stream,
@@ -229,120 +227,44 @@ where
 
         // process in a loop to step through the state machine until a `Poll` is returned
         loop {
-            match std::mem::replace(state, State::Invalid) {
-                State::Initial(mut accu) => {
-                    // query the accc for a tile
-                    let fut = crate::util::spawn_blocking(move || (accu.next_band_tile(), accu));
-
-                    *state = State::NextBandTile(fut);
+            let (new_state, poll) = match std::mem::replace(state, State::Invalid) {
+                State::ComputeNextBandTile(accu) => (
+                    compute_next_band_tile(
+                        current_output_band_idx,
+                        num_bands,
+                        current_input_band_idx,
+                        accu,
+                        new_accu_fn,
+                    ),
+                    None,
+                ),
+                State::AwaitNextBandTile(fut) => {
+                    await_next_band_tile(fut, cx, current_output_band_idx)
                 }
-                State::NextBandTile(mut fut) => {
-                    // await the `next_band_tile` future
-                    let next = match fut.poll_unpin(cx) {
-                        Poll::Ready(next) => next,
-                        Poll::Pending => {
-                            *state = State::NextBandTile(fut);
-                            return Poll::Pending;
-                        }
-                    };
-
-                    let (next_band_tile, mut accu) = match next {
-                        Ok(next) => next,
-                        Err(e) => {
-                            *state = State::Finished;
-                            return Poll::Ready(Some(Err(e.into())));
-                        }
-                    };
-
-                    if let Some(next_band_tile) = next_band_tile {
-                        // the accu has a tile to output
-                        debug_assert!(
-                            next_band_tile.band == *current_output_band_idx,
-                            "unexpected output band index"
-                        );
-                        *current_output_band_idx += 1;
-                        *state = State::Initial(accu);
-                        return Poll::Ready(Some(Ok(next_band_tile)));
-                    }
-
-                    // nothing in the accu, we either need more inputs or are done with all bands of the tile
-
-                    if *current_output_band_idx >= *num_bands {
-                        // all output bands were produced, reset the accu for the next tile
-                        debug_assert!(
-                            *current_input_band_idx == *num_bands,
-                            "not all bands were consumed before finishing"
-                        );
-
-                        accu = new_accu_fn();
-                        *current_input_band_idx = 0;
-                        *current_output_band_idx = 0;
-                    }
-
-                    *state = State::ConsumeNext(accu);
-                }
-                State::ConsumeNext(mut accu) => {
-                    // await the next input tile
-                    let tile = match input_stream.as_mut().poll_next(cx) {
-                        Poll::Ready(tile) => tile,
-                        Poll::Pending => {
-                            *state = State::ConsumeNext(accu);
-                            return Poll::Pending;
-                        }
-                    };
-
-                    let tile = match tile {
-                        Some(Ok(tile)) => tile,
-                        Some(Err(e)) => {
-                            *state = State::Finished;
-                            return Poll::Ready(Some(Err(e)));
-                        }
-                        None => {
-                            if *current_input_band_idx > 0
-                                && *current_input_band_idx < *num_bands - 1
-                            {
-                                *state = State::Finished;
-                                // stream must not end in the middle of a tile
-                                return Poll::Ready(Some(Err(
-                                    crate::error::Error::MustNotHappen {
-                                        message: "Unexpected end of stream".to_string(),
-                                    },
-                                )));
-                            }
-
-                            // stream ended properly
-                            *state = State::Finished;
-                            return Poll::Ready(None);
-                        }
-                    };
-
-                    debug_assert!(
-                        tile.band == *current_input_band_idx,
-                        "unexpected input band index"
+                State::ConsumeNextSourceBandTile(accu) => {
+                    let (new_state, poll, new_input_band_index) = consume_next_source_band_tile(
+                        input_stream.as_mut(),
+                        cx,
+                        accu,
+                        *current_input_band_idx,
+                        *num_bands,
                     );
+                    *current_input_band_idx = new_input_band_index;
 
-                    // accumulate the input tile asynchronously
-                    let fut = crate::util::spawn_blocking(move || (accu.add_tile(tile), accu));
-                    *state = State::Accumulate(fut);
-                    *current_input_band_idx += 1;
+                    (new_state, poll)
                 }
-                State::Accumulate(mut fut) => {
+                State::AwaitAccumulate(mut fut) => {
                     // await the `add_tile` future
                     match fut.poll_unpin(cx) {
-                        Poll::Ready(Ok((Ok(()), accu))) => *state = State::Initial(accu),
+                        Poll::Ready(Ok((Ok(()), accu))) => (State::ComputeNextBandTile(accu), None),
                         Poll::Ready(Ok((Err(e), _))) => {
-                            *state = State::Finished;
-                            return Poll::Ready(Some(Err(e)));
+                            (State::Finished, Some(Poll::Ready(Some(Err(e)))))
                         }
                         Poll::Ready(Err(e)) => {
-                            *state = State::Finished;
-                            return Poll::Ready(Some(Err(e.into())));
+                            (State::Finished, Some(Poll::Ready(Some(Err(e.into())))))
                         }
-                        Poll::Pending => {
-                            *state = State::Accumulate(fut);
-                            return Poll::Pending;
-                        }
-                    };
+                        Poll::Pending => (State::AwaitAccumulate(fut), Some(Poll::Pending)),
+                    }
                 }
                 State::Finished => {
                     *state = State::Finished;
@@ -356,17 +278,164 @@ where
                     })));
                 }
             };
+
+            *state = new_state;
+            if let Some(poll) = poll {
+                return poll;
+            }
         }
     }
 }
 
-// Approximate the first derivative using the central difference method
-// f′(x_i​) ≈ (​y_{i+1} ​ − y_{i−1​​}) / (x_{i+1}​ − x_{i−1})
-// and forward/backward difference for the endpoints
-// f′(x_1​) ≈ (y_2 - y_1) / (x_2 - x_1)
-// f′(x_n​) ≈ (y_n - y_{n-1}) / (x_n - x_{n-1})
+type PollResult = Poll<Option<Result<RasterTile2D<f64>>>>;
+
+fn await_next_band_tile<A>(
+    mut fut: JoinHandle<(Option<RasterTile2D<f64>>, A)>,
+    cx: &mut Context,
+    current_output_band_idx: &mut u32,
+) -> (State<A>, Option<PollResult>)
+where
+    A: Accu,
+{
+    let next = match fut.poll_unpin(cx) {
+        Poll::Ready(next) => next,
+        Poll::Pending => {
+            return (State::AwaitNextBandTile(fut), Some(Poll::Pending));
+        }
+    };
+
+    let (next_band_tile, accu) = match next {
+        Ok(next) => next,
+        Err(e) => {
+            return (State::Finished, Some(Poll::Ready(Some(Err(e.into())))));
+        }
+    };
+
+    if let Some(next_band_tile) = next_band_tile {
+        // the accu has a tile to output
+        debug_assert!(
+            next_band_tile.band == *current_output_band_idx,
+            "unexpected output band index"
+        );
+        *current_output_band_idx += 1;
+        return (
+            State::ComputeNextBandTile(accu),
+            Some(Poll::Ready(Some(Ok(next_band_tile)))),
+        );
+    }
+
+    // nothing in the accu, we either need more inputs or are done with all bands of the tile
+    (State::ConsumeNextSourceBandTile(accu), None)
+}
+
+fn compute_next_band_tile<A, AF>(
+    current_output_band_idx: &mut u32,
+    num_bands: &mut u32,
+    current_input_band_idx: &mut u32,
+    mut accu: A,
+    new_accu_fn: &mut AF,
+) -> State<A>
+where
+    A: Accu + Send + 'static,
+    AF: Fn() -> A,
+{
+    // only check accu if there are still more bands to produce for the current tile, otherwise go to consume next
+    if *current_output_band_idx >= *num_bands {
+        // all output bands were produced, reset the accu for the next tile
+        debug_assert!(
+            *current_input_band_idx == *num_bands,
+            "not all bands were consumed before finishing"
+        );
+
+        accu = new_accu_fn();
+        *current_input_band_idx = 0;
+        *current_output_band_idx = 0;
+
+        State::ConsumeNextSourceBandTile(accu)
+    } else {
+        // query the accc for a tile
+        let fut = crate::util::spawn_blocking(move || (accu.next_band_tile(), accu));
+
+        State::AwaitNextBandTile(fut)
+    }
+}
+
+fn consume_next_source_band_tile<S, A>(
+    input_stream: Pin<&mut S>,
+    cx: &mut Context,
+    mut accu: A,
+    current_input_band_idx: u32,
+    num_bands: u32,
+) -> (State<A>, Option<PollResult>, u32)
+where
+    S: Stream<Item = Result<RasterTile2D<f64>>> + Unpin,
+    A: Accu + Send + 'static,
+{
+    // await the next input tile
+    let tile = match input_stream.poll_next(cx) {
+        Poll::Ready(tile) => tile,
+        Poll::Pending => {
+            return (
+                State::ConsumeNextSourceBandTile(accu),
+                Some(Poll::Pending),
+                current_input_band_idx,
+            );
+        }
+    };
+
+    let tile = match tile {
+        Some(Ok(tile)) => tile,
+        Some(Err(e)) => {
+            return (
+                State::Finished,
+                Some(Poll::Ready(Some(Err(e)))),
+                current_input_band_idx,
+            );
+        }
+        None => {
+            if current_input_band_idx > 0 && current_input_band_idx < num_bands - 1 {
+                // stream must not end in the middle of a tile
+                return (
+                    State::Finished,
+                    Some(Poll::Ready(Some(Err(crate::error::Error::MustNotHappen {
+                        message: "Unexpected end of stream".to_string(),
+                    })))),
+                    current_input_band_idx,
+                );
+            }
+
+            // stream ended properly
+            return (
+                State::Finished,
+                Some(Poll::Ready(None)),
+                current_input_band_idx,
+            );
+        }
+    };
+
+    debug_assert!(
+        tile.band == current_input_band_idx,
+        "unexpected input band index"
+    );
+
+    // accumulate the input tile asynchronously
+    let fut = crate::util::spawn_blocking(move || (accu.add_tile(tile), accu));
+
+    (
+        State::AwaitAccumulate(fut),
+        None,
+        current_input_band_idx + 1,
+    )
+}
+
+/// Approximate the first derivative using the central difference method
+/// `f′(x_i​) ≈ (​y_{i+1} ​ − y_{i−1​​}) / (x_{i+1}​ − x_{i−1})`
+/// and forward/backward difference for the endpoints
+/// `f′(x_1​) ≈ (y_2 - y_1) / (x_2 - x_1)`
+/// `f′(x_n​) ≈ (y_n - y_{n-1}) / (x_n - x_{n-1})`
 #[derive(Clone)]
 pub struct FirstDerivativeAccu {
+    /// hold the last three input bands to compute the first derivative
     input_band_tiles: VecDeque<(u32, RasterTile2D<f64>)>,
     output_band_idx: u32,
     num_bands: u32,
@@ -391,6 +460,7 @@ impl Accu for FirstDerivativeAccu {
 
     fn next_band_tile(&mut self) -> Option<RasterTile2D<f64>> {
         if self.output_band_idx >= self.num_bands {
+            debug_assert!(false, "no more bands to produce");
             return None;
         }
 
@@ -424,6 +494,7 @@ impl Accu for FirstDerivativeAccu {
         out.band = self.output_band_idx;
 
         if self.output_band_idx != 0 {
+            // unless we are at the first output band, we no longer need the first input band
             self.input_band_tiles.pop_front();
         }
 
@@ -433,8 +504,8 @@ impl Accu for FirstDerivativeAccu {
     }
 }
 
-// Compute the moving average of the bands with a given window size
-// For the borders, the window is reduced to the available bands
+/// Compute the moving average of the bands with a given window size
+/// For the borders, the window is reduced to the available bands
 pub struct MovingAverageAccu {
     input_band_tiles: VecDeque<(u32, RasterTile2D<f64>)>,
     output_band_idx: u32,
@@ -463,6 +534,7 @@ impl Accu for MovingAverageAccu {
 
     fn next_band_tile(&mut self) -> Option<RasterTile2D<f64>> {
         if self.output_band_idx >= self.num_source_bands {
+            debug_assert!(false, "no more bands to produce");
             return None;
         }
 
@@ -536,6 +608,7 @@ impl Accu for MovingAverageAccu {
 
         // remove tile if we no longer need it
         if self.output_band_idx >= self.window_size / 2 {
+            // unless we are at the first output bands, we no longer need the first input band
             self.input_band_tiles.pop_front();
         }
 
@@ -656,7 +729,7 @@ mod tests {
                 cache_hint: CacheHint::default(),
             }));
 
-        assert!(accu.next_band_tile().is_none());
+        assert!(std::panic::catch_unwind(move || accu.next_band_tile()).is_err());
     }
 
     #[test]
@@ -748,7 +821,7 @@ mod tests {
                 cache_hint: CacheHint::default(),
             }));
 
-        assert!(accu.next_band_tile().is_none());
+        assert!(std::panic::catch_unwind(move || accu.next_band_tile()).is_err());
     }
 
     #[tokio::test]
