@@ -168,8 +168,8 @@ impl RasterOperator for Onnx {
             bbox: in_descriptor.bbox,
             resolution: in_descriptor.resolution,
             bands: vec![RasterBandDescriptor::new(
-                "prediction".to_string(),
-                Measurement::Unitless, // TODO: get output measurement from model metadata
+                "prediction".to_string(), // TODO: parameter of the operator?
+                Measurement::Unitless,    // TODO: get output measurement from model metadata
             )]
             .try_into()?,
         };
@@ -280,7 +280,12 @@ where
             .raster_query(source_query, ctx)
             .await?
             .chunks(num_bands) // chunk the tiles to get all bands for a spatial index at once
+            // TODO: this does not scale for large number of bands.
+            //       In that case we would need to collect only a fixed number of pixel from each each,
+            //       and repeat the process until the whole tile is finished
             .map(move |chunk| {
+                // TODO: spawn task and await
+
                 if chunk.len() != num_bands {
                     // if there are not exactly N tiles, it should mean the last tile was an error and the chunker ended prematurely
                     if let Some(Err(e)) = chunk.into_iter().last() {
@@ -305,9 +310,11 @@ where
 
                 // TODO: collect into a ndarray directly
 
+                // TODO: use flat array instead of nested Vecs
                 let mut pixels: Vec<Vec<TIn>> = vec![vec![TIn::zero(); num_bands]; width * height];
 
                 for (tile_index, tile) in tiles.into_iter().enumerate() {
+                    // TODO: use map_elements or map_elements_parallel to avoid the double loop
                     for y in 0..height {
                         for x in 0..width {
                             let pixel_index = y * width + x;
@@ -343,6 +350,7 @@ where
                 // this works for 1d tensors as well as 2d tensors with a single column
                 let predictions = predictions.into_owned().into_raw_vec();
 
+                // TODO: create no data mask from input no data masks
                 Ok(RasterTile2D::new(
                     time,
                     tile_position,
@@ -541,6 +549,8 @@ mod tests {
 
         assert!(predictions.abs_diff_eq(&array![0.4f32, 0.5, 0.6, 0.5], 1e-6));
     }
+
+    // TOODO: add test using neural network model
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
