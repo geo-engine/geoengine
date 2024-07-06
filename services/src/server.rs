@@ -4,6 +4,7 @@ use crate::contexts::{PostgresContext, SimpleApplicationContext};
 use crate::error::{Error, Result};
 use crate::util::config;
 use crate::util::config::get_config_element;
+use crate::util::middleware::OutputRequestId;
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
     log_server_info, render_404, render_405, serve_openapi_json, CustomRootSpanBuilder,
@@ -142,6 +143,7 @@ where
 
         App::new()
             .app_data(wrapped_ctx.clone())
+            .wrap(OutputRequestId::default())
             .wrap(
                 middleware::ErrorHandlers::default()
                     .handler(http::StatusCode::NOT_FOUND, render_404)
