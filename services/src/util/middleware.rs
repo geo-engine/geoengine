@@ -9,7 +9,7 @@ use futures_util::future::LocalBoxFuture;
 use tracing::{event_enabled, Level};
 use tracing_actix_web::RequestId;
 
-const REQUEST_ID_HEADER: &str = "x-request-header";
+const REQUEST_ID_HEADER: &str = "x-request-id";
 
 // There are two steps in middleware processing.
 // 1. Middleware initialization, middleware factory gets called with
