@@ -983,7 +983,7 @@ mod tests {
 <?xml version="1.0" encoding="UTF-8"?>
     <ServiceExceptionReport version="1.3.0" xmlns="http://www.opengis.net/ogc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/ogc https://cdc.dwd.de/geoserver/schemas/wms/1.3.0/exceptions_1_3_0.xsd">
     <ServiceException>
-        Operator: DataTypeError: No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }
+        No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }
     </ServiceException>
 </ServiceExceptionReport>"#
         );
@@ -1045,7 +1045,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(res, 200, "Operator", "Operator: DataTypeError: No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
+        ErrorResponse::assert(res, 200, "Operator", "No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
     }
 
     #[ge_context::test]

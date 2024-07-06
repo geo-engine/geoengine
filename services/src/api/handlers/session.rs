@@ -256,7 +256,7 @@ mod tests {
             res,
             401,
             "Unauthorized",
-            "Authorization error *\n\nCaused by this error:\n  1: Anonymous access is disabled, please log in\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.",
+            "Authorization error: Anonymous access is disabled, please log in",
         )
         .await;
     }

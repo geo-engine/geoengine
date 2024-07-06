@@ -6,11 +6,11 @@ use crate::pro::api::ApiDoc;
 
 use crate::pro::contexts::ProPostgresContext;
 use crate::util::config::{self, get_config_element};
+use crate::util::middleware::OutputRequestId;
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
     log_server_info, render_404, render_405, serve_openapi_json, CustomRootSpanBuilder,
 };
-use crate::util::middleware::OutputRequestId;
 use actix_files::Files;
 use actix_web::{http, middleware, web, App, FromRequest, HttpServer};
 
@@ -105,7 +105,7 @@ where
 
         App::new()
             .app_data(wrapped_ctx.clone())
-            .wrap(OutputRequestId::default())
+            .wrap(OutputRequestId)
             .wrap(
                 middleware::ErrorHandlers::default()
                     .handler(http::StatusCode::NOT_FOUND, render_404)

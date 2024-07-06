@@ -11,12 +11,13 @@ use geoengine_datatypes::dataset::LayerId;
 use geoengine_datatypes::error::ErrorSource;
 use ordered_float::FloatIsNan;
 use snafu::prelude::*;
+use std::fmt;
 use std::path::PathBuf;
 use strum::IntoStaticStr;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Debug, Snafu, IntoStaticStr)]
+#[derive(Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum Error {
@@ -526,6 +527,12 @@ impl actix_web::error::ResponseError for Error {
             Error::Duplicate { reason: _ } => StatusCode::CONFLICT,
             _ => StatusCode::BAD_REQUEST,
         }
+    }
+}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&snafu::Report::from_error(self), f)
     }
 }
 

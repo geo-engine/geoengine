@@ -621,7 +621,7 @@ mod tests {
             status,
             json!({
                 "error": "Task",
-                "message": format!("TaskError *\n\nCaused by this error:\n  1: Task was already aborted by the user: {task_id}\n\nNOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior."),
+                "message": format!("TaskError: Task was already aborted by the user: {task_id}"),
             })
         );
 

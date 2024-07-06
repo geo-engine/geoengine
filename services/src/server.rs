@@ -143,7 +143,7 @@ where
 
         App::new()
             .app_data(wrapped_ctx.clone())
-            .wrap(OutputRequestId::default())
+            .wrap(OutputRequestId)
             .wrap(
                 middleware::ErrorHandlers::default()
                     .handler(http::StatusCode::NOT_FOUND, render_404)

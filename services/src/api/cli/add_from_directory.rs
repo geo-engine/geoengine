@@ -3,7 +3,6 @@ use crate::error::Result;
 use crate::layers::external::TypedDataProviderDefinition;
 use crate::layers::storage::LayerProviderDb;
 use log::{error, info, warn};
-use snafu::Report;
 use std::ffi::OsStr;
 use std::{
     fs::{self, DirEntry, File},
@@ -38,9 +37,9 @@ pub async fn add_datasets_from_directory<D: DatasetDb>(dataset_db: &mut D, file_
             Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
                 if let Err(e) = add_dataset_definition_from_dir_entry(dataset_db, &entry).await {
                     warn!(
-                        "Skipped adding dataset from file `{:?}` error `{}`",
+                        "Skipped adding dataset from file `{:?}` error `{:?}`",
                         entry.path(),
-                        Report::from_error(e)
+                        e
                     );
                 }
             }
@@ -80,9 +79,9 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_p
                     Ok(()) => info!("Added provider from file `{:?}`", entry.path()),
                     Err(e) => {
                         warn!(
-                            "Skipped adding provider from file `{:?}` error: `{}`",
+                            "Skipped adding provider from file `{:?}` error: `{:?}`",
                             entry.path(),
-                            Report::from_error(e)
+                            e
                         );
                     }
                 }

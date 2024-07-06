@@ -1,7 +1,9 @@
 use std::future::{ready, Ready};
 
 use actix_web::{
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform}, http::header::{HeaderName, HeaderValue}, Error, HttpMessage
+    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
+    http::header::{HeaderName, HeaderValue},
+    Error, HttpMessage,
 };
 use futures_util::future::LocalBoxFuture;
 use tracing::{event_enabled, Level};
@@ -11,7 +13,6 @@ use tracing_actix_web::RequestId;
 // 1. Middleware initialization, middleware factory gets called with
 //    next service in chain as parameter.
 // 2. Middleware's call method gets called with normal request.
-#[derive(Default)]
 pub struct OutputRequestId;
 
 // Middleware factory is `Transform` trait
