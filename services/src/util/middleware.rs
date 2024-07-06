@@ -9,6 +9,8 @@ use futures_util::future::LocalBoxFuture;
 use tracing::{event_enabled, Level};
 use tracing_actix_web::RequestId;
 
+const REQUEST_ID_HEADER: &str = "x-request-header";
+
 // There are two steps in middleware processing.
 // 1. Middleware initialization, middleware factory gets called with
 //    next service in chain as parameter.
@@ -35,7 +37,8 @@ where
             service,
             // Only send header if request_id gets logged, because
             // otherwise correlation is impossible anyway.
-            enabled: event_enabled!(target: "tracing_actix_web::middleware", Level::WARN, request_id),
+            enabled: event_enabled!(target: "tracing_actix_web::middleware", Level::WARN, request_id)
+                || cfg!(test),
         }))
     }
 }
@@ -76,7 +79,7 @@ where
 
             if !res.status().is_success() {
                 res.headers_mut().insert(
-                    HeaderName::from_static("x-request-id"),
+                    HeaderName::from_static(REQUEST_ID_HEADER),
                     HeaderValue::from_str(request_id.to_string().as_str())
                         .expect("uuid is always valid"),
                 );
@@ -84,5 +87,35 @@ where
 
             Ok(res)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use actix_web::test;
+    use tokio_postgres::NoTls;
+
+    use crate::{contexts::PostgresContext, ge_context, util::tests::send_test_request};
+
+    #[ge_context::test]
+    async fn it_sends_request_id_on_error(app_ctx: PostgresContext<NoTls>) {
+        let req = test::TestRequest::get().uri("/asdf1234_notfound");
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(!res.status().is_success());
+        assert!(res.headers().get(REQUEST_ID_HEADER).is_some());
+    }
+
+    #[ge_context::test]
+    async fn it_hides_request_id_on_success(app_ctx: PostgresContext<NoTls>) {
+        let req = test::TestRequest::get().uri("/dummy");
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(res.status().is_success());
+        assert!(res.headers().get(REQUEST_ID_HEADER).is_none());
     }
 }
