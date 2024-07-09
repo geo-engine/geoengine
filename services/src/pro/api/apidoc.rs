@@ -54,6 +54,7 @@ use crate::layers::listing::{
 };
 use crate::pro;
 use crate::pro::api::handlers::users::{Quota, UpdateQuota};
+use crate::pro::datasets::DatasetDeletionType;
 use crate::pro::datasets::Expiration;
 use crate::pro::datasets::ExpirationChange;
 use crate::pro::permissions::{
@@ -376,6 +377,7 @@ use utoipa::{Modify, OpenApi};
             DataPath,
             Expiration,
             ExpirationChange,
+            DatasetDeletionType,
 
             PlotOutputFormat,
             WrappedPlotOutput,

@@ -193,14 +193,12 @@ where
     request_body(content = ExpirationChange, examples(
     ("Delete" = (value = json!({
             "type": "setExpire",
-            "delete_record": true,
-            "delete_data": true
+            "deletionType": "DeleteData"
             }))),
     ("Expire" = (value = json!({
             "type": "setExpire",
-            "delete_record": true,
-            "delete_data": true,
-            "deletion_timestamp": "2024-06-28T14:52:39.655Z"
+            "deletionType": "DeleteRecordAndData",
+            "deletionTimestamp": "2024-06-28T14:52:39.655Z"
             }))),
     ("Undo Expire" = (value = json!({
             "type": "unsetExpire"

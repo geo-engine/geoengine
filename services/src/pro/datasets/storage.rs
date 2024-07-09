@@ -14,6 +14,7 @@ use crate::error::Result;
 use crate::pro::datasets::storage::DatasetDeletionType::{DeleteData, DeleteRecordAndData};
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct Expiration {
     pub deletion_timestamp: Option<DateTime>,
     pub deletion_type: DatasetDeletionType,
