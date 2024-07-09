@@ -26,12 +26,12 @@ const MAX_WINDOW_SIZE: u32 = 8;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BandNeighborhoodAggregateParams {
-    pub aggregate: NeighborHoodAggregate,
+    pub aggregate: NeighborhoodAggregate,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
-pub enum NeighborHoodAggregate {
+pub enum NeighborhoodAggregate {
     // approximate the first derivative using the central difference method
     FirstDerivative { band_distance: BandDistance },
     // TODO: SecondDerivative,
@@ -93,7 +93,7 @@ impl RasterOperator for BandNeighborhoodAggregate {
         let in_descriptor = source.result_descriptor();
 
         match &self.params.aggregate {
-            NeighborHoodAggregate::FirstDerivative { band_distance } => {
+            NeighborhoodAggregate::FirstDerivative { band_distance } => {
                 if in_descriptor.bands.count() <= 1 {
                     return Err(
                         BandNeighborhoodAggregateError::FirstDerivativeNeedsAtLeastTwoBands.into(),
@@ -111,7 +111,7 @@ impl RasterOperator for BandNeighborhoodAggregate {
                     }
                 }
             }
-            NeighborHoodAggregate::Average { window_size } => {
+            NeighborhoodAggregate::Average { window_size } => {
                 if window_size % 2 == 0 {
                     return Err(BandNeighborhoodAggregateError::AverageWindowSizeMustBeOdd {
                         window_size: *window_size,
@@ -145,7 +145,7 @@ pub struct InitializedBandNeighborhoodAggregate {
     name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
-    aggregate: NeighborHoodAggregate,
+    aggregate: NeighborhoodAggregate,
 }
 
 impl InitializedRasterOperator for InitializedBandNeighborhoodAggregate {
@@ -172,14 +172,14 @@ impl InitializedRasterOperator for InitializedBandNeighborhoodAggregate {
 pub(crate) struct BandNeighborhoodAggregateProcessor {
     source: Box<dyn RasterQueryProcessor<RasterType = f64>>,
     result_descriptor: RasterResultDescriptor,
-    aggregate: NeighborHoodAggregate,
+    aggregate: NeighborhoodAggregate,
 }
 
 impl BandNeighborhoodAggregateProcessor {
     pub fn new(
         source: Box<dyn RasterQueryProcessor<RasterType = f64>>,
         result_descriptor: RasterResultDescriptor,
-        aggregate: NeighborHoodAggregate,
+        aggregate: NeighborhoodAggregate,
     ) -> Self {
         Self {
             source,
@@ -201,7 +201,7 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
         // TODO: ensure min amount of bands in query
 
         Ok(match &self.aggregate {
-            NeighborHoodAggregate::FirstDerivative { band_distance } => {
+            NeighborhoodAggregate::FirstDerivative { band_distance } => {
                 let band_distance = band_distance.clone();
                 Box::pin(
                     BandNeighborhoodAggregateStream::<_, FirstDerivativeAccu, _>::new(
@@ -216,7 +216,7 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
                     ),
                 )
             }
-            NeighborHoodAggregate::Average { window_size } => Box::pin(
+            NeighborhoodAggregate::Average { window_size } => Box::pin(
                 BandNeighborhoodAggregateStream::<_, MovingAverageAccu, _>::new(
                     self.source.raster_query(query, ctx).await?,
                     self.result_descriptor.bands.count(),
@@ -1149,7 +1149,7 @@ mod tests {
 
         let band_neighborhood_aggregate: Box<dyn RasterOperator> = BandNeighborhoodAggregate {
             params: BandNeighborhoodAggregateParams {
-                aggregate: NeighborHoodAggregate::FirstDerivative {
+                aggregate: NeighborhoodAggregate::FirstDerivative {
                     band_distance: BandDistance::EquallySpaced { distance: 1.0 },
                 },
             },
