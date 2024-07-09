@@ -1511,13 +1511,26 @@ where
         Ok(())
     }
 
-    async fn clear_expired_datasets(&self) -> Result<usize> {
+    async fn clear_expired_datasets(&self) -> Result<u64> {
         ensure!(self.session.is_admin(), error::PermissionDenied);
 
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
         self.update_datasets_status_in_tx(&tx).await?;
+
+        let update_expired = tx
+            .prepare(
+                "
+                UPDATE
+                    uploaded_user_datasets
+                SET
+                    status = $1
+                WHERE
+                    status = $2 AND deleted IS NOT NULL;",
+            )
+            .await?;
+        let mut updated = tx.execute(&update_expired, &[&Deleted, &Expired]).await?;
 
         let marked_datasets = tx
             .prepare(
@@ -1527,7 +1540,7 @@ where
                 FROM
                     uploaded_user_datasets
                 WHERE
-                    status = $1 AND deletion_type IS NOT NULL;",
+                    status = $1 AND deleted IS NULL;",
             )
             .await?;
 
@@ -1546,6 +1559,7 @@ where
             } else {
                 deleted.push(upload_id);
             }
+            updated += 1; //Could hypothetically overflow
         }
 
         if !deleted.is_empty() {
@@ -1555,9 +1569,9 @@ where
                 UPDATE
                     uploaded_user_datasets
                 SET
-                    status = $1
+                    status = $1, deleted = CURRENT_TIMESTAMP
                 WHERE
-                    status = $2 AND deletion_type IS NOT NULL AND upload_id = ANY($3);",
+                    status = $2 AND upload_id = ANY($3);",
                 )
                 .await?;
             tx.execute(&mark_deletion, &[&Deleted, &Expired, &deleted])
@@ -1571,9 +1585,9 @@ where
                 UPDATE
                     uploaded_user_datasets
                 SET
-                    status = $1
+                    status = $1, deleted = CURRENT_TIMESTAMP
                 WHERE
-                    status = $2 AND deletion_type IS NOT NULL AND upload_id = ANY($3);",
+                    status = $2 AND upload_id = ANY($3);",
                 )
                 .await?;
             tx.execute(
@@ -1585,7 +1599,7 @@ where
 
         tx.commit().await?;
 
-        Ok(deleted.len())
+        Ok(updated)
     }
 }
 
@@ -2158,6 +2172,12 @@ mod tests {
             &db.load_dataset(&fair2full.dataset_id).await.unwrap(),
             &fair2full
         ));
+
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_ctx = app_ctx.session_context(admin_session.clone());
+        let deleted = admin_ctx.db().clear_expired_datasets().await.unwrap();
+        assert_eq!(deleted, 1);
+
         db.expire_uploaded_dataset(ChangeDatasetExpiration::delete_full(fair2full.dataset_id))
             .await
             .unwrap();
@@ -2165,6 +2185,9 @@ mod tests {
             db.load_dataset(&fair2full.dataset_id).await.unwrap_err(),
             UnknownDatasetId
         ));
+
+        let deleted = admin_ctx.db().clear_expired_datasets().await.unwrap();
+        assert_eq!(deleted, 1);
 
         assert!(db
             .expire_uploaded_dataset(ChangeDatasetExpiration::delete_fair(fair2full.dataset_id))
@@ -2190,10 +2213,8 @@ mod tests {
 
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
-        let admin_session = admin_login(&app_ctx).await;
-        let admin_ctx = app_ctx.session_context(admin_session.clone());
         let deleted = admin_ctx.db().clear_expired_datasets().await.unwrap();
-        assert_eq!(deleted, 1);
+        assert_eq!(deleted, 0);
 
         let listing = db
             .list_datasets(default_list_options.clone())

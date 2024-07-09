@@ -173,5 +173,5 @@ pub trait UploadedUserDatasetStore {
 
     async fn update_datasets_status(&self) -> Result<()>;
 
-    async fn clear_expired_datasets(&self) -> Result<usize>;
+    async fn clear_expired_datasets(&self) -> Result<u64>;
 }
