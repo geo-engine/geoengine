@@ -237,6 +237,11 @@ CREATE TYPE "InternalUploadedDatasetStatus" AS ENUM (
     'DeletedWithError'
 );
 
+CREATE TYPE "DatasetDeletionType" AS ENUM (
+    'DeleteRecordAndData',
+    'DeleteData'
+);
+
 CREATE TABLE uploaded_user_datasets (
     user_id uuid,
     upload_id uuid,
@@ -245,7 +250,6 @@ CREATE TABLE uploaded_user_datasets (
     created timestamp with time zone NOT NULL,
     expiration timestamp with time zone,
     deleted timestamp with time zone,
-    delete_data boolean NOT NULL,
-    delete_record boolean NOT NULL,
+    deletion_type "DatasetDeletionType",
     PRIMARY KEY (user_id, dataset_id, upload_id)
 );

@@ -1,20 +1,28 @@
-use crate::datasets::storage::MetaDataDefinition;
-use crate::datasets::upload::UploadId;
-use crate::datasets::{AddDataset, DatasetIdAndName};
-use crate::error::Result;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::primitives::DateTime;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::Transaction;
 use utoipa::ToSchema;
 
+use geoengine_datatypes::dataset::DatasetId;
+use geoengine_datatypes::primitives::DateTime;
+
+use crate::datasets::storage::MetaDataDefinition;
+use crate::datasets::upload::UploadId;
+use crate::datasets::{AddDataset, DatasetIdAndName};
+use crate::error::Result;
+use crate::pro::datasets::storage::DatasetDeletionType::{DeleteData, DeleteRecordAndData};
+
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 pub struct Expiration {
     pub deletion_timestamp: Option<DateTime>,
-    pub delete_record: bool,
-    pub delete_data: bool,
+    pub deletion_type: DatasetDeletionType,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema, FromSql, ToSql)]
+pub enum DatasetDeletionType {
+    DeleteRecordAndData,
+    DeleteData,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -24,24 +32,12 @@ pub struct ChangeDatasetExpiration {
 }
 
 impl ChangeDatasetExpiration {
-    pub fn delete_meta(dataset_id: DatasetId) -> Self {
-        ChangeDatasetExpiration {
-            dataset_id,
-            expiration_change: ExpirationChange::SetExpire(Expiration {
-                deletion_timestamp: None,
-                delete_record: true,
-                delete_data: false,
-            }),
-        }
-    }
-
     pub fn delete_fair(dataset_id: DatasetId) -> Self {
         ChangeDatasetExpiration {
             dataset_id,
             expiration_change: ExpirationChange::SetExpire(Expiration {
                 deletion_timestamp: None,
-                delete_record: false,
-                delete_data: true,
+                deletion_type: DeleteData,
             }),
         }
     }
@@ -51,30 +47,7 @@ impl ChangeDatasetExpiration {
             dataset_id,
             expiration_change: ExpirationChange::SetExpire(Expiration {
                 deletion_timestamp: None,
-                delete_record: true,
-                delete_data: true,
-            }),
-        }
-    }
-
-    pub fn delete_none(dataset_id: DatasetId) -> Self {
-        ChangeDatasetExpiration {
-            dataset_id,
-            expiration_change: ExpirationChange::SetExpire(Expiration {
-                deletion_timestamp: None,
-                delete_record: false,
-                delete_data: false,
-            }),
-        }
-    }
-
-    pub fn expire_meta(dataset_id: DatasetId, timestamp: DateTime) -> Self {
-        ChangeDatasetExpiration {
-            dataset_id,
-            expiration_change: ExpirationChange::SetExpire(Expiration {
-                deletion_timestamp: Some(timestamp),
-                delete_record: true,
-                delete_data: false,
+                deletion_type: DeleteRecordAndData,
             }),
         }
     }
@@ -84,8 +57,7 @@ impl ChangeDatasetExpiration {
             dataset_id,
             expiration_change: ExpirationChange::SetExpire(Expiration {
                 deletion_timestamp: Some(timestamp),
-                delete_record: false,
-                delete_data: true,
+                deletion_type: DeleteData,
             }),
         }
     }
@@ -95,19 +67,7 @@ impl ChangeDatasetExpiration {
             dataset_id,
             expiration_change: ExpirationChange::SetExpire(Expiration {
                 deletion_timestamp: Some(timestamp),
-                delete_record: true,
-                delete_data: true,
-            }),
-        }
-    }
-
-    pub fn expire_none(dataset_id: DatasetId, timestamp: DateTime) -> Self {
-        ChangeDatasetExpiration {
-            dataset_id,
-            expiration_change: ExpirationChange::SetExpire(Expiration {
-                deletion_timestamp: Some(timestamp),
-                delete_record: false,
-                delete_data: false,
+                deletion_type: DeleteRecordAndData,
             }),
         }
     }
@@ -156,18 +116,12 @@ impl From<InternalUploadedDatasetStatus> for UploadedDatasetStatus {
     }
 }
 
-/// Storage of user-uploaded datasets
+/// internal functionality for transactional control of user-uploaded datasets db
+///
+/// In contrast to the `UploadedUserDatasetStore` this is not to be used by services but only by the `ProPostgresDb` internally.
+/// This is because services do not know about database transactions.
 #[async_trait]
-pub trait UploadedUserDatasetStore {
-    async fn add_uploaded_dataset(
-        &self,
-        upload_id: UploadId,
-        dataset: AddDataset,
-        meta_data: MetaDataDefinition,
-    ) -> Result<DatasetIdAndName>;
-
-    async fn expire_uploaded_dataset(&self, expire_dataset: ChangeDatasetExpiration) -> Result<()>;
-
+pub trait TxUploadedUserDatasetStore {
     async fn validate_expiration_request_in_tx(
         &self,
         tx: &Transaction,
@@ -181,17 +135,43 @@ pub trait UploadedUserDatasetStore {
         tx: &Transaction,
     ) -> Result<UploadedDatasetStatus>;
 
-    async fn update_dataset_status(&self, dataset_id: &DatasetId) -> Result<()>;
-
     async fn update_dataset_status_in_tx(
         &self,
         tx: &Transaction,
         dataset_id: &DatasetId,
     ) -> Result<()>;
 
-    async fn update_datasets_status(&self) -> Result<()>;
-
     async fn update_datasets_status_in_tx(&self, tx: &Transaction) -> Result<()>;
+
+    async fn admin_update_datasets_status_in_tx(&self, tx: &Transaction) -> Result<()>;
+    async fn set_expire_for_uploaded_dataset(
+        &self,
+        tx: &Transaction,
+        dataset_id: &DatasetId,
+        expiration: &Expiration,
+    ) -> Result<()>;
+    async fn unset_expire_for_uploaded_dataset(
+        &self,
+        tx: &Transaction,
+        dataset_id: &DatasetId,
+    ) -> Result<()>;
+}
+
+/// Storage of user-uploaded datasets
+#[async_trait]
+pub trait UploadedUserDatasetStore {
+    async fn add_uploaded_dataset(
+        &self,
+        upload_id: UploadId,
+        dataset: AddDataset,
+        meta_data: MetaDataDefinition,
+    ) -> Result<DatasetIdAndName>;
+
+    async fn expire_uploaded_dataset(&self, expire_dataset: ChangeDatasetExpiration) -> Result<()>;
+
+    async fn update_dataset_status(&self, dataset_id: &DatasetId) -> Result<()>;
+
+    async fn update_datasets_status(&self) -> Result<()>;
 
     async fn clear_expired_datasets(&self) -> Result<usize>;
 }
