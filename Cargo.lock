@@ -2883,6 +2883,7 @@ dependencies = [
  "snafu",
  "stream-cancel",
  "strum",
+ "strum_macros",
  "tempfile",
  "time",
  "tokio",

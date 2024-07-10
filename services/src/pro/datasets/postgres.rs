@@ -3,7 +3,9 @@ use crate::datasets::listing::Provenance;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::listing::{OrderBy, ProvenanceOutput};
 use crate::datasets::postgres::resolve_dataset_name_to_id;
-use crate::datasets::storage::{Dataset, DatasetDb, DatasetStore, MetaDataDefinition};
+use crate::datasets::storage::{
+    Dataset, DatasetDb, DatasetStore, MetaDataDefinition, ReservedTags,
+};
 use crate::datasets::upload::{delete_upload, FileId};
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
@@ -82,7 +84,10 @@ where
             pos += 1;
             (format!("AND d.tags @> ${pos}::text[]"), filter_tags.clone())
         } else {
-            ("AND NOT d.tags @> '{deleted}'::text[]".to_string(), vec![])
+            (
+                format!("AND NOT d.tags @> '{{{}}}'::text[]", ReservedTags::Deleted),
+                vec![],
+            )
         };
 
         let stmt = conn
@@ -1065,11 +1070,12 @@ where
 
         let tag_deletion = tx
             .prepare(
-                "
+                format!(
+                    "
             UPDATE
                 datasets
             SET
-                tags = tags || '{deleted}'
+                tags = tags || '{{{}}}'
             FROM
                 user_permitted_datasets p, uploaded_user_datasets u
             WHERE
@@ -1077,6 +1083,9 @@ where
                     AND p.dataset_id = datasets.id AND u.dataset_id = datasets.id
                     AND u.status = $3 AND u.expiration <= CURRENT_TIMESTAMP
                     AND u.deletion_type = $4;",
+                    ReservedTags::Deleted
+                )
+                .as_str(),
             )
             .await?;
         newly_expired_datasets += tx
@@ -1144,17 +1153,21 @@ where
 
             let tag_deletion = tx
                 .prepare(
-                    "
+                    format!(
+                        "
                 UPDATE
                     datasets
                 SET
-                    tags = tags || '{deleted}'
+                    tags = tags || '{{{}}}'
                 FROM
                     user_permitted_datasets p, uploaded_user_datasets u
                 WHERE
                     p.user_id = $1 AND p.dataset_id = datasets.id AND u.dataset_id = datasets.id
                         AND u.status = $2 AND u.expiration <= CURRENT_TIMESTAMP
                         AND u.deletion_type = $3;",
+                        ReservedTags::Deleted
+                    )
+                    .as_str(),
                 )
                 .await?;
             tx.execute(
@@ -1207,17 +1220,21 @@ where
 
         let tag_deletion = tx
             .prepare(
-                "
+                format!(
+                    "
             UPDATE
                 datasets
             SET
-                tags = tags || '{deleted}'
+                tags = tags || '{{{}}}'
             FROM
                 uploaded_user_datasets u
             WHERE
                 u.dataset_id = datasets.id
                     AND u.status = $1 AND u.expiration <= CURRENT_TIMESTAMP
                     AND u.deletion_type = $2;",
+                    ReservedTags::Deleted
+                )
+                .as_str(),
             )
             .await?;
         tx.execute(&tag_deletion, &[&Expires, &DeleteData]).await?;
@@ -1372,12 +1389,6 @@ where
             name,
             dataset.tags
         );
-
-        if let Some(tags) = &dataset.tags {
-            if tags.contains(&"deleted".to_string()) {
-                log::warn!("Adding a new dataset with a deleted tag");
-            }
-        }
 
         self.check_namespace(&name)?;
 
@@ -1900,14 +1911,15 @@ mod tests {
     }
 
     fn listing_not_deleted(dataset: &DatasetListing, origin: &UploadedTestDataset) -> bool {
-        dataset.name == origin.dataset_name && !dataset.tags.contains(&"deleted".to_owned())
+        dataset.name == origin.dataset_name
+            && !dataset.tags.contains(&ReservedTags::Deleted.to_string())
     }
 
     fn dataset_deleted(dataset: &Dataset, origin: &UploadedTestDataset) -> bool {
         let tags = dataset.tags.clone().unwrap();
         let mut num_deleted = 0;
         for tag in tags {
-            if tag == *"deleted" {
+            if tag == ReservedTags::Deleted.to_string() {
                 num_deleted += 1;
             }
         }

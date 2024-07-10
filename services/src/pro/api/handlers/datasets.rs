@@ -1,5 +1,6 @@
 use crate::api::handlers::datasets::add_tag;
 use crate::datasets::listing::DatasetProvider;
+use crate::datasets::storage::{check_reserved_tags, ReservedTags};
 use crate::datasets::upload::{UploadDb, UploadId};
 use crate::datasets::DatasetName;
 use crate::pro::datasets::{ChangeDatasetExpiration, ExpirationChange, UploadedUserDatasetStore};
@@ -167,7 +168,8 @@ where
     let db = app_ctx.session_context(session).db();
     let upload = db.load_upload(upload_id).await.context(UploadNotFound)?;
 
-    add_tag(&mut definition.properties, "upload".to_owned());
+    check_reserved_tags(&definition.properties.tags);
+    add_tag(&mut definition.properties, ReservedTags::Upload.to_string());
 
     adjust_meta_data_path(&mut definition.meta_data, &upload)
         .context(CannotResolveUploadFilePath)?;
