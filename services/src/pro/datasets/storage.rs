@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use bb8_postgres::bb8::{ManageConnection, PooledConnection};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::Transaction;
@@ -122,7 +123,7 @@ impl From<InternalUploadedDatasetStatus> for UploadedDatasetStatus {
 /// In contrast to the `UploadedUserDatasetStore` this is not to be used by services but only by the `ProPostgresDb` internally.
 /// This is because services do not know about database transactions.
 #[async_trait]
-pub trait TxUploadedUserDatasetStore {
+pub trait TxUploadedUserDatasetStore<M: ManageConnection> {
     async fn validate_expiration_request_in_tx(
         &self,
         tx: &Transaction,
@@ -135,6 +136,14 @@ pub trait TxUploadedUserDatasetStore {
         dataset_id: &DatasetId,
         tx: &Transaction,
     ) -> Result<UploadedDatasetStatus>;
+
+    /// Updates the status of datasets, because some datasets might have reached expiration
+    //TODO: Add some sort of periodic update for the status of datasets
+    async fn lazy_dataset_store_updates(
+        &self,
+        conn: &mut PooledConnection<M>,
+        dataset_id: Option<&DatasetId>,
+    ) -> Result<()>;
 
     async fn update_dataset_status_in_tx(
         &self,
@@ -169,10 +178,6 @@ pub trait UploadedUserDatasetStore {
     ) -> Result<DatasetIdAndName>;
 
     async fn expire_uploaded_dataset(&self, expire_dataset: ChangeDatasetExpiration) -> Result<()>;
-
-    async fn update_dataset_status(&self, dataset_id: &DatasetId) -> Result<()>;
-
-    async fn update_datasets_status(&self) -> Result<()>;
 
     async fn clear_expired_datasets(&self) -> Result<u64>;
 }

@@ -26,8 +26,10 @@ use crate::pro::permissions::{Permission, RoleId};
 use crate::projects::Symbology;
 use crate::util::postgres::PostgresErrorExt;
 use async_trait::async_trait;
+use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use bb8_postgres::tokio_postgres::Socket;
+use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::primitives::RasterQueryRectangle;
@@ -63,8 +65,8 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn list_datasets(&self, options: DatasetListOptions) -> Result<Vec<DatasetListing>> {
-        self.update_datasets_status().await?;
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
+        self.lazy_dataset_store_updates(&mut conn, None).await?;
 
         let mut pos = 3;
         let order_sql = if options.order == OrderBy::NameAsc {
@@ -186,8 +188,10 @@ where
     }
 
     async fn load_dataset(&self, dataset: &DatasetId) -> Result<Dataset> {
-        self.update_dataset_status(dataset).await?;
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
+        self.lazy_dataset_store_updates(&mut conn, Some(dataset))
+            .await?;
+
         let stmt = conn
             .prepare(
                 "
@@ -231,8 +235,9 @@ where
     }
 
     async fn load_provenance(&self, dataset: &DatasetId) -> Result<ProvenanceOutput> {
-        self.update_dataset_status(dataset).await?;
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
+        self.lazy_dataset_store_updates(&mut conn, Some(dataset))
+            .await?;
 
         let stmt = conn
             .prepare(
@@ -260,8 +265,9 @@ where
     }
 
     async fn load_loading_info(&self, dataset: &DatasetId) -> Result<MetaDataDefinition> {
-        self.update_dataset_status(dataset).await?;
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
+        self.lazy_dataset_store_updates(&mut conn, Some(dataset))
+            .await?;
 
         let stmt = conn
             .prepare(
@@ -287,8 +293,8 @@ where
         &self,
         dataset_name: &DatasetName,
     ) -> Result<Option<DatasetId>> {
-        self.update_datasets_status().await?;
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
+        self.lazy_dataset_store_updates(&mut conn, None).await?;
         resolve_dataset_name_to_id(&conn, dataset_name).await
     }
 
@@ -299,8 +305,8 @@ where
         limit: u32,
         offset: u32,
     ) -> Result<Vec<String>> {
-        self.update_datasets_status().await?;
-        let connection = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
+        self.lazy_dataset_store_updates(&mut conn, None).await?;
 
         let limit = i64::from(limit);
         let offset = i64::from(offset);
@@ -319,7 +325,7 @@ where
             String::new()
         };
 
-        let stmt = connection
+        let stmt = conn
             .prepare(&format!(
                 "
             SELECT 
@@ -336,7 +342,7 @@ where
             ))
             .await?;
 
-        let rows = connection.query(&stmt, &query_params).await?;
+        let rows = conn.query(&stmt, &query_params).await?;
 
         Ok(rows.iter().map(|row| row.get(0)).collect())
     }
@@ -914,7 +920,7 @@ impl From<FileUpload> for crate::datasets::upload::FileUpload {
 }
 
 #[async_trait]
-impl<Tls> TxUploadedUserDatasetStore for ProPostgresDb<Tls>
+impl<Tls> TxUploadedUserDatasetStore<PostgresConnectionManager<Tls>> for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -1032,6 +1038,22 @@ where
         let internal_status: InternalUploadedDatasetStatus = result.get(0);
 
         Ok(internal_status.into())
+    }
+
+    async fn lazy_dataset_store_updates(
+        &self,
+        conn: &mut PooledConnection<PostgresConnectionManager<Tls>>,
+        dataset_id: Option<&DatasetId>,
+    ) -> Result<()> {
+        let tx = conn.build_transaction().start().await?;
+        if let Some(id) = dataset_id {
+            self.update_dataset_status_in_tx(&tx, id).await?;
+        } else {
+            self.update_datasets_status_in_tx(&tx).await?;
+        }
+        tx.commit().await?;
+
+        Ok(())
     }
 
     async fn update_dataset_status_in_tx(
@@ -1499,24 +1521,6 @@ where
         self.update_dataset_status_in_tx(&tx, &expire_dataset.dataset_id)
             .await?;
 
-        tx.commit().await?;
-
-        Ok(())
-    }
-
-    async fn update_dataset_status(&self, dataset_id: &DatasetId) -> Result<()> {
-        let mut conn = self.conn_pool.get().await?;
-        let tx = conn.build_transaction().start().await?;
-        self.update_dataset_status_in_tx(&tx, dataset_id).await?;
-        tx.commit().await?;
-
-        Ok(())
-    }
-
-    async fn update_datasets_status(&self) -> Result<()> {
-        let mut conn = self.conn_pool.get().await?;
-        let tx = conn.build_transaction().start().await?;
-        self.update_datasets_status_in_tx(&tx).await?;
         tx.commit().await?;
 
         Ok(())

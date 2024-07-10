@@ -20,7 +20,6 @@ use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::fmt::Debug;
 use std::str::FromStr;
-use serde_json::json;
 use strum_macros;
 use strum_macros::{Display, EnumString};
 use utoipa::{IntoParams, ToSchema};
