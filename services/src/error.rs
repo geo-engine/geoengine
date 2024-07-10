@@ -492,11 +492,18 @@ pub enum Error {
         resource_id: String,
     },
 
-    ExpirationTimestampInPast,
+    #[snafu(display("Trying to set an expiration timestamp for Dataset {dataset} in the past"))]
+    ExpirationTimestampInPast {
+        dataset: DatasetId,
+    },
+    #[snafu(display("Illegal expiration update for Dataset {dataset}: {reason}"))]
     IllegalExpirationUpdate {
+        dataset: DatasetId,
         reason: String,
     },
+    #[snafu(display("Illegal status for Dataset {dataset}: {status}"))]
     IllegalDatasetStatus {
+        dataset: DatasetId,
         status: String,
     },
 }

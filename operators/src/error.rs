@@ -1,6 +1,6 @@
 use crate::util::statistics::StatisticsError;
 use bb8_postgres::bb8;
-use geoengine_datatypes::dataset::{DataId, NamedData};
+use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{FeatureDataType, TimeInterval};
 use geoengine_datatypes::raster::RasterDataType;
@@ -501,8 +501,9 @@ pub enum Error {
         source: bb8::RunError<tokio_postgres::Error>,
     },
 
+    #[snafu(display("Dataset {} cannot be accessed, because it was deleted", id))]
     DatasetDeleted {
-        id: String,
+        id: DatasetId,
     },
 }
 

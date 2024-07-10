@@ -417,9 +417,7 @@ where
         let uploaded_status = self.uploaded_dataset_status_in_tx(&id, &tx).await;
         if let Ok(status) = uploaded_status {
             if matches!(status, UploadedDatasetStatus::Deleted) {
-                return Err(geoengine_operators::error::Error::DatasetDeleted {
-                    id: id.to_string(),
-                });
+                return Err(geoengine_operators::error::Error::DatasetDeleted { id });
             }
         }
 
@@ -510,9 +508,7 @@ where
         let uploaded_status = self.uploaded_dataset_status_in_tx(&id, &tx).await;
         if let Ok(status) = uploaded_status {
             if matches!(status, UploadedDatasetStatus::Deleted) {
-                return Err(geoengine_operators::error::Error::DatasetDeleted {
-                    id: id.to_string(),
-                });
+                return Err(geoengine_operators::error::Error::DatasetDeleted { id });
             }
         }
 
@@ -980,7 +976,9 @@ where
         match status {
             Available | Expires => {
                 if !legal_expiration {
-                    return Err(ExpirationTimestampInPast);
+                    return Err(ExpirationTimestampInPast {
+                        dataset: (*dataset_id).into(),
+                    });
                 }
             }
             Expired | UpdateExpired | Deleted => {
@@ -988,17 +986,20 @@ where
                     && matches!(deletion_type, Some(DeleteRecordAndData))
                 {
                     return Err(IllegalExpirationUpdate {
+                        dataset: (*dataset_id).into(),
                         reason: "Prior expiration already deleted data and record".to_string(),
                     });
                 }
                 if expiration.deletion_timestamp.is_some() {
                     return Err(IllegalExpirationUpdate {
+                        dataset: (*dataset_id).into(),
                         reason: "Setting expiration after deletion".to_string(),
                     });
                 }
             }
             DeletedWithError => {
                 return Err(IllegalDatasetStatus {
+                    dataset: (*dataset_id).into(),
                     status: "Dataset was deleted, but an error occurred during deletion"
                         .to_string(),
                 });
@@ -1378,6 +1379,7 @@ where
             .await?;
         if set_changes == 0 {
             return Err(IllegalDatasetStatus {
+                dataset: (*dataset_id).into(),
                 status: "Requested dataset does not exist or does not have an expiration"
                     .to_string(),
             });
@@ -2268,7 +2270,7 @@ mod tests {
             ))
             .await;
         assert!(err.is_err());
-        assert!(matches!(err.unwrap_err(), ExpirationTimestampInPast));
+        assert!(matches!(err.unwrap_err(), ExpirationTimestampInPast { .. }));
 
         //Unset expire for non-expiring dataset
         let err = db
