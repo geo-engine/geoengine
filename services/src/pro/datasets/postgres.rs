@@ -87,7 +87,10 @@ where
             (format!("AND d.tags @> ${pos}::text[]"), filter_tags.clone())
         } else {
             (
-                format!("AND NOT d.tags @> '{{{}}}'::text[]", ReservedTags::Deleted),
+                format!(
+                    "AND (d.tags IS NULL OR NOT d.tags @> '{{{}}}'::text[])",
+                    ReservedTags::Deleted
+                ),
                 vec![],
             )
         };
@@ -1791,7 +1794,7 @@ mod tests {
         upload_id: UploadId,
     }
 
-    fn test_point_dataset(name_space: String, name: &str) -> TestDatasetDefinition {
+    fn test_point_dataset(name_space: Option<String>, name: &str) -> TestDatasetDefinition {
         let local_path = PathBuf::from(TEST_POINT_DATASET_SOURCE_PATH);
         let file_name = local_path.file_name().unwrap().to_str().unwrap();
         let loading_info = OgrSourceDataset {
@@ -1852,7 +1855,7 @@ mod tests {
             phantom: Default::default(),
         });
 
-        let dataset_name = DatasetName::new(Some(name_space), name);
+        let dataset_name = DatasetName::new(name_space, name);
 
         TestDatasetDefinition {
             meta_data,
@@ -1885,7 +1888,7 @@ mod tests {
         name: &str,
         upload_dir: &mut TestDataUploads,
     ) -> UploadedTestDataset {
-        let test_dataset = test_point_dataset(user_session.user.id.to_string(), name);
+        let test_dataset = test_point_dataset(Some(user_session.user.id.to_string()), name);
         let upload_id = upload_point_dataset(app_ctx, user_session.id).await;
 
         let res = app_ctx
@@ -1954,6 +1957,41 @@ mod tests {
             })
             .await
             .unwrap()
+    }
+
+    #[ge_context::test]
+    async fn it_lists_datasets_without_tags(app_ctx: ProPostgresContext<NoTls>) {
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_ctx = app_ctx.session_context(admin_session.clone());
+        let db = admin_ctx.db();
+        let test_dataset = test_point_dataset(None, "test_data");
+
+        let ds = AddDataset {
+            name: None,
+            display_name: "TestData".to_string(),
+            description: "TestData without tags".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+            tags: None,
+        };
+
+        db.add_dataset(ds, test_dataset.meta_data).await.unwrap();
+
+        let default_list_options = DatasetListOptions {
+            filter: None,
+            order: OrderBy::NameAsc,
+            offset: 0,
+            limit: 10,
+            tags: None,
+        };
+
+        let listing = db
+            .list_datasets(default_list_options.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(listing.len(), 1);
     }
 
     #[ge_context::test]
