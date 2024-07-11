@@ -462,7 +462,8 @@ impl SentinelS2L2aCogsMetaData {
             let end = if i < num_features - 1 {
                 start_times[i + 1]
             } else {
-                start + 1000
+                // (or end of query?)
+                query.time_interval.end() + query_end_buffer
             };
 
             let time_interval = TimeInterval::new(start, end)?;
