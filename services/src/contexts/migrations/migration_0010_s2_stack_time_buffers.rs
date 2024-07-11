@@ -19,7 +19,7 @@ impl Migration for Migration0010S2StacTimeBuffers {
     }
 
     async fn migrate(&self, _tx: &Transaction<'_>) -> Result<()> {
-        // permissions only exist in Pro, nothing to do here
+        // provider only exists in Pro, nothing to do here
 
         Ok(())
     }
