@@ -1,4 +1,6 @@
-use crate::adapters::{FillerTileCacheExpirationStrategy, SparseTilesFillAdapter};
+use crate::adapters::{
+    FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
+};
 use crate::engine::{
     CanonicOperatorName, InitializedRasterOperator, OperatorData, OperatorName, RasterOperator,
     RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
@@ -8,10 +10,10 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{CacheExpiration, CacheHint, TimeInterval};
+use geoengine_datatypes::primitives::{CacheExpiration, TimeInstance};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
-    GridOrEmpty2D, GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification,
+    GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -109,9 +111,32 @@ where
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<crate::util::Result<RasterTile2D<Self::RasterType>>>>
     {
-        let mut parts: Vec<RasterTile2D<T>> = self
+        let mut known_time_start: Option<TimeInstance> = None;
+        let mut known_time_end: Option<TimeInstance> = None;
+        let parts: Vec<RasterTile2D<T>> = self
             .data
             .iter()
+            .inspect(|m| {
+                let time_interval = m.time;
+
+                if time_interval.start() <= query.time_interval.start() {
+                    let t = if time_interval.end() > query.time_interval.start() {
+                        time_interval.start()
+                    } else {
+                        time_interval.end()
+                    };
+                    known_time_start = known_time_start.map(|old| old.max(t)).or(Some(t));
+                }
+
+                if time_interval.end() >= query.time_interval.end() {
+                    let t = if time_interval.start() < query.time_interval.end() {
+                        time_interval.end()
+                    } else {
+                        time_interval.start()
+                    };
+                    known_time_end = known_time_end.map(|old| old.min(t)).or(Some(t));
+                }
+            })
             .filter(move |t| {
                 t.time.intersects(&query.time_interval)
                     && t.tile_information()
@@ -121,76 +146,9 @@ where
             .cloned()
             .collect();
 
-        // This is a workaround to avoid errors when a provider does not fill the complete query rectangle.
-        if let Some(first) = parts.first() {
-            if first.time.start() > query.time_interval.start() {
-                // try to find an element before
-                let element_before = self
-                    .data
-                    .iter()
-                    .filter(|item| item.time.end() < query.time_interval.start())
-                    .last();
-
-                let (no_data_start, no_data_cache) = if let Some(eb) = element_before {
-                    if eb.time.is_instant() {
-                        (eb.time.end() + 1, eb.cache_hint)
-                    } else {
-                        (eb.time.end(), eb.cache_hint)
-                    }
-                } else {
-                    (query.time_interval.start(), CacheHint::max_duration()) // TODO: if there is no data before can we assume that it is MIN?
-                };
-
-                parts.insert(
-                    0,
-                    RasterTile2D::new(
-                        TimeInterval::new(no_data_start, first.time.start())
-                            .expect("Only insert element thats before start"),
-                        first.tile_position, // we can use any tile position inside the query. the Fill adapter will take care of the rest.
-                        first.band,
-                        first.global_geo_transform,
-                        GridOrEmpty2D::new_empty_shape(first.grid_shape()),
-                        no_data_cache,
-                    ),
-                );
-            }
-        }
-
-        if let Some(last) = parts.last() {
-            if (!last.time.is_instant() && last.time.end() < query.time_interval.end())
-                || (last.time.is_instant() && last.time.end() + 1 < query.time_interval.end())
-            {
-                // try to find an element following
-                let element_following = self
-                    .data
-                    .iter()
-                    .find(|item| item.time.start() > query.time_interval.end());
-
-                let no_data_start = if last.time.is_instant() {
-                    last.time.end() + 1
-                } else {
-                    last.time.end()
-                };
-
-                let (no_data_end, no_data_cache) = if let Some(ef) = element_following {
-                    (ef.time.start(), ef.cache_hint)
-                } else {
-                    (query.time_interval.end(), CacheHint::max_duration())
-                };
-
-                parts.push(RasterTile2D::new(
-                    TimeInterval::new(no_data_start, no_data_end)
-                        .expect("Only insert element thats before start"),
-                    last.tile_position, // we can use any tile position inside the query. the Fill adapter will take care of the rest.
-                    last.band,
-                    last.global_geo_transform,
-                    GridOrEmpty2D::new_empty_shape(last.grid_shape()),
-                    no_data_cache,
-                ));
-            }
-        }
-
-        // TODO: if there is no data at all the fill adapter will take care and produce a inf no data tile
+        // if we found no time bound we can assume that there is no data
+        let known_time_before = known_time_start.unwrap_or(TimeInstance::MIN);
+        let known_time_after = known_time_end.unwrap_or(TimeInstance::MAX);
 
         let inner_stream = stream::iter(parts.into_iter().map(Result::Ok));
 
@@ -217,6 +175,7 @@ where
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::FixedValue(CacheExpiration::max()), // cache forever because we know all mock data
+            FillerTimeBounds::new(known_time_before, known_time_after),
         )
         .boxed())
     }
@@ -500,12 +459,12 @@ mod tests {
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
-    async fn zero_length_intervals() {
+    async fn query_interval_larger_then_data_range() {
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams::<u8> {
                 data: vec![
                     RasterTile2D {
-                        time: TimeInterval::new_unchecked(1, 1),
+                        time: TimeInterval::new_unchecked(1, 2),
                         tile_position: [-1, 0].into(),
                         band: 0,
                         global_geo_transform: TestDefault::test_default(),
@@ -516,7 +475,7 @@ mod tests {
                         cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
-                        time: TimeInterval::new_unchecked(1, 1),
+                        time: TimeInterval::new_unchecked(1, 2),
                         tile_position: [-1, 1].into(),
                         band: 0,
                         global_geo_transform: TestDefault::test_default(),
@@ -527,7 +486,7 @@ mod tests {
                         cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
-                        time: TimeInterval::new_unchecked(2, 2),
+                        time: TimeInterval::new_unchecked(2, 3),
                         tile_position: [-1, 0].into(),
                         band: 0,
                         global_geo_transform: TestDefault::test_default(),
@@ -538,7 +497,7 @@ mod tests {
                         cache_hint: CacheHint::default(),
                     },
                     RasterTile2D {
-                        time: TimeInterval::new_unchecked(2, 2),
+                        time: TimeInterval::new_unchecked(2, 3),
                         tile_position: [-1, 1].into(),
                         band: 0,
                         global_geo_transform: TestDefault::test_default(),
@@ -580,7 +539,7 @@ mod tests {
 
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(1, 3),
+            time_interval: TimeInterval::new_unchecked(-3, 7),
             spatial_resolution: SpatialResolution::one(),
             attributes: BandSelection::first(),
         };
@@ -592,10 +551,14 @@ mod tests {
         assert_eq!(
             result.iter().map(|tile| tile.time).collect::<Vec<_>>(),
             [
-                TimeInterval::new_unchecked(1, 1),
-                TimeInterval::new_unchecked(1, 1),
-                TimeInterval::new_unchecked(2, 2),
-                TimeInterval::new_unchecked(2, 2),
+                TimeInterval::new_unchecked(TimeInstance::MIN, 1),
+                TimeInterval::new_unchecked(TimeInstance::MIN, 1),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(2, 3),
+                TimeInterval::new_unchecked(2, 3),
+                TimeInterval::new_unchecked(3, TimeInstance::MAX),
+                TimeInterval::new_unchecked(3, TimeInstance::MAX),
             ]
         );
 
@@ -603,7 +566,7 @@ mod tests {
 
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(2, 3),
+            time_interval: TimeInterval::new_unchecked(2, 4),
             spatial_resolution: SpatialResolution::one(),
             attributes: BandSelection::first(),
         };
@@ -615,8 +578,10 @@ mod tests {
         assert_eq!(
             result.iter().map(|tile| tile.time).collect::<Vec<_>>(),
             [
-                TimeInterval::new_unchecked(2, 2),
-                TimeInterval::new_unchecked(2, 2),
+                TimeInterval::new_unchecked(2, 3),
+                TimeInterval::new_unchecked(2, 3),
+                TimeInterval::new_unchecked(3, TimeInstance::MAX),
+                TimeInterval::new_unchecked(3, TimeInstance::MAX),
             ]
         );
     }

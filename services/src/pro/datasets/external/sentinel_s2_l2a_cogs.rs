@@ -81,7 +81,7 @@ pub struct StacQueryBuffer {
 impl Default for StacQueryBuffer {
     fn default() -> Self {
         Self {
-            start_seconds: -60,
+            start_seconds: 60,
             end_seconds: 60,
         }
     }
@@ -411,13 +411,19 @@ impl SentinelS2L2aCogsMetaData {
         debug!("create_loading_info with: {:?}", &query);
         let request_params = self.request_params(&query)?;
 
+        let query_start_buffer = Duration::seconds(self.stac_query_buffer.start_seconds);
+        let query_end_buffer = Duration::seconds(self.stac_query_buffer.end_seconds);
+
         if request_params.is_none() {
             log::debug!("Request params are empty -> returning empty loading info");
-            return Ok(GdalLoadingInfo {
-                info: GdalLoadingInfoTemporalSliceIterator::Static {
+            return Ok(GdalLoadingInfo::new(
+                // we do not know anything about the data. Can only use query -/+ buffer to determine time bounds.
+                GdalLoadingInfoTemporalSliceIterator::Static {
                     parts: vec![].into_iter(),
                 },
-            });
+                query.time_interval.start() - query_start_buffer,
+                query.time_interval.end() + query_end_buffer,
+            ));
         }
 
         let request_params = request_params.expect("The none case was checked above");
@@ -444,6 +450,8 @@ impl SentinelS2L2aCogsMetaData {
 
         let mut parts: Vec<GdalLoadingInfoTemporalSlice> = vec![];
         let num_features = features.len();
+        let mut known_time_start: Option<TimeInstance> = None;
+        let mut known_time_end: Option<TimeInstance> = None;
         debug!("number of features in current zone: {}", num_features);
         for i in 0..num_features {
             let feature = &features[i];
@@ -454,10 +462,28 @@ impl SentinelS2L2aCogsMetaData {
             let end = if i < num_features - 1 {
                 start_times[i + 1]
             } else {
-                start + 1000 // there was no tile before and there is no tile following. Use 1 sec to be safe. We could assume that there is no other tile in the query and use the query length?
+                start + 1000
             };
 
             let time_interval = TimeInterval::new(start, end)?;
+
+            if time_interval.start() <= query.time_interval.start() {
+                let t = if time_interval.end() > query.time_interval.start() {
+                    time_interval.start()
+                } else {
+                    time_interval.end()
+                };
+                known_time_start = known_time_start.map(|old| old.max(t)).or(Some(t));
+            }
+
+            if time_interval.end() >= query.time_interval.end() {
+                let t = if time_interval.start() < query.time_interval.end() {
+                    time_interval.end()
+                } else {
+                    time_interval.start()
+                };
+                known_time_end = known_time_end.map(|old| old.min(t)).or(Some(t));
+            }
 
             if time_interval.intersects(&query.time_interval) {
                 debug!(
@@ -482,54 +508,20 @@ impl SentinelS2L2aCogsMetaData {
         }
         debug!("number of generated loading infos: {}", parts.len());
 
-        // This is a workaround to avoid errors when a provider does not fill the complete query rectangle.
-        let buffered_start =
-            query.time_interval.start() + Duration::seconds(self.stac_query_buffer.start_seconds);
-        let buffered_end =
-            query.time_interval.end() + Duration::seconds(self.stac_query_buffer.end_seconds);
+        // if there is no information of time outside the query, we fallback to the only information we know: query -/+ buffer.
+        let known_time_before =
+            known_time_start.unwrap_or(query.time_interval.start() - query_start_buffer);
 
-        if let Some(first) = parts.first() {
-            if first.time.start() > query.time_interval.start() {
-                log::debug!("Missing temporal slice information to provide loading info for the whole query rectangle. Inserting fake first element! Query time: {} Buffered start: {} First element available: {}. Increase query buffer to avoid.", query.time_interval, buffered_start, first.time);
-                parts.insert(
-                    0,
-                    GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(buffered_start, first.time.start())
-                            .expect("Condition is checked above"),
-                        params: None,
-                        cache_ttl: first.cache_ttl, // TODO: maybe this needs to be zero.
-                    },
-                );
-            }
-        }
+        let known_time_after =
+            known_time_end.unwrap_or(query.time_interval.end() + query_end_buffer);
 
-        if let Some(last) = parts.last() {
-            if last.time.end() < query.time_interval.end() {
-                log::debug!("Missing temporal slice information to provide loading info for the whole query rectangle. Inserting fake last element! Query time: {} Buffered end: {} Last element available: {}. Increase query buffer to avoid.", query.time_interval, buffered_end, last.time);
-                parts.push(GdalLoadingInfoTemporalSlice {
-                    time: TimeInterval::new(last.time.end(), buffered_end)
-                        .expect("Condition is checked above"),
-                    params: None,
-                    cache_ttl: last.cache_ttl, // TODO: maybe this needs to be zero.
-                });
-            }
-        }
-
-        if parts.is_empty() {
-            log::debug!("NO temporal slice information to provide loading info for the query rectangle. Inserting no data element! Query time: {} Buffered start: {} Bufferend end: {}. Increase query buffer to avoid.", query.time_interval, buffered_start, buffered_end);
-            parts.push(GdalLoadingInfoTemporalSlice {
-                time: TimeInterval::new(buffered_start, buffered_end)
-                    .expect("Condition is checked above"),
-                params: None,
-                cache_ttl: CacheTtlSeconds::new(0), // Could this be larger?
-            });
-        }
-
-        Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoTemporalSliceIterator::Static {
+        Ok(GdalLoadingInfo::new(
+            GdalLoadingInfoTemporalSliceIterator::Static {
                 parts: parts.into_iter(),
             },
-        })
+            known_time_before,
+            known_time_after,
+        ))
     }
 
     fn make_unique_start_times_from_sorted_features(
@@ -616,7 +608,7 @@ impl SentinelS2L2aCogsMetaData {
     ) -> Result<Option<Vec<(String, String)>>> {
         let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
 
-        let t_start = t_start + Duration::seconds(self.stac_query_buffer.start_seconds);
+        let t_start = t_start - Duration::seconds(self.stac_query_buffer.start_seconds);
         let t_end = t_end + Duration::seconds(self.stac_query_buffer.end_seconds);
 
         // request all features in zone in order to be able to determine the temporal validity of individual tile

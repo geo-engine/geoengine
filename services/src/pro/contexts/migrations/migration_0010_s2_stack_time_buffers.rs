@@ -22,7 +22,7 @@ impl ProMigration for ProMigrationImpl<Migration0010S2StacTimeBuffers> {
             r"
             UPDATE pro_layer_providers
             SET
-                definition.sentinel_s2_l2_a_cogs_provider_definition.query_buffer.start_seconds = -60,
+                definition.sentinel_s2_l2_a_cogs_provider_definition.query_buffer.start_seconds = 60,
                 definition.sentinel_s2_l2_a_cogs_provider_definition.query_buffer.end_seconds = 60
             WHERE NOT ((definition).sentinel_s2_l2_a_cogs_provider_definition IS NULL);
             ",

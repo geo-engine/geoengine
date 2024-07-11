@@ -60,8 +60,8 @@
       "epsg": 32737
     }
   ],
-  "query_buffer": {
-    "start_seconds": -60,
-    "end_seconds": 60
+  "queryBuffer": {
+    "startSeconds": 60,
+    "endSeconds": 60
   }
 }

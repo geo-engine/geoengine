@@ -1,4 +1,6 @@
-use crate::adapters::{FillerTileCacheExpirationStrategy, SparseTilesFillAdapter};
+use crate::adapters::{
+    FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
+};
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
 };
@@ -29,7 +31,7 @@ use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
-    SpatialPartition2D, SpatialPartitioned,
+    SpatialPartition2D, SpatialPartitioned, TimeInstance,
 };
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::raster::TileInformation;
@@ -44,12 +46,11 @@ use geoengine_datatypes::{
     primitives::TimeInterval,
     raster::{Grid, GridBlit, GridBoundingBox2D, GridIdx, GridSize, TilingSpecification},
 };
-use itertools::{Itertools, Position};
 pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
-use log::{debug, warn};
+use log::debug;
 use num::FromPrimitive;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -725,36 +726,39 @@ where
         }
         */
 
-        let loading_iter = if empty {
-            GdalLoadingInfoTemporalSliceIterator::Static {
-                parts: vec![].into_iter(),
-            }
+        let loading_info = if empty {
+            // TODO: using this shortcut will insert one no-data element with max time validity. However, this does not honor time intervals of data in other areas!
+            GdalLoadingInfo::new(
+                GdalLoadingInfoTemporalSliceIterator::Static {
+                    parts: vec![].into_iter(),
+                },
+                TimeInstance::MIN,
+                TimeInstance::MAX,
+            )
         } else {
-            let loading_info = self.meta_data.loading_info(query.clone()).await?;
-            loading_info.info
+            self.meta_data.loading_info(query.clone()).await?
         };
 
-        let loading_inter_checked = loading_iter.with_position().map(move |(pos, ele)| {
-            let q_time = query.time_interval;
-            match (ele, &pos) {
-                (Ok(e), Position::First) if q_time.start() < e.time.start() => {
-                    warn!("The data provider does not cover the query start. Query time {}, First element time {}", q_time, e.time);
-                    Err(error::GdalSourceError::MissingTemporalDataAtQueryStart{query_time: q_time, first_element_time: e.time}.into())
-                },
-                (Ok(e), Position::Last) if q_time.end() > e.time.end() => {
-                    warn!("The data provider does not cover the query end. Query time {}, Last element time {}", q_time, e.time);
-                    Err(error::GdalSourceError::MissingTemporalDataAtQueryEnd{query_time: q_time, last_element_time: e.time}.into())
-                },
-                (Ok(e), Position::Only) if q_time.start() < e.time.start() || q_time.end() > e.time.end() => {
-                    warn!("The data provider does not cover the query end. Query time {}, Only element time {}", q_time, e.time);
-                    Err(error::GdalSourceError::MissingTemporalDataOnlyElement{query_time: q_time, only_element_time: e.time}.into())
-                },
-                (Ok(e), _) => {Ok(e)},
-                (Err(e), _) => {Err(e)}
+        let time_bounds = match (
+            loading_info.known_time_before,
+            loading_info.known_time_after,
+        ) {
+            (Some(start), Some(end)) => FillerTimeBounds::new(start, end),
+            (None, None) => {
+                log::warn!("The provider did not provide a time range that covers the query. Falling back to query time range. ");
+                FillerTimeBounds::new(query.time_interval.start(), query.time_interval.end())
             }
-        });
+            (Some(start), None) => {
+                log::warn!("The provider did only provide a time range start that covers the query. Falling back to query time end. ");
+                FillerTimeBounds::new(start, query.time_interval.end())
+            }
+            (None, Some(end)) => {
+                log::warn!("The provider did only provide a time range end that covers the query. Falling back to query time start. ");
+                FillerTimeBounds::new(query.time_interval.start(), end)
+            }
+        };
 
-        let source_stream = stream::iter(loading_inter_checked);
+        let source_stream = stream::iter(loading_info.info);
 
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
             source_stream,
@@ -770,6 +774,7 @@ where
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+            time_bounds,
         );
         Ok(filled_stream.boxed())
     }

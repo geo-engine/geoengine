@@ -198,7 +198,7 @@ mod tests {
                     },
                     cache_ttl: CacheTtlSeconds::new(60),
                     query_buffer: StacQueryBuffer {
-                        start_seconds: -1,
+                        start_seconds: 1,
                         end_seconds: 1,
                     },
                 }],
@@ -235,7 +235,7 @@ mod tests {
                             },
                             cache_ttl: CacheTtlSeconds::new(60),
                             query_buffer: StacQueryBuffer {
-                                start_seconds: -1,
+                                start_seconds: 1,
                                 end_seconds: 1,
                             },
                         },
