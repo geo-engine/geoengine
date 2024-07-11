@@ -1,8 +1,9 @@
 use crate::{
     adapters::{QueryWrapper, RasterArrayTimeAdapter},
+    define_operator,
     engine::{
         BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
-        InitializedSources, Operator, OperatorData, OperatorName, QueryContext, QueryProcessor,
+        InitializedSources, OperatorData, OperatorName, QueryContext, QueryProcessor,
         RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
         TypedRasterQueryProcessor, WorkflowOperatorPath,
     },
@@ -22,16 +23,28 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReferenceOption,
 };
 use num_traits::AsPrimitive;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 
 /// The `Rgb` operator combines three raster sources into a single raster output.
 /// The output it of type `U32` and contains the red, green and blue values as the first, second and third byte.
 /// The forth byte (alpha) is always 255.
-pub type Rgb = Operator<RgbParams, RgbSources>;
+define_operator!(
+    Rgb,
+    RgbParams,
+    RgbSources,
+    output_type = "raster",
+    help_url = "https://docs.geoengine.io/operators/rgb.html"
+);
+
+// cannot use num_traits::One::one() for JsonSchema because of missing type signatures
+fn one() -> f64 {
+    1.0
+}
 
 /// Parameters for the `Rgb` operator.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RgbParams {
     /// The minimum value for the red channel.
@@ -39,7 +52,7 @@ pub struct RgbParams {
     /// The maximum value for the red channel.
     pub red_max: f64,
     /// A scaling factor for the red channel between 0 and 1.
-    #[serde(default = "num_traits::One::one")]
+    #[serde(default = "one")]
     pub red_scale: f64,
 
     /// The minimum value for the red channel.
@@ -47,7 +60,7 @@ pub struct RgbParams {
     /// The maximum value for the red channel.
     pub green_max: f64,
     /// A scaling factor for the green channel between 0 and 1.
-    #[serde(default = "num_traits::One::one")]
+    #[serde(default = "one")]
     pub green_scale: f64,
 
     /// The minimum value for the red channel.
@@ -55,7 +68,7 @@ pub struct RgbParams {
     /// The maximum value for the red channel.
     pub blue_max: f64,
     /// A scaling factor for the blue channel between 0 and 1.
-    #[serde(default = "num_traits::One::one")]
+    #[serde(default = "one")]
     pub blue_scale: f64,
 }
 
@@ -101,7 +114,7 @@ impl RgbParams {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct RgbSources {
     red: Box<dyn RasterOperator>,
     green: Box<dyn RasterOperator>,
@@ -221,10 +234,6 @@ impl RasterOperator for Rgb {
     }
 
     span_fn!(Rgb);
-}
-
-impl OperatorName for Rgb {
-    const TYPE_NAME: &'static str = "Rgb";
 }
 
 pub struct InitializedRgb {

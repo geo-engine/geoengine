@@ -27,7 +27,7 @@ pub enum TimeGranularity {
 }
 
 /// A step in time.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSql, FromSql)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSql, FromSql, JsonSchema)]
 pub struct TimeStep {
     pub granularity: TimeGranularity,
     pub step: u32, // TODO: ensure on deserialization it is > 0

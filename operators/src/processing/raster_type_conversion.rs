@@ -4,16 +4,21 @@ use geoengine_datatypes::{
     primitives::{BandSelection, RasterQueryRectangle, SpatialPartition2D},
     raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
 };
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
-};
 use crate::util::Result;
+use crate::{
+    define_operator,
+    engine::{
+        CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
+        Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
+        WorkflowOperatorPath,
+    },
+};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterTypeConversionParams {
     pub output_data_type: RasterDataType,
@@ -21,11 +26,13 @@ pub struct RasterTypeConversionParams {
 
 /// This operator converts the type of raster data into another type. This may cause precision loss as e.g. `3.1_f32` converted to `u8` will result in `3_u8`.
 /// In case the value range is to small the operator will clip the values at the bounds of the data range. An example is this: The `u32` value `10000_u32` is converted to `u8`, which has a value range of 0..256. The result is `255_u8` since this is the highest value a `u8` can represent.
-pub type RasterTypeConversion = Operator<RasterTypeConversionParams, SingleRasterSource>;
-
-impl OperatorName for RasterTypeConversion {
-    const TYPE_NAME: &'static str = "RasterTypeConversion";
-}
+define_operator!(
+    RasterTypeConversion,
+    RasterTypeConversionParams,
+    SingleRasterSource,
+    output_type = "raster",
+    help_url = "https://docs.geoengine.io/operators/rastertypeconversion.html"
+);
 
 pub struct InitializedRasterTypeConversionOperator {
     name: CanonicOperatorName,

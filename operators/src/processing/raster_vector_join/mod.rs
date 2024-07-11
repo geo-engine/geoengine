@@ -3,6 +3,7 @@ mod aggregator;
 mod non_aggregated;
 mod util;
 
+use crate::define_operator;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
     Operator, OperatorName, SingleVectorMultipleRasterSources, TypedRasterQueryProcessor,
@@ -18,6 +19,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::primitives::FeatureDataType;
 use geoengine_datatypes::raster::{Pixel, RasterDataType, RenameBands};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -27,16 +29,18 @@ use self::aggregator::{
 };
 
 /// An operator that attaches raster values to vector data
-pub type RasterVectorJoin = Operator<RasterVectorJoinParams, SingleVectorMultipleRasterSources>;
-
-impl OperatorName for RasterVectorJoin {
-    const TYPE_NAME: &'static str = "RasterVectorJoin";
-}
+define_operator!(
+    RasterVectorJoin,
+    RasterVectorJoinParams,
+    SingleVectorMultipleRasterSources,
+    output_type = "vector",
+    help_url = "https://docs.geoengine.io/operators/rastervectorjoin.html"
+);
 
 const MAX_NUMBER_OF_RASTER_INPUTS: usize = 8;
 
 /// The parameter spec for `RasterVectorJoin`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterVectorJoinParams {
     /// The names of the new columns are derived from the names of the raster bands.
@@ -60,7 +64,7 @@ pub struct RasterVectorJoinParams {
     pub temporal_aggregation_ignore_no_data: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", tag = "type", content = "values")]
 pub enum ColumnNames {
     Default, // use the input band name and append " (n)" to the band name for the `n`-th conflict,
@@ -81,7 +85,7 @@ impl From<ColumnNames> for RenameBands {
 /// How to aggregate the values for the geometries inside a feature e.g.
 /// the mean of all the raster values corresponding to the individual
 /// points inside a `MultiPoint` feature.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureAggregationMethod {
     First,
@@ -92,7 +96,7 @@ pub enum FeatureAggregationMethod {
 /// If there are multiple rasters valid during the validity of a feature
 /// the featuer is either split into multiple (None-aggregation) or the
 /// values are aggreagated
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum TemporalAggregationMethod {
     None,
