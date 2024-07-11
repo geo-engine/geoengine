@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use crate::adapters::RasterStreamExt;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -33,8 +34,10 @@ pub struct BandNeighborhoodAggregateParams {
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum NeighborhoodAggregate {
     // approximate the first derivative using the central difference method
+    #[serde(rename_all = "camelCase")]
     FirstDerivative { band_distance: BandDistance },
     // TODO: SecondDerivative,
+    #[serde(rename_all = "camelCase")]
     Average { window_size: u32 },
     // TODO: Savitzky-Golay Filter
 }
@@ -198,14 +201,21 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<f64>>>> {
-        // TODO: ensure min amount of bands in query
+        // query the source with all bands, to compute the aggregate
+        // then, select only the queried bands
+        // TODO: avoid computing the aggregate for bands that are not queried
+        let mut source_query = query.clone();
+        let source_result_descriptor = self.source.raster_result_descriptor();
+        source_query.attributes = (&source_result_descriptor.bands).into();
 
-        Ok(match &self.aggregate {
+        let must_extract_bands = query.attributes != source_query.attributes;
+
+        let aggregate = match &self.aggregate {
             NeighborhoodAggregate::FirstDerivative { band_distance } => {
                 let band_distance = band_distance.clone();
                 Box::pin(
                     BandNeighborhoodAggregateStream::<_, FirstDerivativeAccu, _>::new(
-                        self.source.raster_query(query, ctx).await?,
+                        self.source.raster_query(source_query, ctx).await?,
                         self.result_descriptor.bands.count(),
                         move || {
                             FirstDerivativeAccu::new(
@@ -214,18 +224,28 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
                             )
                         },
                     ),
-                )
+                ) as BoxStream<'a, Result<RasterTile2D<f64>>>
             }
             NeighborhoodAggregate::Average { window_size } => Box::pin(
                 BandNeighborhoodAggregateStream::<_, MovingAverageAccu, _>::new(
-                    self.source.raster_query(query, ctx).await?,
+                    self.source.raster_query(source_query, ctx).await?,
                     self.result_descriptor.bands.count(),
                     move || {
                         MovingAverageAccu::new(self.result_descriptor.bands.count(), *window_size)
                     },
                 ),
-            ),
-        })
+            )
+                as BoxStream<'a, Result<RasterTile2D<f64>>>,
+        };
+
+        if must_extract_bands {
+            Ok(Box::pin(aggregate.extract_bands(
+                query.attributes.as_vec(),
+                source_result_descriptor.bands.count(),
+            )))
+        } else {
+            Ok(aggregate)
+        }
     }
 
     fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
@@ -488,7 +508,9 @@ where
 
     debug_assert!(
         tile.band == current_input_band_idx,
-        "unexpected input band index"
+        "unexpected input band index: expected {} found {}",
+        current_input_band_idx,
+        tile.band
     );
 
     // accumulate the input tile asynchronously
@@ -1167,6 +1189,148 @@ mod tests {
             time_interval: TimeInterval::new_unchecked(0, 5),
             spatial_resolution: SpatialResolution::one(),
             attributes: BandSelection::new_unchecked(vec![0, 1, 2]),
+        };
+
+        let query_ctx = MockQueryContext::test_default();
+
+        let op = band_neighborhood_aggregate
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let qp = op.query_processor().unwrap().get_f64().unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        assert!(result.tiles_equal_ignoring_cache_hint(&expected));
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_selects_bands_from_result() {
+        let data: Vec<RasterTile2D<u8>> = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 1,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![2, 3, 4, 5]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 2,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 1,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 2,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![8, 9, 10, 11]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        let expected: Vec<RasterTile2D<f64>> = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![4., 4., 4., 4.])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        let mrs1 = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: data.clone(),
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                    bands: RasterBandDescriptors::new_multiple_bands(3),
+                },
+            },
+        }
+        .boxed();
+
+        let band_neighborhood_aggregate: Box<dyn RasterOperator> = BandNeighborhoodAggregate {
+            params: BandNeighborhoodAggregateParams {
+                aggregate: NeighborhoodAggregate::FirstDerivative {
+                    band_distance: BandDistance::EquallySpaced { distance: 1.0 },
+                },
+            },
+            sources: SingleRasterSource { raster: mrs1 },
+        }
+        .boxed();
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+            shape_array: [2, 2],
+        };
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
+            time_interval: TimeInterval::new_unchecked(0, 5),
+            spatial_resolution: SpatialResolution::one(),
+            attributes: BandSelection::new_unchecked(vec![0]), // only get first band
         };
 
         let query_ctx = MockQueryContext::test_default();
