@@ -1,6 +1,7 @@
 use crate::api::model::datatypes::{
     RasterColorizer, SpatialReference, SpatialReferenceOption, TimeInterval,
 };
+use crate::api::model::responses::ErrorResponse;
 use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::api::ogc::wms::request::{
     GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat,
@@ -31,7 +32,6 @@ use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
 use reqwest::Url;
-use serde_json::json;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
@@ -402,9 +402,9 @@ fn handle_wms_error(
 
             HttpResponse::Ok().content_type(mime::TEXT_XML).body(body)
         }
-        GetMapExceptionFormat::Json => HttpResponse::Ok().json(
-            json!({"error": Into::<&str>::into(error).to_string(), "message": error.to_string() }),
-        ),
+        GetMapExceptionFormat::Json => {
+            HttpResponse::Ok().json(ErrorResponse::from_service_error(error))
+        }
     }
 }
 
@@ -1045,7 +1045,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(res, 200, "Operator", "No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
+        ErrorResponse::assert(res, 200, "NoCoordinateProjector", "No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
     }
 
     #[ge_context::test]

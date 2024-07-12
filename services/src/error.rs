@@ -518,7 +518,7 @@ pub enum Error {
 
 impl actix_web::error::ResponseError for Error {
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from_service_error(self))
     }
 
     fn status_code(&self) -> StatusCode {

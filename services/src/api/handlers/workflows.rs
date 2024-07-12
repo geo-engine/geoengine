@@ -1225,7 +1225,7 @@ mod tests {
         let res_body = read_body_string(res).await;
         assert_eq!(
             res_body,
-            json!({"error": "Operator", "message": "Invalid operator type: expected Vector found Raster"}).to_string()
+            json!({"error": "InvalidOperatorType", "message": "Invalid operator type: expected Vector found Raster"}).to_string()
         );
     }
 

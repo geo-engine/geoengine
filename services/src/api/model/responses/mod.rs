@@ -2,6 +2,7 @@ pub mod datasets;
 
 use actix_http::StatusCode;
 use actix_web::{dev::ServiceResponse, HttpResponse};
+use convert_case::{Converter, Pattern};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use utoipa::{ToResponse, ToSchema};
@@ -76,17 +77,47 @@ impl ErrorResponse {
             }
         );
     }
+
+    /// Extracts the inner variant from a service error and
+    /// generates a response based on that.
+    /// This leads to more specific error codes for `Operator`
+    /// and `DataType` errors.
+    pub fn from_service_error(error: &crate::error::Error) -> Self {
+        match error {
+            crate::error::Error::DataType { source } => Self::from(source),
+            crate::error::Error::Operator { source } => match source {
+                geoengine_operators::error::Error::DataType { source } => Self::from(source),
+                _ => Self::from(source),
+            },
+            _ => Self::from(error),
+        }
+    }
 }
 
 impl<'a, T> From<&'a T> for ErrorResponse
 where
     T: snafu::Error,
-    &'static str: From<&'a T>,
+    &'a T: Into<&'static str>, // from strum::IntoStaticStr
 {
+    /// Generates a response based on a general error.
+    ///
+    /// If you have a [service error](crate::error::Error), please use the more specific
+    /// function [`ErrorResponse::from_service_error`] to have better error codes.
     fn from(value: &'a T) -> Self {
+        let variant_name: &str = value.into();
+        let mut message = value.to_string();
+
+        if message == variant_name {
+            // error variant was not tagged with custom display
+            // => derive more sensible default than snafu
+            let conv = Converter::new()
+                .set_pattern(Pattern::Sentence)
+                .set_delim(' ');
+            message = conv.convert(variant_name);
+        }
         ErrorResponse {
-            error: Into::<&str>::into(value).to_string(),
-            message: value.to_string(),
+            error: variant_name.to_string(),
+            message,
         }
     }
 }
@@ -193,3 +224,41 @@ pub struct ZipResponse(Vec<u8>);
 #[derive(ToResponse)]
 #[response(description = "PNG Image", content_type = "image/png", example = json!("image bytes"))]
 pub struct PngResponse(Vec<u8>);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn it_extracts_inner_variant_and_derives_message() {
+        let inner_error = geoengine_datatypes::error::Error::InvalidUuid;
+        assert_eq!(
+            inner_error.to_string(),
+            "InvalidUuid",
+            "Precondition failed. InvalidUuid error should not have display annotation."
+        );
+        let wrapped_error = crate::error::Error::Operator {
+            source: geoengine_operators::error::Error::DataType {
+                source: inner_error,
+            },
+        };
+
+        let json_default = ErrorResponse::from(&wrapped_error);
+        assert_eq!(
+            json_default,
+            ErrorResponse {
+                error: "Operator".to_owned(),
+                message: "InvalidUuid".to_owned()
+            }
+        );
+
+        let json_pretty = ErrorResponse::from_service_error(&wrapped_error);
+        assert_eq!(
+            json_pretty,
+            ErrorResponse {
+                error: "InvalidUuid".to_owned(),
+                message: "Invalid uuid".to_owned()
+            }
+        );
+    }
+}

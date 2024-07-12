@@ -10,8 +10,9 @@ use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::ops::Range;
 use std::path::PathBuf;
+use strum::IntoStaticStr;
 
-#[derive(Debug, Snafu)]
+#[derive(Debug, Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum Error {

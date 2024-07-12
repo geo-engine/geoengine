@@ -6,6 +6,7 @@ use crate::{
 };
 use snafu::{prelude::*, AsErrorSource, ErrorCompat, IntoError};
 use std::{any::Any, convert::Infallible, path::PathBuf, sync::Arc};
+use strum::IntoStaticStr;
 
 use crate::util::Result;
 
@@ -56,7 +57,7 @@ where
     }
 }
 
-#[derive(Debug, Snafu)]
+#[derive(Debug, Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum Error {
