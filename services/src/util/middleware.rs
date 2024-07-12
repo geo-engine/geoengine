@@ -11,15 +11,10 @@ use tracing_actix_web::RequestId;
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
 
-// There are two steps in middleware processing.
-// 1. Middleware initialization, middleware factory gets called with
-//    next service in chain as parameter.
-// 2. Middleware's call method gets called with normal request.
+/// Middleware that sends the request id in the `x-request-id` header on failed requests.
+/// The header is skipped if actix tracing is deactivated.
 pub struct OutputRequestId;
 
-// Middleware factory is `Transform` trait
-// `S` - type of the next service
-// `B` - type of response's body
 impl<S, B> Transform<S, ServiceRequest> for OutputRequestId
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
@@ -61,12 +56,11 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        // TODO: rethink this error handling
         let request_id = req
             .extensions()
             .get::<RequestId>()
             .copied()
-            .expect("it should not run without the `RequestId` extension");
+            .expect("`RequestId` was attached by `TracingLogger`");
 
         let fut = self.service.call(req);
 
