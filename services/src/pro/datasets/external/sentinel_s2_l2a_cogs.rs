@@ -1330,7 +1330,7 @@ mod tests {
         assert_eq!(
             parts,
             vec![GdalLoadingInfoTemporalSlice {
-                time: TimeInterval::new_unchecked(1_632_384_644_000, 1_632_384_645_000),
+                time: TimeInterval::new_unchecked(1_632_384_644_000,1_632_384_704_000),
                 params: Some(GdalDatasetParameters {
                     file_path: "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif".into(),
                     rasterband_channel: 1,

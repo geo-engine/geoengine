@@ -306,6 +306,11 @@ impl<T: Pixel> StateContainer<T> {
                 old_time.end() <= new_time.start(),
                 "Time progress must be positive"
             );
+
+            debug_assert!(
+                !old_time.is_instant() || old_time.end() < new_time.start(),
+                "Instant progress must be > 1"
+            );
         }
         self.current_time = Some(new_time);
     }
@@ -552,7 +557,6 @@ where
                             ) {
                                 // the tile is the next to produce. Return it and set state to polling for the next tile.
                                 this.sc.state = State::PollingForNextTile;
-
                                 tile
                             } else {
                                 // the tile is not the next to produce. Save it and go to fill mode.

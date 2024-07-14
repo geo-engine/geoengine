@@ -102,6 +102,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         let mut known_time_start: Option<TimeInstance> = None;
         let mut known_time_end: Option<TimeInstance> = None;
 
+        // TODO: reverse one step?
         TimeStepIter::new_with_interval(data_time, step)?
             .into_intervals(step, data_time.end())
             .for_each(|time_interval| {
@@ -537,8 +538,19 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
 pub struct GdalLoadingInfo {
     /// partitions of dataset sorted by time
     pub info: GdalLoadingInfoTemporalSliceIterator,
-    pub known_time_before: Option<TimeInstance>,
-    pub known_time_after: Option<TimeInstance>,
+    /// To answer the query time, the `TimeInterval` of the first issued part must contain the query start and the last issued part must contain the query end.
+    /// This is the start of the first part produced to answer the query. If there is no data part that intersects the query start, this is the last time known before the query start.
+    /// IF there is a part starting exactly at the query time start. It is the start time of that part (and the query).
+    /// ELSE IF there is a known element with an end before the query time it is the end of that `TimeInterval`.
+    /// ELSE IF there is no data at all (and never will be) it might be `TimeInstance::MIN`.
+    /// ELSE it should be None and the GdalSource will replace it with the start of the query AND issue a warning about missing information.
+    pub first_part_to_answer_query_time_start: Option<TimeInstance>,
+    /// This is the end of the last part produced to answer the query.
+    /// IF there is no data part that intersects the query end, this is the first time known after the query end.
+    /// ELSE IF there is a known element with an end after the query time it is the start of that `TimeInterval`.
+    /// ELSE IF there is no data at all (and never will be) it might be `TimeInstance::MAX`.
+    /// ELSE it should be None and the GdalSource will replace it with the start of the query AND issue a warning about missing information.
+    pub last_part_to_answer_query_time_end: Option<TimeInstance>,
 }
 
 impl GdalLoadingInfo {
@@ -553,18 +565,18 @@ impl GdalLoadingInfo {
     ) -> Self {
         Self {
             info,
-            known_time_before: Some(known_time_before),
-            known_time_after: Some(known_time_after),
+            first_part_to_answer_query_time_start: Some(known_time_before),
+            last_part_to_answer_query_time_end: Some(known_time_after),
         }
     }
 
     /// NOTE! This method creates a new `GdalLoadingInfo` without information of the elements containing the query start/end `TimeInstance`.
-    /// IF a provider can't determine where the prev. and/or following elements are places in time use this method.
+    /// IF a provider can't determine where the prev. and/or following elements are placed in time use this method.
     pub fn new_no_known_time_bounds(info: GdalLoadingInfoTemporalSliceIterator) -> Self {
         Self {
             info,
-            known_time_after: None,
-            known_time_before: None,
+            last_part_to_answer_query_time_end: None,
+            first_part_to_answer_query_time_start: None,
         }
     }
 }
