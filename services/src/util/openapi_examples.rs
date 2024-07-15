@@ -392,8 +392,8 @@ pub async fn can_run_examples<F, Fut>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::model::services::Volume;
     use crate::contexts::SimpleApplicationContext;
-    use crate::datasets::upload::Volume;
     use crate::ge_context;
     use crate::util::server::{configure_extractors, render_404, render_405};
     use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
@@ -728,7 +728,7 @@ mod tests {
 
     #[ge_context::test(expect_panic = "BodyDeserializeError")]
     async fn detects_bodydeserializeerror(app_ctx: PostgresContext<NoTls>) {
-        run_dummy_example(app_ctx, json!({"name": "note-path_field_missing"})).await;
+        run_dummy_example(app_ctx, json!({"path": "note-name_field_missing"})).await;
     }
 
     #[ge_context::test]
