@@ -11,7 +11,9 @@ use crate::{
     datasets::{
         listing::{DatasetListOptions, DatasetProvider},
         storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
-        upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName},
+        upload::{
+            AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName, Volumes,
+        },
         DatasetName,
     },
     error::{self, Result},
@@ -97,7 +99,7 @@ where
         (status = 200, description = "OK", body = [Volume],
             example = json!([
                 {
-                    "id": "f6aa9f3d-a211-43e8-9b91-b23ab9632791",
+                    "name": "test_data",
                     "path": "./test_data/"
                 }
             ])
@@ -902,9 +904,9 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
                 .main_file
                 .ok_or(error::Error::NoMainFileCandidateFound)?;
 
-            let volumes = app_ctx.session_context(session).volumes()?;
+            let volumes = Volumes::default();
 
-            let root_path = volumes.iter().find(|v| v.name == volume).ok_or(
+            let root_path = volumes.volumes.iter().find(|v| v.name == volume).ok_or(
                 crate::error::Error::UnknownVolumeName {
                     volume_name: volume.0,
                 },
@@ -933,7 +935,11 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
             meta_data: meta_data.into(),
         }))
     } else {
-        let gdal_params = gdal_parameters_from_dataset(&dataset, 1, &main_file_path, None, None)?;
+        let mut gdal_params =
+            gdal_parameters_from_dataset(&dataset, 1, &main_file_path, None, None)?;
+        if let Ok(relative_path) = gdal_params.file_path.strip_prefix(root_path) {
+            gdal_params.file_path = relative_path.to_path_buf();
+        }
         let result_descriptor = raster_descriptor_from_dataset(&dataset, 1)?;
 
         Ok(web::Json(MetaDataSuggestion {

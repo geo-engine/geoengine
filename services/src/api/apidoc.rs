@@ -34,13 +34,13 @@ use crate::api::model::responses::{
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
-    Provenance, ProvenanceOutput, Provenances, UpdateDataset,
+    Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
 };
 use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
 use crate::contexts::{SessionId, SimpleSession};
 use crate::datasets::listing::{DatasetListing, OrderBy};
 use crate::datasets::storage::{AutoCreateDataset, Dataset, SuggestMetaData};
-use crate::datasets::upload::{UploadId, Volume, VolumeName};
+use crate::datasets::upload::{UploadId, VolumeName};
 use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,

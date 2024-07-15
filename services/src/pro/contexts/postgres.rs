@@ -1,12 +1,13 @@
 use super::migrations::{pro_migrations, ProMigrationImpl};
 use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 use crate::api::cli::add_providers_from_directory;
+use crate::api::model::services::Volume;
 use crate::contexts::{
     initialize_database, ApplicationContext, CurrentSchemaMigration, MigrationResult,
     PostgresContext, QueryContextImpl, SessionId,
 };
 use crate::contexts::{GeoEngineDb, SessionContext};
-use crate::datasets::upload::{Volume, Volumes};
+use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
 use crate::pro::api::cli::add_datasets_from_directory;
@@ -41,7 +42,7 @@ use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::info;
 use rayon::ThreadPool;
-use snafu::{ensure, ResultExt};
+use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -336,9 +337,20 @@ where
     }
 
     fn volumes(&self) -> Result<Vec<Volume>> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
-
-        Ok(self.context.volumes.volumes.clone())
+        Ok(self
+            .context
+            .volumes
+            .volumes
+            .iter()
+            .map(|v| Volume {
+                name: v.name.0.clone(),
+                path: if self.session.is_admin() {
+                    Some(v.path.to_string_lossy().to_string())
+                } else {
+                    None
+                },
+            })
+            .collect())
     }
 
     fn session(&self) -> &Self::Session {

@@ -1,6 +1,6 @@
+use crate::api::model::services::Volume;
 use crate::datasets::external::netcdfcf::NetCdfCfProviderDb;
 use crate::datasets::storage::DatasetDb;
-use crate::datasets::upload::Volume;
 use crate::error::Result;
 use crate::layers::listing::LayerCollectionProvider;
 use crate::layers::storage::{LayerDb, LayerProviderDb};
