@@ -544,29 +544,29 @@ pub struct GdalLoadingInfo {
     /// ELSE IF there is a known element with an end before the query time it is the end of that `TimeInterval`.
     /// ELSE IF there is no data at all (and never will be) it might be `TimeInstance::MIN`.
     /// ELSE it should be None and the GdalSource will replace it with the start of the query AND issue a warning about missing information.
-    pub first_part_to_answer_query_time_start: Option<TimeInstance>,
+    pub start_time_of_output_stream: Option<TimeInstance>,
     /// This is the end of the last part produced to answer the query.
     /// IF there is no data part that intersects the query end, this is the first time known after the query end.
     /// ELSE IF there is a known element with an end after the query time it is the start of that `TimeInterval`.
     /// ELSE IF there is no data at all (and never will be) it might be `TimeInstance::MAX`.
     /// ELSE it should be None and the GdalSource will replace it with the start of the query AND issue a warning about missing information.
-    pub last_part_to_answer_query_time_end: Option<TimeInstance>,
+    pub end_time_of_output_stream: Option<TimeInstance>,
 }
 
 impl GdalLoadingInfo {
     /// This method generates a new `GdalLoadingInfo`.
-    /// It requires you to set the time bounds of the elemets containing the start and the end of the query to answer.
-    /// In an ideal world this is the start and end of the elements containing the start and end of the query.
-    /// IF there is a nodata or other kind of temporal gap you must set the bounds to the start / end of the gap (connecting to the prev. and/or following element).
+    /// The temporal slice iterator may not start/end covering the temporal part of the query. In this case the first temporal slice starts after the query start and there is a gap that has to be filled with a nodata tile.
+    /// This nodata tile needs a temporal validity, thus we need to know how long before the start of the first loading info there is no data.
+    /// This information is passed as start/end_time_of_output_stream.
     pub fn new(
         info: GdalLoadingInfoTemporalSliceIterator,
-        known_time_before: TimeInstance,
-        known_time_after: TimeInstance,
+        start_time_of_output_stream: TimeInstance,
+        end_time_of_output_stream: TimeInstance,
     ) -> Self {
         Self {
             info,
-            first_part_to_answer_query_time_start: Some(known_time_before),
-            last_part_to_answer_query_time_end: Some(known_time_after),
+            start_time_of_output_stream: Some(start_time_of_output_stream),
+            end_time_of_output_stream: Some(end_time_of_output_stream),
         }
     }
 
@@ -575,8 +575,8 @@ impl GdalLoadingInfo {
     pub fn new_no_known_time_bounds(info: GdalLoadingInfoTemporalSliceIterator) -> Self {
         Self {
             info,
-            last_part_to_answer_query_time_end: None,
-            first_part_to_answer_query_time_start: None,
+            end_time_of_output_stream: None,
+            start_time_of_output_stream: None,
         }
     }
 }

@@ -740,8 +740,8 @@ where
         };
 
         let time_bounds = match (
-            loading_info.first_part_to_answer_query_time_start,
-            loading_info.last_part_to_answer_query_time_end,
+            loading_info.start_time_of_output_stream,
+            loading_info.end_time_of_output_stream,
         ) {
             (Some(start), Some(end)) => FillerTimeBounds::new(start, end),
             (None, None) => {
