@@ -657,7 +657,7 @@ where
                 tiling_strat.geo_transform,
                 self.tiling_spec.tile_size_in_pixels,
                 FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-                FillerTimeBounds::from(query.time_interval),
+                FillerTimeBounds::from(query.time_interval), // TODO: derive this from the query once the child query can provide this.
             )))
         }
     }

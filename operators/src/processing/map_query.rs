@@ -60,7 +60,7 @@ where
                 &query,
                 self.additional_data,
                 FillerTileCacheExpirationStrategy::NoCache,
-                FillerTimeBounds::from(query.time_interval),
+                FillerTimeBounds::from(query.time_interval), // TODO: derive this from the query once the child query can provide this.
             )
             .boxed())
         }
