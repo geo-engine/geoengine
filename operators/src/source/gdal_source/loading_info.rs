@@ -557,7 +557,7 @@ impl GdalLoadingInfo {
     /// This method generates a new `GdalLoadingInfo`.
     /// The temporal slice iterator may not start/end covering the temporal part of the query. In this case the first temporal slice starts after the query start and there is a gap that has to be filled with a nodata tile.
     /// This nodata tile needs a temporal validity, thus we need to know how long before the start of the first loading info there is no data.
-    /// This information is passed as start/end_time_of_output_stream.
+    /// This information is passed as `start/end_time_of_output_stream`.
     pub fn new(
         info: GdalLoadingInfoTemporalSliceIterator,
         start_time_of_output_stream: TimeInstance,
