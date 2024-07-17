@@ -1,9 +1,10 @@
 use super::migrations::{all_migrations, CurrentSchemaMigration, MigrationResult};
 use super::{initialize_database, ExecutionContextImpl, Session, SimpleApplicationContext};
 use crate::api::cli::{add_datasets_from_directory, add_providers_from_directory};
+use crate::api::model::services::Volume;
 use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId, SimpleSession};
 use crate::contexts::{GeoEngineDb, SessionContext};
-use crate::datasets::upload::{Volume, Volumes};
+use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
 use crate::layers::add_from_directory::{
@@ -382,7 +383,16 @@ where
     }
 
     fn volumes(&self) -> Result<Vec<Volume>> {
-        Ok(self.context.volumes.volumes.clone())
+        Ok(self
+            .context
+            .volumes
+            .volumes
+            .iter()
+            .map(|v| Volume {
+                name: v.name.0.clone(),
+                path: Some(v.path.to_string_lossy().to_string()),
+            })
+            .collect())
     }
 
     fn session(&self) -> &Self::Session {
