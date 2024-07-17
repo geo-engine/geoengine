@@ -650,7 +650,7 @@ impl ArunaDataProvider {
             cache_ttl,
         };
 
-        // FIXME: someone with more detailed insights needs to add the time bounds!
+        // FIXME: We need more information about the datasets. One way would be to store the time information as metadata in Aruna itself.
         GdalLoadingInfo::new_no_known_time_bounds(GdalLoadingInfoTemporalSliceIterator::Static {
             parts: vec![part].into_iter(),
         })
