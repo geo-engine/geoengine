@@ -650,11 +650,10 @@ impl ArunaDataProvider {
             cache_ttl,
         };
 
-        GdalLoadingInfo {
-            info: GdalLoadingInfoTemporalSliceIterator::Static {
-                parts: vec![part].into_iter(),
-            },
-        }
+        // FIXME: We need more information about the datasets. One way would be to store the time information as metadata in Aruna itself.
+        GdalLoadingInfo::new_no_known_time_bounds(GdalLoadingInfoTemporalSliceIterator::Static {
+            parts: vec![part].into_iter(),
+        })
     }
 }
 
@@ -991,11 +990,12 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
                     })
                     .collect::<std::vec::Vec<_>>();
 
-                Ok(Self {
-                    info: GdalLoadingInfoTemporalSliceIterator::Static {
+                Ok(Self::new_no_known_time_bounds(
+                    // FIXME: someone with more detailed insights into the provider needs to add the time bounds
+                    GdalLoadingInfoTemporalSliceIterator::Static {
                         parts: new_parts.into_iter(),
                     },
-                })
+                ))
             }
             _ => Err(geoengine_operators::error::Error::InvalidType {
                 found: "GdalLoadingInfoPartIterator::Dynamic".to_string(),

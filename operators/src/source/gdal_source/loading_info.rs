@@ -35,14 +35,33 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                 params: Some(self.params.clone()),
                 cache_ttl: self.cache_ttl,
             }]
-            .into_iter()
         } else {
-            vec![].into_iter()
+            vec![]
         };
 
-        Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoTemporalSliceIterator::Static { parts },
-        })
+        let known_time_before = if query.time_interval.start() < valid.start() {
+            TimeInstance::MIN
+        } else if query.time_interval.start() < valid.end() {
+            valid.start()
+        } else {
+            valid.end()
+        };
+
+        let known_time_after = if query.time_interval.end() <= valid.start() {
+            valid.start()
+        } else if query.time_interval.end() <= valid.end() {
+            valid.end()
+        } else {
+            TimeInstance::MAX
+        };
+
+        Ok(GdalLoadingInfo::new(
+            GdalLoadingInfoTemporalSliceIterator::Static {
+                parts: parts.into_iter(),
+            },
+            known_time_before,
+            known_time_after,
+        ))
     }
 
     async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
@@ -77,18 +96,51 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for GdalMetaDataRegular
 {
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
-        Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoTemporalSliceIterator::Dynamic(
-                DynamicGdalLoadingInfoPartIterator::new(
-                    self.params.clone(),
-                    self.time_placeholders.clone(),
-                    self.step,
-                    query.time_interval,
-                    self.data_time,
-                    self.cache_ttl,
-                )?,
-            ),
-        })
+        let data_time = self.data_time;
+        let step = self.step;
+
+        let mut known_time_start: Option<TimeInstance> = None;
+        let mut known_time_end: Option<TimeInstance> = None;
+
+        // TODO: reverse one step?
+        TimeStepIter::new_with_interval(data_time, step)?
+            .into_intervals(step, data_time.end())
+            .for_each(|time_interval| {
+                if time_interval.start() <= query.time_interval.start() {
+                    let t = if time_interval.end() > query.time_interval.start() {
+                        time_interval.start()
+                    } else {
+                        time_interval.end()
+                    };
+                    known_time_start = known_time_start.map(|old| old.max(t)).or(Some(t));
+                }
+
+                if time_interval.end() >= query.time_interval.end() {
+                    let t = if time_interval.start() < query.time_interval.end() {
+                        time_interval.end()
+                    } else {
+                        time_interval.start()
+                    };
+                    known_time_end = known_time_end.map(|old| old.min(t)).or(Some(t));
+                }
+            });
+
+        // if we found no time bound we can assume that there is no data
+        let known_time_before = known_time_start.unwrap_or(TimeInstance::MIN);
+        let known_time_after = known_time_end.unwrap_or(TimeInstance::MAX);
+
+        Ok(GdalLoadingInfo::new(
+            GdalLoadingInfoTemporalSliceIterator::Dynamic(DynamicGdalLoadingInfoPartIterator::new(
+                self.params.clone(),
+                self.time_placeholders.clone(),
+                self.step,
+                query.time_interval,
+                self.data_time,
+                self.cache_ttl,
+            )?),
+            known_time_before,
+            known_time_after,
+        ))
     }
 
     async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
@@ -153,8 +205,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 
         let time_iterator = TimeStepIter::new_with_interval(snapped_interval, self.step)?;
 
-        Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoTemporalSliceIterator::NetCdfCf(
+        Ok(GdalLoadingInfo::new_no_known_time_bounds(
+            GdalLoadingInfoTemporalSliceIterator::NetCdfCf(
                 NetCdfCfGdalLoadingInfoPartIterator::new(
                     time_iterator,
                     self.params.clone(),
@@ -165,7 +217,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                     self.cache_ttl,
                 ),
             ),
-        })
+        ))
     }
 
     async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
@@ -190,22 +242,48 @@ pub struct GdalMetaDataList {
 #[async_trait]
 impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for GdalMetaDataList {
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
-        #[allow(clippy::needless_collect)]
-        let parts = self
+        let mut known_time_start: Option<TimeInstance> = None;
+        let mut known_time_end: Option<TimeInstance> = None;
+
+        let data = self
             .params
             .iter()
-            .filter(|item| item.time.intersects(&query.time_interval))
+            .inspect(|m| {
+                let time_interval = m.time;
+
+                if time_interval.start() <= query.time_interval.start() {
+                    let t = if time_interval.end() > query.time_interval.start() {
+                        time_interval.start()
+                    } else {
+                        time_interval.end()
+                    };
+                    known_time_start = known_time_start.map(|old| old.max(t)).or(Some(t));
+                }
+
+                if time_interval.end() >= query.time_interval.end() {
+                    let t = if time_interval.start() < query.time_interval.end() {
+                        time_interval.end()
+                    } else {
+                        time_interval.start()
+                    };
+                    known_time_end = known_time_end.map(|old| old.min(t)).or(Some(t));
+                }
+            })
+            .filter(|m| m.time.intersects(&query.time_interval))
             .cloned()
             .collect::<Vec<_>>();
 
-        // TODO: if `parts` is empty, return a `GdalLoadingInfoTemporalSlice` with `None` as params but proper cache ttl,
-        //       otherwise the result will not be cached, because the fill adapter can't derive the ttl as there are no surrounding tiles
+        // if we found no time bound we can assume that there is no data
+        let known_time_before = known_time_start.unwrap_or(TimeInstance::MIN);
+        let known_time_after = known_time_end.unwrap_or(TimeInstance::MAX);
 
-        Ok(GdalLoadingInfo {
-            info: GdalLoadingInfoTemporalSliceIterator::Static {
-                parts: parts.into_iter(),
+        Ok(GdalLoadingInfo::new(
+            GdalLoadingInfoTemporalSliceIterator::Static {
+                parts: data.into_iter(),
             },
-        })
+            known_time_before,
+            known_time_after,
+        ))
     }
 
     async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
@@ -460,6 +538,47 @@ impl Iterator for NetCdfCfGdalLoadingInfoPartIterator {
 pub struct GdalLoadingInfo {
     /// partitions of dataset sorted by time
     pub info: GdalLoadingInfoTemporalSliceIterator,
+    /// To answer the query time, the `TimeInterval` of the first issued part must contain the query start and the last issued part must contain the query end.
+    /// This is the start of the first part produced to answer the query. If there is no data part that intersects the query start, this is the last time known before the query start.
+    /// IF there is a part starting exactly at the query time start. It is the start time of that part (and the query).
+    /// ELSE IF there is a known element with an end before the query time it is the end of that `TimeInterval`.
+    /// ELSE IF there is no data at all (and never will be) it might be `TimeInstance::MIN`.
+    /// ELSE it should be None and the GdalSource will replace it with the start of the query AND issue a warning about missing information.
+    pub start_time_of_output_stream: Option<TimeInstance>,
+    /// This is the end of the last part produced to answer the query.
+    /// IF there is no data part that intersects the query end, this is the first time known after the query end.
+    /// ELSE IF there is a known element with an end after the query time it is the start of that `TimeInterval`.
+    /// ELSE IF there is no data at all (and never will be) it might be `TimeInstance::MAX`.
+    /// ELSE it should be None and the GdalSource will replace it with the start of the query AND issue a warning about missing information.
+    pub end_time_of_output_stream: Option<TimeInstance>,
+}
+
+impl GdalLoadingInfo {
+    /// This method generates a new `GdalLoadingInfo`.
+    /// The temporal slice iterator may not start/end covering the temporal part of the query. In this case the first temporal slice starts after the query start and there is a gap that has to be filled with a nodata tile.
+    /// This nodata tile needs a temporal validity, thus we need to know how long before the start of the first loading info there is no data.
+    /// This information is passed as `start/end_time_of_output_stream`.
+    pub fn new(
+        info: GdalLoadingInfoTemporalSliceIterator,
+        start_time_of_output_stream: TimeInstance,
+        end_time_of_output_stream: TimeInstance,
+    ) -> Self {
+        Self {
+            info,
+            start_time_of_output_stream: Some(start_time_of_output_stream),
+            end_time_of_output_stream: Some(end_time_of_output_stream),
+        }
+    }
+
+    /// NOTE! This method creates a new `GdalLoadingInfo` without information of the elements containing the query start/end `TimeInstance`.
+    /// IF a provider can't determine where the prev. and/or following elements are placed in time use this method.
+    pub fn new_no_known_time_bounds(info: GdalLoadingInfoTemporalSliceIterator) -> Self {
+        Self {
+            info,
+            end_time_of_output_stream: None,
+            start_time_of_output_stream: None,
+        }
+    }
 }
 
 #[allow(clippy::large_enum_variant)]

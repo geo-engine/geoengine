@@ -17,7 +17,8 @@ pub use simple_raster_stacker::{
     stack_individual_aligned_raster_bands, SimpleRasterStackerAdapter, SimpleRasterStackerSource,
 };
 pub use sparse_tiles_fill_adapter::{
-    FillerTileCacheExpirationStrategy, SparseTilesFillAdapter, SparseTilesFillAdapterError,
+    FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
+    SparseTilesFillAdapterError,
 };
 
 use self::raster_time_substream::RasterTimeMultiFold;
