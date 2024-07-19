@@ -1,0 +1,10 @@
+{
+  "type": "CopernicusDataspaceDataProviderDefinition",
+  "id": "bf888259-e4dd-4872-ac4a-f6d1f05a5014",
+  "name": "Copernicus Dataspace",
+  "description": "",
+  "stacUrl": "https://catalogue.dataspace.copernicus.eu/stac",
+  "s3Url": "dataspace.copernicus.eu",
+  "s3AccessKey": "XYZ",
+  "s3SecretKey": "XYZ"
+}

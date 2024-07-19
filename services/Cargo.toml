@@ -79,6 +79,7 @@ serde_with = "3.6"
 snafu = "0.8"
 stream-cancel = "0.8"
 strum = { version = "0.26", features = ["derive"] }
+strum_macros = "0.26.0"
 time = "0.3"
 tokio = { version = "1.36", features = [
   "macros",
@@ -128,7 +129,7 @@ nix = { version = "0.27", features = ["socket"] }
 assert_cmd = "2.0"
 httptest = "0.15"
 pretty_assertions = "1.4"
-prost = "0.12.3"            # must be compatbile with aruna-rust-api
+prost = "0.12.3"          # must be compatbile with aruna-rust-api
 serial_test = "3.0"
 tempfile = "3.10"
 xml-rs = "0.8"

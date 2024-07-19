@@ -1,8 +1,8 @@
 use crate::{
     error::Error,
     pro::datasets::{
-        GdalRetries, SentinelS2L2ACogsProviderDefinition, StacApiRetries,
-        TypedProDataProviderDefinition,
+        CopernicusDataspaceDataProviderDefinition, GdalRetries,
+        SentinelS2L2ACogsProviderDefinition, StacApiRetries, TypedProDataProviderDefinition,
     },
 };
 use geoengine_datatypes::delegate_from_to_sql;
@@ -65,15 +65,23 @@ impl TryFrom<GdalRetriesDbType> for GdalRetries {
 #[derive(Debug, ToSql, FromSql)]
 #[postgres(name = "ProDataProviderDefinition")]
 pub struct TypedProDataProviderDefinitionDbType {
+    copernicus_dataspace_provider_definition: Option<CopernicusDataspaceDataProviderDefinition>,
     sentinel_s2_l2_a_cogs_provider_definition: Option<SentinelS2L2ACogsProviderDefinition>,
 }
 
 impl From<&TypedProDataProviderDefinition> for TypedProDataProviderDefinitionDbType {
     fn from(other: &TypedProDataProviderDefinition) -> Self {
         match other {
+            TypedProDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(
+                data_provider_definition,
+            ) => Self {
+                copernicus_dataspace_provider_definition: Some(data_provider_definition.clone()),
+                sentinel_s2_l2_a_cogs_provider_definition: None,
+            },
             TypedProDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(
                 data_provider_definition,
             ) => Self {
+                copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: Some(data_provider_definition.clone()),
             },
         }
@@ -89,9 +97,18 @@ impl TryFrom<TypedProDataProviderDefinitionDbType> for TypedProDataProviderDefin
     ) -> Result<Self, Self::Error> {
         match result_descriptor {
             TypedProDataProviderDefinitionDbType {
+                copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: Some(data_provider_definition),
             } => Ok(
                 TypedProDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(
+                    data_provider_definition,
+                ),
+            ),
+            TypedProDataProviderDefinitionDbType {
+                copernicus_dataspace_provider_definition: Some(data_provider_definition),
+                sentinel_s2_l2_a_cogs_provider_definition: None,
+            } => Ok(
+                TypedProDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(
                     data_provider_definition,
                 ),
             ),
@@ -207,8 +224,36 @@ mod tests {
 
             assert_sql_type(
                 &pool,
+                "CopernicusDataspaceDataProviderDefinition",
+                [CopernicusDataspaceDataProviderDefinition {
+                    name: "foo".to_owned(),
+                    description: "A provider".to_owned(),
+                    priority: Some(3),
+                    id: DataProviderId::new(),
+                    stac_url: "https://catalogue.dataspace.copernicus.eu/stac".to_string(),
+                    s3_url: "dataspace.copernicus.eu".to_string(),
+                    s3_access_key: "XYZ".to_string(),
+                    s3_secret_key: "XYZ".to_string(),
+                }],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
                 "ProDataProviderDefinition",
                 [
+                    TypedProDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(
+                        CopernicusDataspaceDataProviderDefinition {
+                            name: "foo".to_owned(),
+                            description: "A provider".to_owned(),
+                            priority: Some(3),
+                            id: DataProviderId::new(),
+                            stac_url: "https://catalogue.dataspace.copernicus.eu/stac".to_string(),
+                            s3_url: "dataspace.copernicus.eu".to_string(),
+                            s3_access_key: "XYZ".to_string(),
+                            s3_secret_key: "XYZ".to_string(),
+                        },
+                    ),
                     TypedProDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(
                         SentinelS2L2ACogsProviderDefinition {
                             name: "foo".to_owned(),
