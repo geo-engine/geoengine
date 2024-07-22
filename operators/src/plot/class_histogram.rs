@@ -1,11 +1,11 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    InitializedVectorOperator, OperatorName, PlotOperator, PlotQueryProcessor,
     PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::engine::{QueryProcessor, WorkflowOperatorPath};
-use crate::error;
+use crate::{define_operator, error};
 use crate::error::Error;
 use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
@@ -18,6 +18,7 @@ use geoengine_datatypes::primitives::{
     Measurement, PlotQueryRectangle, RasterQueryRectangle,
 };
 use num_traits::AsPrimitive;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt};
 use std::collections::HashMap;
@@ -28,14 +29,16 @@ pub const CLASS_HISTOGRAM_OPERATOR_NAME: &str = "ClassHistogram";
 ///
 /// For vector inputs, it calculates the histogram on one of its attributes.
 ///
-pub type ClassHistogram = Operator<ClassHistogramParams, SingleRasterOrVectorSource>;
-
-impl OperatorName for ClassHistogram {
-    const TYPE_NAME: &'static str = "ClassHistogram";
-}
+define_operator!(
+    ClassHistogram,
+    ClassHistogramParams,
+    SingleRasterOrVectorSource,
+    output_type = "plot",
+    help_url = "https://docs.geoengine.io/plots/classHistogram.html"
+);
 
 /// The parameter spec for `Histogram`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ClassHistogramParams {
     /// Name of the (numeric) attribute to compute the histogram on. Fails if set for rasters.

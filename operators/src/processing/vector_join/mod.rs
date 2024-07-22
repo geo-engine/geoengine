@@ -1,15 +1,16 @@
 use geoengine_datatypes::dataset::NamedData;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use geoengine_datatypes::collections::VectorDataType;
 
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
+    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
     OperatorData, OperatorName, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
 };
-use crate::error;
+use crate::{define_operator, error};
 use crate::util::Result;
 
 use self::equi_data_join::EquiGeoToDataJoinProcessor;
@@ -21,21 +22,23 @@ mod equi_data_join;
 mod util;
 
 /// The vector join operator requires two inputs and the join type.
-pub type VectorJoin = Operator<VectorJoinParams, VectorJoinSources>;
-
-impl OperatorName for VectorJoin {
-    const TYPE_NAME: &'static str = "VectorJoin";
-}
+define_operator!(
+    VectorJoin,
+    VectorJoinParams,
+    VectorJoinSources,
+    output_type = "vector",
+    help_url = "https://docs.geoengine.io/operators/vectorjoin.html"
+);
 
 /// A set of parameters for the `VectorJoin`
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorJoinParams {
     #[serde(flatten)]
     join_type: VectorJoinType,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorJoinSources {
     left: Box<dyn VectorOperator>,
@@ -75,7 +78,7 @@ impl InitializedSources<InitializedVectorJoinSources> for VectorJoinSources {
 }
 
 /// Define the type of join
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(tag = "type")]
 pub enum VectorJoinType {
     /// An inner equi-join between a `GeoFeatureCollection` and a `DataCollection`

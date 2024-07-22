@@ -1,11 +1,11 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
+    InitializedVectorOperator, OperatorName, PlotOperator, PlotQueryProcessor,
     PlotResultDescriptor, QueryContext, SingleRasterOrVectorSource, TypedPlotQueryProcessor,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::engine::{QueryProcessor, WorkflowOperatorPath};
-use crate::error;
+use crate::{define_operator, error};
 use crate::error::Error;
 use crate::string_token;
 use crate::util::input::RasterOrVectorOperator;
@@ -24,6 +24,7 @@ use geoengine_datatypes::{
     collections::{FeatureCollection, FeatureCollectionInfos},
     raster::GridSize,
 };
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::TryFrom;
@@ -34,14 +35,16 @@ pub const HISTOGRAM_OPERATOR_NAME: &str = "Histogram";
 ///
 /// For vector inputs, it calculates the histogram on one of its attributes.
 ///
-pub type Histogram = Operator<HistogramParams, SingleRasterOrVectorSource>;
-
-impl OperatorName for Histogram {
-    const TYPE_NAME: &'static str = "Histogram";
-}
+define_operator!(
+    Histogram,
+    HistogramParams,
+    SingleRasterOrVectorSource,
+    output_type = "plot",
+    help_url = "https://docs.geoengine.io/plots/histogram.html"
+);
 
 /// The parameter spec for `Histogram`
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HistogramParams {
     /// Name of the (numeric) vector attribute or raster band to compute the histogram on.
@@ -56,7 +59,7 @@ pub struct HistogramParams {
 }
 
 /// Options for how to derive the histogram's number of buckets.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum HistogramBuckets {
     #[serde(rename_all = "camelCase")]
@@ -74,8 +77,33 @@ fn default_max_number_of_buckets() -> u8 {
 
 string_token!(Data, "data");
 
+impl schemars::JsonSchema for Data {
+    fn schema_name() -> String {
+        "Data".to_owned()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(concat!(module_path!(), "::Data"))
+    }
+
+    fn is_referenceable() -> bool {
+        false
+    }
+
+    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        use schemars::schema::*;
+        Schema::Object(SchemaObject {
+            instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::String))),
+            enum_values: Some(vec![
+                serde_json::Value::String("data".to_owned())
+            ]),
+            ..Default::default()
+        })
+    }
+}
+
 /// Let the bounds either be computed or given.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum HistogramBounds {
     Data(Data),
