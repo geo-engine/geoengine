@@ -1,3 +1,4 @@
+use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use std::str::FromStr;
 use strum::EnumIter;
 use strum_macros::EnumString;
@@ -24,11 +25,19 @@ pub enum Sentinel2LayerCollectionId {
         product: Sentinel2Product,
         zone: UtmZone,
     },
-    ProductZoneBand {
-        product: Sentinel2Product,
-        zone: UtmZone,
-        band: Sentinel2Band,
-    },
+}
+
+#[derive(Debug, Clone)]
+pub enum CopernicusDataspaceLayerId {
+    // Sentinel1,
+    Sentinel2(Sentinel2LayerId),
+}
+
+#[derive(Debug, Clone)]
+pub struct Sentinel2LayerId {
+    pub product: Sentinel2Product,
+    pub zone: UtmZone,
+    pub band: Sentinel2Band,
 }
 
 #[derive(Debug, Clone, Copy, EnumString, strum::Display, EnumIter)]
@@ -101,6 +110,61 @@ impl From<CopernicusDataspaceLayerCollectionId> for LayerCollectionId {
     }
 }
 
+impl FromStr for CopernicusDataspaceLayerId {
+    type Err = crate::error::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.splitn(3, '/');
+
+        let root = parts.next().ok_or(Error::InvalidLayerCollectionId)?;
+        let dataset = parts.next();
+        let rem = parts.next();
+
+        match (root, dataset, rem) {
+            ("datasets", Some("SENTINEL-2"), rem) => Ok(Self::Sentinel2(
+                rem.unwrap_or("").parse::<Sentinel2LayerId>()?,
+            )),
+            _ => Err(Error::InvalidLayerId),
+        }
+    }
+}
+
+impl From<CopernicusDataspaceLayerId> for LayerId {
+    fn from(id: CopernicusDataspaceLayerId) -> Self {
+        match id {
+            CopernicusDataspaceLayerId::Sentinel2(sentinel2) => sentinel2.into(),
+        }
+    }
+}
+
+pub struct CopernicusDataId(pub CopernicusDataspaceLayerId, pub DataProviderId);
+
+impl From<CopernicusDataId> for DataId {
+    fn from(id: CopernicusDataId) -> Self {
+        match id.0 {
+            CopernicusDataspaceLayerId::Sentinel2(sentinel2) => {
+                Sentinel2DataId(sentinel2, id.1).into()
+            }
+        }
+    }
+}
+
+impl TryFrom<DataId> for CopernicusDataId {
+    type Error = crate::error::Error;
+
+    fn try_from(id: DataId) -> Result<Self> {
+        let external_id = match id {
+            DataId::Internal { dataset_id: _ } => return Err(Error::InvalidDataId),
+            DataId::External(external_id) => external_id,
+        };
+
+        Ok(CopernicusDataId(
+            CopernicusDataspaceLayerId::from_str(&external_id.layer_id.0)?,
+            external_id.provider_id,
+        ))
+    }
+}
+
 impl FromStr for Sentinel2LayerCollectionId {
     type Err = crate::error::Error;
 
@@ -121,12 +185,6 @@ impl FromStr for Sentinel2LayerCollectionId {
                     .map_err(|_| Error::InvalidLayerCollectionId)?,
                 zone: UtmZone::from_str(zone)?,
             },
-            [product, zone, band] => Self::ProductZoneBand {
-                product: Sentinel2Product::from_str(product)
-                    .map_err(|_| Error::InvalidLayerCollectionId)?,
-                zone: UtmZone::from_str(zone)?,
-                band: Sentinel2Band::from_str(band).map_err(|_| Error::InvalidLayerCollectionId)?,
-            },
             _ => return Err(Error::InvalidLayerCollectionId),
         })
     }
@@ -142,14 +200,53 @@ impl From<Sentinel2LayerCollectionId> for LayerCollectionId {
             Sentinel2LayerCollectionId::ProductZone { product, zone } => {
                 format!("datasets/SENTINEL-2/{product}/{zone}")
             }
-            Sentinel2LayerCollectionId::ProductZoneBand {
-                product,
-                zone,
-                band,
-            } => format!("datasets/SENTINEL-2/{product}/{zone}/{band}"),
         };
 
         LayerCollectionId(s)
+    }
+}
+
+impl FromStr for Sentinel2LayerId {
+    type Err = crate::error::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            return Err(Error::InvalidLayerId);
+        }
+
+        let split: Vec<&str> = s.split('/').collect();
+
+        Ok(match *split.as_slice() {
+            [product, zone, band] => Self {
+                product: Sentinel2Product::from_str(product).map_err(|_| Error::InvalidLayerId)?,
+                zone: UtmZone::from_str(zone)?,
+                band: Sentinel2Band::from_str(band).map_err(|_| Error::InvalidLayerId)?,
+            },
+            _ => return Err(Error::InvalidLayerId),
+        })
+    }
+}
+
+impl From<Sentinel2LayerId> for LayerId {
+    fn from(id: Sentinel2LayerId) -> Self {
+        LayerId(format!(
+            "datasets/SENTINEL-2/{}/{}/{}",
+            id.product, id.zone, id.band
+        ))
+    }
+}
+
+pub struct Sentinel2DataId(Sentinel2LayerId, DataProviderId);
+
+impl From<Sentinel2DataId> for DataId {
+    fn from(id: Sentinel2DataId) -> Self {
+        Self::External(ExternalDataId {
+            provider_id: id.1,
+            layer_id: LayerId(format!(
+                "datasets/SENTINEL-2/{}/{}/{}",
+                id.0.product, id.0.zone, id.0.band
+            )),
+        })
     }
 }
 

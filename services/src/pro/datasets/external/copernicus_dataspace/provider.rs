@@ -6,7 +6,7 @@ use crate::{
     layers::{
         layer::{
             CollectionItem, Layer, LayerCollection, LayerCollectionListOptions,
-            LayerCollectionListing, ProviderLayerCollectionId,
+            LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
         },
         listing::LayerCollectionId,
     },
@@ -33,9 +33,12 @@ use crate::{
     },
 };
 
-use super::ids::{
-    CopernicusDataspaceLayerCollectionId, Sentinel2Band, Sentinel2LayerCollectionId,
-    Sentinel2Product, UtmZone,
+use super::{
+    ids::{
+        CopernicusDataId, CopernicusDataspaceLayerCollectionId, CopernicusDataspaceLayerId,
+        Sentinel2Band, Sentinel2LayerCollectionId, Sentinel2LayerId, Sentinel2Product, UtmZone,
+    },
+    sentinel2::Sentinel2Metadata,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, FromSql, ToSql)]
@@ -149,11 +152,6 @@ impl CopernicusDataspaceDataProvider {
             Sentinel2LayerCollectionId::ProductZone { product, zone } => {
                 self.load_sentinel2_product_zone_collection(product, zone)
             }
-            Sentinel2LayerCollectionId::ProductZoneBand {
-                product,
-                zone,
-                band,
-            } => self.load_sentinel2_product_zone_band_collection(product, zone, band),
         }
     }
 
@@ -229,17 +227,14 @@ impl CopernicusDataspaceDataProvider {
             description: "Bands".to_string(),
             items: Sentinel2Band::iter()
                 .map(|band| {
-                    CollectionItem::Collection(LayerCollectionListing {
-                        // TODO: this is a layer and not a collection?
-                        id: ProviderLayerCollectionId {
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
                             provider_id: self.id,
-                            collection_id: CopernicusDataspaceLayerCollectionId::Sentinel2(
-                                Sentinel2LayerCollectionId::ProductZoneBand {
-                                    product,
-                                    zone,
-                                    band,
-                                },
-                            )
+                            layer_id: CopernicusDataspaceLayerId::Sentinel2(Sentinel2LayerId {
+                                product,
+                                zone,
+                                band,
+                            })
                             .into(),
                         },
                         name: format!("{band}"),
@@ -253,14 +248,21 @@ impl CopernicusDataspaceDataProvider {
         }
     }
 
-    fn load_sentinel2_product_zone_band_collection(
+    fn sentinel2_meta_data(
         &self,
-        _product: Sentinel2Product,
-        _zone: UtmZone,
-        _band: Sentinel2Band,
-    ) -> LayerCollection {
-        // TODO: this is a layer and not a collection?
-        todo!()
+        product: Sentinel2Product,
+        zone: UtmZone,
+        band: Sentinel2Band,
+    ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
+        Box::new(Sentinel2Metadata {
+            stac_url: self.stac_url.clone(),
+            s3_url: self.s3_url.clone(),
+            s3_access_key: self.s3_access_key.clone(),
+            s3_secret_key: self.s3_secret_key.clone(),
+            product,
+            zone,
+            band,
+        })
     }
 }
 
@@ -335,12 +337,25 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 {
     async fn meta_data(
         &self,
-        _id: &geoengine_datatypes::dataset::DataId,
+        id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        todo!()
+        let id: CopernicusDataId =
+            id.clone()
+                .try_into()
+                .map_err(|_| geoengine_operators::error::Error::LoadingInfo {
+                    source: Box::new(Error::DataIdTypeMissMatch),
+                })?;
+
+        match id.0 {
+            CopernicusDataspaceLayerId::Sentinel2(Sentinel2LayerId {
+                product,
+                zone,
+                band,
+            }) => Ok(self.sentinel2_meta_data(product, zone, band)),
+        }
     }
 }
 
