@@ -75,6 +75,15 @@ pub enum UtmZoneDirection {
     South,
 }
 
+impl Sentinel2Product {
+    pub fn product_type(&self) -> &str {
+        match self {
+            Self::L1C => "S2MSI1C",
+            Self::L2A => "S2MSI2A",
+        }
+    }
+}
+
 impl FromStr for CopernicusDataspaceLayerCollectionId {
     type Err = crate::error::Error;
 

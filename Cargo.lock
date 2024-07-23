@@ -2881,6 +2881,7 @@ dependencies = [
  "serial_test",
  "sha2 0.10.8",
  "snafu",
+ "stac",
  "stream-cancel",
  "strum",
  "strum_macros",
@@ -6501,6 +6502,7 @@ version = "1.0.114"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c5f09b1bd632ef549eaa9f60a1f8de742bdbc698e6cee2095fc84dde5f549ae0"
 dependencies = [
+ "indexmap 2.2.2",
  "itoa",
  "ryu",
  "serde",
@@ -6805,6 +6807,20 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "stac"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77a1a5f55d16199f9b75c42f0742766ce7e34418e27e4618de8bcb88c1ce3d67"
+dependencies = [
+ "chrono",
+ "geojson",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "url",
+]
 
 [[package]]
 name = "static_assertions"
