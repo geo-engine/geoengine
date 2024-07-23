@@ -11,8 +11,10 @@ use geoengine_datatypes::primitives::DateTime;
 use crate::datasets::storage::MetaDataDefinition;
 use crate::datasets::upload::UploadId;
 use crate::datasets::{AddDataset, DatasetIdAndName};
+use crate::error::Error::IllegalDatasetStatus;
 use crate::error::Result;
 use crate::pro::datasets::storage::DatasetDeletionType::{DeleteData, DeleteRecordAndData};
+use crate::pro::permissions::Permission;
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -89,9 +91,11 @@ pub enum ExpirationChange {
     UnsetExpire,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum UploadedDatasetStatus {
     Available,
-    Deleted,
+    Expires(Expiration),
+    Deleted(Expiration),
 }
 
 #[derive(Debug, FromSql, ToSql)]
@@ -104,16 +108,85 @@ pub enum InternalUploadedDatasetStatus {
     DeletedWithError,
 }
 
-impl From<InternalUploadedDatasetStatus> for UploadedDatasetStatus {
-    fn from(value: InternalUploadedDatasetStatus) -> Self {
-        match value {
-            InternalUploadedDatasetStatus::Available | InternalUploadedDatasetStatus::Expires => {
-                UploadedDatasetStatus::Available
+impl InternalUploadedDatasetStatus {
+    pub fn convert_to_uploaded_dataset_status(
+        &self,
+        dataset_id: &DatasetId,
+        expiration_timestamp: Option<DateTime>,
+        dataset_deletion_type: Option<DatasetDeletionType>,
+    ) -> Result<UploadedDatasetStatus> {
+        if matches!(self, InternalUploadedDatasetStatus::Available)
+            && expiration_timestamp.is_none()
+            && expiration_timestamp.is_none()
+        {
+            return Ok(UploadedDatasetStatus::Available);
+        } else if let Some(deletion_type) = dataset_deletion_type {
+            let expiration = Expiration {
+                deletion_timestamp: expiration_timestamp,
+                deletion_type,
+            };
+            match self {
+                InternalUploadedDatasetStatus::Available => {}
+                InternalUploadedDatasetStatus::Expires => {
+                    if expiration_timestamp.is_some() {
+                        return Ok(UploadedDatasetStatus::Expires(expiration));
+                    }
+                }
+                InternalUploadedDatasetStatus::Expired
+                | InternalUploadedDatasetStatus::UpdateExpired
+                | InternalUploadedDatasetStatus::Deleted
+                | InternalUploadedDatasetStatus::DeletedWithError => {
+                    return Ok(UploadedDatasetStatus::Deleted(expiration));
+                }
             }
-            InternalUploadedDatasetStatus::Expired
-            | InternalUploadedDatasetStatus::UpdateExpired
-            | InternalUploadedDatasetStatus::Deleted
-            | InternalUploadedDatasetStatus::DeletedWithError => UploadedDatasetStatus::Deleted,
+        }
+        Err(IllegalDatasetStatus {
+            dataset: (*dataset_id).into(),
+            status: "InternalUploadedDatasetStatus is not a legal configuration".to_string(),
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum DatasetType {
+    UserUpload(UploadedDatasetStatus),
+    NonUserUpload,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DatasetAccessStatus {
+    pub id: DatasetId,
+    pub dataset_type: DatasetType,
+    pub permissions: Vec<Permission>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DatasetAccessStatusResponse {
+    pub id: DatasetId,
+    pub is_user_upload: bool,
+    pub is_available: bool,
+    pub expiration: Option<Expiration>,
+    pub permissions: Vec<Permission>,
+}
+
+impl From<DatasetAccessStatus> for DatasetAccessStatusResponse {
+    fn from(value: DatasetAccessStatus) -> Self {
+        let (is_user_upload, is_available, expiration) = match value.dataset_type {
+            DatasetType::UserUpload(upload) => match upload {
+                UploadedDatasetStatus::Available => (true, true, None),
+                UploadedDatasetStatus::Expires(expiration) => (true, true, Some(expiration)),
+                UploadedDatasetStatus::Deleted(expiration) => (true, false, Some(expiration)),
+            },
+            DatasetType::NonUserUpload => (false, true, None),
+        };
+
+        DatasetAccessStatusResponse {
+            id: value.id,
+            is_user_upload,
+            is_available,
+            expiration,
+            permissions: value.permissions,
         }
     }
 }
@@ -124,6 +197,12 @@ impl From<InternalUploadedDatasetStatus> for UploadedDatasetStatus {
 /// This is because services do not know about database transactions.
 #[async_trait]
 pub trait TxUploadedUserDatasetStore<M: ManageConnection> {
+    async fn get_dataset_access_status_in_tx(
+        &self,
+        dataset_id: &DatasetId,
+        tx: &Transaction,
+    ) -> Result<DatasetAccessStatus>;
+
     async fn validate_expiration_request_in_tx(
         &self,
         tx: &Transaction,
@@ -145,21 +224,19 @@ pub trait TxUploadedUserDatasetStore<M: ManageConnection> {
         dataset_id: Option<&DatasetId>,
     ) -> Result<()>;
 
-    async fn update_dataset_status_in_tx(
+    async fn update_uploaded_datasets_status_in_tx(
         &self,
         tx: &Transaction,
-        dataset_id: &DatasetId,
+        dataset_id: Option<&DatasetId>,
     ) -> Result<()>;
 
-    async fn update_datasets_status_in_tx(&self, tx: &Transaction) -> Result<()>;
-
-    async fn admin_update_datasets_status_in_tx(&self, tx: &Transaction) -> Result<()>;
     async fn set_expire_for_uploaded_dataset(
         &self,
         tx: &Transaction,
         dataset_id: &DatasetId,
         expiration: &Expiration,
     ) -> Result<()>;
+
     async fn unset_expire_for_uploaded_dataset(
         &self,
         tx: &Transaction,
@@ -178,6 +255,11 @@ pub trait UploadedUserDatasetStore {
     ) -> Result<DatasetIdAndName>;
 
     async fn expire_uploaded_dataset(&self, expire_dataset: ChangeDatasetExpiration) -> Result<()>;
+
+    async fn get_dataset_access_status(
+        &self,
+        dataset_id: &DatasetId,
+    ) -> Result<DatasetAccessStatus>;
 
     async fn clear_expired_datasets(&self) -> Result<u64>;
 }

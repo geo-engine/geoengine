@@ -17,12 +17,14 @@ use crate::pro::contexts::ProPostgresDb;
 use crate::pro::datasets::storage::DatasetDeletionType::{DeleteData, DeleteRecordAndData};
 use crate::pro::datasets::storage::InternalUploadedDatasetStatus::{Deleted, DeletedWithError};
 use crate::pro::datasets::storage::{
-    ChangeDatasetExpiration, DatasetDeletionType, InternalUploadedDatasetStatus,
-    TxUploadedUserDatasetStore, UploadedDatasetStatus, UploadedUserDatasetStore,
+    ChangeDatasetExpiration, DatasetAccessStatus, DatasetDeletionType, DatasetType,
+    InternalUploadedDatasetStatus, TxUploadedUserDatasetStore, UploadedDatasetStatus,
+    UploadedUserDatasetStore,
 };
 use crate::pro::datasets::{Expiration, ExpirationChange};
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Permission, RoleId};
+use crate::pro::users::{UserId, UserSession};
 use crate::projects::Symbology;
 use crate::util::postgres::PostgresErrorExt;
 use async_trait::async_trait;
@@ -419,7 +421,7 @@ where
 
         let uploaded_status = self.uploaded_dataset_status_in_tx(&id, &tx).await;
         if let Ok(status) = uploaded_status {
-            if matches!(status, UploadedDatasetStatus::Deleted) {
+            if matches!(status, UploadedDatasetStatus::Deleted { .. }) {
                 return Err(geoengine_operators::error::Error::DatasetDeleted { id });
             }
         }
@@ -510,7 +512,7 @@ where
 
         let uploaded_status = self.uploaded_dataset_status_in_tx(&id, &tx).await;
         if let Ok(status) = uploaded_status {
-            if matches!(status, UploadedDatasetStatus::Deleted) {
+            if matches!(status, UploadedDatasetStatus::Deleted { .. }) {
                 return Err(geoengine_operators::error::Error::DatasetDeleted { id });
             }
         }
@@ -926,6 +928,59 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    async fn get_dataset_access_status_in_tx(
+        &self,
+        dataset_id: &DatasetId,
+        tx: &Transaction,
+    ) -> Result<DatasetAccessStatus> {
+        let permissions = self
+            .get_user_permissions_in_tx(*dataset_id, tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+        let uploaded = self.uploaded_dataset_status_in_tx(dataset_id, tx).await;
+        let access_status = if let Ok(user_upload) = uploaded {
+            if let UploadedDatasetStatus::Deleted(expiration) = &user_upload {
+                if matches!(expiration.deletion_type, DeleteRecordAndData) {
+                    return Err(UnknownDatasetId);
+                }
+            }
+            DatasetAccessStatus {
+                id: *dataset_id,
+                dataset_type: DatasetType::UserUpload(user_upload),
+                permissions,
+            }
+        } else {
+            let stmt = tx
+                .prepare(
+                    "
+                SELECT
+                    TRUE
+                FROM
+                    user_permitted_datasets p JOIN datasets d
+                        ON (p.dataset_id = d.id)
+                WHERE
+                    d.id = $1 AND p.user_id = $2;",
+                )
+                .await?;
+
+            let rows = tx
+                .query(&stmt, &[&dataset_id, &self.session.user.id])
+                .await?;
+
+            if rows.is_empty() {
+                return Err(UnknownDatasetId);
+            }
+
+            DatasetAccessStatus {
+                id: *dataset_id,
+                dataset_type: DatasetType::NonUserUpload,
+                permissions,
+            }
+        };
+
+        Ok(access_status)
+    }
+
     async fn validate_expiration_request_in_tx(
         &self,
         tx: &Transaction,
@@ -1020,13 +1075,14 @@ where
             .await
             .boxed_context(crate::error::PermissionDb)?;
 
-        self.update_dataset_status_in_tx(tx, dataset_id).await?;
+        self.update_uploaded_datasets_status_in_tx(tx, Some(dataset_id))
+            .await?;
 
         let stmt = tx
             .prepare(
                 "
             SELECT
-                status
+                status, expiration, deletion_type
             FROM
                 uploaded_user_datasets
             WHERE
@@ -1040,8 +1096,16 @@ where
             .ok_or(error::Error::UnknownDatasetId)?;
 
         let internal_status: InternalUploadedDatasetStatus = result.get(0);
+        let expiration_timestamp = result.get(1);
+        let dataset_deletion_type = result.get(2);
 
-        Ok(internal_status.into())
+        let status = internal_status.convert_to_uploaded_dataset_status(
+            dataset_id,
+            expiration_timestamp,
+            dataset_deletion_type,
+        )?;
+
+        Ok(status)
     }
 
     async fn lazy_dataset_store_updates(
@@ -1050,235 +1114,136 @@ where
         dataset_id: Option<&DatasetId>,
     ) -> Result<()> {
         let tx = conn.build_transaction().start().await?;
-        if let Some(id) = dataset_id {
-            self.update_dataset_status_in_tx(&tx, id).await?;
-        } else {
-            self.update_datasets_status_in_tx(&tx).await?;
-        }
+        self.update_uploaded_datasets_status_in_tx(&tx, dataset_id)
+            .await?;
         tx.commit().await?;
 
         Ok(())
     }
 
-    async fn update_dataset_status_in_tx(
+    #[allow(clippy::too_many_lines)]
+    async fn update_uploaded_datasets_status_in_tx(
         &self,
         tx: &Transaction,
-        dataset_id: &DatasetId,
+        dataset_id: Option<&DatasetId>,
     ) -> Result<()> {
-        let mut newly_expired_datasets = 0;
+        fn create_filter(
+            session: &UserSession,
+            dataset_id: Option<&DatasetId>,
+            mut param_size: usize,
+        ) -> (String, Option<UserId>, String, Option<DatasetId>) {
+            let (user_filter, user_param) = if session.is_admin() {
+                (String::new(), None)
+            } else {
+                param_size += 1;
+                let filter = format!("AND up.user_id = ${param_size}").to_string();
+                (filter, Some(session.user.id))
+            };
 
-        let delete_records = tx
-            .prepare(
-                "
-                DELETE FROM
-                    datasets
-                USING
-                    user_permitted_datasets p, uploaded_user_datasets u
-                WHERE
-                    p.user_id = $1 AND datasets.id = $2
-                        AND p.dataset_id = datasets.id AND u.dataset_id = datasets.id
-                        AND (u.status = $3 OR u.status = $4) AND u.expiration <= CURRENT_TIMESTAMP
-                        AND u.deletion_type = $5;",
-            )
-            .await?;
-        newly_expired_datasets += tx
-            .execute(
-                &delete_records,
-                &[
-                    &self.session.user.id,
-                    &dataset_id,
-                    &Expires,
-                    &UpdateExpired,
-                    &DeleteRecordAndData,
-                ],
-            )
-            .await?;
+            let (dataset_filter, dataset_param) = if let Some(dataset_id) = dataset_id {
+                param_size += 1;
+                let filter = format!("AND up.dataset_id = ${param_size}").to_string();
+                (filter, Some(*dataset_id))
+            } else {
+                (String::new(), None)
+            };
 
-        let tag_deletion = tx
-            .prepare(
-                format!(
-                    "
-            UPDATE
-                datasets
-            SET
-                tags = tags || '{{{}}}'
-            FROM
-                user_permitted_datasets p, uploaded_user_datasets u
-            WHERE
-                p.user_id = $1 AND datasets.id = $2
-                    AND p.dataset_id = datasets.id AND u.dataset_id = datasets.id
-                    AND u.status = $3 AND u.expiration <= CURRENT_TIMESTAMP
-                    AND u.deletion_type = $4;",
-                    ReservedTags::Deleted
-                )
-                .as_str(),
-            )
-            .await?;
-        newly_expired_datasets += tx
-            .execute(
-                &tag_deletion,
-                &[&self.session.user.id, &dataset_id, &Expires, &DeleteData],
-            )
-            .await?;
-
-        if newly_expired_datasets > 0 {
-            let mark_deletion = tx
-                .prepare(
-                    "
-                UPDATE
-                    uploaded_user_datasets
-                SET
-                    status = $3
-                FROM
-                    user_permitted_datasets p
-                WHERE
-                    p.user_id = $1 AND uploaded_user_datasets.dataset_id = $2
-                        AND uploaded_user_datasets.dataset_id = p.dataset_id
-                        AND (status = $4 OR status = $5) AND expiration <= CURRENT_TIMESTAMP;",
-                )
-                .await?;
-
-            tx.execute(
-                &mark_deletion,
-                &[
-                    &self.session.user.id,
-                    &dataset_id,
-                    &Expired,
-                    &Expires,
-                    &UpdateExpired,
-                ],
-            )
-            .await?;
+            (user_filter, user_param, dataset_filter, dataset_param)
         }
 
-        Ok(())
-    }
+        fn create_filter_params<'a>(
+            filter_params: &'a mut Vec<&'a (dyn ToSql + Sync)>,
+            user_id: Option<&'a UserId>,
+            dataset_id: Option<&'a DatasetId>,
+        ) -> &'a [&'a (dyn ToSql + Sync)] {
+            if let Some(user_id) = user_id {
+                filter_params.push(user_id);
+            }
+            if let Some(dataset_id) = dataset_id {
+                filter_params.push(dataset_id);
+            }
+            filter_params.as_slice()
+        }
 
-    async fn update_datasets_status_in_tx(&self, tx: &Transaction) -> Result<()> {
-        if self.session.is_admin() {
-            self.admin_update_datasets_status_in_tx(tx).await?;
-        } else {
-            let delete_records = tx
-                .prepare(
-                    "
-                DELETE FROM
-                    datasets
-                USING
-                    user_permitted_datasets p, uploaded_user_datasets u
-                WHERE
-                    p.user_id = $1 AND p.dataset_id = datasets.id AND u.dataset_id = datasets.id
-                        AND u.status = $2 AND u.expiration <= CURRENT_TIMESTAMP
-                        AND u.deletion_type = $3;",
-                )
-                .await?;
-            tx.execute(
-                &delete_records,
-                &[&self.session.user.id, &Expires, &DeleteRecordAndData],
-            )
-            .await?;
-
-            let tag_deletion = tx
-                .prepare(
-                    format!(
-                        "
+        let (user_filter, user_param, dataset_filter, dataset_param) =
+            create_filter(&self.session, dataset_id, 1);
+        let tag_deletion = tx
+            .prepare(
+                format!("
                 UPDATE
                     datasets
                 SET
                     tags = tags || '{{{}}}'
                 FROM
-                    user_permitted_datasets p, uploaded_user_datasets u
+                    updatable_uploaded_user_datasets up
                 WHERE
-                    p.user_id = $1 AND p.dataset_id = datasets.id AND u.dataset_id = datasets.id
-                        AND u.status = $2 AND u.expiration <= CURRENT_TIMESTAMP
-                        AND u.deletion_type = $3;",
-                        ReservedTags::Deleted
-                    )
-                    .as_str(),
+                    datasets.id = up.dataset_id AND up.deletion_type = $1 {user_filter} {dataset_filter};",
+                    ReservedTags::Deleted
                 )
-                .await?;
-            tx.execute(
-                &tag_deletion,
-                &[&self.session.user.id, &Expires, &DeleteData],
+                    .as_str(),
             )
             .await?;
+        let mut tag_deletion_params: Vec<&(dyn ToSql + Sync)> = vec![&DeleteData];
+        tx.execute(
+            &tag_deletion,
+            create_filter_params(
+                &mut tag_deletion_params,
+                user_param.as_ref(),
+                dataset_param.as_ref(),
+            ),
+        )
+        .await?;
 
-            let mark_deletion = tx
-                .prepare(
-                    "
+        let mark_deletion = tx
+            .prepare(
+                format!("
                 UPDATE
                     uploaded_user_datasets
                 SET
-                    status = $2
+                    status = $1
                 FROM
-                    user_permitted_datasets p
+                    updatable_uploaded_user_datasets up
                 WHERE
-                    p.user_id = $1 AND uploaded_user_datasets.dataset_id = p.dataset_id
-                        AND (status = $3 OR status = $4) AND expiration <= CURRENT_TIMESTAMP;",
-                )
-                .await?;
-
-            tx.execute(
-                &mark_deletion,
-                &[&self.session.user.id, &Expired, &Expires, &UpdateExpired],
-            )
-            .await?;
-        }
-        Ok(())
-    }
-
-    async fn admin_update_datasets_status_in_tx(&self, tx: &Transaction) -> Result<()> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
-        let delete_records = tx
-            .prepare(
-                "
-            DELETE FROM
-                datasets
-            USING
-                user_permitted_datasets p, uploaded_user_datasets u
-            WHERE
-                u.dataset_id = datasets.id
-                    AND u.status = $1 AND u.expiration <= CURRENT_TIMESTAMP
-                    AND u.deletion_type = $2;",
-            )
-            .await?;
-        tx.execute(&delete_records, &[&Expires, &DeleteRecordAndData])
-            .await?;
-
-        let tag_deletion = tx
-            .prepare(
-                format!(
-                    "
-            UPDATE
-                datasets
-            SET
-                tags = tags || '{{{}}}'
-            FROM
-                uploaded_user_datasets u
-            WHERE
-                u.dataset_id = datasets.id
-                    AND u.status = $1 AND u.expiration <= CURRENT_TIMESTAMP
-                    AND u.deletion_type = $2;",
-                    ReservedTags::Deleted
+                    uploaded_user_datasets.dataset_id = up.dataset_id {user_filter} {dataset_filter};"
                 )
                 .as_str(),
             )
             .await?;
-        tx.execute(&tag_deletion, &[&Expires, &DeleteData]).await?;
+        let mut mark_deletion_params: Vec<&(dyn ToSql + Sync)> = vec![&Expired];
+        tx.execute(
+            &mark_deletion,
+            create_filter_params(
+                &mut mark_deletion_params,
+                user_param.as_ref(),
+                dataset_param.as_ref(),
+            ),
+        )
+        .await?;
 
-        let mark_deletion = tx
+        let (user_filter, user_param, dataset_filter, dataset_param) =
+            create_filter(&self.session, dataset_id, 2);
+        let delete_records = tx
             .prepare(
-                "
-            UPDATE
-                uploaded_user_datasets
-            SET
-                status = $1
-            WHERE
-                (status = $2 or status = $3) AND expiration <= CURRENT_TIMESTAMP;",
+                format!("
+                DELETE FROM
+                    datasets
+                USING
+                    uploaded_user_datasets up
+                WHERE
+                    datasets.id = up.dataset_id AND up.status = $1 AND up.deletion_type = $2 {user_filter} {dataset_filter};").as_str(),
             )
             .await?;
-
-        tx.execute(&mark_deletion, &[&Expired, &Expires, &UpdateExpired])
-            .await?;
+        let mut delete_records_params: Vec<&(dyn ToSql + Sync)> =
+            vec![&Expired, &DeleteRecordAndData];
+        tx.execute(
+            &delete_records,
+            create_filter_params(
+                &mut delete_records_params,
+                user_param.as_ref(),
+                dataset_param.as_ref(),
+            ),
+        )
+        .await?;
         Ok(())
     }
 
@@ -1510,7 +1475,7 @@ where
             .await
             .boxed_context(error::PermissionDb)?;
 
-        self.update_dataset_status_in_tx(&tx, &expire_dataset.dataset_id)
+        self.update_uploaded_datasets_status_in_tx(&tx, Some(&expire_dataset.dataset_id))
             .await?;
 
         match expire_dataset.expiration_change {
@@ -1523,12 +1488,29 @@ where
                     .await?;
             }
         }
-        self.update_dataset_status_in_tx(&tx, &expire_dataset.dataset_id)
+        self.update_uploaded_datasets_status_in_tx(&tx, Some(&expire_dataset.dataset_id))
             .await?;
 
         tx.commit().await?;
 
         Ok(())
+    }
+
+    async fn get_dataset_access_status(
+        &self,
+        dataset_id: &DatasetId,
+    ) -> Result<DatasetAccessStatus> {
+        let mut conn = self.conn_pool.get().await?;
+        self.lazy_dataset_store_updates(&mut conn, Some(dataset_id))
+            .await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        let result = self.get_dataset_access_status_in_tx(dataset_id, &tx).await;
+
+        tx.commit().await?;
+
+        result
     }
 
     async fn clear_expired_datasets(&self) -> Result<u64> {
@@ -1537,7 +1519,8 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        self.update_datasets_status_in_tx(&tx).await?;
+        self.update_uploaded_datasets_status_in_tx(&tx, None)
+            .await?;
 
         let update_expired = tx
             .prepare(
@@ -1582,36 +1565,26 @@ where
             updated += 1; //Could hypothetically overflow
         }
 
-        if !deleted.is_empty() {
-            let mark_deletion = tx
-                .prepare(
-                    "
+        let mark_deletion = tx
+            .prepare(
+                "
                 UPDATE
                     uploaded_user_datasets
                 SET
                     status = $1, deleted = CURRENT_TIMESTAMP
                 WHERE
                     status = $2 AND upload_id = ANY($3);",
-                )
-                .await?;
+            )
+            .await?;
+
+        if !deleted.is_empty() {
             tx.execute(&mark_deletion, &[&Deleted, &Expired, &deleted])
                 .await?;
         }
 
         if !deleted_with_error.is_empty() {
-            let mark_error = tx
-                .prepare(
-                    "
-                UPDATE
-                    uploaded_user_datasets
-                SET
-                    status = $1, deleted = CURRENT_TIMESTAMP
-                WHERE
-                    status = $2 AND upload_id = ANY($3);",
-                )
-                .await?;
             tx.execute(
-                &mark_error,
+                &mark_deletion,
                 &[&DeletedWithError, &Expired, &deleted_with_error],
             )
             .await?;
@@ -1634,6 +1607,7 @@ mod tests {
     use crate::contexts::SessionId;
     use crate::datasets::upload::UploadRootPath;
     use crate::error::Error::PermissionDenied;
+    use crate::pro::permissions::{PermissionDb, Role};
     use crate::pro::users::{UserCredentials, UserRegistration};
     use crate::pro::util::tests::get_db_timestamp;
     use crate::pro::util::tests::{admin_login, send_pro_test_request};
@@ -1707,7 +1681,7 @@ mod tests {
             .is_empty());
     }
 
-    async fn add_single_dataset(db: &ProPostgresDb<NoTls>, session: &UserSession) {
+    async fn add_single_dataset(db: &ProPostgresDb<NoTls>, session: &UserSession) -> DatasetName {
         let loading_info = OgrSourceDataset {
             file_name: PathBuf::from("test.csv"),
             layer_name: "test.csv".to_owned(),
@@ -1779,6 +1753,8 @@ mod tests {
         )
         .await
         .unwrap();
+
+        dataset_name
     }
 
     const TEST_POINT_DATASET_SOURCE_PATH: &str = "vector/data/points.fgb";
@@ -1919,6 +1895,32 @@ mod tests {
         }
     }
 
+    async fn add_test_volume_dataset(app_ctx: &ProPostgresContext<NoTls>) -> DatasetId {
+        let admin_session = admin_login(app_ctx).await;
+        let admin_ctx = app_ctx.session_context(admin_session.clone());
+        let db = admin_ctx.db();
+        let dataset_name = add_single_dataset(&db, &admin_session).await;
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
+
+        db.add_permission(
+            Role::registered_user_role_id(),
+            dataset_id,
+            Permission::Read,
+        )
+        .await
+        .unwrap();
+
+        db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+            .await
+            .unwrap();
+
+        dataset_id
+    }
+
     fn listing_not_deleted(dataset: &DatasetListing, origin: &UploadedTestDataset) -> bool {
         dataset.name == origin.dataset_name
             && !dataset.tags.contains(&ReservedTags::Deleted.to_string())
@@ -1938,6 +1940,12 @@ mod tests {
     fn dir_exists(origin: &UploadedTestDataset) -> bool {
         let path = origin.upload_id.root_path().unwrap();
         fs::read_dir(path).is_ok()
+    }
+
+    fn has_read_and_owner_permissions(permissions: &[Permission]) {
+        assert_eq!(permissions.len(), 2);
+        assert!(permissions.contains(&Permission::Read));
+        assert!(permissions.contains(&Permission::Owner));
     }
 
     async fn register_test_user(app_ctx: &ProPostgresContext<NoTls>) -> UserSession {
@@ -2284,6 +2292,66 @@ mod tests {
 
         assert!(dir_exists(&fair2available));
         assert!(!dir_exists(&fair2full));
+    }
+
+    #[ge_context::test]
+    async fn it_handles_dataset_status(app_ctx: ProPostgresContext<NoTls>) {
+        let mut test_data = TestDataUploads::default();
+        let current_time = get_db_timestamp(&app_ctx).await;
+        let future_time = current_time.add(Duration::seconds(3));
+
+        let volume_dataset = add_test_volume_dataset(&app_ctx).await;
+
+        let user_session = register_test_user(&app_ctx).await;
+        let db = app_ctx.session_context(user_session.clone()).db();
+
+        let access_status = db.get_dataset_access_status(&volume_dataset).await.unwrap();
+        assert!(matches!(
+            access_status.dataset_type,
+            DatasetType::NonUserUpload
+        ));
+        assert_eq!(access_status.permissions, vec![Permission::Read]);
+
+        let user_dataset =
+            upload_and_add_point_dataset(&app_ctx, &user_session, "user_dataset", &mut test_data)
+                .await
+                .dataset_id;
+
+        let access_status = db.get_dataset_access_status(&user_dataset).await.unwrap();
+        assert!(matches!(
+            access_status.dataset_type,
+            DatasetType::UserUpload(UploadedDatasetStatus::Available)
+        ));
+        has_read_and_owner_permissions(&access_status.permissions);
+
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+            user_dataset,
+            future_time,
+        ))
+        .await
+        .unwrap();
+        let access_status = db.get_dataset_access_status(&user_dataset).await.unwrap();
+        assert!(matches!(
+            access_status.dataset_type,
+            DatasetType::UserUpload(UploadedDatasetStatus::Expires(ex)) if ex.deletion_timestamp.unwrap() == future_time
+        ));
+        has_read_and_owner_permissions(&access_status.permissions);
+
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        let access_status = db.get_dataset_access_status(&user_dataset).await.unwrap();
+        assert!(matches!(
+            access_status.dataset_type,
+            DatasetType::UserUpload(UploadedDatasetStatus::Deleted(ex)) if ex.deletion_timestamp.unwrap() == future_time
+        ));
+        has_read_and_owner_permissions(&access_status.permissions);
+
+        db.expire_uploaded_dataset(ChangeDatasetExpiration::delete_full(user_dataset))
+            .await
+            .unwrap();
+
+        let access_status = db.get_dataset_access_status(&user_dataset).await;
+        assert!(matches!(access_status, Err(UnknownDatasetId)));
     }
 
     #[ge_context::test]

@@ -3,7 +3,10 @@ use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{check_reserved_tags, ReservedTags};
 use crate::datasets::upload::{UploadDb, UploadId};
 use crate::datasets::DatasetName;
-use crate::pro::datasets::{ChangeDatasetExpiration, ExpirationChange, UploadedUserDatasetStore};
+use crate::pro::datasets::{
+    ChangeDatasetExpiration, DatasetAccessStatusResponse, ExpirationChange,
+    UploadedUserDatasetStore,
+};
 use crate::{
     api::{
         handlers::datasets::{
@@ -61,6 +64,9 @@ where
             .service(
                 web::resource("/{dataset}/expiration")
                     .route(web::put().to(set_dataset_expiration::<C>)),
+            )
+            .service(
+                web::resource("/{dataset}/status").route(web::get().to(get_dataset_status::<C>)),
             )
             .service(
                 web::resource("/{dataset}")
@@ -284,12 +290,54 @@ where
     Ok(HttpResponse::Ok())
 }
 
+/// Returns the access status of the current user for the dataset with the given name.
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/dataset/{dataset}/status",
+    responses(
+        (status = 200, description = "OK", body = DatasetAccessStatusResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn get_dataset_status<C: ProApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    dataset: web::Path<DatasetName>,
+) -> Result<impl Responder>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let db = app_ctx.session_context(session).db();
+
+    let dataset_name = dataset.into_inner();
+
+    let dataset_id = db.resolve_dataset_name_to_id(&dataset_name).await?;
+
+    let dataset_id = dataset_id.ok_or(error::Error::UnknownDatasetName {
+        dataset_name: dataset_name.to_string(),
+    })?;
+
+    let status: DatasetAccessStatusResponse =
+        db.get_dataset_access_status(&dataset_id).await?.into();
+
+    Ok(web::Json(status))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::api::model::responses::IdResponse;
     use crate::datasets::DatasetName;
     use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::datasets::DatasetAccessStatusResponse;
     use crate::pro::ge_context;
     use crate::pro::util::tests::get_db_timestamp;
     use crate::{
@@ -685,7 +733,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_expires_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn it_expires_dataset_and_checks_status(
+        app_ctx: ProPostgresContext<NoTls>,
+    ) -> Result<()> {
         let mut test_data = TestDataUploads::default();
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -707,6 +757,16 @@ mod tests {
 
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}/status"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200, "response: {res:?}");
+        let status: DatasetAccessStatusResponse = actix_web::test::read_body_json(res).await;
+        assert!(status.is_user_upload);
+        assert!(status.is_available);
+        assert!(status.expiration.is_none());
+
         let current_time = get_db_timestamp(&app_ctx).await;
         let future_time = current_time.add(Duration::seconds(2));
 
@@ -726,9 +786,25 @@ mod tests {
 
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}/status"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200, "response: {res:?}");
+        let status: DatasetAccessStatusResponse = actix_web::test::read_body_json(res).await;
+        assert!(status.is_user_upload);
+        assert!(status.is_available);
+        assert!(status.expiration.is_some());
+
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
         assert!(db.load_dataset(&dataset_id).await.is_err());
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}/status"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 400, "response: {res:?}");
 
         Ok(())
     }

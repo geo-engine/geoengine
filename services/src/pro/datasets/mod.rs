@@ -8,6 +8,6 @@ pub use external::{
 };
 
 pub use storage::{
-    ChangeDatasetExpiration, DatasetDeletionType, Expiration, ExpirationChange,
-    UploadedUserDatasetStore,
+    ChangeDatasetExpiration, DatasetAccessStatus, DatasetAccessStatusResponse, DatasetDeletionType,
+    Expiration, ExpirationChange, UploadedUserDatasetStore,
 };
