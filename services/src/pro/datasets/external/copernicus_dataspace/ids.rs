@@ -46,6 +46,7 @@ pub enum Sentinel2Product {
     L2A,
 }
 
+// TODO: are these bands for all sentinel 2 products?
 #[derive(Debug, Clone, Copy, EnumString, strum::Display, EnumIter)]
 pub enum Sentinel2Band {
     B01,
@@ -56,11 +57,12 @@ pub enum Sentinel2Band {
     B06,
     B07,
     B08,
-    B8A,
+    B08A,
     B09,
-    B10,
+    // B10,
     B11,
     B12,
+    // TODO: AOT, CLD, etc. but they have multiple resolutions
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -76,10 +78,74 @@ pub enum UtmZoneDirection {
 }
 
 impl Sentinel2Product {
+    // TODO: move to sentinel2 to separate concerns
     pub fn product_type(&self) -> &str {
         match self {
             Self::L1C => "S2MSI1C",
             Self::L2A => "S2MSI2A",
+        }
+    }
+
+    pub fn main_file_name(&self) -> &str {
+        match self {
+            Self::L1C => "MTD_MSIL1C.xml",
+            Self::L2A => "MTD_MSIL2A.xml",
+        }
+    }
+}
+
+// exemplary gdalinfo output:
+// $ gdalinfo /vsizip/download/S2A.zip/S2A_MSIL2A_20160103T154242_N0201_R068_T17NRA_20160103T154241.SAFE/MTD_MSIL2A.xml
+// [...]
+//     Subdatasets:
+//     SUBDATASET_1_NAME=SENTINEL2_L2A:/vsizip/download/S2A.zip/S2A_MSIL2A_20160103T154242_N0201_R068_T17NRA_20160103T154241.SAFE/MTD_MSIL2A.xml:10m:EPSG_32617
+//     SUBDATASET_1_DESC=Bands B2, B3, B4, B8 with 10m resolution, UTM 17N
+//     SUBDATASET_2_NAME=SENTINEL2_L2A:/vsizip/download/S2A.zip/S2A_MSIL2A_20160103T154242_N0201_R068_T17NRA_20160103T154241.SAFE/MTD_MSIL2A.xml:20m:EPSG_32617
+//     SUBDATASET_2_DESC=Bands B5, B6, B7, B8A, B11, B12, AOT, CLD, SCL, SNW, WVP with 20m resolution, UTM 17N
+//     SUBDATASET_3_NAME=SENTINEL2_L2A:/vsizip/download/S2A.zip/S2A_MSIL2A_20160103T154242_N0201_R068_T17NRA_20160103T154241.SAFE/MTD_MSIL2A.xml:60m:EPSG_32617
+//     SUBDATASET_3_DESC=Bands B1, B9, AOT, CLD, SCL, SNW, WVP with 60m resolution, UTM 17N
+//     SUBDATASET_4_NAME=SENTINEL2_L2A:/vsizip/download/S2A.zip/S2A_MSIL2A_20160103T154242_N0201_R068_T17NRA_20160103T154241.SAFE/MTD_MSIL2A.xml:TCI:EPSG_32617
+//     SUBDATASET_4_DESC=True color image, UTM 17N
+impl Sentinel2Band {
+    pub fn resolution(self) -> &'static str {
+        match self {
+            Sentinel2Band::B02 | Sentinel2Band::B03 | Sentinel2Band::B04 | Sentinel2Band::B08 => {
+                "10m"
+            }
+            Sentinel2Band::B05
+            | Sentinel2Band::B06
+            | Sentinel2Band::B07
+            | Sentinel2Band::B08A
+            | Sentinel2Band::B11
+            | Sentinel2Band::B12 => "20m",
+            Sentinel2Band::B01 | Sentinel2Band::B09 => "60m",
+        }
+    }
+
+    #[allow(clippy::match_same_arms)]
+    pub fn channel_in_subdataset(self) -> usize {
+        match self {
+            Sentinel2Band::B01 => 1,
+            Sentinel2Band::B02 => 1,
+            Sentinel2Band::B03 => 2,
+            Sentinel2Band::B04 => 3,
+            Sentinel2Band::B05 => 1,
+            Sentinel2Band::B06 => 2,
+            Sentinel2Band::B07 => 3,
+            Sentinel2Band::B08 => 4,
+            Sentinel2Band::B08A => 4,
+            Sentinel2Band::B09 => 2,
+            Sentinel2Band::B11 => 5,
+            Sentinel2Band::B12 => 6,
+        }
+    }
+}
+
+impl UtmZone {
+    pub fn epsg_code(self) -> u32 {
+        match self.north {
+            UtmZoneDirection::North => 32600 + u32::from(self.zone),
+            UtmZoneDirection::South => 32700 + u32::from(self.zone),
         }
     }
 }

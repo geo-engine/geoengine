@@ -6,7 +6,7 @@ use url::Url;
 
 // API limits
 const MAX_NUM_PAGES: usize = 100;
-const MAX_PAGE_SIZE: usize = 20;
+const MAX_PAGE_SIZE: usize = 1000;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -18,6 +18,8 @@ pub enum CopernicusStacError {
     CannotBuildStacUrl { source: url::ParseError },
     QueryingStacServerFailed { source: reqwest::Error },
     InvalidStacResponse { source: reqwest::Error },
+    MissingStacAssetProperty { property: String },
+    ProductAlternateS3HrefIsNotAString,
 }
 
 fn bbox_time_query(
@@ -84,7 +86,9 @@ pub async fn load_stac_items(
         let response = client
             .get(url.clone())
             .query(&query)
+            .query(&("limit", MAX_PAGE_SIZE))
             .query(&("page", page))
+            .query(&["sortby", "+datetime"])
             .send()
             .await
             .context(QueryingStacServerFailed)?;
@@ -168,4 +172,46 @@ pub fn resolve_datetime_duplicates(items: &mut Vec<stac::Item>) -> Result<(), Co
     }
 
     Ok(())
+}
+
+pub trait StacItemExt {
+    fn datetime(&self) -> Result<DateTime, CopernicusStacError>;
+    fn s3_assert_product_url(&self) -> Result<String, CopernicusStacError>;
+}
+
+impl StacItemExt for stac::Item {
+    fn datetime(&self) -> Result<DateTime, CopernicusStacError> {
+        let datetime = self
+            .properties
+            .datetime
+            .as_ref()
+            .ok_or(CopernicusStacError::DateTimeMissing)?;
+
+        DateTime::parse_from_rfc3339(datetime).context(CannotParseDateTimeFromString)
+    }
+
+    fn s3_assert_product_url(&self) -> Result<String, CopernicusStacError> {
+        Ok(self
+            .assets
+            .get("PRODUCT")
+            .ok_or(CopernicusStacError::MissingStacAssetProperty {
+                property: "PRODUCT".to_string(),
+            })?
+            .additional_fields
+            .get("alternate")
+            .ok_or(CopernicusStacError::MissingStacAssetProperty {
+                property: "PRODUCT/altenate".to_string(),
+            })?
+            .get("s3")
+            .ok_or(CopernicusStacError::MissingStacAssetProperty {
+                property: "PRODUCT/alternate/s3".to_string(),
+            })?
+            .get("href")
+            .ok_or(CopernicusStacError::MissingStacAssetProperty {
+                property: "PRODUCT/alternate/s3/href".to_string(),
+            })?
+            .as_str()
+            .ok_or(CopernicusStacError::ProductAlternateS3HrefIsNotAString)?
+            .to_string())
+    }
 }
