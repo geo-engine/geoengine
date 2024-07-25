@@ -15,7 +15,6 @@ pro = [
   "geoengine-operators/pro",
   "geoengine-datatypes/pro",
   "geoengine-macros/pro",
-  "dep:xgboost-rs",
 ]
 
 [dependencies]
@@ -116,7 +115,6 @@ uuid = { version = "1.7", features = [
 ] } # must be compatible with `bb8-postgres`
 validator = { version = "0.16", features = ["derive"] }
 walkdir = "2.4"
-xgboost-rs = { version = "0.3", optional = true, features = ["use_serde"] }
 zip = "0.6"
 assert-json-diff = "2.0.2"
 sha2 = "0.10.8"
@@ -128,7 +126,7 @@ nix = { version = "0.27", features = ["socket"] }
 assert_cmd = "2.0"
 httptest = "0.15"
 pretty_assertions = "1.4"
-prost = "0.12.3"            # must be compatbile with aruna-rust-api
+prost = "0.12.3"          # must be compatbile with aruna-rust-api
 serial_test = "3.0"
 tempfile = "3.10"
 xml-rs = "0.8"

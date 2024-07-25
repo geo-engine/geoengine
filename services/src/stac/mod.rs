@@ -187,7 +187,7 @@ impl TryFrom<geojson::Feature> for Feature {
             Properties::deserialize(MapDeserializer::new(props.into_iter()))?;
 
         if let Some(foreign_members) = value.foreign_members {
-            let ass = foreign_members.get("assets").map(Clone::clone).ok_or(
+            let ass = foreign_members.get("assets").cloned().ok_or(
                 StacError::MissingRequiredField {
                     field_name: "assets".to_owned(),
                 },
@@ -195,8 +195,7 @@ impl TryFrom<geojson::Feature> for Feature {
             let assets: HashMap<String, StacAsset> = serde_json::from_value(ass)?;
 
             let stac_version = foreign_members
-                .get("stac_version")
-                .map(Clone::clone)
+                .get("stac_version").cloned()
                 .ok_or(StacError::MissingRequiredField {
                     field_name: "stac_version".to_owned(),
                 })?;
@@ -204,8 +203,7 @@ impl TryFrom<geojson::Feature> for Feature {
             let stac_version: String = serde_json::from_value(stac_version)?;
 
             let stac_extensions = foreign_members
-                .get("stac_extensions")
-                .map(Clone::clone)
+                .get("stac_extensions").cloned()
                 .ok_or(StacError::MissingRequiredField {
                     field_name: "stac_extensions".to_owned(),
                 })?;

@@ -805,6 +805,7 @@ pub trait FeatureCollectionInfos {
     fn byte_size(&self) -> usize;
 }
 
+#[allow(dead_code)]
 pub struct ColumnNamesIter<'i, I>
 where
     I: Iterator<Item = &'i str> + 'i,

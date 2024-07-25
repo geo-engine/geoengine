@@ -156,7 +156,7 @@ where
                     name: row.get(1),
                     display_name: row.get(2),
                     description: row.get(3),
-                    tags: row.get::<_, Option<_>>(4).unwrap_or_default(),
+                    tags: row.get::<_, Option<Vec<String>>>(4).unwrap_or_default(),
                     source_operator: row.get(5),
                     result_descriptor: row.get(6),
                     symbology: row.get(7),
@@ -504,6 +504,7 @@ where
 }
 
 #[async_trait]
+#[allow(dead_code)]
 pub trait PostgresStorable<Tls>: Send + Sync
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
@@ -515,7 +516,9 @@ where
 }
 
 pub struct DatasetMetaData<'m> {
+    #[allow(dead_code)]
     pub meta_data: &'m MetaDataDefinition,
+    #[allow(dead_code)]
     pub result_descriptor: TypedResultDescriptor,
 }
 

@@ -76,6 +76,24 @@ impl ErrorResponse {
             }
         );
     }
+
+    /// Assert that a `Response` has a certain `status` and `error` message starts with a given prefix.
+    ///
+    /// # Panics
+    /// Panics if `status` or `error` do not match.
+    ///
+    pub async fn assert_eq_message_starts_with(
+        res: ServiceResponse,
+        status: u16,
+        error: &str,
+        message: &str,
+    ) {
+        assert_eq!(res.status(), status);
+
+        let body: Self = actix_web::test::read_body_json(res).await;
+        assert_eq!(&body.error, error);
+        assert!(&body.message.starts_with(message));
+    }
 }
 
 impl<'a, T> From<&'a T> for ErrorResponse
@@ -112,6 +130,7 @@ impl fmt::Display for ErrorResponse {
     "error": "UnsupportedMediaType",
     "message": "Unsupported content type header."
 }))]
+#[allow(dead_code)]
 pub struct UnsupportedMediaTypeForJsonResponse(ErrorResponse);
 
 #[derive(ToResponse)]
@@ -125,6 +144,7 @@ pub struct UnsupportedMediaTypeForJsonResponse(ErrorResponse);
         "message": "JSON payload (XXX bytes) is larger than allowed (limit: 2097152 bytes)."
     })))
 ))]
+#[allow(dead_code)]
 pub struct PayloadTooLargeResponse(ErrorResponse);
 
 #[derive(ToResponse)]
@@ -150,6 +170,7 @@ pub struct PayloadTooLargeResponse(ErrorResponse);
         "message": "Authorization error: Invalid admin token"
     })))
 ))]
+#[allow(dead_code)]
 pub struct UnauthorizedAdminResponse(ErrorResponse);
 
 #[derive(ToResponse)]
@@ -171,6 +192,7 @@ pub struct UnauthorizedAdminResponse(ErrorResponse);
         "message": "Authorization error: The session id is invalid."
     })))
 ))]
+#[allow(dead_code)]
 pub struct UnauthorizedUserResponse(ErrorResponse);
 
 #[derive(ToResponse)]
@@ -184,12 +206,15 @@ pub struct UnauthorizedUserResponse(ErrorResponse);
         "message": "Unable to parse query string: invalid digit found in string"
     })))
 ))]
+#[allow(dead_code)]
 pub struct BadRequestQueryResponse(ErrorResponse);
 
 #[derive(ToResponse)]
 #[response(description = "ZIP Archive", content_type = "application/zip", example = json!("zip bytes"))]
+#[allow(dead_code)]
 pub struct ZipResponse(Vec<u8>);
 
 #[derive(ToResponse)]
 #[response(description = "PNG Image", content_type = "image/png", example = json!("image bytes"))]
+#[allow(dead_code)]
 pub struct PngResponse(Vec<u8>);

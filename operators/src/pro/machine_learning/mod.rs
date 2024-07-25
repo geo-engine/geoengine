@@ -1,9 +1,6 @@
 use crate::util::Result;
 use geoengine_datatypes::pro::MlModelId;
 
-pub mod xg_error;
-pub mod xgboost;
-
 #[async_trait::async_trait]
 pub trait LoadMlModel: Send + Sync {
     // TODO: return a proper model type

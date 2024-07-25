@@ -74,6 +74,7 @@ pub trait CloneableInitializedVectorOperator {
 }
 
 /// Helper trait for making boxed `InitializedPlotOperator`s cloneable
+#[allow(dead_code)]
 pub trait CloneableInitializedPlotOperator {
     fn clone_boxed_plot(&self) -> Box<dyn InitializedPlotOperator>;
 }

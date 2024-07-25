@@ -19,8 +19,10 @@ pub trait Aggregator {
 
     fn add_null(&mut self, feature_idx: usize);
 
+    #[allow(dead_code /*is used in tests*/)]
     fn feature_data_type() -> FeatureDataType;
 
+    #[allow(dead_code /*is used in tests*/)]
     fn data(&self) -> &[Self::Output];
 
     fn nulls(&self) -> &[bool];

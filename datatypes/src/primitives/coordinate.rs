@@ -144,7 +144,7 @@ impl From<Coordinate2D> for [f64; 2] {
 
 impl<'c> From<&'c Coordinate2D> for &'c [f64] {
     fn from(coordinate: &'c Coordinate2D) -> &'c [f64] {
-        unsafe { slice::from_raw_parts((coordinate as *const Coordinate2D).cast::<f64>(), 2) }
+        unsafe { slice::from_raw_parts(std::ptr::from_ref::<Coordinate2D>(coordinate).cast::<f64>(), 2) }
     }
 }
 
@@ -251,7 +251,7 @@ impl ArrowTyped for Coordinate2D {
 
 impl AsRef<[f64]> for Coordinate2D {
     fn as_ref(&self) -> &[f64] {
-        let raw_ptr = (self as *const Coordinate2D).cast::<f64>();
+        let raw_ptr = std::ptr::from_ref::<Coordinate2D>(self).cast::<f64>();
         unsafe { std::slice::from_raw_parts(raw_ptr, 2) }
     }
 }

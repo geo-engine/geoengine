@@ -10,7 +10,7 @@ repository.workspace = true
 
 [features]
 # This compiles Geo Engine Pro
-pro = ["geoengine-datatypes/pro", "dep:xgboost-rs"]
+pro = ["geoengine-datatypes/pro"]
 
 [dependencies]
 arrow = { version = "50.0" }
@@ -61,7 +61,6 @@ tokio-postgres = "0.7"
 tracing = "0.1"
 typetag = "0.2"
 uuid = { version = "1.7", features = ["serde", "v4", "v5"] }
-xgboost-rs = { version = "0.3", optional = true }
 
 [dev-dependencies]
 async-stream = "0.3"
