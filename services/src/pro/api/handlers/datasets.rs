@@ -14,6 +14,7 @@ use crate::{
             get_dataset_handler, get_loading_info_handler, list_datasets_handler,
             list_volumes_handler, suggest_meta_data_handler, update_dataset_handler,
             update_dataset_provenance_handler, update_dataset_symbology_handler,
+            update_loading_info_handler,
         },
         model::{
             responses::datasets::{errors::*, DatasetNameResponse},
@@ -45,13 +46,16 @@ where
 {
     cfg.service(
         web::scope("/dataset")
-            .service(web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)))
+            .service(
+                web::resource("/suggest").route(web::post().to(suggest_meta_data_handler::<C>)),
+            )
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(web::resource("/gc").route(web::post().to(gc_expired_datasets::<C>)))
             .service(
                 web::resource("/{dataset}/loadingInfo")
-                    .route(web::get().to(get_loading_info_handler::<C>)),
+                    .route(web::get().to(get_loading_info_handler::<C>))
+                    .route(web::put().to(update_loading_info_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}/symbology")

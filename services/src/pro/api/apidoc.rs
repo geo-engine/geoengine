@@ -37,13 +37,13 @@ use crate::api::model::responses::{
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
-    Provenance, ProvenanceOutput, Provenances, UpdateDataset,
+    Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
 };
 use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
 use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy};
-use crate::datasets::storage::{AutoCreateDataset, Dataset};
-use crate::datasets::upload::{UploadId, Volume, VolumeName};
+use crate::datasets::storage::{AutoCreateDataset, Dataset, SuggestMetaData};
+use crate::datasets::upload::{UploadId, VolumeName};
 use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
@@ -144,6 +144,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::auto_create_dataset_handler,
         handlers::datasets::suggest_meta_data_handler,
         handlers::datasets::get_loading_info_handler,
+        handlers::datasets::update_loading_info_handler,
         handlers::datasets::update_dataset_symbology_handler,
         handlers::datasets::update_dataset_provenance_handler,
         handlers::spatial_references::get_spatial_reference_specification_handler,
@@ -330,6 +331,7 @@ use utoipa::{Modify, OpenApi};
             CreateDataset,
             UpdateDataset,
             AutoCreateDataset,
+            SuggestMetaData,
             OrderBy,
             DatasetListing,
             MetaDataSuggestion,

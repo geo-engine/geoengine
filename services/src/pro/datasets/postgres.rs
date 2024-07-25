@@ -718,6 +718,30 @@ where
         Ok(())
     }
 
+    async fn update_dataset_loading_info(
+        &self,
+        dataset: DatasetId,
+        meta_data: &MetaDataDefinition,
+    ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        tx.execute(
+            "UPDATE datasets SET meta_data = $2 WHERE id = $1;",
+            &[&dataset, &meta_data],
+        )
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
     async fn update_dataset_symbology(
         &self,
         dataset: DatasetId,

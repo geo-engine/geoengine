@@ -21,6 +21,11 @@ CREATE TYPE "GdalRetries" AS (
     number_of_retries bigint
 );
 
+CREATE TYPE "StacQueryBuffer" AS (
+    start_seconds bigint,
+    end_seconds bigint
+);
+
 CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     "name" text,
     id uuid,
@@ -31,7 +36,8 @@ CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     gdal_retries "GdalRetries",
     cache_ttl int,
     description text,
-    priority smallint
+    priority smallint,
+    query_buffer "StacQueryBuffer"
 );
 
 CREATE TYPE "ProDataProviderDefinition" AS (
@@ -262,6 +268,6 @@ SELECT
     u.deletion_type
 FROM
     uploaded_user_datasets u JOIN
-    user_permitted_datasets p ON (p.user_id = u.user_id)
+    user_permitted_datasets p ON (u.user_id = p.user_id)
 WHERE
     u.expiration <= CURRENT_TIMESTAMP AND (u.status = 'Expires' OR u.status = 'UpdateExpired');

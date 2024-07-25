@@ -1110,6 +1110,14 @@ mod tests {
 
         let db = Arc::new(app_ctx.default_session_context().await.unwrap().db());
 
+        assert!(!db
+            .overviews_exist(
+                NETCDF_CF_PROVIDER_ID,
+                dataset_path.to_string_lossy().as_ref()
+            )
+            .await
+            .unwrap());
+
         create_overviews(
             NopTaskContext,
             db.clone(),
@@ -1131,12 +1139,20 @@ mod tests {
             NETCDF_CF_PROVIDER_ID,
             dataset_path,
             overview_folder.path(),
-            db,
+            db.clone(),
             false,
         )
         .await
         .unwrap();
 
         assert!(is_empty(overview_folder.path()));
+
+        assert!(!db
+            .overviews_exist(
+                NETCDF_CF_PROVIDER_ID,
+                dataset_path.to_string_lossy().as_ref()
+            )
+            .await
+            .unwrap());
     }
 }

@@ -492,6 +492,11 @@ pub enum Error {
         resource_id: String,
     },
 
+    #[snafu(display("Unknown volume name: {}", volume_name))]
+    UnknownVolumeName {
+        volume_name: String,
+    },
+
     #[snafu(display("Trying to set an expiration timestamp for Dataset {dataset} in the past"))]
     ExpirationTimestampInPast {
         dataset: DatasetId,
