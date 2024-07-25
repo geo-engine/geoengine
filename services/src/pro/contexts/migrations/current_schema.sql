@@ -267,7 +267,8 @@ SELECT
     u.status,
     u.deletion_type
 FROM
-    uploaded_user_datasets u JOIN
-    user_permitted_datasets p ON (u.user_id = p.user_id)
+    uploaded_user_datasets AS u INNER JOIN
+    user_permitted_datasets AS p ON (u.user_id = p.user_id)
 WHERE
-    u.expiration <= CURRENT_TIMESTAMP AND (u.status = 'Expires' OR u.status = 'UpdateExpired');
+    u.expiration <= CURRENT_TIMESTAMP
+    AND (u.status = 'Expires' OR u.status = 'UpdateExpired');
