@@ -144,7 +144,12 @@ impl From<Coordinate2D> for [f64; 2] {
 
 impl<'c> From<&'c Coordinate2D> for &'c [f64] {
     fn from(coordinate: &'c Coordinate2D) -> &'c [f64] {
-        unsafe { slice::from_raw_parts(std::ptr::from_ref::<Coordinate2D>(coordinate).cast::<f64>(), 2) }
+        unsafe {
+            slice::from_raw_parts(
+                std::ptr::from_ref::<Coordinate2D>(coordinate).cast::<f64>(),
+                2,
+            )
+        }
     }
 }
 
