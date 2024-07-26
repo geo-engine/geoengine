@@ -21,8 +21,6 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use itertools::Itertools;
-use log::Level::Debug;
-use log::{debug, log_enabled};
 use snafu::ResultExt;
 
 use crate::{
@@ -375,10 +373,10 @@ pub fn register_gdal_drivers_from_list<S: BuildHasher>(mut drivers: HashSet<Stri
         }
     }
 
-    if !drivers.is_empty() && log_enabled!(Debug) {
+    if !drivers.is_empty() {
         let mut drivers: Vec<String> = drivers.into_iter().collect();
         drivers.sort();
         let remaining_drivers = drivers.into_iter().join(", ");
-        debug!("Could not register drivers: {remaining_drivers}");
+        log::warn!("Could not register drivers: {remaining_drivers}");
     }
 }
