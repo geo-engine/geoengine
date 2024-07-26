@@ -772,7 +772,7 @@ mod tests {
         assert!(status.expiration.is_none());
 
         let current_time = get_db_timestamp(&app_ctx).await;
-        let future_time = current_time.add(Duration::seconds(2));
+        let future_time = current_time.add(Duration::seconds(5));
 
         let expiration =
             ChangeDatasetExpiration::expire_full(dataset_id, future_time).expiration_change;
@@ -800,7 +800,7 @@ mod tests {
         assert!(status.is_available);
         assert!(status.expiration.is_some());
 
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
         assert!(db.load_dataset(&dataset_id).await.is_err());
 

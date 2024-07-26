@@ -1007,9 +1007,9 @@ where
 
     async fn validate_expiration_request_in_tx(
         &self,
-        tx: &Transaction,
         dataset_id: &DatasetId,
         expiration: &Expiration,
+        tx: &Transaction,
     ) -> Result<()> {
         let (status, deletion_type, legal_expiration): (
             InternalUploadedDatasetStatus,
@@ -1099,7 +1099,7 @@ where
             .await
             .boxed_context(crate::error::PermissionDb)?;
 
-        self.update_uploaded_datasets_status_in_tx(tx, Some(dataset_id))
+        self.update_uploaded_datasets_status_in_tx(Some(dataset_id), tx)
             .await?;
 
         let stmt = tx
@@ -1138,9 +1138,37 @@ where
         dataset_id: Option<&DatasetId>,
     ) -> Result<()> {
         let tx = conn.build_transaction().start().await?;
-        self.update_uploaded_datasets_status_in_tx(&tx, dataset_id)
+        self.update_uploaded_datasets_status_in_tx(dataset_id, &tx)
             .await?;
         tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn expire_uploaded_dataset_in_tx(
+        &self,
+        expire_dataset: ChangeDatasetExpiration,
+        tx: &Transaction,
+    ) -> Result<()> {
+        self.ensure_permission_in_tx(expire_dataset.dataset_id.into(), Permission::Owner, tx)
+            .await
+            .boxed_context(error::PermissionDb)?;
+
+        self.update_uploaded_datasets_status_in_tx(Some(&expire_dataset.dataset_id), tx)
+            .await?;
+
+        match expire_dataset.expiration_change {
+            ExpirationChange::SetExpire(expiration) => {
+                self.set_expire_for_uploaded_dataset(&expire_dataset.dataset_id, &expiration, tx)
+                    .await?;
+            }
+            ExpirationChange::UnsetExpire => {
+                self.unset_expire_for_uploaded_dataset(&expire_dataset.dataset_id, tx)
+                    .await?;
+            }
+        }
+        self.update_uploaded_datasets_status_in_tx(Some(&expire_dataset.dataset_id), tx)
+            .await?;
 
         Ok(())
     }
@@ -1148,8 +1176,8 @@ where
     #[allow(clippy::too_many_lines)]
     async fn update_uploaded_datasets_status_in_tx(
         &self,
-        tx: &Transaction,
         dataset_id: Option<&DatasetId>,
+        tx: &Transaction,
     ) -> Result<()> {
         fn create_filter(
             session: &UserSession,
@@ -1273,9 +1301,9 @@ where
 
     async fn set_expire_for_uploaded_dataset(
         &self,
-        tx: &Transaction,
         dataset_id: &DatasetId,
         expiration: &Expiration,
+        tx: &Transaction,
     ) -> Result<()> {
         let num_changes = if let Some(delete_timestamp) = expiration.deletion_timestamp {
             let stmt = tx
@@ -1346,7 +1374,7 @@ where
         };
 
         if num_changes == 0 {
-            self.validate_expiration_request_in_tx(tx, dataset_id, expiration)
+            self.validate_expiration_request_in_tx(dataset_id, expiration, tx)
                 .await?;
         };
 
@@ -1355,8 +1383,8 @@ where
 
     async fn unset_expire_for_uploaded_dataset(
         &self,
-        tx: &Transaction,
         dataset_id: &DatasetId,
+        tx: &Transaction,
     ) -> Result<()> {
         let stmt = tx
             .prepare(
@@ -1495,24 +1523,7 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        self.ensure_permission_in_tx(expire_dataset.dataset_id.into(), Permission::Owner, &tx)
-            .await
-            .boxed_context(error::PermissionDb)?;
-
-        self.update_uploaded_datasets_status_in_tx(&tx, Some(&expire_dataset.dataset_id))
-            .await?;
-
-        match expire_dataset.expiration_change {
-            ExpirationChange::SetExpire(expiration) => {
-                self.set_expire_for_uploaded_dataset(&tx, &expire_dataset.dataset_id, &expiration)
-                    .await?;
-            }
-            ExpirationChange::UnsetExpire => {
-                self.unset_expire_for_uploaded_dataset(&tx, &expire_dataset.dataset_id)
-                    .await?;
-            }
-        }
-        self.update_uploaded_datasets_status_in_tx(&tx, Some(&expire_dataset.dataset_id))
+        self.expire_uploaded_dataset_in_tx(expire_dataset, &tx)
             .await?;
 
         tx.commit().await?;
@@ -1543,7 +1554,7 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        self.update_uploaded_datasets_status_in_tx(&tx, None)
+        self.update_uploaded_datasets_status_in_tx(None, &tx)
             .await?;
 
         let update_expired = tx
@@ -1633,8 +1644,8 @@ mod tests {
     use crate::error::Error::PermissionDenied;
     use crate::pro::permissions::{PermissionDb, Role};
     use crate::pro::users::{UserCredentials, UserRegistration};
-    use crate::pro::util::tests::get_db_timestamp;
     use crate::pro::util::tests::{admin_login, send_pro_test_request};
+    use crate::pro::util::tests::{get_db_timestamp, get_db_timestamp_in_tx};
     use crate::util::tests::{SetMultipartBody, TestDataUploads};
     use crate::{
         contexts::{ApplicationContext, SessionContext},
@@ -1647,7 +1658,7 @@ mod tests {
     use actix_web::http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::primitives::Duration;
+    use geoengine_datatypes::primitives::{DateTime, Duration};
     use geoengine_datatypes::{
         collections::VectorDataType,
         primitives::{CacheTtlSeconds, FeatureDataType, Measurement},
@@ -1991,6 +2002,36 @@ mod tests {
             .unwrap()
     }
 
+    async fn expire_in_tx_time_duration(
+        app_ctx: &ProPostgresContext<NoTls>,
+        user_session: &UserSession,
+        dataset_id: DatasetId,
+        fair: bool,
+        duration: Duration,
+    ) -> DateTime {
+        let mut conn = app_ctx.pool.get().await.unwrap();
+        let tx = conn.build_transaction().start().await.unwrap();
+
+        let db = app_ctx.session_context(user_session.clone()).db();
+
+        let current_time = get_db_timestamp_in_tx(&tx).await;
+        let future_time = current_time.add(duration);
+
+        let change_dataset_expiration = if fair {
+            ChangeDatasetExpiration::expire_fair(dataset_id, future_time)
+        } else {
+            ChangeDatasetExpiration::expire_full(dataset_id, future_time)
+        };
+
+        db.expire_uploaded_dataset_in_tx(change_dataset_expiration, &tx)
+            .await
+            .unwrap();
+
+        tx.commit().await.unwrap();
+
+        future_time
+    }
+
     #[ge_context::test]
     async fn it_lists_datasets_without_tags(app_ctx: ProPostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
@@ -2104,9 +2145,6 @@ mod tests {
         let mut test_data = TestDataUploads::default();
         let user_session = register_test_user(&app_ctx).await;
 
-        let current_time = get_db_timestamp(&app_ctx).await;
-        let future_time = current_time.add(Duration::seconds(3));
-
         let fair =
             upload_and_add_point_dataset(&app_ctx, &user_session, "fair", &mut test_data).await;
 
@@ -2120,12 +2158,14 @@ mod tests {
             tags: None,
         };
 
-        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+        expire_in_tx_time_duration(
+            &app_ctx,
+            &user_session,
             fair.dataset_id,
-            future_time,
-        ))
-        .await
-        .unwrap();
+            true,
+            Duration::seconds(3),
+        )
+        .await;
 
         let listing = db
             .list_datasets(default_list_options.clone())
@@ -2154,10 +2194,6 @@ mod tests {
         let mut test_data = TestDataUploads::default();
         let user_session = register_test_user(&app_ctx).await;
 
-        let current_time = get_db_timestamp(&app_ctx).await;
-        let future_time_1 = current_time.add(Duration::seconds(2));
-        let future_time_2 = current_time.add(Duration::seconds(5));
-
         let fair =
             upload_and_add_point_dataset(&app_ctx, &user_session, "fair", &mut test_data).await;
         let fair2full =
@@ -2174,30 +2210,38 @@ mod tests {
             tags: None,
         };
 
-        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+        expire_in_tx_time_duration(
+            &app_ctx,
+            &user_session,
             fair.dataset_id,
-            future_time_1,
-        ))
-        .await
-        .unwrap();
-        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+            true,
+            Duration::seconds(5),
+        )
+        .await;
+        expire_in_tx_time_duration(
+            &app_ctx,
+            &user_session,
             fair.dataset_id,
-            future_time_2,
-        ))
-        .await
-        .unwrap();
-        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+            true,
+            Duration::seconds(10),
+        )
+        .await;
+        expire_in_tx_time_duration(
+            &app_ctx,
+            &user_session,
             fair2full.dataset_id,
-            future_time_1,
-        ))
-        .await
-        .unwrap();
-        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_full(
+            true,
+            Duration::seconds(5),
+        )
+        .await;
+        expire_in_tx_time_duration(
+            &app_ctx,
+            &user_session,
             fair2full.dataset_id,
-            future_time_1,
-        ))
-        .await
-        .unwrap();
+            false,
+            Duration::seconds(5),
+        )
+        .await;
 
         let listing = db
             .list_datasets(default_list_options.clone())
@@ -2208,7 +2252,7 @@ mod tests {
         assert!(listing_not_deleted(listing.first().unwrap(), &fair));
         assert!(listing_not_deleted(listing.get(1).unwrap(), &fair2full));
 
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
         let listing = db
             .list_datasets(default_list_options.clone())
@@ -2222,7 +2266,7 @@ mod tests {
             UnknownDatasetId
         ));
 
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
         let listing = db
             .list_datasets(default_list_options.clone())
@@ -2282,17 +2326,18 @@ mod tests {
             .await
             .is_err());
 
-        let current_time = get_db_timestamp(&app_ctx).await;
-        let future_time = current_time.add(Duration::seconds(2));
         let fair2available =
             upload_and_add_point_dataset(&app_ctx, &user_session, "fair2available", &mut test_data)
                 .await;
-        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+
+        expire_in_tx_time_duration(
+            &app_ctx,
+            &user_session,
             fair2available.dataset_id,
-            future_time,
-        ))
-        .await
-        .unwrap();
+            true,
+            Duration::seconds(3),
+        )
+        .await;
         db.expire_uploaded_dataset(ChangeDatasetExpiration::unset_expire(
             fair2available.dataset_id,
         ))
@@ -2321,8 +2366,6 @@ mod tests {
     #[ge_context::test]
     async fn it_handles_dataset_status(app_ctx: ProPostgresContext<NoTls>) {
         let mut test_data = TestDataUploads::default();
-        let current_time = get_db_timestamp(&app_ctx).await;
-        let future_time = current_time.add(Duration::seconds(3));
 
         let volume_dataset = add_test_volume_dataset(&app_ctx).await;
 
@@ -2348,12 +2391,14 @@ mod tests {
         ));
         has_read_and_owner_permissions(&access_status.permissions);
 
-        db.expire_uploaded_dataset(ChangeDatasetExpiration::expire_fair(
+        let future_time = expire_in_tx_time_duration(
+            &app_ctx,
+            &user_session,
             user_dataset,
-            future_time,
-        ))
-        .await
-        .unwrap();
+            true,
+            Duration::seconds(3),
+        )
+        .await;
         let access_status = db.get_dataset_access_status(&user_dataset).await.unwrap();
         assert!(matches!(
             access_status.dataset_type,

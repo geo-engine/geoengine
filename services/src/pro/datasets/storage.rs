@@ -205,9 +205,9 @@ pub trait TxUploadedUserDatasetStore<M: ManageConnection> {
 
     async fn validate_expiration_request_in_tx(
         &self,
-        tx: &Transaction,
         dataset_id: &DatasetId,
         expiration: &Expiration,
+        tx: &Transaction,
     ) -> Result<()>;
 
     async fn uploaded_dataset_status_in_tx(
@@ -224,23 +224,29 @@ pub trait TxUploadedUserDatasetStore<M: ManageConnection> {
         dataset_id: Option<&DatasetId>,
     ) -> Result<()>;
 
+    async fn expire_uploaded_dataset_in_tx(
+        &self,
+        expire_dataset: ChangeDatasetExpiration,
+        tx: &Transaction,
+    ) -> Result<()>;
+
     async fn update_uploaded_datasets_status_in_tx(
         &self,
-        tx: &Transaction,
         dataset_id: Option<&DatasetId>,
+        tx: &Transaction,
     ) -> Result<()>;
 
     async fn set_expire_for_uploaded_dataset(
         &self,
-        tx: &Transaction,
         dataset_id: &DatasetId,
         expiration: &Expiration,
+        tx: &Transaction,
     ) -> Result<()>;
 
     async fn unset_expire_for_uploaded_dataset(
         &self,
-        tx: &Transaction,
         dataset_id: &DatasetId,
+        tx: &Transaction,
     ) -> Result<()>;
 }
 
