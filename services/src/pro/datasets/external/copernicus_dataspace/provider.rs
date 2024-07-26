@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use crate::{
     datasets::listing::ProvenanceOutput,
@@ -10,16 +10,22 @@ use crate::{
         },
         listing::LayerCollectionId,
     },
+    projects::RasterSymbology,
+    workflows::workflow::Workflow,
 };
 use async_trait::async_trait;
 use geoengine_datatypes::{
     dataset::{DataId, DataProviderId, LayerId},
+    operations::image::{Breakpoint, Colorizer, RasterColorizer, RgbaColor},
     primitives::{RasterQueryRectangle, VectorQueryRectangle},
 };
 use geoengine_operators::{
-    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
+    engine::{
+        MetaData, MetaDataProvider, RasterOperator, RasterResultDescriptor, TypedOperator,
+        VectorResultDescriptor,
+    },
     mock::MockDatasetDataSourceLoadingInfo,
-    source::{GdalLoadingInfo, OgrSourceDataset},
+    source::{GdalLoadingInfo, GdalSource, GdalSourceParameters, OgrSourceDataset},
 };
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -143,6 +149,7 @@ impl CopernicusDataspaceDataProvider {
         }
     }
 
+    // TODO: move to sentinel2.rs
     fn load_sentinel2_collection(&self, id: &Sentinel2LayerCollectionId) -> LayerCollection {
         match *id {
             Sentinel2LayerCollectionId::Products => self.load_sentinel2_products_collection(),
@@ -248,6 +255,50 @@ impl CopernicusDataspaceDataProvider {
         }
     }
 
+    fn load_sentinel2_layer(&self, id: &Sentinel2LayerId) -> Layer {
+        Layer {
+            id: ProviderLayerId {
+                provider_id: self.id,
+                layer_id: id.clone().into(),
+            },
+            name: format!("Sentinel-2 {} {} {}", id.product, id.zone, id.band),
+            description: String::new(),
+            workflow: Workflow {
+                operator: TypedOperator::Raster(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: CopernicusDataId(
+                                CopernicusDataspaceLayerId::Sentinel2(id.clone()),
+                                self.id,
+                            )
+                            .into(),
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            //Minimum=543.000, Maximum=18336.000
+            symbology: Some(crate::projects::Symbology::Raster(RasterSymbology {
+                opacity: 1.0,
+                raster_colorizer: RasterColorizer::SingleBand {
+                    band: 0,
+                    band_colorizer: Colorizer::linear_gradient(
+                        vec![
+                            (543., RgbaColor::black()).try_into().unwrap(),
+                            (18336., RgbaColor::white()).try_into().unwrap(),
+                        ],
+                        RgbaColor::transparent(),
+                        RgbaColor::black(),
+                        RgbaColor::white(),
+                    )
+                    .unwrap(),
+                },
+            })),
+            properties: vec![],
+            metadata: HashMap::new(),
+        }
+    }
+
     fn sentinel2_meta_data(
         &self,
         product: Sentinel2Product,
@@ -326,8 +377,14 @@ impl LayerCollectionProvider for CopernicusDataspaceDataProvider {
         Ok(CopernicusDataspaceLayerCollectionId::Datasets.into())
     }
 
-    async fn load_layer(&self, _id: &LayerId) -> Result<Layer> {
-        todo!()
+    async fn load_layer(&self, id: &LayerId) -> Result<Layer> {
+        let id: CopernicusDataspaceLayerId = id.clone().try_into()?;
+
+        match id {
+            CopernicusDataspaceLayerId::Sentinel2(sentinel2) => {
+                Ok(self.load_sentinel2_layer(&sentinel2))
+            }
+        }
     }
 }
 

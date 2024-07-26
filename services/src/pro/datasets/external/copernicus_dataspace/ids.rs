@@ -1,4 +1,8 @@
-use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
+use geoengine_datatypes::{
+    dataset::{DataId, DataProviderId, ExternalDataId, LayerId, NamedData},
+    raster::RasterDataType,
+    spatial_reference::{SpatialReference, SpatialReferenceAuthority},
+};
 use std::str::FromStr;
 use strum::EnumIter;
 use strum_macros::EnumString;
@@ -68,7 +72,7 @@ pub enum Sentinel2Band {
 #[derive(Debug, Clone, Copy)]
 pub struct UtmZone {
     zone: u8,
-    north: UtmZoneDirection,
+    direction: UtmZoneDirection,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -92,6 +96,13 @@ impl Sentinel2Product {
             Self::L2A => "MTD_MSIL2A.xml",
         }
     }
+
+    pub fn driver_name(&self) -> &str {
+        match self {
+            Self::L1C => "SENTINEL2_L1C",
+            Self::L2A => "SENTINEL2_L2A",
+        }
+    }
 }
 
 // exemplary gdalinfo output:
@@ -107,18 +118,16 @@ impl Sentinel2Product {
 //     SUBDATASET_4_NAME=SENTINEL2_L2A:/vsizip/download/S2A.zip/S2A_MSIL2A_20160103T154242_N0201_R068_T17NRA_20160103T154241.SAFE/MTD_MSIL2A.xml:TCI:EPSG_32617
 //     SUBDATASET_4_DESC=True color image, UTM 17N
 impl Sentinel2Band {
-    pub fn resolution(self) -> &'static str {
+    pub fn resolution_meters(self) -> usize {
         match self {
-            Sentinel2Band::B02 | Sentinel2Band::B03 | Sentinel2Band::B04 | Sentinel2Band::B08 => {
-                "10m"
-            }
+            Sentinel2Band::B02 | Sentinel2Band::B03 | Sentinel2Band::B04 | Sentinel2Band::B08 => 10,
             Sentinel2Band::B05
             | Sentinel2Band::B06
             | Sentinel2Band::B07
             | Sentinel2Band::B08A
             | Sentinel2Band::B11
-            | Sentinel2Band::B12 => "20m",
-            Sentinel2Band::B01 | Sentinel2Band::B09 => "60m",
+            | Sentinel2Band::B12 => 20,
+            Sentinel2Band::B01 | Sentinel2Band::B09 => 60,
         }
     }
 
@@ -139,14 +148,23 @@ impl Sentinel2Band {
             Sentinel2Band::B12 => 6,
         }
     }
+
+    #[allow(clippy::unused_self)] // might need to be used in the future to distinguish between bands
+    pub fn data_type(self) -> RasterDataType {
+        RasterDataType::U16
+    }
 }
 
 impl UtmZone {
     pub fn epsg_code(self) -> u32 {
-        match self.north {
+        match self.direction {
             UtmZoneDirection::North => 32600 + u32::from(self.zone),
             UtmZoneDirection::South => 32700 + u32::from(self.zone),
         }
+    }
+
+    pub fn spatial_reference(self) -> SpatialReference {
+        SpatialReference::new(SpatialReferenceAuthority::Epsg, self.epsg_code())
     }
 }
 
@@ -204,6 +222,14 @@ impl FromStr for CopernicusDataspaceLayerId {
     }
 }
 
+impl TryFrom<LayerId> for CopernicusDataspaceLayerId {
+    type Error = crate::error::Error;
+
+    fn try_from(id: LayerId) -> Result<Self> {
+        CopernicusDataspaceLayerId::from_str(&id.0)
+    }
+}
+
 impl From<CopernicusDataspaceLayerId> for LayerId {
     fn from(id: CopernicusDataspaceLayerId) -> Self {
         match id {
@@ -213,6 +239,18 @@ impl From<CopernicusDataspaceLayerId> for LayerId {
 }
 
 pub struct CopernicusDataId(pub CopernicusDataspaceLayerId, pub DataProviderId);
+
+impl From<CopernicusDataId> for NamedData {
+    fn from(id: CopernicusDataId) -> Self {
+        match id.0 {
+            CopernicusDataspaceLayerId::Sentinel2(sentinel2) => NamedData {
+                namespace: None,
+                provider: Some(id.1 .0.to_string()),
+                name: format!("datasets/{sentinel2}"),
+            },
+        }
+    }
+}
 
 impl From<CopernicusDataId> for DataId {
     fn from(id: CopernicusDataId) -> Self {
@@ -281,6 +319,12 @@ impl From<Sentinel2LayerCollectionId> for LayerCollectionId {
     }
 }
 
+impl std::fmt::Display for Sentinel2LayerId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "SENTINEL-2/{}/{}/{}", self.product, self.zone, self.band)
+    }
+}
+
 impl FromStr for Sentinel2LayerId {
     type Err = crate::error::Error;
 
@@ -346,7 +390,10 @@ impl FromStr for UtmZone {
             _ => return Err(Error::InvalidLayerCollectionId),
         };
 
-        Ok(Self { zone, north })
+        Ok(Self {
+            zone,
+            direction: north,
+        })
     }
 }
 
@@ -356,7 +403,7 @@ impl std::fmt::Display for UtmZone {
             f,
             "UTM{}{}",
             self.zone,
-            match self.north {
+            match self.direction {
                 UtmZoneDirection::North => "N",
                 UtmZoneDirection::South => "S",
             }
@@ -370,11 +417,11 @@ impl UtmZone {
             vec![
                 UtmZone {
                     zone,
-                    north: UtmZoneDirection::North,
+                    direction: UtmZoneDirection::North,
                 },
                 UtmZone {
                     zone,
-                    north: UtmZoneDirection::South,
+                    direction: UtmZoneDirection::South,
                 },
             ]
         })

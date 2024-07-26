@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 pub use geoengine_datatypes::util::Identifier;
 pub use geoengine_operators::util::{spawn, spawn_blocking, spawn_blocking_with_thread_pool};
+use url::Url;
 
 pub mod apidoc;
 pub mod config;
@@ -107,6 +108,22 @@ pub fn path_with_base_path(base: &Path, sub_path: &Path) -> Result<PathBuf> {
     Ok(path)
 }
 
+pub fn join_base_url_and_path(base_url: &Url, path: &str) -> Result<Url, url::ParseError> {
+    let mut url = base_url.to_string();
+
+    if !url.ends_with('/') {
+        url.push('/');
+    }
+
+    if path.starts_with('/') {
+        url.push_str(&path[1..]);
+    } else {
+        url.push_str(path);
+    }
+
+    url.parse()
+}
+
 #[cfg(test)]
 mod mod_tests {
     use super::*;
@@ -153,5 +170,22 @@ mod mod_tests {
         );
 
         assert!(path_with_base_path(&tmp_path.join("foo/bar"), Path::new("../barfoo")).is_err());
+    }
+
+    #[test]
+    fn it_joins_url_base_with_path() {
+        assert_eq!(
+            join_base_url_and_path(&Url::parse("https://example.com/foo").unwrap(), "bar/baz")
+                .unwrap()
+                .to_string(),
+            "https://example.com/foo/bar/baz"
+        );
+
+        assert_eq!(
+            join_base_url_and_path(&Url::parse("https://example.com/foo/").unwrap(), "bar/baz")
+                .unwrap()
+                .to_string(),
+            "https://example.com/foo/bar/baz"
+        );
     }
 }
