@@ -158,11 +158,6 @@ pub enum Error {
         source: Box<dyn ErrorSource>,
     },
 
-    #[snafu(display("There is no Model with id {:?} avaiable.", id))]
-    UnknownModelId {
-        id: String,
-    },
-
     InvalidDatasetSpec {
         name: String,
         source: serde_json::Error,
@@ -374,23 +369,6 @@ pub enum Error {
     },
 
     InvalidDataProviderConfig,
-
-    InvalidMachineLearningConfig,
-
-    MachineLearningFeatureDataNotAvailable,
-    MachineLearningFeaturesNotAvailable,
-    MachineLearningModelNotFound,
-    MachineLearningMustHaveAtLeastTwoFeatures,
-
-    CouldNotCreateMlModelFilePath,
-    CouldNotGetMlLabelKeyName,
-    CouldNotGetMlModelDirectory,
-    CouldNotGetMlModelFileName,
-    CouldNotStoreMlModelInDb,
-    InvalidMlModelPath,
-
-    #[snafu(display("Valid filetypes: 'json'"))]
-    NoValidMlModelFileType,
 
     #[snafu(context(false), display("PieChart: {}", source))]
     PieChart {

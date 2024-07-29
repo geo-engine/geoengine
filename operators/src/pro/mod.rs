@@ -4,5 +4,3 @@ pub mod adapters;
 pub mod cache;
 pub mod engine;
 pub mod meta;
-
-pub mod machine_learning;

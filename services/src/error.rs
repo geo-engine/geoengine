@@ -444,7 +444,6 @@ pub enum Error {
     ProviderDoesNotSupportBrowsing,
 
     InvalidPath,
-    CouldNotGetMlModelPath,
 
     InvalidWorkflowOutputType,
 
