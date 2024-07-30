@@ -139,6 +139,15 @@ impl TilingStrategy {
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
+    /// Transforms a tile position into a global pixel position
+    pub fn tile_idx_to_global_pixel_idx(&self, tile_idx: GridIdx2D) -> GridIdx2D {
+        let GridIdx([y_tile_idx, x_tile_idx]) = tile_idx;
+        GridIdx::new([
+            y_tile_idx * self.tile_size_in_pixels.axis_size_y() as isize,
+            x_tile_idx * self.tile_size_in_pixels.axis_size_x() as isize,
+        ])
+    }
+
     /// Returns the tile grid bounds for the given `raster_spatial_query`.
     /// The query must match the tiling strategy's geo transform for now.
     ///
@@ -375,24 +384,23 @@ mod tests {
             -0.000_033_337_4,
         );
         let nearest_to_zero = geo_transform.nearest_pixel_to_zero();
-        println!("nearest_to_zero: {nearest_to_zero:?}");
 
         let nearest_to_zero_coord =
             geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(nearest_to_zero);
-        println!("nearest_to_zero_coord: {nearest_to_zero_coord:?}");
 
         let tiling_spec = TilingSpecification::new([512, 512].into());
         let tile_size = tiling_spec.tile_size_in_pixels;
-        println!("tile_size: {tile_size:?}");
 
         let tile_idx = tiling_spec.pixel_idx_to_tile_idx(nearest_to_zero);
-        println!("near zero tile_idx: {tile_idx:?}");
+        let expected_near_zero_idx = GridIdx::new([72329138149, 72329138149]);
+        assert_eq!(tile_idx, expected_near_zero_idx);
 
         let (origin_tile, origin_offset) =
             TilingSpecification::origin_pixel_tile_coord(&geo_transform, &tiling_spec);
-
-        println!("origin_tile: {origin_tile:?}");
-        println!("origin_offset: {origin_offset:?}");
+        let expected_origin_in_tiling_based_pixels = GridIdx::new([-72329138150, -72329138150]);
+        let expected_tile_offset_from_tiling = GridIdx::new([-86, -86]);
+        assert_eq!(origin_tile, expected_origin_in_tiling_based_pixels);
+        assert_eq!(origin_offset, expected_tile_offset_from_tiling);
 
         let GridIdx([y, x]) = origin_tile * tile_size;
         println!("y: {y:?}");

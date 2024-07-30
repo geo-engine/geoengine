@@ -95,7 +95,9 @@ impl RasterOperator for Rasterization {
             GridOrDensity::Density(params) => params.origin_coordinate,
         };
 
-        let geo_transform = GeoTransform::new(origin, resolution.x, -resolution.y);
+        let geo_transform =
+            GeoTransform::new(origin, resolution.x, -resolution.y).nearest_pixel_to_zero_based(); // transform geo transform to tiling based
+        dbg!(geo_transform);
 
         let spatial_bounds = in_desc
             .bbox
@@ -265,6 +267,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
         ctx: &'a dyn QueryContext,
     ) -> util::Result<BoxStream<'a, util::Result<RasterTile2D<Self::RasterType>>>> {
         let geo_transform = self.result_descriptor.tiling_geo_transform();
+        dbg!(geo_transform);
 
         if let MultiPoint(points_processor) = &self.input {
             let tiling_strategy =
@@ -282,6 +285,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
             )
             .then(move |tile_info| async move {
                 let tile_spatial_bounds = tile_info.spatial_partition();
+                dbg!(&tile_info);
 
                 let grid_size_x = tile_info.tile_size_in_pixels().axis_size_x();
 
@@ -592,12 +596,21 @@ mod tests {
             }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
-                    params: MockPointSourceParams::new(vec![
-                        (-1., 1.).into(),
-                        (1., 1.).into(),
-                        (-1., -1.).into(),
-                        (1., -1.).into(),
-                    ]),
+                    params: MockPointSourceParams::new_with_bounds(
+                        vec![
+                            (-1., 1.).into(),
+                            (1., 1.).into(),
+                            (-1., -1.).into(),
+                            (1., -1.).into(),
+                        ],
+                        crate::mock::SpatialBoundsDerive::Bounds(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(-2., -2.),
+                                Coordinate2D::new(2., 2.),
+                            )
+                            .unwrap(),
+                        ),
+                    ),
                 }
                 .boxed(),
             },
@@ -608,7 +621,7 @@ mod tests {
         .unwrap();
 
         let query = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap(),
+            GridBoundingBox2D::new([-2, -2], [1, 1]).unwrap(),
             Default::default(),
             BandSelection::first(),
         );
@@ -633,16 +646,25 @@ mod tests {
         let rasterization = Rasterization {
             params: GridOrDensity::Grid(GridParams {
                 spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-                origin_coordinate: [0.5, -0.5].into(),
+                origin_coordinate: [0.9, 0.9].into(),
             }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
-                    params: MockPointSourceParams::new(vec![
-                        (-1., 1.).into(),
-                        (1., 1.).into(),
-                        (-1., -1.).into(),
-                        (1., -1.).into(),
-                    ]),
+                    params: MockPointSourceParams::new_with_bounds(
+                        vec![
+                            (-1., 1.).into(),
+                            (1., 1.).into(),
+                            (-1., -1.).into(),
+                            (1., -1.).into(),
+                        ],
+                        crate::mock::SpatialBoundsDerive::Bounds(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(-2., -2.),
+                                Coordinate2D::new(2., 2.),
+                            )
+                            .unwrap(),
+                        ),
+                    ),
                 }
                 .boxed(),
             },
@@ -653,7 +675,7 @@ mod tests {
         .unwrap();
 
         let query = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap(),
+            GridBoundingBox2D::new([-2, -2], [1, 1]).unwrap(),
             Default::default(),
             BandSelection::first(),
         );
