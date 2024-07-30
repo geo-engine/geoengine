@@ -3,3 +3,8 @@
 pub trait Contains<T> {
     fn contains(&self, other: &T) -> bool;
 }
+
+/// This method returns `true` iff does this `Self` intersect with the input `T`
+pub trait Intersects<T> {
+    fn contains(&self, other: &T) -> bool;
+}
