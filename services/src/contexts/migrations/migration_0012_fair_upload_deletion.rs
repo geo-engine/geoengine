@@ -6,10 +6,10 @@ use crate::error::Result;
 use super::database_migration::{DatabaseVersion, Migration};
 
 /// This migration adds new delete options for uploaded user datasets
-pub struct Migration0011DeleteUploadedDatasets;
+pub struct Migration0012FairUploadDeletion;
 
 #[async_trait]
-impl Migration for Migration0011DeleteUploadedDatasets {
+impl Migration for Migration0012FairUploadDeletion {
     fn prev_version(&self) -> Option<DatabaseVersion> {
         Some("0010_s2_stac_time_buffers".into())
     }

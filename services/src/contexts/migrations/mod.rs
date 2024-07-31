@@ -9,7 +9,7 @@ pub use crate::contexts::migrations::{
     migration_0007_owner_role::Migration0007OwnerRole,
     migration_0008_band_names::Migration0008BandNames,
     migration_0009_oidc_tokens::Migration0009OidcTokens,
-    migration_0010_delete_uploaded_datasets::Migration0011DeleteUploadedDatasets,
+    migration_0012_fair_upload_deletion::Migration0012FairUploadDeletion,
     migration_0010_s2_stack_time_buffers::Migration0010S2StacTimeBuffers,
 };
 pub use database_migration::{
@@ -28,7 +28,7 @@ mod migration_0006_ebv_provider;
 pub mod migration_0007_owner_role;
 pub mod migration_0008_band_names;
 pub mod migration_0009_oidc_tokens;
-pub mod migration_0010_delete_uploaded_datasets;
+pub mod migration_0012_fair_upload_deletion;
 pub mod migration_0010_s2_stack_time_buffers;
 
 #[cfg(test)]
@@ -54,7 +54,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0008BandNames),
         Box::new(Migration0009OidcTokens),
         Box::new(Migration0010S2StacTimeBuffers),
-        Box::new(Migration0011DeleteUploadedDatasets),
+        Box::new(Migration0012FairUploadDeletion),
     ]
 }
 
