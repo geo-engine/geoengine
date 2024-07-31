@@ -318,7 +318,7 @@ impl RawFeatureCollectionBuilder {
         nulls_buffer: Option<Buffer>,
     ) -> Result<()> {
         ensure!(
-            self.types.get(column).is_some(),
+            self.types.contains_key(column),
             error::ColumnDoesNotExist { name: column }
         );
 

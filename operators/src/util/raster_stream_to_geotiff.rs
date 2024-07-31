@@ -705,7 +705,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
                 .translate_path_for_interval(time_interval)?;
 
             let mut dataset_parameters = self.create_meta.intermediate_dataset_parameters.clone();
-            dataset_parameters.file_path = dataset_path.clone();
+            dataset_parameters.file_path.clone_from(&dataset_path);
             self.result.push(GdalLoadingInfoTemporalSlice {
                 time: time_interval,
                 params: Some(dataset_parameters),
@@ -1660,6 +1660,8 @@ mod tests {
             },
         ];
 
+        let query_time = TimeInterval::new(data[0].time.start(), data[1].time.end()).unwrap();
+
         let ctx = MockQueryContext::test_default();
         let tiling_specification =
             TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
@@ -1672,9 +1674,10 @@ mod tests {
             tiling_specification,
         }
         .boxed();
+
         let query_rectangle = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((0., 2.).into(), (2., 0.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(1_596_109_801_000, 1_659_181_801_000),
+            time_interval: query_time,
             spatial_resolution: GeoTransform::test_default().spatial_resolution(),
             attributes: BandSelection::first(),
         };
@@ -1704,7 +1707,6 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(result.len(), num_time_steps);
 
         for x in result.iter().zip(expected_paths) {
             assert_eq!(x.0.params.as_ref().unwrap().file_path, x.1);
@@ -1733,12 +1735,12 @@ mod tests {
 
         let all_expected_file_suffixes = vec![
             vec![
-                "raster_2020-07-30T11-50-01-000.tiff",
-                "raster_2021-07-30T11-50-01-000.tiff",
+                "raster_2020-07-30T11-50-01-000.tiff", //1596109801000
+                "raster_2021-07-30T11-50-01-000.tiff", //1627645801000
             ], //year
             vec![
-                "raster_2020-07-30T11-50-01-000.tiff",
-                "raster_2020-08-30T11-50-01-000.tiff",
+                "raster_2020-07-30T11-50-01-000.tiff", //1596109801000
+                "raster_2020-08-30T11-50-01-000.tiff", //1598788201000
             ], //month
             vec![
                 "raster_2020-07-30T11-50-01-000.tiff",

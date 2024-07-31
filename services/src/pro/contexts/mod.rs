@@ -25,7 +25,6 @@ use rayon::ThreadPool;
 use crate::contexts::{ApplicationContext, GeoEngineDb};
 use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
-use crate::pro::machine_learning::ml_model::MlModelDb;
 
 use crate::layers::storage::LayerProviderDb;
 use crate::pro::users::{OidcManager, UserDb};
@@ -44,7 +43,7 @@ pub trait ProApplicationContext: ApplicationContext<Session = UserSession> + Use
     fn oidc_manager(&self) -> &OidcManager;
 }
 
-pub trait ProGeoEngineDb: GeoEngineDb + UserDb + PermissionDb + RoleDb + MlModelDb {}
+pub trait ProGeoEngineDb: GeoEngineDb + UserDb + PermissionDb + RoleDb {}
 
 pub struct ExecutionContextImpl<D>
 where
@@ -98,8 +97,7 @@ where
             VectorQueryRectangle,
         > + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + LayerProviderDb
-        + MlModelDb,
+        + LayerProviderDb,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool

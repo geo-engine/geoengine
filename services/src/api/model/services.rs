@@ -195,3 +195,9 @@ pub struct ProvenanceOutput {
     pub data: DataId,
     pub provenance: Option<Vec<Provenance>>,
 }
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, ToSchema)]
+pub struct Volume {
+    pub name: String,
+    pub path: Option<String>,
+}
