@@ -913,9 +913,7 @@ where
             )
             .await?;
 
-        let result = tx
-            .query_opt(&stmt, &[&dataset_id])
-            .await?;
+        let result = tx.query_opt(&stmt, &[&dataset_id]).await?;
 
         return Ok(result.is_some());
     }
