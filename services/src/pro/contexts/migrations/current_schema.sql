@@ -52,7 +52,7 @@ CREATE TYPE "CopernicusDataspaceDataProviderDefinition" AS (
 );
 
 CREATE TYPE "ProDataProviderDefinition" AS (
-    -- one 
+    -- one of
     sentinel_s2_l2_a_cogs_provider_definition
     "SentinelS2L2ACogsProviderDefinition",
     copernicus_dataspace_provider_definition
@@ -229,11 +229,6 @@ SELECT
 FROM user_roles AS r
 INNER JOIN permissions AS p ON (
     r.role_id = p.role_id AND p.layer_id IS NOT NULL
-);
-
-CREATE TABLE ml_models (
-    id uuid PRIMARY KEY,
-    content text NOT NULL
 );
 
 CREATE TABLE oidc_session_tokens (

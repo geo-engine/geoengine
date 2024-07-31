@@ -46,7 +46,7 @@ pub struct EbvPortalDataProviderDefinition {
     pub description: String,
     pub priority: Option<i16>,
     pub base_url: Url,
-    /// Path were the NetCDF data can be found
+    /// Path were the `NetCDF` data can be found
     pub data: PathBuf,
     /// Path were overview files are stored
     pub overviews: PathBuf,

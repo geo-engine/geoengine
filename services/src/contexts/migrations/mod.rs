@@ -10,7 +10,8 @@ pub use crate::contexts::migrations::{
     migration_0008_band_names::Migration0008BandNames,
     migration_0009_oidc_tokens::Migration0009OidcTokens,
     migration_0010_s2_stack_time_buffers::Migration0010S2StacTimeBuffers,
-    migration_0011_copernicus_provider::Migration0011CopernicusProvider,
+    migration_0011_remove_xgb::Migration0011RemoveXgb,
+    migration_0012_copernicus_provider::Migration0012CopernicusProvider,
 };
 pub use database_migration::{
     initialize_database, migrate_database, DatabaseVersion, Migration, MigrationResult,
@@ -29,7 +30,8 @@ pub mod migration_0007_owner_role;
 pub mod migration_0008_band_names;
 pub mod migration_0009_oidc_tokens;
 pub mod migration_0010_s2_stack_time_buffers;
-pub mod migration_0011_copernicus_provider;
+pub mod migration_0011_remove_xgb;
+pub mod migration_0012_copernicus_provider;
 
 #[cfg(test)]
 mod schema_info;
@@ -54,7 +56,8 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0008BandNames),
         Box::new(Migration0009OidcTokens),
         Box::new(Migration0010S2StacTimeBuffers),
-        Box::new(Migration0011CopernicusProvider),
+        Box::new(Migration0011RemoveXgb),
+        Box::new(Migration0012CopernicusProvider),
     ]
 }
 

@@ -57,9 +57,6 @@ pub enum CopernicusSentinel2Error {
     CouldNotOpenDataset {
         source: geoengine_operators::error::Error,
     },
-    CouldNotOpenRasterBand {
-        source: gdal::errors::GdalError,
-    },
     CouldNotGenerateGdalParameters {
         source: geoengine_operators::error::Error,
     },
