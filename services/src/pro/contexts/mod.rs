@@ -44,7 +44,10 @@ pub trait ProApplicationContext: ApplicationContext<Session = UserSession> + Use
     fn oidc_manager(&self) -> &OidcManager;
 }
 
-pub trait ProGeoEngineDb: GeoEngineDb + UserDb + PermissionDb + RoleDb + UploadedUserDatasetStore {}
+pub trait ProGeoEngineDb:
+    GeoEngineDb + UserDb + PermissionDb + RoleDb + UploadedUserDatasetStore
+{
+}
 
 pub struct ExecutionContextImpl<D>
 where
