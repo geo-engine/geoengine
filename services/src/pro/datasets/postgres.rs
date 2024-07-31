@@ -794,42 +794,40 @@ where
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
-        let _uploaded = self.uploaded_dataset_status_in_tx(&dataset_id, &tx).await;
-        if let Err(error) = _uploaded {
-            if matches!(error, UnknownDatasetId) {
-                self.ensure_permission_in_tx(dataset_id.into(), Permission::Owner, &tx)
-                    .await
-                    .boxed_context(crate::error::PermissionDb)?;
+        let is_user_upload = self.is_user_upload_in_tx(&dataset_id, &tx).await?;
+        if !is_user_upload {
+            self.ensure_permission_in_tx(dataset_id.into(), Permission::Owner, &tx)
+                .await
+                .boxed_context(crate::error::PermissionDb)?;
 
-                let stmt = tx
-                    .prepare(
-                        "
-                SELECT
-                    TRUE
-                FROM
-                    user_permitted_datasets p JOIN datasets d
-                        ON (p.dataset_id = d.id)
-                WHERE
-                    d.id = $1 AND p.user_id = $2 AND p.permission = 'Owner';",
-                    )
-                    .await?;
+            let stmt = tx
+                .prepare(
+                    "
+            SELECT
+                TRUE
+            FROM
+                user_permitted_datasets p JOIN datasets d
+                    ON (p.dataset_id = d.id)
+            WHERE
+                d.id = $1 AND p.user_id = $2 AND p.permission = 'Owner';",
+                )
+                .await?;
 
-                let rows = tx
-                    .query(&stmt, &[&dataset_id, &self.session.user.id])
-                    .await?;
+            let rows = tx
+                .query(&stmt, &[&dataset_id, &self.session.user.id])
+                .await?;
 
-                if rows.is_empty() {
-                    return Err(Error::OperationRequiresOwnerPermission);
-                }
-
-                let stmt = tx.prepare("DELETE FROM datasets WHERE id = $1;").await?;
-
-                tx.execute(&stmt, &[&dataset_id]).await?;
-
-                tx.commit().await?;
-
-                return Ok(());
+            if rows.is_empty() {
+                return Err(Error::OperationRequiresOwnerPermission);
             }
+
+            let stmt = tx.prepare("DELETE FROM datasets WHERE id = $1;").await?;
+
+            tx.execute(&stmt, &[&dataset_id]).await?;
+
+            tx.commit().await?;
+
+            return Ok(());
         }
 
         self.expire_uploaded_dataset(ChangeDatasetExpiration::delete_full(dataset_id))
@@ -952,6 +950,30 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    async fn is_user_upload_in_tx(&self, dataset_id: &DatasetId, tx: &Transaction) -> Result<bool> {
+        self.ensure_permission_in_tx((*dataset_id).into(), Permission::Read, tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        let stmt = tx
+            .prepare(
+                "
+            SELECT
+                TRUE
+            FROM
+                uploaded_user_datasets
+            WHERE
+                dataset_id = $1;",
+            )
+            .await?;
+
+        let result = tx
+            .query_opt(&stmt, &[&dataset_id, &self.session.user.id])
+            .await?;
+
+        return Ok(result.is_some());
+    }
+
     async fn get_dataset_access_status_in_tx(
         &self,
         dataset_id: &DatasetId,

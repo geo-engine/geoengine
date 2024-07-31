@@ -197,6 +197,8 @@ impl From<DatasetAccessStatus> for DatasetAccessStatusResponse {
 /// This is because services do not know about database transactions.
 #[async_trait]
 pub trait TxUploadedUserDatasetStore<M: ManageConnection> {
+    async fn is_user_upload_in_tx(&self, dataset_id: &DatasetId, tx: &Transaction) -> Result<bool>;
+
     async fn get_dataset_access_status_in_tx(
         &self,
         dataset_id: &DatasetId,
