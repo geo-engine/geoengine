@@ -914,7 +914,7 @@ where
             .await?;
 
         let result = tx
-            .query_opt(&stmt, &[&dataset_id, &self.session.user.id])
+            .query_opt(&stmt, &[&dataset_id])
             .await?;
 
         return Ok(result.is_some());
