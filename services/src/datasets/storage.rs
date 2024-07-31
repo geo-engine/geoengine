@@ -19,6 +19,9 @@ use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMe
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::fmt::Debug;
+use std::str::FromStr;
+use strum_macros;
+use strum_macros::{Display, EnumString};
 use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
@@ -95,6 +98,13 @@ pub struct AutoCreateDataset {
     pub tags: Option<Vec<String>>,
 }
 
+#[derive(Display, EnumString)]
+pub enum ReservedTags {
+    #[strum(serialize = "upload")]
+    Upload,
+    Deleted,
+}
+
 fn validate_main_file(main_file: &str) -> Result<(), ValidationError> {
     if main_file.is_empty() || main_file.contains('/') || main_file.contains("..") {
         return Err(ValidationError::new("Invalid upload file name"));
@@ -112,6 +122,20 @@ pub fn validate_tags(tags: &Vec<String>) -> Result<(), ValidationError> {
     }
 
     Ok(())
+}
+
+pub fn check_reserved_tags(tags: &Option<Vec<String>>) {
+    if let Some(tags) = tags {
+        for tag in tags {
+            let conversion = ReservedTags::from_str(tag.as_str());
+            if let Ok(reserved) = conversion {
+                log::warn!(
+                    "Adding a new dataset with a reserved tag: {}",
+                    reserved.to_string()
+                );
+            }
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]

@@ -10,9 +10,10 @@ use crate::pro::permissions::{
 };
 use async_trait::async_trait;
 use snafu::{ensure, ResultExt};
+use std::collections::HashSet;
 use tokio_postgres::{
     tls::{MakeTlsConnect, TlsConnect},
-    Socket,
+    Socket, Transaction,
 };
 use uuid::Uuid;
 
@@ -123,6 +124,13 @@ pub trait TxPermissionDb {
         limit: u32,
         tx: &tokio_postgres::Transaction<'_>,
     ) -> Result<Vec<PermissionListing>, PermissionDbError>;
+
+    /// Get all permissions the current user has for this `resource`.
+    async fn get_user_permissions_in_tx<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        tx: &tokio_postgres::Transaction<'_>,
+    ) -> Result<Vec<Permission>, PermissionDbError>;
 }
 
 #[async_trait]
@@ -369,6 +377,44 @@ where
             .collect();
 
         Ok(permissions)
+    }
+
+    async fn get_user_permissions_in_tx<R: Into<ResourceId> + Send + Sync>(
+        &self,
+        resource: R,
+        tx: &Transaction<'_>,
+    ) -> Result<Vec<Permission>, PermissionDbError> {
+        let resource: ResourceId = resource.into();
+
+        let stmt = tx
+            .prepare(&format!(
+                "
+            SELECT
+                p.permission
+            FROM
+                permissions p JOIN user_roles r ON (p.role_id = r.role_id)
+            WHERE
+                {resource_type} = $1 AND r.user_id = $2
+            ;",
+                resource_type = resource.resource_type_name()
+            ))
+            .await
+            .context(PostgresPermissionDbError)?;
+
+        let rows = tx
+            .query(&stmt, &[&resource.uuid()?, &self.session.user.id])
+            .await
+            .context(PostgresPermissionDbError)?;
+
+        let mut all_permissions = HashSet::new();
+        for row in rows {
+            let permission: Permission = row.get(0);
+            for implied_permission in permission.implied_permissions() {
+                all_permissions.insert(implied_permission);
+            }
+        }
+
+        Ok(Vec::from_iter(all_permissions))
     }
 }
 

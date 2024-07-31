@@ -36,6 +36,7 @@ use super::users::{RoleDb, UserAuth, UserSession};
 use super::util::config::{Cache, QuotaTrackingMode};
 use crate::util::config::get_config_element;
 
+use crate::pro::datasets::UploadedUserDatasetStore;
 pub use postgres::ProPostgresDb;
 
 /// A pro application contexts that extends the default context.
@@ -43,7 +44,10 @@ pub trait ProApplicationContext: ApplicationContext<Session = UserSession> + Use
     fn oidc_manager(&self) -> &OidcManager;
 }
 
-pub trait ProGeoEngineDb: GeoEngineDb + UserDb + PermissionDb + RoleDb {}
+pub trait ProGeoEngineDb:
+    GeoEngineDb + UserDb + PermissionDb + RoleDb + UploadedUserDatasetStore
+{
+}
 
 pub struct ExecutionContextImpl<D>
 where

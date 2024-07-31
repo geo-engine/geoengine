@@ -53,6 +53,9 @@ use crate::layers::listing::{
 };
 use crate::pro;
 use crate::pro::api::handlers::users::{Quota, UpdateQuota};
+use crate::pro::datasets::{
+    DatasetAccessStatusResponse, DatasetDeletionType, Expiration, ExpirationChange,
+};
 use crate::pro::permissions::{
     Permission, PermissionListing, ResourceId, Role, RoleDescription, RoleId,
 };
@@ -157,7 +160,10 @@ use utoipa::{Modify, OpenApi};
         handlers::upload::upload_handler,
         pro::api::handlers::permissions::add_permission_handler,
         pro::api::handlers::permissions::remove_permission_handler,
-        pro::api::handlers::permissions::get_resource_permissions_handler
+        pro::api::handlers::permissions::get_resource_permissions_handler,
+        pro::api::handlers::datasets::set_dataset_expiration,
+        pro::api::handlers::datasets::get_dataset_status,
+        pro::api::handlers::datasets::gc_expired_datasets
     ),
     components(
         responses(
@@ -371,6 +377,10 @@ use utoipa::{Modify, OpenApi};
             Volume,
             VolumeName,
             DataPath,
+            Expiration,
+            ExpirationChange,
+            DatasetDeletionType,
+            DatasetAccessStatusResponse,
 
             PlotOutputFormat,
             WrappedPlotOutput,
