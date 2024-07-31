@@ -164,8 +164,8 @@ impl Sentinel2Metadata {
             ("GDAL_PAM_ENABLED".to_string(), "NO".to_string()),
             // Debugging option
             // TODO: make configurable?
-            ("CPL_CURL_VERBOSE".to_string(), "YES".to_string()),
-            ("CPL_DEBUG".to_string(), "ON".to_string()),
+            // ("CPL_CURL_VERBOSE".to_string(), "YES".to_string()),
+            // ("CPL_DEBUG".to_string(), "ON".to_string()),
         ]
     }
 
@@ -258,5 +258,91 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
         &self,
     ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
         Box::new(self.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use geoengine_datatypes::{
+        primitives::{BandSelection, DateTime, SpatialPartition2D},
+        test_data,
+    };
+    use httptest::{
+        all_of,
+        matchers::{contains, request, url_decoded},
+        responders::status_code,
+        Expectation,
+    };
+
+    use crate::pro::datasets::external::copernicus_dataspace::ids::UtmZoneDirection;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn it_creates_loading_info() {
+        let mock_server = httptest::Server::run();
+
+        let stac_body = tokio::fs::read(test_data!(
+            "pro/copernicus_dataspace/stac_responses/stac_response_1.json"
+        ))
+        .await
+        .unwrap();
+
+        mock_server.expect(
+            Expectation::matching(all_of![
+                request::method("GET"),
+                request::path("/stac/collections/SENTINEL-2/items"),
+                request::query(url_decoded(contains((
+                    "bbox",
+                    "8.751627919756874,50.79897568511778,8.765865426422579,50.80799775499464",
+                )))),
+                request::query(url_decoded(contains((
+                    "datetime",
+                    "2020-07-01T12:00:00+00:00/2020-07-03T12:00:00+00:00",
+                )))),
+                request::query(url_decoded(contains(("limit", "1000")))),
+                request::query(url_decoded(contains(("page", "1")))),
+                request::query(url_decoded(contains(("sortby", "+datetime"))))
+            ])
+            .respond_with(
+                status_code(200)
+                    .append_header("Content-Type", "application/json")
+                    .body(stac_body),
+            ),
+        );
+
+        // TODO: add responses for dataset
+
+        let metadata = Sentinel2Metadata {
+            stac_url: mock_server.url_str("/stac"),
+            s3_url: mock_server.url_str("/s3"),
+            s3_access_key: "ACCESS_KEY".to_string(),
+            s3_secret_key: "SECRET_KEY".to_string(),
+            product: Sentinel2Product::L2A,
+            zone: UtmZone {
+                zone: 32,
+                direction: UtmZoneDirection::North,
+            },
+            band: Sentinel2Band::B04,
+        };
+
+        // time=2020-07-01T12%3A00%3A00.000Z/2020-07-03T12%3A00%3A00.000Z&EXCEPTIONS=application%2Fjson&WIDTH=256&HEIGHT=256&CRS=EPSG%3A32632&BBOX=482500%2C5627500%2C483500%2C5628500
+        let loading_info = metadata
+            .crate_loading_info(RasterQueryRectangle {
+                spatial_bounds: SpatialPartition2D::new_unchecked(
+                    (482_500., 5_627_500.).into(),
+                    (483_500., 5_628_500.).into(),
+                ),
+                time_interval: TimeInterval::new_unchecked(
+                    DateTime::parse_from_rfc3339("2020-07-01T12:00:00.000Z").unwrap(),
+                    DateTime::parse_from_rfc3339("2020-07-03T12:00:00.000Z").unwrap(),
+                ),
+                spatial_resolution: SpatialResolution::new(10., 10.).unwrap(),
+                attributes: BandSelection::first(),
+            })
+            .await
+            .unwrap();
+
+        dbg!(loading_info);
     }
 }

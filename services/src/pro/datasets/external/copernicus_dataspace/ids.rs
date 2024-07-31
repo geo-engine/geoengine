@@ -71,8 +71,8 @@ pub enum Sentinel2Band {
 
 #[derive(Debug, Clone, Copy)]
 pub struct UtmZone {
-    zone: u8,
-    direction: UtmZoneDirection,
+    pub zone: u8,
+    pub direction: UtmZoneDirection,
 }
 
 #[derive(Debug, Clone, Copy)]
