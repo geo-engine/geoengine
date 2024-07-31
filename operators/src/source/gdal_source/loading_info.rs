@@ -543,13 +543,13 @@ pub struct GdalLoadingInfo {
     /// IF there is a part starting exactly at the query time start. It is the start time of that part (and the query).
     /// ELSE IF there is a known element with an end before the query time it is the end of that `TimeInterval`.
     /// ELSE IF there is no data at all (and never will be) it might be `TimeInstance::MIN`.
-    /// ELSE it should be None and the GdalSource will replace it with the start of the query AND issue a warning about missing information.
+    /// ELSE it should be None and the `GdalSource` will replace it with the start of the query AND issue a warning about missing information.
     pub start_time_of_output_stream: Option<TimeInstance>,
     /// This is the end of the last part produced to answer the query.
     /// IF there is no data part that intersects the query end, this is the first time known after the query end.
     /// ELSE IF there is a known element with an end after the query time it is the start of that `TimeInterval`.
     /// ELSE IF there is no data at all (and never will be) it might be `TimeInstance::MAX`.
-    /// ELSE it should be None and the GdalSource will replace it with the start of the query AND issue a warning about missing information.
+    /// ELSE it should be None and the `GdalSource` will replace it with the start of the query AND issue a warning about missing information.
     pub end_time_of_output_stream: Option<TimeInstance>,
 }
 

@@ -445,20 +445,12 @@ pub enum Error {
     ProviderDoesNotSupportBrowsing,
 
     InvalidPath,
-    CouldNotGetMlModelPath,
 
     InvalidWorkflowOutputType,
 
     #[snafu(display("Functionality is not implemented: '{}'", message))]
     NotImplemented {
         message: String,
-    },
-
-    // TODO: refactor error
-    #[cfg(feature = "pro")]
-    #[snafu(context(false))]
-    MachineLearning {
-        source: crate::pro::machine_learning::ml_error::MachineLearningError,
     },
 
     #[snafu(display("NotNan error: {}", source))]

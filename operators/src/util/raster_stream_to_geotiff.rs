@@ -705,7 +705,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
                 .translate_path_for_interval(time_interval)?;
 
             let mut dataset_parameters = self.create_meta.intermediate_dataset_parameters.clone();
-            dataset_parameters.file_path = dataset_path.clone();
+            dataset_parameters.file_path.clone_from(&dataset_path);
             self.result.push(GdalLoadingInfoTemporalSlice {
                 time: time_interval,
                 params: Some(dataset_parameters),

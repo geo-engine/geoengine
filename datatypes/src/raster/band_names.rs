@@ -89,7 +89,7 @@ impl RenameBands {
                 }
             }
             RenameBands::Rename(names) => {
-                new_names = names.clone();
+                new_names.clone_from(names);
             }
         }
 
