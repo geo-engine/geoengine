@@ -432,9 +432,7 @@ impl<'r> ToWkt<f64> for MultiLineStringRef<'r> {
             multi_line_string.0.push(line_strings);
         }
 
-        Wkt {
-            item: wkt::Geometry::MultiLineString(multi_line_string),
-        }
+        Wkt::MultiLineString(multi_line_string)
     }
 }
 

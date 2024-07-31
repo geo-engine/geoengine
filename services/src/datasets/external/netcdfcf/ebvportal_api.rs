@@ -7,7 +7,8 @@ use crate::error::Result;
 use error::NetCdfCf4DProviderError;
 use geoengine_datatypes::dataset::DataProviderId;
 use log::debug;
-use serde::Serialize;
+#[allow(unused_imports)]
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 mod portal_responses {
@@ -60,12 +61,14 @@ mod portal_responses {
 
     #[derive(Debug, Deserialize)]
     #[serde(untagged)]
+    #[allow(dead_code)]
     pub enum EbvDatasetsResponseEbvScenario {
         String(String),
         Value(EbvDatasetsResponseEbvScenarioValue),
     }
 
     #[derive(Debug, Deserialize)]
+    #[allow(dead_code)]
     pub struct EbvDatasetsResponseEbvScenarioValue {
         pub ebv_scenario_classification_name: String,
     }
@@ -80,6 +83,7 @@ pub struct EbvClass {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct EbvClasses {
     classes: Vec<EbvClass>,
 }

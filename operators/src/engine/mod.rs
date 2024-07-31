@@ -1,6 +1,7 @@
 pub use clonable_operator::{
-    CloneableInitializedRasterOperator, CloneableInitializedVectorOperator, CloneablePlotOperator,
-    CloneableRasterOperator, CloneableVectorOperator,
+    CloneableInitializedPlotOperator, CloneableInitializedRasterOperator,
+    CloneableInitializedVectorOperator, CloneablePlotOperator, CloneableRasterOperator,
+    CloneableVectorOperator,
 };
 pub use execution_context::{
     ExecutionContext, ExecutionContextExtensions, MetaData, MetaDataProvider, MockExecutionContext,

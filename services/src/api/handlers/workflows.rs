@@ -31,7 +31,7 @@ use std::collections::HashMap;
 use std::io::{Cursor, Write};
 use std::sync::Arc;
 use utoipa::{IntoParams, ToSchema};
-use zip::{write::FileOptions, ZipWriter};
+use zip::{write::SimpleFileOptions, ZipWriter};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -356,7 +356,7 @@ async fn get_workflow_all_metadata_zip_handler<C: ApplicationContext>(
         let mut output = Vec::new();
 
         let zip_options =
-            FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
         let mut zip_writer = ZipWriter::new(Cursor::new(&mut output));
 
         let workflow_filename = "workflow.json";
@@ -398,7 +398,6 @@ async fn get_workflow_all_metadata_zip_handler<C: ApplicationContext>(
         zip_writer
             .finish()
             .boxed_context(error::CannotFinishZipFile)?;
-        drop(zip_writer);
 
         Result::<Vec<u8>>::Ok(output)
     })

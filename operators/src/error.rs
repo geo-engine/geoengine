@@ -158,11 +158,6 @@ pub enum Error {
         source: Box<dyn ErrorSource>,
     },
 
-    #[snafu(display("There is no Model with id {:?} avaiable.", id))]
-    UnknownModelId {
-        id: String,
-    },
-
     InvalidDatasetSpec {
         name: String,
         source: serde_json::Error,
@@ -375,29 +370,6 @@ pub enum Error {
 
     InvalidDataProviderConfig,
 
-    InvalidMachineLearningConfig,
-
-    MachineLearningFeatureDataNotAvailable,
-    MachineLearningFeaturesNotAvailable,
-    MachineLearningModelNotFound,
-    MachineLearningMustHaveAtLeastTwoFeatures,
-
-    CouldNotCreateMlModelFilePath,
-    CouldNotGetMlLabelKeyName,
-    CouldNotGetMlModelDirectory,
-    CouldNotGetMlModelFileName,
-    CouldNotStoreMlModelInDb,
-    InvalidMlModelPath,
-
-    #[snafu(display("Valid filetypes: 'json'"))]
-    NoValidMlModelFileType,
-
-    #[cfg(feature = "pro")]
-    #[snafu(context(false))]
-    XGBoost {
-        source: crate::pro::xg_error::XGBoostModuleError,
-    },
-
     #[snafu(context(false), display("PieChart: {}", source))]
     PieChart {
         source: crate::plot::PieChartError,
@@ -524,6 +496,7 @@ impl From<crate::mock::MockRasterSourceError> for Error {
 mod requirements {
     use super::*;
 
+    #[allow(dead_code)]
     trait RequiresSend: Send {}
 
     impl RequiresSend for Error {}

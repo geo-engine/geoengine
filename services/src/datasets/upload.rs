@@ -136,6 +136,7 @@ pub async fn create_upload(mut body: Multipart) -> Result<(UploadId, Vec<FileUpl
         let mut field = item?;
         let file_name = field
             .content_disposition()
+            .ok_or(error::Error::UploadFieldMissingFileName)?
             .get_filename()
             .ok_or(error::Error::UploadFieldMissingFileName)?
             .to_owned();

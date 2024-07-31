@@ -8,6 +8,7 @@ use std::sync::Arc;
     context(suffix(false)), // disables default `Snafu` suffix
     module(raster))
 ]
+#[allow(clippy::large_enum_variant)]
 pub enum RasterExpressionError {
     #[snafu(display("{}", source), context(false))]
     Parser { source: ExpressionParserError },
@@ -97,6 +98,7 @@ pub enum ExpressionDependenciesInitializationError {
 mod send_sync_ensurance {
     use super::*;
 
+    #[allow(dead_code)]
     trait SendSyncEnsurance: Send + Sync {}
 
     impl SendSyncEnsurance for RasterExpressionError {}

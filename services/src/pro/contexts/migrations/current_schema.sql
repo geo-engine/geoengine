@@ -218,11 +218,6 @@ INNER JOIN permissions AS p ON (
     r.role_id = p.role_id AND p.layer_id IS NOT NULL
 );
 
-CREATE TABLE ml_models (
-    id uuid PRIMARY KEY,
-    content text NOT NULL
-);
-
 CREATE TABLE oidc_session_tokens (
     session_id uuid PRIMARY KEY REFERENCES sessions (
         id

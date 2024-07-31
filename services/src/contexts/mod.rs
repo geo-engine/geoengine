@@ -29,8 +29,8 @@ pub use migrations::{
     Migration0002DatasetListingProvider, Migration0003GbifConfig,
     Migration0004DatasetListingProviderPrio, Migration0005GbifColumnSelection,
     Migration0006EbvProvider, Migration0007OwnerRole, Migration0008BandNames,
-    Migration0009OidcTokens, Migration0010S2StacTimeBuffers, Migration0012FairUploadDeletion,
-    MigrationResult,
+    Migration0009OidcTokens, Migration0010S2StacTimeBuffers, Migration0011RemoveXgb,
+    Migration0012FairUploadDeletion, MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
