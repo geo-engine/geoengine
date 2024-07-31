@@ -7,7 +7,7 @@ use crate::engine::{
 };
 use crate::error;
 use ndarray::Array2;
-use ort::IntoTensorElementType;
+use ort::{IntoTensorElementType, PrimitiveTensorElementType};
 use snafu::{ensure, ResultExt};
 
 use crate::util::Result;
@@ -247,7 +247,7 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
 impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
 where
     TIn: Pixel + NoDataValue,
-    TOut: Pixel + IntoTensorElementType,
+    TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
     ort::Value: std::convert::TryFrom<
         ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
     >,

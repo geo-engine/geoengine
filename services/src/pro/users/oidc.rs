@@ -884,9 +884,9 @@ mod tests {
             .map(|(x, y)| (x.to_string(), y.to_string()))
             .collect();
 
-        assert!(query_map.get("state").is_some());
-        assert!(query_map.get("nonce").is_some());
-        assert!(query_map.get("code_challenge").is_some());
+        assert!(query_map.contains_key("state"));
+        assert!(query_map.contains_key("nonce"));
+        assert!(query_map.contains_key("code_challenge"));
 
         assert_eq!(query_map.get("client_id"), Some(&"DummyClient".to_string()));
         assert_eq!(

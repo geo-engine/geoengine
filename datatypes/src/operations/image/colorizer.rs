@@ -174,7 +174,7 @@ impl Colorizer {
         match self {
             Self::LinearGradient { breakpoints, .. }
             | Self::LogarithmicGradient { breakpoints, .. } => *breakpoints[0].value,
-            Self::Palette { .. } | Self::Rgba { .. } => f64::from(u8::min_value()),
+            Self::Palette { .. } | Self::Rgba { .. } => f64::from(u8::MIN),
         }
     }
 
@@ -204,7 +204,7 @@ impl Colorizer {
             | Self::LogarithmicGradient { breakpoints, .. } => {
                 *breakpoints[breakpoints.len() - 1].value
             }
-            Self::Palette { .. } | Self::Rgba { .. } => f64::from(u8::max_value()),
+            Self::Palette { .. } | Self::Rgba { .. } => f64::from(u8::MAX),
         }
     }
 
