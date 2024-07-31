@@ -232,11 +232,11 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
         &self,
         query: RasterQueryRectangle,
     ) -> geoengine_operators::util::Result<GdalLoadingInfo> {
-        dbg!(self.crate_loading_info(query).await.map_err(|e| {
+        self.crate_loading_info(query).await.map_err(|e| {
             geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
             }
-        }))
+        })
     }
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {

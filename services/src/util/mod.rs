@@ -115,8 +115,8 @@ pub fn join_base_url_and_path(base_url: &Url, path: &str) -> Result<Url, url::Pa
         url.push('/');
     }
 
-    if path.starts_with('/') {
-        url.push_str(&path[1..]);
+    if let Some(stripped) = path.strip_prefix('/') {
+        url.push_str(stripped);
     } else {
         url.push_str(path);
     }

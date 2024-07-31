@@ -133,8 +133,6 @@ pub async fn load_stac_items(
 
         let new_items: stac::ItemCollection = response.json().await.context(InvalidStacResponse)?;
 
-        dbg!(&new_items);
-
         let num_items_in_page = new_items.items.len();
 
         // the STAC API does not allow to filter by product type, so we have to do it here
@@ -251,9 +249,4 @@ impl StacItemExt for stac::Item {
             .ok_or(CopernicusStacError::ProductAlternateS3HrefIsNotAString)?
             .to_string())
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 }

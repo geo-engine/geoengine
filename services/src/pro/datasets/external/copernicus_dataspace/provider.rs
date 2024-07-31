@@ -16,7 +16,7 @@ use crate::{
 use async_trait::async_trait;
 use geoengine_datatypes::{
     dataset::{DataId, DataProviderId, LayerId},
-    operations::image::{Breakpoint, Colorizer, RasterColorizer, RgbaColor},
+    operations::image::{Colorizer, RasterColorizer, RgbaColor},
     primitives::{RasterQueryRectangle, VectorQueryRectangle},
 };
 use geoengine_operators::{
@@ -27,6 +27,7 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, GdalSource, GdalSourceParameters, OgrSourceDataset},
 };
+use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
@@ -277,21 +278,22 @@ impl CopernicusDataspaceDataProvider {
                     .boxed(),
                 ),
             },
-            //Minimum=543.000, Maximum=18336.000
             symbology: Some(crate::projects::Symbology::Raster(RasterSymbology {
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
                     band_colorizer: Colorizer::linear_gradient(
                         vec![
-                            (543., RgbaColor::black()).try_into().unwrap(),
-                            (18336., RgbaColor::white()).try_into().unwrap(),
+                            (NotNan::<f64>::from(0), RgbaColor::black()).into(),
+                            (NotNan::<f64>::from(u16::MAX), RgbaColor::white()).into(),
                         ],
                         RgbaColor::transparent(),
                         RgbaColor::black(),
                         RgbaColor::white(),
                     )
-                    .unwrap(),
+                    .expect(
+                        "colorizer should be valid because it was created from valid breakpoints",
+                    ),
                 },
             })),
             properties: vec![],
