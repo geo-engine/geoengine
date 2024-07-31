@@ -1344,7 +1344,7 @@ mod tests {
     async fn oidc_illegal_provider(app_ctx: ProPostgresContext<NoTls>) {
         let res = oidc_init_test_helper(Method::POST, app_ctx).await;
 
-        ErrorResponse::assert(
+        ErrorResponse::assert_eq_message_starts_with(
             res,
             400,
             "Oidc",

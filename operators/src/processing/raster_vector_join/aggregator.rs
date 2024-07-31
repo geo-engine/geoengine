@@ -1,7 +1,7 @@
 use crate::error;
 use crate::error::Error;
 use crate::util::Result;
-use geoengine_datatypes::primitives::{FeatureData, FeatureDataType};
+use geoengine_datatypes::primitives::FeatureData;
 use geoengine_datatypes::raster::Pixel;
 use num_traits::AsPrimitive;
 use snafu::ensure;
@@ -18,10 +18,6 @@ pub trait Aggregator {
         P: Pixel + AsPrimitive<Self::Output>;
 
     fn add_null(&mut self, feature_idx: usize);
-
-    fn feature_data_type() -> FeatureDataType;
-
-    fn data(&self) -> &[Self::Output];
 
     fn nulls(&self) -> &[bool];
 
@@ -164,14 +160,6 @@ where
         self.number_of_pristine_values -= 1;
     }
 
-    fn feature_data_type() -> FeatureDataType {
-        T::feature_data_type()
-    }
-
-    fn data(&self) -> &[Self::Output] {
-        &self.values
-    }
-
     fn nulls(&self) -> &[bool] {
         &self.null
     }
@@ -225,27 +213,18 @@ where
 }
 
 pub trait FirstValueOutputType {
-    fn feature_data_type() -> FeatureDataType;
     fn typed_aggregator(aggregator: FirstValueAggregator<Self>) -> TypedAggregator
     where
         Self: Sized;
 }
 
 impl FirstValueOutputType for i64 {
-    fn feature_data_type() -> FeatureDataType {
-        FeatureDataType::Int
-    }
-
     fn typed_aggregator(aggregator: FirstValueAggregator<Self>) -> TypedAggregator {
         TypedAggregator::FirstValueInt(aggregator)
     }
 }
 
 impl FirstValueOutputType for f64 {
-    fn feature_data_type() -> FeatureDataType {
-        FeatureDataType::Float
-    }
-
     fn typed_aggregator(aggregator: FirstValueAggregator<Self>) -> TypedAggregator {
         TypedAggregator::FirstValueFloat(aggregator)
     }
@@ -300,14 +279,6 @@ impl Aggregator for MeanValueAggregator {
 
         self.null[feature_idx] = true;
         self.number_of_non_null_values -= 1;
-    }
-
-    fn feature_data_type() -> FeatureDataType {
-        FeatureDataType::Float
-    }
-
-    fn data(&self) -> &[Self::Output] {
-        &self.means
     }
 
     fn nulls(&self) -> &[bool] {
@@ -376,7 +347,7 @@ mod tests {
 
         aggregator.add_value(1, 10, 1);
 
-        assert_eq!(aggregator.data(), &[1., 10.]);
+        assert_eq!(aggregator.values, &[1., 10.]);
     }
 
     #[test]
@@ -388,7 +359,7 @@ mod tests {
 
         aggregator.add_value(1, 4., 1);
 
-        assert_eq!(aggregator.data(), &[2, 4]);
+        assert_eq!(aggregator.values, &[2, 4]);
     }
 
     #[test]
@@ -401,7 +372,7 @@ mod tests {
             aggregator.add_value(1, i, i);
         }
 
-        assert_eq!(aggregator.data(), &[5.5, 385. / 55.]);
+        assert_eq!(aggregator.means, &[5.5, 385. / 55.]);
     }
 
     #[test]
@@ -414,7 +385,7 @@ mod tests {
         aggregator.add_value(1, 4., 1);
 
         if let TypedAggregator::FirstValueInt(ref aggregator) = aggregator {
-            assert_eq!(aggregator.data(), &[2, 4]);
+            assert_eq!(aggregator.values, &[2, 4]);
         } else {
             unreachable!();
         }
@@ -497,6 +468,6 @@ mod tests {
             aggregator.add_value(1, i, i);
         }
 
-        assert_eq!(aggregator.data(), &[5.5, 385. / 55.]);
+        assert_eq!(aggregator.means, &[5.5, 385. / 55.]);
     }
 }

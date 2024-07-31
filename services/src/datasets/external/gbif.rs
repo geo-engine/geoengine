@@ -1436,8 +1436,8 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                 .filter(|(column, _)| self.columns.contains(column))
                 .collect(),
                 time: Some(TimeInterval::new(
-                    tmin.timestamp_millis(),
-                    tmax.timestamp_millis(),
+                    tmin.and_utc().timestamp_millis(),
+                    tmax.and_utc().timestamp_millis(),
                 )?),
                 bbox: Some(BoundingBox2D::new(
                     Coordinate2D::new(xmin, ymin),

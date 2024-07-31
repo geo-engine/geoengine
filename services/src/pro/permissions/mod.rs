@@ -5,7 +5,6 @@ use crate::layers::listing::LayerCollectionId;
 use crate::projects::ProjectId;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, LayerId};
-use geoengine_datatypes::pro::MlModelId;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -99,7 +98,6 @@ pub enum ResourceId {
     LayerCollection(LayerCollectionId), // TODO: UUID?
     Project(ProjectId),
     DatasetId(DatasetId),
-    ModelId(MlModelId),
 }
 
 impl std::fmt::Display for ResourceId {
@@ -111,7 +109,6 @@ impl std::fmt::Display for ResourceId {
             }
             ResourceId::Project(project_id) => write!(f, "project:{}", project_id.0),
             ResourceId::DatasetId(dataset_id) => write!(f, "dataset:{}", dataset_id.0),
-            ResourceId::ModelId(model_id) => write!(f, "model:{}", model_id.0),
         }
     }
 }
@@ -152,9 +149,6 @@ impl TryFrom<(String, String)> for ResourceId {
             }
             "dataset" => {
                 ResourceId::DatasetId(DatasetId(Uuid::from_str(&value.1).context(error::Uuid)?))
-            }
-            "model" => {
-                ResourceId::ModelId(MlModelId(Uuid::from_str(&value.1).context(error::Uuid)?))
             }
             _ => {
                 return Err(Error::InvalidResourceId {

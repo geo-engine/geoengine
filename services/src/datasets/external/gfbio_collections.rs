@@ -638,7 +638,7 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
                 dataset: _,
             } => {
                 // get the layer information by reusing the code for listing the collections
-                let collection = self.get_collection(collection, 0, std::u32::MAX).await?;
+                let collection = self.get_collection(collection, 0, u32::MAX).await?;
 
                 let layer = collection
                     .items
