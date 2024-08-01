@@ -83,6 +83,7 @@ async fn upload_handler<C: ApplicationContext>(
         let mut field = item?;
         let file_name = field
             .content_disposition()
+            .ok_or(error::Error::UploadFieldMissingFileName)?
             .get_filename()
             .ok_or(error::Error::UploadFieldMissingFileName)?
             .to_owned();

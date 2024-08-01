@@ -124,7 +124,7 @@ pub struct Web {
     pub bind_address: SocketAddr,
     #[serde(deserialize_with = "deserialize_base_url_option", default)]
     pub external_address: Option<url::Url>,
-    /// The api prefix is the path relative to the bind_adress where the API is served.
+    /// The api prefix is the path relative to the `bind_adress` where the API is served.
     /// During parsing it is ensured that a slash is at the start and no slash is at the end.
     #[serde(deserialize_with = "deserialize_api_prefix")]
     pub api_prefix: String,

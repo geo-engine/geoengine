@@ -286,6 +286,7 @@ mod tests {
             operator: Statistics {
                 params: StatisticsParams {
                     column_names: vec![],
+                    percentiles: vec![],
                 },
                 sources: vec![example_raster_source()].into(),
             }
@@ -331,7 +332,8 @@ mod tests {
                         "min": 1.0,
                         "max": 6.0,
                         "mean": 3.5,
-                        "stddev": 1.707_825_127_659_933
+                        "stddev": 1.707_825_127_659_933,
+                        "percentiles": []
                     }
                 }
             })
@@ -484,6 +486,7 @@ mod tests {
                 operator: Statistics {
                     params: StatisticsParams {
                         column_names: vec![],
+                        percentiles: vec![],
                     },
                     sources: vec![example_raster_source()].into(),
                 }

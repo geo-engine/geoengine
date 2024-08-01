@@ -464,7 +464,7 @@ mod tests {
                 (1.0, -2.0),
             ])
             .unwrap(),
-            vec![TimeInterval::default(); 6],
+            vec![TimeInterval::new(0, 20).unwrap(); 6],
             Default::default(),
             CacheHint::default(),
         )
@@ -480,7 +480,7 @@ mod tests {
             false,
             VectorQueryRectangle::with_bounds(
                 BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
-                Default::default(),
+                TimeInterval::new(0, 20).unwrap(),
                 ColumnSelection::all(),
             ),
             &MockQueryContext::new(ChunkByteSize::MIN),
@@ -587,7 +587,7 @@ mod tests {
                 vec![(1.0, 0.0), (3.0, 0.0)],
             ])
             .unwrap(),
-            vec![TimeInterval::default(); 2],
+            vec![TimeInterval::new(0, 20).unwrap(); 2],
             Default::default(),
             CacheHint::default(),
         )
@@ -603,7 +603,7 @@ mod tests {
             false,
             VectorQueryRectangle::with_bounds(
                 BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
-                Default::default(),
+                TimeInterval::new(0, 20).unwrap(),
                 ColumnSelection::all(),
             ),
             &MockQueryContext::new(ChunkByteSize::MIN),
@@ -744,7 +744,7 @@ mod tests {
                 (0.5, -0.5).into(),
             ]]])
             .unwrap()],
-            vec![TimeInterval::default(); 1],
+            vec![TimeInterval::new(0, 20).unwrap(); 1],
             Default::default(),
             CacheHint::default(),
         )
@@ -760,7 +760,7 @@ mod tests {
             false,
             VectorQueryRectangle::with_bounds(
                 BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
-                Default::default(),
+                TimeInterval::new(0, 20).unwrap(),
                 ColumnSelection::all(),
             ),
             &MockQueryContext::new(ChunkByteSize::MIN),
@@ -993,7 +993,7 @@ mod tests {
                 (0.5, -0.5).into(),
             ]]])
             .unwrap()],
-            vec![TimeInterval::default(); 1],
+            vec![TimeInterval::new(0, 20).unwrap(); 1],
             Default::default(),
             CacheHint::default(),
         )
@@ -1065,7 +1065,7 @@ mod tests {
                     (0.5, -0.5).into(),
                 ]]])
                 .unwrap(),],
-                &[TimeInterval::default()],
+                &[TimeInterval::new(0, 20).unwrap()],
                 &[
                     (
                         "foo",

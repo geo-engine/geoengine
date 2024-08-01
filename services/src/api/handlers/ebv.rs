@@ -37,7 +37,8 @@ pub const EBV_REMOVE_OVERVIEW_TASK_TYPE: &str = "ebv-remove-overview";
     paths(
         create_overviews,
         create_overview,
-        remove_overview
+        remove_overview,
+        refresh_overview
     ),
     components(
         schemas(
@@ -410,7 +411,6 @@ async fn create_overview<C: ApplicationContext>(
     tag = "Overviews",
     put,
     path = "/ebv/overviews/{path}/refresh",
-    request_body = Option<CreateOverviewParams>,
     responses(
         (
             status = 200,
@@ -664,6 +664,7 @@ mod tests {
 
     use super::*;
     use crate::contexts::PostgresContext;
+    use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::ge_context;
     use crate::{
         contexts::SimpleApplicationContext,
@@ -718,7 +719,8 @@ mod tests {
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        ctx.db()
+        let provider_id = ctx
+            .db()
             .add_layer_provider(
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
@@ -786,6 +788,12 @@ mod tests {
         assert!(status["timeStarted"].is_string());
 
         assert!(is_empty(overview_folder.path()));
+
+        assert!(!ctx
+            .db()
+            .overviews_exist(provider_id, "dataset_m.nc")
+            .await
+            .unwrap());
     }
 
     #[ge_context::test]

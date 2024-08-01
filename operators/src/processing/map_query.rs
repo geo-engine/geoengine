@@ -1,4 +1,6 @@
-use crate::adapters::{FillerTileCacheExpirationStrategy, SparseTilesFillAdapter};
+use crate::adapters::{
+    FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
+};
 use crate::engine::{
     QueryContext, RasterQueryProcessor, RasterResultDescriptor, VectorQueryProcessor,
     VectorResultDescriptor,
@@ -63,6 +65,7 @@ where
                 &query,
                 strat,
                 FillerTileCacheExpirationStrategy::NoCache,
+                FillerTimeBounds::from(query.time_interval), // TODO: derive this from the query once the child query can provide this.
             )
             .boxed())
         }

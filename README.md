@@ -26,6 +26,8 @@ apt install clang lld
 apt install libgdal-dev gdal-bin
 # Proj build dependencies (if libproj >= 7.2 not installed)
 apt install cmake sqlite3
+# Protocl Buffers
+apt install protobuf-compiler
 ```
 
 ### Lints

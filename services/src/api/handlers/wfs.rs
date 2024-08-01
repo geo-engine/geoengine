@@ -1117,12 +1117,12 @@ x;y
         .await;
     }
 
-    async fn add_dataset_definition_to_datasets<Tls: std::fmt::Debug>(
+    async fn add_dataset_definition_to_datasets<Tls>(
         app_ctx: &PostgresContext<Tls>,
         dataset_definition_path: &Path,
     ) -> DatasetId
     where
-        Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+        Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + std::fmt::Debug + 'static,
         <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
         <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
         <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,

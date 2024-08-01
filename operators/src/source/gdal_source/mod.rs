@@ -1,5 +1,6 @@
-use self::reader::{GdalReadAdvise, GdalReadWindow, GdalReaderMode, GridAndProperties};
-use crate::adapters::{FillerTileCacheExpirationStrategy, SparseTilesFillAdapter};
+use crate::adapters::{
+    FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
+};
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
 };
@@ -29,6 +30,10 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
+    SpatialPartition2D, SpatialPartitioned, TimeInstance,
+};
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{
     Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, RasterSpatialQueryRectangle,
@@ -681,16 +686,39 @@ where
             unimplemented!("GdalReaderMode::OverviewResolution");
         };
 
-        let loading_iter = if empty {
-            GdalLoadingInfoTemporalSliceIterator::Static {
-                parts: vec![].into_iter(),
-            }
+        let loading_info = if empty {
+            // TODO: using this shortcut will insert one no-data element with max time validity. However, this does not honor time intervals of data in other areas!
+            GdalLoadingInfo::new(
+                GdalLoadingInfoTemporalSliceIterator::Static {
+                    parts: vec![].into_iter(),
+                },
+                TimeInstance::MIN,
+                TimeInstance::MAX,
+            )
         } else {
-            let loading_info = self.meta_data.loading_info(query.clone()).await?;
-            loading_info.info
+            self.meta_data.loading_info(query.clone()).await?
         };
 
-        let source_stream = stream::iter(loading_iter);
+        let time_bounds = match (
+            loading_info.start_time_of_output_stream,
+            loading_info.end_time_of_output_stream,
+        ) {
+            (Some(start), Some(end)) => FillerTimeBounds::new(start, end),
+            (None, None) => {
+                log::warn!("The provider did not provide a time range that covers the query. Falling back to query time range. ");
+                FillerTimeBounds::new(query.time_interval.start(), query.time_interval.end())
+            }
+            (Some(start), None) => {
+                log::warn!("The provider did only provide a time range start that covers the query. Falling back to query time end. ");
+                FillerTimeBounds::new(start, query.time_interval.end())
+            }
+            (None, Some(end)) => {
+                log::warn!("The provider did only provide a time range end that covers the query. Falling back to query time start. ");
+                FillerTimeBounds::new(query.time_interval.start(), end)
+            }
+        };
+
+        let source_stream = stream::iter(loading_info.info);
 
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
             source_stream,
@@ -707,6 +735,7 @@ where
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+            time_bounds,
         );
         Ok(filled_stream.boxed())
     }

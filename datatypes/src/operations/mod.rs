@@ -2,4 +2,4 @@ pub mod image;
 pub mod reproject;
 mod spatial_relation;
 
-pub use spatial_relation::Contains;
+pub use spatial_relation::{Contains, Intersects};

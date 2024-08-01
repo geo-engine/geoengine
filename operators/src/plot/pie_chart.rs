@@ -73,7 +73,7 @@ impl PlotOperator for PieChart {
                 let mut column_label = column_measurement.to_string();
                 if column_label.is_empty() {
                     // in case of `Measurement::Unitless`
-                    column_label = column_name.clone();
+                    column_label.clone_from(&column_name);
                 }
 
                 let class_mapping =

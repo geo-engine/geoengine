@@ -80,7 +80,7 @@ pub struct NetCdfCfDataProviderDefinition {
     pub name: String,
     pub description: String,
     pub priority: Option<i16>,
-    /// Path were the NetCDF data can be found
+    /// Path were the `NetCDF` data can be found
     pub data: PathBuf,
     /// Path were overview files are stored
     pub overviews: PathBuf,
@@ -791,33 +791,48 @@ fn fallback_colorizer() -> Result<Colorizer> {
             )
                 .into(),
             (
-                36.428_571_428_571_42.try_into().expect("not nan"),
-                RgbaColor::new(70, 50, 126, 255),
+                25.5.try_into().expect("not nan"),
+                RgbaColor::new(72, 36, 117, 255),
             )
                 .into(),
             (
-                72.857_142_857_142_85.try_into().expect("not nan"),
-                RgbaColor::new(54, 92, 141, 255),
+                51.0.try_into().expect("not nan"),
+                RgbaColor::new(65, 68, 135, 255),
             )
                 .into(),
             (
-                109.285_714_285_714_28.try_into().expect("not nan"),
-                RgbaColor::new(39, 127, 142, 255),
+                76.5.try_into().expect("not nan"),
+                RgbaColor::new(52, 95, 141, 255),
             )
                 .into(),
             (
-                109.285_714_285_714_28.try_into().expect("not nan"),
-                RgbaColor::new(31, 161, 135, 255),
+                102.0.try_into().expect("not nan"),
+                RgbaColor::new(42, 120, 142, 255),
             )
                 .into(),
             (
-                182.142_857_142_857_1.try_into().expect("not nan"),
-                RgbaColor::new(74, 193, 109, 255),
+                127.5.try_into().expect("not nan"),
+                RgbaColor::new(33, 144, 140, 255),
             )
                 .into(),
             (
-                218.571_428_571_428_53.try_into().expect("not nan"),
-                RgbaColor::new(160, 218, 57, 255),
+                153.0.try_into().expect("not nan"),
+                RgbaColor::new(34, 168, 132, 255),
+            )
+                .into(),
+            (
+                178.5.try_into().expect("not nan"),
+                RgbaColor::new(67, 190, 112, 255),
+            )
+                .into(),
+            (
+                204.0.try_into().expect("not nan"),
+                RgbaColor::new(122, 209, 81, 255),
+            )
+                .into(),
+            (
+                229.5.try_into().expect("not nan"),
+                RgbaColor::new(187, 222, 39, 255),
             )
                 .into(),
             (
@@ -1752,7 +1767,16 @@ mod tests {
                         name: "Test dataset metric and scenario".to_string(),
                         description: "Fake description of test dataset with metric and scenario.".to_string(),
                         properties: Default::default(),
-                    })
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: NETCDF_CF_PROVIDER_ID,
+                            collection_id: LayerCollectionId("dataset_esri.nc".to_string())
+                        },
+                        name: "Test dataset metric monthly".to_string(),
+                        description: "Fake description of test dataset with metric.".to_string(),
+                        properties: Default::default(),
+                    }),
                 ],
                 entry_label: None,
                 properties: vec![]
@@ -2017,6 +2041,7 @@ mod tests {
         let expected_files: Vec<PathBuf> = vec![
             "Biodiversity/dataset_daily.nc".into(),
             "Biodiversity/dataset_monthly.nc".into(),
+            "dataset_esri.nc".into(),
             "dataset_irr_ts.nc".into(),
             "dataset_m.nc".into(),
             "dataset_sm.nc".into(),
@@ -2341,9 +2366,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, PlotData {
-                vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.34280000000002},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.54399999999997}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
-                metadata: PlotMetaData::None,
-            });
+            vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.342800000000004},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.54399999999997}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
+            metadata: PlotMetaData::None,
+        });
     }
 
     #[ge_context::test]
@@ -2607,6 +2632,129 @@ mod tests {
                 .path()
                 .join(file_name)
                 .join("scenario_2/metric_2/1/2010-01-01T00:00:00.000Z.tiff"),
+        )
+        .await
+        .unwrap();
+
+        provider
+            .refresh_overview_metadata(Path::new(file_name), NopTaskContext)
+            .await
+            .unwrap_err();
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_handles_esri_in_creation_and_refresh(app_ctx: PostgresContext<NoTls>) {
+        async fn query_collection_name(
+            provider: &NetCdfCfDataProvider<PostgresDb<NoTls>>,
+            id: &LayerCollectionId,
+        ) -> String {
+            let collection = provider
+                .load_layer_collection(
+                    id,
+                    LayerCollectionListOptions {
+                        offset: 0,
+                        limit: 20,
+                    },
+                )
+                .await
+                .unwrap();
+            collection.name
+        }
+
+        hide_gdal_errors();
+
+        let session_context = app_ctx.default_session_context().await.unwrap();
+
+        let overview_folder = tempfile::tempdir().unwrap();
+
+        let provider = Box::new(NetCdfCfDataProviderDefinition {
+            name: "NetCdfCfDataProvider".to_string(),
+            description: "NetCdfCfProviderDefinition".to_string(),
+            priority: None,
+            data: test_data!("netcdf4d").into(),
+            overviews: overview_folder.path().to_path_buf(),
+            cache_ttl: Default::default(),
+        })
+        .initialize(session_context.db())
+        .await
+        .unwrap();
+
+        let file_name = "dataset_esri.nc";
+        let id = LayerCollectionId(file_name.to_string());
+
+        let provider = provider
+            .as_any()
+            .downcast_ref::<NetCdfCfDataProvider<PostgresDb<NoTls>>>()
+            .unwrap();
+
+        provider
+            .create_overviews(Path::new(file_name), None, NopTaskContext)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            query_collection_name(provider, &id).await,
+            "Test dataset metric monthly"
+        );
+
+        let layer_id =
+            netcdf_entity_to_layer_id(Path::new(file_name), &["metric_2".to_string()], 2);
+
+        assert_eq!(
+            provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
+            "[2.0,25093.0]"
+        );
+
+        // manipulate a field in the metadata
+
+        let db = session_context.db();
+
+        db.test_execute_with_transaction(
+            "UPDATE ebv_provider_overviews SET title = 'MANIPULATED' WHERE file_name = $1",
+            &[&file_name],
+        )
+        .await
+        .unwrap();
+
+        db.test_execute_with_transaction(
+            "UPDATE ebv_provider_groups SET data_range = ARRAY[5, 23] WHERE file_name = $1",
+            &[&file_name],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(query_collection_name(provider, &id).await, "MANIPULATED");
+
+        assert_eq!(
+            provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
+            "[5.0,23.0]"
+        );
+
+        provider
+            .refresh_overview_metadata(Path::new(file_name), NopTaskContext)
+            .await
+            .unwrap();
+
+        // after refresh, the metadata should be correct
+
+        assert_eq!(
+            query_collection_name(provider, &id).await,
+            "Test dataset metric monthly"
+        );
+
+        assert_eq!(
+            provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
+            "[2.0,25093.0]"
+        );
+
+        // forcefully remove file to test error handling
+
+        tokio::fs::remove_file(
+            overview_folder
+                .path()
+                .join(file_name)
+                .join("metric_2/1/2000-01-01T00:00:00.000Z.tiff"),
         )
         .await
         .unwrap();

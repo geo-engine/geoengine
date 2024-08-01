@@ -172,7 +172,14 @@ where
         let mut connection = get_connection!(self.conn_pool);
         let transaction = deferred_write_transaction!(connection);
 
-        remove_overviews(&transaction, provider_id, file_name).await
+        let res = remove_overviews(&transaction, provider_id, file_name).await;
+
+        transaction
+            .commit()
+            .await
+            .boxed_context(crate::datasets::external::netcdfcf::error::DatabaseTransaction)?;
+
+        res
     }
 
     async fn layer_collection<ID: LayerCollectionIdFn>(
