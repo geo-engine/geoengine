@@ -132,6 +132,14 @@ pub fn visit_api<T: OpenapiVisitor>(api: &OpenApi, visitor: &mut T) {
     };
 
     for (source_location, path_item) in &api.paths.paths {
+        if let Some(parameters) = &path_item.parameters {
+            for parameter in parameters {
+                if let Some(schema) = parameter.schema.as_ref() {
+                    visit_schema(schema, components, visitor, source_location);
+                }
+            }
+        }
+
         for operation in path_item.operations.values() {
             if let Some(request_body) = operation.request_body.as_ref() {
                 for content in request_body.content.values() {

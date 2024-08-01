@@ -214,7 +214,7 @@ mod tests {
     use assert_json_diff::assert_json_eq;
     use serde::Serialize;
     use serde_json::json;
-    use utoipa::{openapi::*, Modify, ToSchema};
+    use utoipa::{openapi::{*, path::*}, Modify, ToSchema};
 
     #[test]
     #[allow(dead_code)]
@@ -416,5 +416,45 @@ mod tests {
                 }
             })
         );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "The type MyStruct is used in the enum MyEnum as payload, but also in other places"
+    )]
+    #[allow(dead_code)]
+    fn detect_variant_used_elsewhere() {
+        #[derive(Serialize, ToSchema)]
+        #[serde(rename_all = "camelCase", tag = "type")]
+        enum MyEnum {
+            X(MyStruct),
+        }
+        #[derive(Serialize, ToSchema)]
+        struct MyStruct;
+        let mut openapi = OpenApiBuilder::new()
+            .components(Some(
+                ComponentsBuilder::new()
+                    .schema_from::<MyEnum>()
+                    .schema_from::<MyStruct>()
+                    .build(),
+            ))
+            .paths(
+                PathsBuilder::new().path(
+                    "/",
+                    PathItemBuilder::new()
+                        .parameters(Some([
+                            ParameterBuilder::new()
+                                .schema(Some(Ref::from_schema_name("MyEnum")))
+                                .build(),
+                            ParameterBuilder::new()
+                                .schema(Some(Ref::from_schema_name("MyStruct")))
+                                .build(),
+                        ]))
+                        .build(),
+                ),
+            )
+            .build();
+        let transformer = TransformSchemasWithTag;
+        transformer.modify(&mut openapi);
     }
 }
