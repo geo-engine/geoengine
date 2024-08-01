@@ -105,6 +105,7 @@ pub enum NetCdfCf4DProviderError {
         source: std::num::ParseIntError,
     },
     CannotComputeSubdatasetsFromMetadata,
+    #[snafu(display("GdalMd Error: {source}"))]
     GdalMd {
         source: GdalError,
     },
