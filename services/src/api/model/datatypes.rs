@@ -1480,11 +1480,13 @@ pub enum Colorizer {
     #[serde(rename_all = "camelCase")]
     LogarithmicGradient(LogarithmicGradient),
     #[serde(rename_all = "camelCase")]
+    #[schema(title = "PaletteColorizer")]
     Palette {
         colors: Palette,
         no_data_color: RgbaColor,
         default_color: RgbaColor,
     },
+    #[schema(title = "RgbaColorizer")]
     Rgba,
 }
 
@@ -1575,6 +1577,7 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum RasterColorizer {
     #[serde(rename_all = "camelCase")]
+    #[schema(title = "SingleBandRasterColorizer")]
     SingleBand {
         band: u32,
         band_colorizer: Colorizer,
