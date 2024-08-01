@@ -30,13 +30,10 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
-    SpatialPartition2D, SpatialPartitioned, TimeInstance,
-};
+use geoengine_datatypes::primitives::RasterSpatialQueryRectangle;
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{
-    Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, RasterSpatialQueryRectangle,
+    Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, TimeInstance,
 };
 use geoengine_datatypes::raster::TileInformation;
 use geoengine_datatypes::raster::{
@@ -58,6 +55,7 @@ pub use loading_info::{
 use log::debug;
 use num::{integer::div_ceil, integer::div_floor, FromPrimitive};
 use postgres_types::{FromSql, ToSql};
+use reader::{GdalReadAdvise, GdalReadWindow, GdalReaderMode, GridAndProperties};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
@@ -1174,6 +1172,7 @@ mod tests {
     use geoengine_datatypes::util::gdal::hide_gdal_errors;
     use httptest::matchers::request;
     use httptest::{responders, Expectation, Server};
+    use reader::{GdalReadAdvise, GdalReadWindow};
 
     async fn query_gdal_source(
         exe_ctx: &MockExecutionContext,

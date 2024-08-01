@@ -418,7 +418,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
 
     let processor = initialized.query_processor().context(error::Operator)?;
 
-    let spatial_resolution: SpatialResolution =
+    let query_interval_larger_then_data_rangspatial_resolution: SpatialResolution =
         if let Some(spatial_resolution) = request.spatial_resolution() {
             spatial_resolution?
         } else {

@@ -210,7 +210,7 @@ where
             *accu_time,
             *info_out,
             0, // TODO
-            GridOrEmpty::new_empty(info_out.tile_size_in_pixels),
+            GridOrEmpty::new_empty_shape(info_out.tile_size_in_pixels),
             accu_cache_hint, // TODO: is this correct? Was CacheHint::max_duration() before
         );
     }
@@ -293,7 +293,7 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
         .expect("accu bounds must be valid because they are calculated from valid bounds");
 
     // create a non-aligned (w.r.t. the tiling specification) grid by setting the origin to the top-left of the tile and the tile-index to [0, 0]
-    let grid = GridOrEmpty::new_empty(accu_bounds);
+    let grid = GridOrEmpty::new_empty_shape(accu_bounds);
 
     NeighborhoodAggregateAccu::new(
         grid,

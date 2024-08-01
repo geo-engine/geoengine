@@ -457,7 +457,7 @@ mod tests {
         VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheTtlSeconds, ColumnSelection};
-    use geoengine_datatypes::raster::RasterDataType;
+    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::Identifier;

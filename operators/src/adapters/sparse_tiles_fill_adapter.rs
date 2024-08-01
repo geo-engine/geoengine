@@ -1,10 +1,7 @@
 use crate::util::Result;
 use futures::{ready, Stream};
 use geoengine_datatypes::{
-    primitives::{
-        CacheExpiration, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInstance,
-        TimeInterval,
-    },
+    primitives::{CacheExpiration, CacheHint, RasterQueryRectangle, TimeInstance, TimeInterval},
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
         Pixel, RasterTile2D, TilingStrategy,

@@ -744,7 +744,7 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
 
         let out_data_bounds = out_data_bounds.expect("was checked before");
 
-        let mut write_buffer_grid = GridOrEmpty::<_, P>::new_empty(out_data_bounds);
+        let mut write_buffer_grid = GridOrEmpty::<_, P>::new_empty_shape(out_data_bounds);
 
         write_buffer_grid.grid_blit_from(&tile.into_inner_positioned_grid());
 

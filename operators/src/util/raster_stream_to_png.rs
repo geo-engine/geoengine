@@ -44,7 +44,7 @@ where
     // the tile stream will allways produce tiles aligned to the tiling origin
     let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
 
-    let output_grid = Ok(GridOrEmpty::<GridBoundingBox2D, T>::new_empty(
+    let output_grid = Ok(GridOrEmpty::<GridBoundingBox2D, T>::new_empty_shape(
         query_rect.spatial_query.grid_bounds(),
     ));
 

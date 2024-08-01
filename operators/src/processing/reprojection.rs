@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{
-        fold_by_coordinate_lookup_future, FillerTileCacheExpirationStrategy, FillerTimeBounds,
-        RasterSubQueryAdapter, SparseTilesFillAdapter, TileReprojectionSubQuery,
+        fold_by_coordinate_lookup_future, FillerTileCacheExpirationStrategy, RasterSubQueryAdapter,
+        TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo,
     },
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
@@ -730,7 +730,7 @@ where
         Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
             &self.source,
             query,
-            self.tiling_spec,
+            tiling_strat,
             ctx,
             sub_query_spec,
         )

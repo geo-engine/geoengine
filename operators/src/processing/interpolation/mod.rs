@@ -484,7 +484,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>>(
         .expect("max bounds must be larger then min bounds already");
 
         // create a non-aligned (w.r.t. the tiling specification) grid by setting the origin to the top-left of the tile and the tile-index to [0, 0]
-        let grid = GridOrEmpty::new_empty(enlarged_input_pixel_bounds);
+        let grid = GridOrEmpty::new_empty_shape(enlarged_input_pixel_bounds);
 
         InterpolationAccu::new(
             grid,

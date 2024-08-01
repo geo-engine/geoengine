@@ -3293,13 +3293,12 @@ mod tests {
                     vec![],
                 );
 
-                let query_rectangle = VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                let query_rectangle = VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
-                    time_interval: TimeInterval::new_instant(1_517_011_200_000).unwrap(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: ColumnSelection::all(),
-                };
+                    TimeInterval::new_instant(1_517_011_200_000).unwrap(),
+                     ColumnSelection::all(),
+                );
                 let ctx = MockQueryContext::test_default();
 
                 let result: Vec<_> = processor
@@ -3338,13 +3337,13 @@ mod tests {
                     return Err(format!("{result:?} != {expected:?}"));
                 }
 
-                let query_rectangle = VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                let query_rectangle = VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
-                    time_interval: TimeInterval::new_instant(1_517_443_200_000).unwrap(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: ColumnSelection::all(),
-                };
+                    TimeInterval::new_instant(1_517_443_200_000).unwrap(),
+                    
+                    ColumnSelection::all(),
+                );
                 let ctx = MockQueryContext::test_default();
 
                 let result: Vec<_> = processor
@@ -3435,17 +3434,16 @@ mod tests {
                     vec![],
                 );
 
-                let query_rectangle = VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                let query_rectangle = VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
-                    time_interval: TimeInterval::new(
+                    TimeInterval::new(
                         TimeInstance::from_millis_unchecked(1_517_011_200_000),
                         TimeInstance::from_millis_unchecked(1_517_443_200_000),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: ColumnSelection::all(),
-                };
+                    ColumnSelection::all(),
+                );
                 let ctx = MockQueryContext::test_default();
 
                 let result: Vec<_> = processor
@@ -3484,17 +3482,16 @@ mod tests {
                     return Err(format!("{result:?} != {expected:?}"));
                 }
 
-                let query_rectangle = VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
+                let query_rectangle = VectorQueryRectangle::with_bounds(
+                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
                         .unwrap(),
-                    time_interval: TimeInterval::new(
+                     TimeInterval::new(
                         TimeInstance::from_millis_unchecked(1_517_011_200_000),
                         TimeInstance::from_millis_unchecked(1_517_443_200_001),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: ColumnSelection::all(),
-                };
+                     ColumnSelection::all(),
+                );
                 let ctx = MockQueryContext::test_default();
 
                 let result: Vec<_> = processor

@@ -42,7 +42,7 @@ where
         out_bounds: D,
     ) -> Result<GridOrEmpty<D, P>> {
         if input.is_empty() {
-            return Ok(GridOrEmpty::new_empty(out_bounds));
+            return Ok(GridOrEmpty::new_empty_shape(out_bounds));
         }
 
         let map_fn = |gidx: GridIdx2D| {
@@ -110,7 +110,7 @@ where
         out_bounds: D,
     ) -> Result<GridOrEmpty<D, P>> {
         if input.is_empty() {
-            return Ok(GridOrEmpty::new_empty(out_bounds));
+            return Ok(GridOrEmpty::new_empty_shape(out_bounds));
         }
 
         debug_assert!(in_geo_transform

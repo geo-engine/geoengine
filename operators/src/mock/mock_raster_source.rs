@@ -10,8 +10,8 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::{CacheExpiration, TimeInstance};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
 use geoengine_datatypes::raster::{
     GridIntersection, GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D,
     TilingSpecification, TilingStrategy,
@@ -141,8 +141,8 @@ where
             .filter(move |t| {
                 t.time.intersects(&query.time_interval)
                     && t.tile_information()
-                        .spatial_partition()
-                        .intersects(&query.spatial_bounds)
+                        .global_pixel_bounds()
+                        .intersects(&query.spatial_query.grid_bounds())
             })
             .cloned()
             .collect();
@@ -161,7 +161,8 @@ where
         // use SparseTilesFillAdapter to fill all the gaps
         Ok(SparseTilesFillAdapter::new(
             inner_stream,
-            tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(pixel_bounds),
+            tiling_strategy
+                .global_pixel_grid_bounds_to_tile_grid_bounds(query.spatial_query.grid_bounds()),
             self.result_descriptor.bands.count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
@@ -536,7 +537,7 @@ mod tests {
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-            TimeInterval::new_unchecked(1, 3),
+            TimeInterval::new_unchecked(0, 4),
             BandSelection::first(),
         );
 
@@ -562,7 +563,7 @@ mod tests {
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-            TimeInterval::new_unchecked(2, 3),
+            TimeInterval::new_unchecked(2, 4),
             BandSelection::first(),
         );
 
