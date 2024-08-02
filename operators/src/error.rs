@@ -1,4 +1,5 @@
 use crate::util::statistics::StatisticsError;
+use bb8_postgres::bb8;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{FeatureDataType, TimeInterval};
@@ -155,11 +156,6 @@ pub enum Error {
     CannotResolveDatasetName {
         name: NamedData,
         source: Box<dyn ErrorSource>,
-    },
-
-    #[snafu(display("There is no Model with id {:?} avaiable.", id))]
-    UnknownModelId {
-        id: String,
     },
 
     InvalidDatasetSpec {
@@ -322,7 +318,7 @@ pub enum Error {
     SparseTilesFillAdapter {
         source: crate::adapters::SparseTilesFillAdapterError,
     },
-    #[snafu(context(false))]
+    #[snafu(context(false), display("Expression: {}", source))]
     ExpressionOperator {
         source: crate::processing::RasterExpressionError,
     },
@@ -373,29 +369,6 @@ pub enum Error {
     },
 
     InvalidDataProviderConfig,
-
-    InvalidMachineLearningConfig,
-
-    MachineLearningFeatureDataNotAvailable,
-    MachineLearningFeaturesNotAvailable,
-    MachineLearningModelNotFound,
-    MachineLearningMustHaveAtLeastTwoFeatures,
-
-    CouldNotCreateMlModelFilePath,
-    CouldNotGetMlLabelKeyName,
-    CouldNotGetMlModelDirectory,
-    CouldNotGetMlModelFileName,
-    CouldNotStoreMlModelInDb,
-    InvalidMlModelPath,
-
-    #[snafu(display("Valid filetypes: 'json'"))]
-    NoValidMlModelFileType,
-
-    #[cfg(feature = "pro")]
-    #[snafu(context(false))]
-    XGBoost {
-        source: crate::pro::xg_error::XGBoostModuleError,
-    },
 
     #[snafu(context(false), display("PieChart: {}", source))]
     PieChart {
@@ -489,6 +462,16 @@ pub enum Error {
     BandDoesNotExist {
         band_idx: u32,
     },
+
+    #[snafu(display("PostgresError: {}", source))]
+    Postgres {
+        source: tokio_postgres::Error,
+    },
+
+    #[snafu(display("Bb8PostgresError: {}", source))]
+    Bb8Postgres {
+        source: bb8::RunError<tokio_postgres::Error>,
+    },
 }
 
 impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
@@ -508,6 +491,7 @@ impl From<crate::mock::MockRasterSourceError> for Error {
 mod requirements {
     use super::*;
 
+    #[allow(dead_code)]
     trait RequiresSend: Send {}
 
     impl RequiresSend for Error {}

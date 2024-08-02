@@ -93,21 +93,16 @@ impl TransformSchemasWithTag {
     ) -> Option<Schema> {
         match schema {
             Schema::AllOf(ao) => {
-                let Some(reference) = Self::get_base_type_name(schema) else {
-                    return None;
-                };
+                let reference = Self::get_base_type_name(schema)?;
                 let Some(RefOr::T(Schema::Object(referenced_object))) = all_schemas.get(reference)
                 else {
                     return None;
                 };
-                let Some(mut obj_with_discrimator_prop) =
+                let mut obj_with_discrimator_prop =
                     ao.items.iter().find_map(|item| match item {
                         RefOr::T(Schema::Object(concrete)) => Some(concrete.clone()),
                         _ => None,
-                    })
-                else {
-                    return None;
-                };
+                    })?;
                 let mut final_obj = referenced_object.clone();
                 final_obj
                     .properties

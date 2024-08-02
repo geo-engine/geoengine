@@ -22,8 +22,7 @@ use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, TypedResultDescriptor,
-    VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -156,7 +155,7 @@ where
                     name: row.get(1),
                     display_name: row.get(2),
                     description: row.get(3),
-                    tags: row.get::<_, Option<_>>(4).unwrap_or_default(),
+                    tags: row.get::<_, Option<Vec<String>>>(4).unwrap_or_default(),
                     source_operator: row.get(5),
                     result_descriptor: row.get(6),
                     symbology: row.get(7),
@@ -504,59 +503,6 @@ where
 }
 
 #[async_trait]
-pub trait PostgresStorable<Tls>: Send + Sync
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    fn to_typed_metadata(&self) -> Result<DatasetMetaData>;
-}
-
-pub struct DatasetMetaData<'m> {
-    pub meta_data: &'m MetaDataDefinition,
-    pub result_descriptor: TypedResultDescriptor,
-}
-
-impl<Tls> PostgresStorable<Tls> for MetaDataDefinition
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    fn to_typed_metadata(&self) -> Result<DatasetMetaData> {
-        match self {
-            MetaDataDefinition::MockMetaData(d) => Ok(DatasetMetaData {
-                meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
-            }),
-            MetaDataDefinition::OgrMetaData(d) => Ok(DatasetMetaData {
-                meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
-            }),
-            MetaDataDefinition::GdalMetaDataRegular(d) => Ok(DatasetMetaData {
-                meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
-            }),
-            MetaDataDefinition::GdalStatic(d) => Ok(DatasetMetaData {
-                meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
-            }),
-            MetaDataDefinition::GdalMetadataNetCdfCf(d) => Ok(DatasetMetaData {
-                meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
-            }),
-            MetaDataDefinition::GdalMetaDataList(d) => Ok(DatasetMetaData {
-                meta_data: self,
-                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
-            }),
-        }
-    }
-}
-
-#[async_trait]
 impl<Tls> DatasetStore for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
@@ -661,6 +607,30 @@ where
                 &update.description,
                 &update.tags,
             ],
+        )
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn update_dataset_loading_info(
+        &self,
+        dataset: DatasetId,
+        meta_data: &MetaDataDefinition,
+    ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        tx.execute(
+            "UPDATE datasets SET meta_data = $2 WHERE id = $1;",
+            &[&dataset, &meta_data],
         )
         .await?;
 

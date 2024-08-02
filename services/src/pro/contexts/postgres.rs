@@ -1,12 +1,13 @@
 use super::migrations::{pro_migrations, ProMigrationImpl};
 use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 use crate::api::cli::add_providers_from_directory;
+use crate::api::model::services::Volume;
 use crate::contexts::{
     initialize_database, ApplicationContext, CurrentSchemaMigration, MigrationResult,
     PostgresContext, QueryContextImpl, SessionId,
 };
 use crate::contexts::{GeoEngineDb, SessionContext};
-use crate::datasets::upload::{Volume, Volumes};
+use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
 use crate::pro::api::cli::add_datasets_from_directory;
@@ -14,10 +15,10 @@ use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
     add_pro_providers_from_directory,
 };
-use crate::pro::machine_learning::ml_model::{MlModel, MlModelDb};
 use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
-use crate::pro::users::{OidcRequestDb, UserAuth, UserSession};
+use crate::pro::users::OidcManager;
+use crate::pro::users::{UserAuth, UserSession};
 use crate::pro::util::config::{Cache, Oidc, Quota};
 use crate::tasks::SimpleTaskManagerContext;
 use async_trait::async_trait;
@@ -27,7 +28,6 @@ use bb8_postgres::{
     tokio_postgres::{tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
-use geoengine_datatypes::pro::MlModelId;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
@@ -35,12 +35,11 @@ use geoengine_operators::engine::{
     ChunkByteSize, ExecutionContextExtensions, QueryContextExtensions,
 };
 use geoengine_operators::pro::cache::shared_cache::SharedCache;
-use geoengine_operators::pro::machine_learning::{LoadMlModel, MlModelAccess};
 use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::info;
 use rayon::ThreadPool;
-use snafu::{ensure, ResultExt};
+use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -59,7 +58,7 @@ where
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
     task_manager: Arc<ProTaskManagerBackend>,
-    oidc_request_db: Arc<Option<OidcRequestDb>>,
+    oidc_manager: OidcManager,
     quota: QuotaTrackingFactory,
     pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
     volumes: Volumes,
@@ -79,7 +78,7 @@ where
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
         quota_config: Quota,
-        oidc_db: Option<OidcRequestDb>,
+        oidc_db: OidcManager,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -100,7 +99,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            oidc_request_db: Arc::new(oidc_db),
+            oidc_manager: oidc_db,
             quota,
             pool,
             volumes: Default::default(),
@@ -112,7 +111,7 @@ where
     pub async fn new_with_oidc(
         config: Config,
         tls: Tls,
-        oidc_db: OidcRequestDb,
+        oidc_db: OidcManager,
         cache_config: Cache,
         quota_config: Quota,
     ) -> Result<Self> {
@@ -135,7 +134,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
-            oidc_request_db: Arc::new(Some(oidc_db)),
+            oidc_manager: oidc_db,
             quota,
             pool,
             volumes: Default::default(),
@@ -180,7 +179,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            oidc_request_db: Arc::new(OidcRequestDb::try_from(oidc_config).ok()),
+            oidc_manager: OidcManager::from(oidc_config),
             quota,
             pool,
             volumes: Default::default(),
@@ -224,10 +223,6 @@ where
 
         Ok(migration == MigrationResult::CreatedDatabase)
     }
-
-    pub fn oidc_request_db(&self) -> Arc<Option<OidcRequestDb>> {
-        self.oidc_request_db.clone()
-    }
 }
 
 #[async_trait]
@@ -256,7 +251,6 @@ where
     }
 }
 
-#[async_trait]
 impl<Tls> ProApplicationContext for ProPostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
@@ -264,8 +258,8 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    fn oidc_request_db(&self) -> Option<&OidcRequestDb> {
-        self.oidc_request_db.as_ref().as_ref()
+    fn oidc_manager(&self) -> &OidcManager {
+        &self.oidc_manager
     }
 }
 
@@ -325,9 +319,7 @@ where
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {
-        let mut extensions = ExecutionContextExtensions::default();
-        let ml_model_access: MlModelAccess = Box::new(self.db());
-        extensions.insert(ml_model_access);
+        let extensions = ExecutionContextExtensions::default();
 
         Ok(
             ExecutionContextImpl::<ProPostgresDb<Tls>>::new_with_extensions(
@@ -340,9 +332,20 @@ where
     }
 
     fn volumes(&self) -> Result<Vec<Volume>> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
-
-        Ok(self.context.volumes.volumes.clone())
+        Ok(self
+            .context
+            .volumes
+            .volumes
+            .iter()
+            .map(|v| Volume {
+                name: v.name.0.clone(),
+                path: if self.session.is_admin() {
+                    Some(v.path.to_string_lossy().to_string())
+                } else {
+                    None
+                },
+            })
+            .collect())
     }
 
     fn session(&self) -> &Self::Session {
@@ -388,101 +391,6 @@ where
     }
 }
 
-#[async_trait]
-impl<Tls> MlModelDb for ProPostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    /// Load a machine learning model from the database by its ID.
-    ///
-    /// # Arguments
-    ///
-    /// * `model_id` - A MlModelId that identifies the desired model.
-    ///
-    /// # Returns
-    ///
-    /// * `MlModel` - The loaded machine learning model.
-    /// * `Error` - If the model cannot be found or loaded.
-    async fn load_ml_model(&self, model_id: MlModelId) -> Result<MlModel> {
-        let conn = self.conn_pool.get().await?;
-
-        let stmt = conn
-            .prepare("SELECT id, content FROM ml_models WHERE id = $1")
-            .await?;
-
-        let row = conn.query_opt(&stmt, &[&model_id]).await?;
-
-        // Handle the result of the query
-        match row {
-            Some(row) => Ok(MlModel {
-                id: row.get(0),
-                content: row.get(1),
-            }),
-            None => Err(
-                error::Error::MachineLearning { source:
-                    crate::pro::machine_learning::ml_error::MachineLearningError::UnknownModelIdInPostgres {
-                     model_id,
-                    }
-                },
-            ),
-        }
-    }
-
-    /// Store a machine learning model in the database.
-    ///
-    /// # Arguments
-    ///
-    /// * `model` - The MlModel to be stored.
-    ///
-    /// # Returns
-    ///
-    /// * `Result<()>` - Ok if the model was successfully stored, otherwise an error.
-    async fn store_ml_model(&self, model: MlModel) -> Result<()> {
-        let mut conn = self.conn_pool.get().await?;
-
-        let tx = conn.build_transaction().start().await?;
-
-        let stmt = tx
-            .prepare(
-                "
-                INSERT INTO ml_models (
-                    id,
-                    content
-                )
-                VALUES ($1, $2);",
-            )
-            .await?;
-
-        tx.execute(&stmt, &[&model.id, &model.content]).await?;
-
-        tx.commit().await?;
-
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl<Tls> LoadMlModel for ProPostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    async fn load_ml_model_by_id(
-        &self,
-        model_id: MlModelId,
-    ) -> Result<String, geoengine_operators::error::Error> {
-        self.load_ml_model(model_id)
-            .await
-            .map(|model| model.content)
-            .map_err(|_| geoengine_operators::error::Error::MachineLearningModelNotFound)
-    }
-}
-
 impl<Tls> GeoEngineDb for ProPostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
@@ -524,12 +432,13 @@ mod tests {
         INTERNAL_PROVIDER_ID,
     };
     use crate::pro::ge_context;
-    use crate::pro::machine_learning::ml_model::{MlModel, MlModelDb};
     use crate::pro::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
+    use crate::pro::users::{OidcTokens, SessionTokenStore};
     use crate::pro::users::{
-        ExternalUserClaims, RoleDb, UserCredentials, UserDb, UserId, UserRegistration,
+        RoleDb, UserClaims, UserCredentials, UserDb, UserId, UserRegistration,
     };
     use crate::pro::util::config::QuotaTrackingMode;
+    use crate::pro::util::tests::mock_oidc::{mock_refresh_server, MockRefreshServerConfig};
     use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::projects::{
         CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
@@ -548,7 +457,6 @@ mod tests {
         TimeStep, VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheTtlSeconds, ColumnSelection};
-    use geoengine_datatypes::pro::MlModelId;
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::test_data;
@@ -567,6 +475,8 @@ mod tests {
         OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
     };
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
+    use httptest::Server;
+    use oauth2::{AccessToken, RefreshToken};
     use openidconnect::SubjectIdentifier;
     use serde_json::json;
     use std::str::FromStr;
@@ -621,6 +531,14 @@ mod tests {
         delete_project(&app_ctx, &session, project_id).await;
     }
 
+    fn tokens_from_duration(duration: Duration) -> OidcTokens {
+        OidcTokens {
+            access: AccessToken::new("AccessToken".to_string()),
+            refresh: None,
+            expires_in: duration,
+        }
+    }
+
     async fn set_session(app_ctx: &ProPostgresContext<NoTls>, projects: &[ProjectListing]) {
         let credentials = UserCredentials {
             email: "foo@example.com".into(),
@@ -636,14 +554,17 @@ mod tests {
         app_ctx: &ProPostgresContext<NoTls>,
         projects: &[ProjectListing],
     ) {
-        let external_user_claims = ExternalUserClaims {
+        let external_user_claims = UserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
             real_name: "Foo Bar".into(),
         };
 
         let session = app_ctx
-            .login_external(external_user_claims, Duration::minutes(10))
+            .login_external(
+                external_user_claims,
+                tokens_from_duration(Duration::minutes(10)),
+            )
             .await
             .unwrap();
 
@@ -763,6 +684,7 @@ mod tests {
                 operator: Statistics {
                     params: StatisticsParams {
                         column_names: vec![],
+                        percentiles: vec![],
                     },
                     sources: MultipleRasterOrSingleVectorSource {
                         source: Raster(vec![]),
@@ -914,18 +836,16 @@ mod tests {
         user_id
     }
 
-    //TODO: No duplicate tests for postgres and hashmap implementation possible?
     async fn external_user_login_twice(app_ctx: &ProPostgresContext<NoTls>) -> UserSession {
-        let external_user_claims = ExternalUserClaims {
+        let external_user_claims = UserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
             real_name: "Foo Bar".into(),
         };
         let duration = Duration::minutes(30);
 
-        //NEW
         let login_result = app_ctx
-            .login_external(external_user_claims.clone(), duration)
+            .login_external(external_user_claims.clone(), tokens_from_duration(duration))
             .await;
         assert!(login_result.is_ok());
 
@@ -950,7 +870,7 @@ mod tests {
 
         let duration = Duration::minutes(10);
         let login_result = app_ctx
-            .login_external(external_user_claims.clone(), duration)
+            .login_external(external_user_claims.clone(), tokens_from_duration(duration))
             .await;
         assert!(login_result.is_ok());
 
@@ -1250,7 +1170,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(datasets.items.len(), 4);
+        assert_eq!(datasets.items.len(), 5);
     }
 
     #[ge_context::test]
@@ -4833,39 +4753,88 @@ mod tests {
         assert_eq!(db.quota_used_by_user(&user2).await.unwrap(), 3);
     }
 
-    #[ge_context::test]
-    async fn it_persists_ml_models(app_ctx: ProPostgresContext<NoTls>) {
-        let id = MlModelId::from_str("3db69b02-6d7a-4112-a355-e3745be18a80").unwrap();
-        let input = MlModel {
-            id,
-            content: "model content".to_owned(),
+    async fn it_handles_oidc_tokens(app_ctx: ProPostgresContext<NoTls>) {
+        let external_user_claims = UserClaims {
+            external_id: SubjectIdentifier::new("Foo bar Id".into()),
+            email: "foo@bar.de".into(),
+            real_name: "Foo Bar".into(),
+        };
+        let tokens = OidcTokens {
+            access: AccessToken::new("FIRST_ACCESS_TOKEN".into()),
+            refresh: Some(RefreshToken::new("FIRST_REFRESH_TOKEN".into())),
+            expires_in: Duration::seconds(2),
         };
 
-        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let login_result = app_ctx
+            .login_external(external_user_claims.clone(), tokens)
+            .await;
+        assert!(login_result.is_ok());
 
-        let db = app_ctx.session_context(session.clone()).db();
+        let session_id = login_result.unwrap().id;
 
-        db.store_ml_model(input.clone()).await.unwrap();
+        let access_token = app_ctx.get_access_token(session_id).await.unwrap();
 
-        let model = db.load_ml_model(id).await.unwrap();
+        assert_eq!(
+            "FIRST_ACCESS_TOKEN".to_string(),
+            access_token.secret().to_owned()
+        );
 
-        assert_eq!(model, input);
+        //Access token duration oidc_login_refresh is 2 sec, i.e., session times out after 2 sec.
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        let access_token = app_ctx.get_access_token(session_id).await.unwrap();
+
+        assert_eq!(
+            "SECOND_ACCESS_TOKEN".to_string(),
+            access_token.secret().to_owned()
+        );
     }
 
-    #[ge_context::test]
-    async fn it_fails_to_load_nonexistent_ml_model(app_ctx: ProPostgresContext<NoTls>) {
-        let model_id = MlModelId::from_str("3db69b02-6d7a-4112-a355-e3745be18a80").unwrap();
+    pub fn oidc_only_refresh() -> (Server, impl Fn() -> OidcManager) {
+        let mock_refresh_server_config = MockRefreshServerConfig {
+            expected_discoveries: 1,
+            token_duration: std::time::Duration::from_secs(2),
+            creates_first_token: false,
+            first_access_token: "FIRST_ACCESS_TOKEN".to_string(),
+            first_refresh_token: "FIRST_REFRESH_TOKEN".to_string(),
+            second_access_token: "SECOND_ACCESS_TOKEN".to_string(),
+            second_refresh_token: "SECOND_REFRESH_TOKEN".to_string(),
+            client_side_password: None,
+        };
 
-        let session = app_ctx.create_anonymous_session().await.unwrap();
-        let db = app_ctx.session_context(session.clone()).db();
+        let (server, oidc_manager) = mock_refresh_server(mock_refresh_server_config);
 
-        let result = db.load_ml_model(model_id).await;
+        (server, move || {
+            OidcManager::from_oidc_with_static_tokens(oidc_manager.clone())
+        })
+    }
 
-        match result {
-            Err(error::Error::MachineLearning {
-                source: crate::pro::machine_learning::ml_error::MachineLearningError::UnknownModelIdInPostgres { .. },
-            }) => (),
-            _ => panic!("Expected UnknownModelId error"),
-        }
+    #[ge_context::test(oidc_db = "oidc_only_refresh")]
+    async fn it_handles_oidc_tokens_without_encryption(app_ctx: ProPostgresContext<NoTls>) {
+        it_handles_oidc_tokens(app_ctx).await;
+    }
+
+    pub fn oidc_only_refresh_with_encryption() -> (Server, impl Fn() -> OidcManager) {
+        let mock_refresh_server_config = MockRefreshServerConfig {
+            expected_discoveries: 1,
+            token_duration: std::time::Duration::from_secs(2),
+            creates_first_token: false,
+            first_access_token: "FIRST_ACCESS_TOKEN".to_string(),
+            first_refresh_token: "FIRST_REFRESH_TOKEN".to_string(),
+            second_access_token: "SECOND_ACCESS_TOKEN".to_string(),
+            second_refresh_token: "SECOND_REFRESH_TOKEN".to_string(),
+            client_side_password: Some("password123".to_string()),
+        };
+
+        let (server, oidc_manager) = mock_refresh_server(mock_refresh_server_config);
+
+        (server, move || {
+            OidcManager::from_oidc_with_static_tokens(oidc_manager.clone())
+        })
+    }
+
+    #[ge_context::test(oidc_db = "oidc_only_refresh_with_encryption")]
+    async fn it_handles_oidc_tokens_with_encryption(app_ctx: ProPostgresContext<NoTls>) {
+        it_handles_oidc_tokens(app_ctx).await;
     }
 }

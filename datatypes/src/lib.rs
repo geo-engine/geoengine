@@ -8,10 +8,6 @@ pub mod raster;
 pub mod spatial_reference;
 pub mod util;
 
-/// Compiles Geo Engine Pro
-#[cfg(feature = "pro")]
-pub mod pro;
-
 /// This macro resolves paths of files or folders in the `test_data` folder.
 /// The `test_data` folder is located in the workspace root and has the same name as this macro.
 /// To address data from the `test_data` folder you can use the macro like this:

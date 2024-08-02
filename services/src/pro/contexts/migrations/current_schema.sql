@@ -21,6 +21,11 @@ CREATE TYPE "GdalRetries" AS (
     number_of_retries bigint
 );
 
+CREATE TYPE "StacQueryBuffer" AS (
+    start_seconds bigint,
+    end_seconds bigint
+);
+
 CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     "name" text,
     id uuid,
@@ -31,7 +36,8 @@ CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     gdal_retries "GdalRetries",
     cache_ttl int,
     description text,
-    priority smallint
+    priority smallint,
+    query_buffer "StacQueryBuffer"
 );
 
 CREATE TYPE "ProDataProviderDefinition" AS (
@@ -212,7 +218,13 @@ INNER JOIN permissions AS p ON (
     r.role_id = p.role_id AND p.layer_id IS NOT NULL
 );
 
-CREATE TABLE ml_models (
-    id uuid PRIMARY KEY,
-    content text NOT NULL
+CREATE TABLE oidc_session_tokens (
+    session_id uuid PRIMARY KEY REFERENCES sessions (
+        id
+    ) ON DELETE CASCADE NOT NULL,
+    access_token bytea NOT NULL,
+    access_token_encryption_nonce bytea,
+    access_token_valid_until timestamp with time zone NOT NULL,
+    refresh_token bytea,
+    refresh_token_encryption_nonce bytea
 );

@@ -610,6 +610,64 @@ impl FeaturesProvider<'_> {
         Ok(())
     }
 
+    ///  Creates a time filter string.
+    fn create_time_filter_string(
+        time_type: OgrSourceDatasetTimeType,
+        mut time_interval: TimeInterval,
+        driver: &str,
+    ) -> Option<String> {
+        match driver {
+            "PostgreSQL" => {
+                let postgres_range: TimeInterval = // https://www.postgresql.org/docs/current/datatype-datetime.html, capped by max supported TimeInstance value
+                    TimeInterval::new_unchecked(-210_895_056_000_000, 8_210_266_876_799_999);
+
+                if !postgres_range.contains(&time_interval) {
+                    return None;
+                }
+
+                time_interval = postgres_range.intersect(&time_interval)?;
+            }
+            _ => return None,
+        }
+
+        let t_start = time_interval.start();
+        let t_end = time_interval.end();
+        let comp_end = if time_interval.is_instant() {
+            "<="
+        } else {
+            "<"
+        };
+
+        #[allow(clippy::match_same_arms)]
+        match time_type {
+            OgrSourceDatasetTimeType::None => None,
+            OgrSourceDatasetTimeType::Start {
+                start_field,
+                start_format: _,
+                duration,
+            } => {
+                match duration {
+                    OgrSourceDurationSpec::Infinite => {
+                        Some(format!(r#""{start_field}" {comp_end} '{t_end}'"#))
+                    }
+                    OgrSourceDurationSpec::Zero => Some(format!(
+                        r#""{start_field}" {comp_end} '{t_end}' AND "{start_field}" >= '{t_start}'"#
+                    )),
+                    OgrSourceDurationSpec::Value(_) => None, // TODO
+                }
+            }
+            OgrSourceDatasetTimeType::StartEnd {
+                start_field,
+                start_format: _,
+                end_field,
+                end_format: _,
+            } => Some(format!(
+                r#""{start_field}" {comp_end} '{t_end}' AND "{end_field}" >= '{t_start}'"#
+            )),
+            OgrSourceDatasetTimeType::StartDuration { .. } => None, // TODO
+        }
+    }
+
     ///  Creates an attribute filter string.
     fn create_attribute_filter_string(attribute_filters: &[AttributeFilter]) -> Option<String> {
         Self::create_attribute_filter_string_internal(
@@ -1034,6 +1092,7 @@ where
         chunk_byte_size: usize,
     ) -> Result<FeatureCollection<G>> {
         let was_spatial_filtered_by_ogr = feature_iterator.was_spatial_filtered_by_ogr();
+        let was_time_filtered_by_ogr = feature_iterator.was_time_filtered_by_ogr();
 
         let mut builder = feature_collection_builder.finish_header();
 
@@ -1052,7 +1111,7 @@ where
                 time_attribute_parser,
                 &mut builder,
                 &feature,
-                dataset_information.force_ogr_time_filter,
+                was_time_filtered_by_ogr,
                 was_spatial_filtered_by_ogr,
             ) {
                 match dataset_information.on_error {
@@ -6986,6 +7045,185 @@ mod tests {
             result[0].cache_hint.total_ttl_seconds(),
             CacheTtlSeconds::max()
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn creates_time_filter_string() -> Result<()> {
+        assert!(FeaturesProvider::create_time_filter_string(
+            OgrSourceDatasetTimeType::None, // Unsupported time type
+            TimeInterval::new_instant(0)?,
+            "PostgreSQL"
+        )
+        .is_none());
+
+        assert_eq!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    duration: OgrSourceDurationSpec::Infinite,
+                },
+                TimeInterval::new_instant(0)?,
+                "PostgreSQL"
+            )
+            .unwrap(),
+            r#""start" <= '1970-01-01T00:00:00.000Z'"#.to_string()
+        );
+
+        assert_eq!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    duration: OgrSourceDurationSpec::Infinite,
+                },
+                TimeInterval::new(-1, 0)?,
+                "PostgreSQL"
+            )
+            .unwrap(),
+            r#""start" < '1970-01-01T00:00:00.000Z'"#.to_string()
+        );
+
+        assert_eq!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                TimeInterval::new_instant(0)?,
+                "PostgreSQL"
+            )
+            .unwrap(),
+            r#""start" <= '1970-01-01T00:00:00.000Z' AND "start" >= '1970-01-01T00:00:00.000Z'"#
+                .to_string()
+        );
+
+        assert_eq!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                TimeInterval::new(-1, 0)?,
+                "PostgreSQL"
+            )
+            .unwrap(),
+            r#""start" < '1970-01-01T00:00:00.000Z' AND "start" >= '1969-12-31T23:59:59.999Z'"#
+                .to_string()
+        );
+
+        assert!(FeaturesProvider::create_time_filter_string(
+            OgrSourceDatasetTimeType::Start {
+                start_field: "start".to_string(),
+                start_format: Default::default(),
+                duration: OgrSourceDurationSpec::Value(TimeStep {
+                    // Unsupported duration spec
+                    granularity: TimeGranularity::Millis,
+                    step: 10
+                }),
+            },
+            TimeInterval::new_instant(0)?,
+            "PostgreSQL"
+        )
+        .is_none());
+
+        assert!(FeaturesProvider::create_time_filter_string(
+            OgrSourceDatasetTimeType::StartDuration {
+                // Unsupported time type
+                start_field: "start".to_string(),
+                start_format: Default::default(),
+                duration_field: "duration".to_string(),
+            },
+            TimeInterval::new_instant(0)?,
+            "PostgreSQL"
+        )
+        .is_none());
+
+        assert_eq!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::StartEnd {
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    end_field: "end".to_string(),
+                    end_format: Default::default(),
+                },
+                TimeInterval::new_instant(0)?,
+                "PostgreSQL"
+            )
+            .unwrap(),
+            r#""start" <= '1970-01-01T00:00:00.000Z' AND "end" >= '1970-01-01T00:00:00.000Z'"#
+                .to_string()
+        );
+
+        assert_eq!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::StartEnd {
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    end_field: "end".to_string(),
+                    end_format: Default::default(),
+                },
+                TimeInterval::new(-1, 0)?,
+                "PostgreSQL"
+            )
+            .unwrap(),
+            r#""start" < '1970-01-01T00:00:00.000Z' AND "end" >= '1969-12-31T23:59:59.999Z'"#
+                .to_string()
+        );
+
+        assert_eq!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    duration: OgrSourceDurationSpec::Infinite,
+                },
+                TimeInterval::new_unchecked(-210_895_056_000_000, 8_210_266_876_799_999), // = Postgres range
+                "PostgreSQL"
+            )
+            .unwrap(),
+            r#""start" < '+262142-12-31T23:59:59.999Z'"#.to_string()
+        );
+
+        assert!(FeaturesProvider::create_time_filter_string(
+            OgrSourceDatasetTimeType::Start {
+                start_field: "start".to_string(),
+                start_format: Default::default(),
+                duration: OgrSourceDurationSpec::Infinite,
+            },
+            TimeInterval::new_unchecked(-210_895_056_000_001, 8_210_266_876_799_999), // Exceeds Postgres range lower bound
+            "PostgreSQL"
+        )
+        .is_none());
+
+        assert!(std::panic::catch_unwind(|| {
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    duration: OgrSourceDurationSpec::Infinite,
+                },
+                TimeInterval::new_unchecked(-210_895_056_000_000, 8_210_266_876_800_000), // Exceeds Postgres range upper bound (limited by TimeInstance upper bound, panics)
+                "PostgreSQL",
+            )
+        })
+        .is_err());
+
+        assert!(FeaturesProvider::create_time_filter_string(
+            OgrSourceDatasetTimeType::Start {
+                start_field: "start".to_string(),
+                start_format: Default::default(),
+                duration: OgrSourceDurationSpec::Infinite,
+            },
+            TimeInterval::new_instant(0)?,
+            "Unsupported driver"
+        )
+        .is_none());
 
         Ok(())
     }

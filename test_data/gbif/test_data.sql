@@ -272,26 +272,35 @@ INSERT INTO species VALUES (
     'Limoniidae'
 );
 
-CREATE MATERIALIZED VIEW family_counts AS (
+CREATE MATERIALIZED VIEW family_stats AS (
     SELECT
         family AS name, -- noqa: RF04
-        count(*) AS count
+        count(*) AS count,
+        tsrange('[' || min(eventdate) || ',' || max(eventdate) || ']')
+        AS "time",
+        st_extent(geom) AS extent
     FROM occurrences
     GROUP BY family
 );
 
-CREATE MATERIALIZED VIEW genus_counts AS (
+CREATE MATERIALIZED VIEW genus_stats AS (
     SELECT
         genus AS name, -- noqa: RF04
-        count(*) AS count
+        count(*) AS count,
+        tsrange('[' || min(eventdate) || ',' || max(eventdate) || ']')
+        AS "time",
+        st_extent(geom) AS extent
     FROM occurrences
     GROUP BY genus
 );
 
-CREATE MATERIALIZED VIEW species_counts AS (
+CREATE MATERIALIZED VIEW species_stats AS (
     SELECT
         species AS name, -- noqa: RF04
-        count(*) AS count
+        count(*) AS count,
+        tsrange('[' || min(eventdate) || ',' || max(eventdate) || ']')
+        AS "time",
+        st_extent(geom) AS extent
     FROM occurrences
     GROUP BY species
 );
@@ -304,6 +313,7 @@ CREATE MATERIALIZED VIEW occurrences_lite AS (
         geom,
         family,
         genus,
-        species
+        species,
+        eventdate
     FROM occurrences
 );
