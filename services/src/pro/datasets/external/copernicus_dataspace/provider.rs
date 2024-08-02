@@ -310,6 +310,7 @@ impl CopernicusDataspaceDataProvider {
         Box::new(Sentinel2Metadata {
             stac_url: self.stac_url.clone(),
             s3_url: self.s3_url.clone(),
+            s3_use_https: true,
             s3_access_key: self.s3_access_key.clone(),
             s3_secret_key: self.s3_secret_key.clone(),
             product,

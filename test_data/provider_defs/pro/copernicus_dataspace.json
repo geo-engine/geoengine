@@ -4,7 +4,7 @@
   "name": "Copernicus Dataspace",
   "description": "",
   "stacUrl": "https://catalogue.dataspace.copernicus.eu/stac",
-  "s3Url": "dataspace.copernicus.eu",
+  "s3Url": "eodata.dataspace.copernicus.eu",
   "s3AccessKey": "XYZ",
   "s3SecretKey": "XYZ"
 }
