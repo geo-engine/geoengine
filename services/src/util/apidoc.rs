@@ -214,7 +214,10 @@ mod tests {
     use assert_json_diff::assert_json_eq;
     use serde::Serialize;
     use serde_json::json;
-    use utoipa::{openapi::{*, path::*}, Modify, ToSchema};
+    use utoipa::{
+        openapi::{path::*, *},
+        Modify, ToSchema,
+    };
 
     #[test]
     #[allow(dead_code)]
