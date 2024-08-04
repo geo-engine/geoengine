@@ -46,7 +46,7 @@ wkt = "0.11"
 
 [dev-dependencies]
 criterion = "0.5"
-tempfile = "3.10"
+tempfile = "3.11"
 
 [[bench]]
 name = "multi_point_collection"

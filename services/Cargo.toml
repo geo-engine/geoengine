@@ -128,7 +128,7 @@ httptest = "0.15"
 pretty_assertions = "1.4"
 prost = "0.12.3"          # must be compatbile with aruna-rust-api
 serial_test = "3.0"
-tempfile = "3.10"
+tempfile = "3.11"
 xml-rs = "0.8"
 
 [build-dependencies]
