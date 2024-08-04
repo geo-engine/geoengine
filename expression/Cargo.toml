@@ -20,7 +20,7 @@ proc-macro2 = "1.0"
 quote = "1.0"
 snafu = "0.8"
 syn = "2.0"
-tempfile = "3.10"
+tempfile = "3.11"
 
 [dev-dependencies]
 geo = "0.27.0"
