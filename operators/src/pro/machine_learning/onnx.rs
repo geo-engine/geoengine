@@ -6,6 +6,10 @@ use crate::engine::{
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
+use crate::pro::machine_learning::error::{
+    InputBandsMismatch, InputTypeMismatch, InvalidInputDimensions, InvalidOutputDimensions,
+    MultipleInputsNotSupported, Ort,
+};
 use ndarray::Array2;
 use ort::{IntoTensorElementType, PrimitiveTensorElementType};
 use snafu::{ensure, ResultExt};
@@ -19,6 +23,8 @@ use geoengine_datatypes::raster::{
     Grid, GridIdx2D, GridIndexAccess, GridSize, Pixel, RasterDataType, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
+
+use super::MachineLearningError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,17 +52,17 @@ struct MlModelMetadata {
 }
 
 // TODO: extract metadata during model import and load it from database here instead of accessing the model file here
-fn load_model_metadata(path: &Path) -> Result<MlModelMetadata> {
+fn load_model_metadata(path: &Path) -> Result<MlModelMetadata, MachineLearningError> {
     // TODO: proper error if model file cannot be found
     let session = ort::Session::builder()
-        .context(error::Onnx)?
+        .context(Ort)?
         .commit_from_file(path)
-        .context(error::Onnx)?;
+        .context(Ort)?;
 
     // Onnx model may have multiple inputs, but we only support one input (with multiple features/bands)
     ensure!(
         session.inputs.len() == 1,
-        error::OnnxMultipleInputsNotSupported {
+        MultipleInputsNotSupported {
             num_inputs: session.inputs.len()
         }
     );
@@ -67,7 +73,7 @@ fn load_model_metadata(path: &Path) -> Result<MlModelMetadata> {
         dimensions: input_dimensions,
     } = &session.inputs[0].input_type
     else {
-        return Err(error::Error::OnnxInvalidInputType {
+        return Err(MachineLearningError::InvalidInputType {
             input_type: session.inputs[0].input_type.clone(),
         });
     };
@@ -75,7 +81,7 @@ fn load_model_metadata(path: &Path) -> Result<MlModelMetadata> {
     // Input dimensions must be [-1, b] to accept a table of (arbitrarily many) single pixel features (rows) with `b` bands (columns)
     ensure!(
         input_dimensions.len() == 2 && input_dimensions[0] == -1 && input_dimensions[1] > 0,
-        error::OnnxInvalidInputDimensions {
+        InvalidInputDimensions {
             dimensions: input_dimensions.clone()
         }
     );
@@ -87,14 +93,14 @@ fn load_model_metadata(path: &Path) -> Result<MlModelMetadata> {
         if let ort::ValueType::Tensor { ty, dimensions } = &session.outputs[0].output_type {
             ensure!(
                 dimensions == &[-1] || dimensions == &[-1, 1],
-                error::OnnxInvalidOutputDimensions {
+                InvalidOutputDimensions {
                     dimensions: dimensions.clone()
                 }
             );
 
             ty
         } else {
-            return Err(error::Error::OnnxInvalidOutputType {
+            return Err(MachineLearningError::InvalidOutputType {
                 output_type: session.outputs[0].output_type.clone(),
             });
         };
@@ -109,7 +115,7 @@ fn load_model_metadata(path: &Path) -> Result<MlModelMetadata> {
 // can't implement `TryFrom` here because `RasterDataType` is in operators crate
 fn try_raster_datatype_from_tensor_element_type(
     value: ort::TensorElementType,
-) -> Result<RasterDataType> {
+) -> Result<RasterDataType, MachineLearningError> {
     match value {
         ort::TensorElementType::Float32 => Ok(RasterDataType::F32),
         ort::TensorElementType::Uint8 | ort::TensorElementType::Bool => Ok(RasterDataType::U8),
@@ -121,7 +127,7 @@ fn try_raster_datatype_from_tensor_element_type(
         ort::TensorElementType::Float64 => Ok(RasterDataType::F64),
         ort::TensorElementType::Uint32 => Ok(RasterDataType::U32),
         ort::TensorElementType::Uint64 => Ok(RasterDataType::U64),
-        _ => Err(error::Error::OnnxUnsupportedTensorElementType {
+        _ => Err(MachineLearningError::UnsupportedTensorElementType {
             element_type: value,
         }),
     }
@@ -146,7 +152,7 @@ impl RasterOperator for Onnx {
         // check that number of input bands fits number of model features
         ensure!(
             model_metadata.num_input_bands == in_descriptor.bands.count() as usize,
-            error::OnnxInputBandsMismatch {
+            InputBandsMismatch {
                 model_input_bands: model_metadata.num_input_bands,
                 source_bands: in_descriptor.bands.count() as usize,
             }
@@ -155,7 +161,7 @@ impl RasterOperator for Onnx {
         // check that input type fits model input type
         ensure!(
             model_metadata.input_type == in_descriptor.data_type,
-            error::OnnxInputTypeMismatch {
+            InputTypeMismatch {
                 model_input_type: model_metadata.input_type,
                 source_type: in_descriptor.data_type,
             }
@@ -271,9 +277,9 @@ where
 
         // TODO: re-use session accross queries?
         let session = ort::Session::builder()
-            .context(error::Onnx)?
+            .context(Ort)?
             .commit_from_file(&self.model_path)
-            .context(error::Onnx)?;
+            .context(Ort)?;
 
         let stream = self
             .source
@@ -337,14 +343,12 @@ where
                 let input_name = &session.inputs[0].name;
 
                 let outputs = session
-                    .run(ort::inputs![input_name => samples].context(error::Onnx)?)
-                    .context(error::Onnx)?;
+                    .run(ort::inputs![input_name => samples].context(Ort)?)
+                    .context(Ort)?;
 
                 // assume the first output is the prediction and ignore the other outputs (e.g. probabilities for classification)
                 // we don't access the output by name because it can vary, e.g. "output_label" vs "variable"
-                let predictions = outputs[0]
-                    .try_extract_tensor::<TOut>()
-                    .context(error::Onnx)?;
+                let predictions = outputs[0].try_extract_tensor::<TOut>().context(Ort)?;
 
                 // extract the values as a raw vector because we expect one prediction per pixel.
                 // this works for 1d tensors as well as 2d tensors with a single column
