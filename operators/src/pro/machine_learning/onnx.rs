@@ -420,36 +420,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tract() {
-        use tract_onnx::prelude::*;
-
-        let model = tract_onnx::onnx()
-            // load the model
-            .model_for_path(test_data!("pro/ml/onnx/test_no_zipmap.onnx"))
-            .unwrap()
-            .into_runnable()
-            .unwrap();
-
-        let array = arr2(&[[0.1f32, 0.2], [0.2, 0.3], [0.2, 0.2], [0.3, 0.1]]);
-
-        let tensor: Tensor = array.into();
-
-        // run the model on the input
-
-        let result = model.run(tvec!(tensor.into())).unwrap();
-
-        let _predictions: Array1<i64> = result[0]
-            .to_array_view::<i64>()
-            .unwrap()
-            .to_owned()
-            .into_dimensionality()
-            .unwrap();
-
-        // TODO: fix the input because the prediction is wrong(?)
-        // assert_eq!(predictions, array![33i64, 33, 42, 42]);
-    }
-
-    #[test]
     fn ort() {
         let session = ort::Session::builder()
             .unwrap()
