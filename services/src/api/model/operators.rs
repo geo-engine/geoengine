@@ -1,11 +1,9 @@
-use super::datatypes::{
-    BoundingBox2D, FeatureDataType, Measurement, RasterDataType, SpatialPartition2D,
-    SpatialReferenceOption, TimeInterval, VectorDataType,
-};
 use crate::api::model::datatypes::{
-    CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, GdalConfigOption, MultiLineString,
-    MultiPoint, MultiPolygon, NoGeometry, QueryRectangle, RasterPropertiesEntryType,
-    RasterPropertiesKey, SpatialResolution, TimeInstance, TimeStep, VectorQueryRectangle,
+    BoundingBox2D, CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, FeatureDataType,
+    GdalConfigOption, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
+    QueryRectangle, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
+    SpatialPartition2D, SpatialReferenceOption, SpatialResolution, TimeInstance, TimeInterval,
+    TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::error::{
     RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique, Result,
@@ -284,8 +282,11 @@ impl From<PlotResultDescriptor> for geoengine_operators::engine::PlotResultDescr
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum TypedResultDescriptor {
+    #[schema(title = "TypedPlotResultDescriptor")]
     Plot(PlotResultDescriptor),
+    #[schema(title = "TypedRasterResultDescriptor")]
     Raster(RasterResultDescriptor),
+    #[schema(title = "TypedVectorResultDescriptor")]
     Vector(VectorResultDescriptor),
 }
 
@@ -807,6 +808,7 @@ impl Default for OgrSourceDatasetTimeType {
 pub enum OgrSourceDurationSpec {
     Infinite,
     Zero,
+    #[schema(title = "OgrSourceDurationSpecValue")]
     Value(TimeStep),
 }
 

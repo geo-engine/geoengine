@@ -37,6 +37,7 @@ impl From<DatasetId> for geoengine_datatypes::dataset::DatasetId {
 /// for accessing the data. Internal data is loaded from datasets, external from `DataProvider`s.
 pub enum DataId {
     #[serde(rename_all = "camelCase")]
+    #[schema(title = "InternalDataId")]
     Internal {
         dataset_id: DatasetId,
     },
@@ -799,6 +800,7 @@ impl From<FeatureDataType> for geoengine_datatypes::primitives::FeatureDataType 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
+    #[schema(title = "UnitlessMeasurement")]
     Unitless,
     Continuous(ContinuousMeasurement),
     Classification(ClassificationMeasurement),
@@ -1478,11 +1480,13 @@ pub enum Colorizer {
     #[serde(rename_all = "camelCase")]
     LogarithmicGradient(LogarithmicGradient),
     #[serde(rename_all = "camelCase")]
+    #[schema(title = "PaletteColorizer")]
     Palette {
         colors: Palette,
         no_data_color: RgbaColor,
         default_color: RgbaColor,
     },
+    #[schema(title = "RgbaColorizer")]
     Rgba,
 }
 
@@ -1573,6 +1577,7 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum RasterColorizer {
     #[serde(rename_all = "camelCase")]
+    #[schema(title = "SingleBandRasterColorizer")]
     SingleBand {
         band: u32,
         band_colorizer: Colorizer,

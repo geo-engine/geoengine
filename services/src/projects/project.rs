@@ -331,7 +331,10 @@ pub struct PolygonSymbology {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum NumberParam {
-    Static { value: usize },
+    #[schema(title = "StaticNumberParam")]
+    Static {
+        value: usize,
+    },
     Derived(DerivedNumber),
 }
 
