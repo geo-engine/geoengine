@@ -5,7 +5,7 @@ use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution};
 use reqwest::Url;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt};
+use snafu::ensure;
 use std::str::FromStr;
 use utoipa::openapi::{ObjectBuilder, SchemaType};
 use utoipa::ToSchema;
@@ -47,7 +47,7 @@ impl OgcBoundingBox {
             (self.values[0], self.values[1]).into(),
             (self.values[2], self.values[3]).into(),
         )
-        .context(error::DataType)
+        .map_err(Into::into)
     }
 }
 
@@ -253,12 +253,8 @@ pub fn rectangle_from_ogc_params<A: AxisAlignedRectangle>(
         .ok_or(error::Error::AxisOrderingNotKnownForSrs {
             srs_string: spatial_reference.srs_string(),
         })? {
-        AxisOrder::EastNorth => {
-            A::from_min_max((a, b).into(), (c, d).into()).context(error::DataType)
-        }
-        AxisOrder::NorthEast => {
-            A::from_min_max((b, a).into(), (d, c).into()).context(error::DataType)
-        }
+        AxisOrder::EastNorth => A::from_min_max((a, b).into(), (c, d).into()).map_err(Into::into),
+        AxisOrder::NorthEast => A::from_min_max((b, a).into(), (d, c).into()).map_err(Into::into),
     }
 }
 

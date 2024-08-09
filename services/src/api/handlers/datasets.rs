@@ -575,11 +575,11 @@ pub async fn update_dataset_provenance_handler<C: ApplicationContext>(
             }))),
             ("Normal user tried to create dataset from a volume" = (value = json!({
                 "error": "OnlyAdminsCanCreateDatasetFromVolume",
-                "message": "OnlyAdminsCanCreateDatasetFromVolume"
+                "message": "Only admins can create dataset from volume"
             }))),
             ("Admin tried to create dataset from an upload" = (value = json!({
                 "error": "AdminsCannotCreateDatasetFromUpload",
-                "message": "AdminsCannotCreateDatasetFromUpload"
+                "message": "Admins cannot create dataset from upload"
             }))),
             ("Filepath in metadata is invalid" = (value = json!({
                 "error": "CannotResolveUploadFilePath",
@@ -587,7 +587,7 @@ pub async fn update_dataset_provenance_handler<C: ApplicationContext>(
             }))),
             ("Referenced an unknown volume" = (value = json!({
                 "error": "UnknownVolume",
-                "message": "UnknownVolume"
+                "message": "Unknown volume"
             })))
         )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse),
@@ -739,23 +739,23 @@ pub fn add_tag(properties: &mut AddDataset, tag: String) {
             }))),
             ("Referenced an unknown upload" = (value = json!({
                 "error": "UnknownUploadId",
-                "message": "UnknownUploadId"
+                "message": "Unknown upload id"
             }))),
             ("Dataset name is empty" = (value = json!({
                 "error": "InvalidDatasetName",
-                "message": "InvalidDatasetName"
+                "message": "Invalid dataset name"
             }))),
             ("Upload filename is invalid" = (value = json!({
                 "error": "InvalidUploadFileName",
-                "message": "InvalidUploadFileName"
+                "message": "Invalid upload file name"
             }))),
             ("File does not exist" = (value = json!({
-                "error": "Operator",
-                "message": "Operator: GdalError: GDAL method 'GDALOpenEx' returned a NULL pointer. Error msg: 'upload/0bdd1062-7796-4d44-a655-e548144281a6/asdf: No such file or directory'"
+                "error": "GdalError",
+                "message": "GdalError: GDAL method 'GDALOpenEx' returned a NULL pointer. Error msg: 'upload/0bdd1062-7796-4d44-a655-e548144281a6/asdf: No such file or directory'"
             }))),
             ("Dataset has no auto-importable layer" = (value = json!({
                 "error": "DatasetHasNoAutoImportableLayer",
-                "message": "DatasetHasNoAutoImportableLayer"
+                "message": "Dataset has no auto importable layer"
             })))
         )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse),
@@ -854,19 +854,19 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
             }))),
             ("Referenced an unknown upload" = (value = json!({
                 "error": "UnknownUploadId",
-                "message": "UnknownUploadId"
+                "message": "Unknown upload id"
             }))),
             ("No suitable mainfile found" = (value = json!({
                 "error": "NoMainFileCandidateFound",
-                "message": "NoMainFileCandidateFound"
+                "message": "No main file candidate found"
             }))),
             ("File does not exist" = (value = json!({
-                "error": "Operator",
-                "message": "Operator: GdalError: GDAL method 'GDALOpenEx' returned a NULL pointer. Error msg: 'upload/0bdd1062-7796-4d44-a655-e548144281a6/asdf: No such file or directory'"
+                "error": "GdalError",
+                "message": "GdalError: GDAL method 'GDALOpenEx' returned a NULL pointer. Error msg: 'upload/0bdd1062-7796-4d44-a655-e548144281a6/asdf: No such file or directory'"
             }))),
             ("Dataset has no auto-importable layer" = (value = json!({
                 "error": "DatasetHasNoAutoImportableLayer",
-                "message": "DatasetHasNoAutoImportableLayer"
+                "message": "Dataset has no auto importable layer"
             })))
         )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
@@ -920,7 +920,7 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
 
     let main_file_path = path_with_base_path(&root_path, Path::new(&main_file))?;
 
-    let dataset = gdal_open_dataset(&main_file_path).context(error::Operator)?;
+    let dataset = gdal_open_dataset(&main_file_path)?;
 
     if dataset.layer_count() > 0 {
         let meta_data = auto_detect_vector_meta_data_definition(&main_file_path, &layer_name)?;
@@ -996,7 +996,7 @@ fn auto_detect_vector_meta_data_definition(
     main_file_path: &Path,
     layer_name: &Option<String>,
 ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>> {
-    let dataset = gdal_open_dataset(main_file_path).context(error::Operator)?;
+    let dataset = gdal_open_dataset(main_file_path)?;
 
     auto_detect_vector_meta_data_definition_from_dataset(&dataset, main_file_path, layer_name)
 }
@@ -1242,7 +1242,7 @@ fn detect_vector_geometry(layer: &Layer) -> DetectedGeometry {
                     .spatial_ref()
                     .context(error::Gdal)
                     .and_then(|s| {
-                        let s: Result<SpatialReference> = s.try_into().context(error::DataType);
+                        let s: Result<SpatialReference> = s.try_into().map_err(Into::into);
                         s
                     })
                     .map(Into::into)
@@ -1368,11 +1368,11 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Referenced an unknown dataset" = (value = json!({
                 "error": "UnknownDatasetName",
-                "message": "UnknownDatasetName"
+                "message": "Unknown dataset name"
             }))),
             ("Given dataset can only be deleted by owner" = (value = json!({
                 "error": "OperationRequiresOwnerPermission",
-                "message": "OperationRequiresOwnerPermission"
+                "message": "Operation requires owner permission"
             })))
         )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)

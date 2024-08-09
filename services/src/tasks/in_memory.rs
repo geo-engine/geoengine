@@ -298,6 +298,11 @@ fn run_task(
             Err(err) => {
                 let err = Arc::from(err);
 
+                log::error!(
+                    "Task {} failed with: {}",
+                    task_id,
+                    snafu::Report::from_error(Arc::clone(&err))
+                );
                 *task_handle.status.write().await = TaskStatus::failed(
                     Arc::clone(&err),
                     TaskCleanUpStatus::Running(RunningTaskStatusInfo::new(

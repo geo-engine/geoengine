@@ -41,7 +41,6 @@ use pin_project::pin_project;
 use postgres_protocol::escape::{escape_identifier, escape_literal};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
@@ -330,7 +329,7 @@ impl Add<OgrSourceDurationSpec> for TimeInstance {
         match rhs {
             OgrSourceDurationSpec::Infinite => Ok(TimeInstance::MAX),
             OgrSourceDurationSpec::Zero => Ok(self),
-            OgrSourceDurationSpec::Value(step) => (self + step).context(error::DataType),
+            OgrSourceDurationSpec::Value(step) => (self + step).map_err(Into::into),
         }
     }
 }
@@ -876,8 +875,7 @@ where
                 .and_then(|c| c.rename.as_ref())
             {
                 let names: Vec<_> = rename.iter().collect();
-                batch_result
-                    .and_then(|c| c.rename_columns(names.as_slice()).context(error::DataType))
+                batch_result.and_then(|c| c.rename_columns(names.as_slice()).map_err(Into::into))
             } else {
                 batch_result
             };
@@ -926,10 +924,10 @@ where
                 };
                 match field {
                     FieldValue::IntegerValue(v) => {
-                        TimeInstance::from_millis(i64::from(v) * factor).context(error::DataType)
+                        TimeInstance::from_millis(i64::from(v) * factor).map_err(Into::into)
                     }
                     FieldValue::Integer64Value(v) => {
-                        TimeInstance::from_millis(v * factor).context(error::DataType)
+                        TimeInstance::from_millis(v * factor).map_err(Into::into)
                     }
                     FieldValue::StringValue(v) => DateTime::parse_from_str(&v, &fmt)
                         .map_err(|e| Error::TimeParse {
@@ -939,8 +937,7 @@ where
                     FieldValue::RealValue(v)
                         if timestamp_type == UnixTimeStampType::EpochSeconds =>
                     {
-                        TimeInstance::from_millis((v * (factor as f64)) as i64)
-                            .context(error::DataType)
+                        TimeInstance::from_millis((v * (factor as f64)) as i64).map_err(Into::into)
                     }
                     _ => Err(Error::OgrFieldValueIsNotValidForTimestamp),
                 }

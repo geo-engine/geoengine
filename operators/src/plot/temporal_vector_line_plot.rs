@@ -23,7 +23,7 @@ use geoengine_datatypes::{
     util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt};
+use snafu::ensure;
 use std::collections::HashMap;
 use std::{
     cmp::Ordering,
@@ -199,7 +199,7 @@ where
         let measurement = Measurement::Unitless; // TODO: attach actual unit if we know it
         MultiLineChart::new(data_points, measurement)
             .to_vega_embeddable(false)
-            .context(error::DataType)
+            .map_err(Into::into)
     }
 }
 

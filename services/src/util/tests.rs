@@ -12,6 +12,7 @@ use crate::projects::{
     CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
 };
+use crate::util::middleware::OutputRequestId;
 use crate::util::server::{configure_extractors, render_404, render_405};
 use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
@@ -22,7 +23,9 @@ use crate::{
     datasets::storage::{DatasetDefinition, MetaDataDefinition},
 };
 use actix_web::dev::ServiceResponse;
-use actix_web::{http, http::header, http::Method, middleware, test, web, App};
+use actix_web::{
+    http, http::header, http::Method, middleware, test, web, App, HttpResponse, Responder,
+};
 use bb8_postgres::bb8::ManageConnection;
 use bb8_postgres::PostgresConnectionManager;
 use flexi_logger::Logger;
@@ -62,6 +65,7 @@ use tokio::sync::OwnedSemaphorePermit;
 use tokio::sync::RwLock;
 use tokio::sync::Semaphore;
 use tokio_postgres::NoTls;
+use tracing_actix_web::TracingLogger;
 
 use super::config::get_config_element;
 use super::config::Postgres;
@@ -344,6 +348,12 @@ where
     check_allowed_http_methods2(test_helper, allowed_methods, |res| res)
 }
 
+#[actix_web::get("/dummy")]
+#[allow(clippy::unused_async)]
+async fn dummy_handler() -> impl Responder {
+    HttpResponse::Ok().body("Hey there!")
+}
+
 pub async fn send_test_request<C: SimpleApplicationContext>(
     req: test::TestRequest,
     app_ctx: C,
@@ -351,11 +361,13 @@ pub async fn send_test_request<C: SimpleApplicationContext>(
     let app = test::init_service(
         App::new()
             .app_data(web::Data::new(app_ctx))
+            .wrap(OutputRequestId)
             .wrap(
                 middleware::ErrorHandlers::default()
                     .handler(http::StatusCode::NOT_FOUND, render_404)
                     .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
             )
+            .wrap(TracingLogger::default())
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
@@ -368,7 +380,8 @@ pub async fn send_test_request<C: SimpleApplicationContext>(
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>),
+            .configure(handlers::workflows::init_workflow_routes::<C>)
+            .service(dummy_handler),
     )
     .await;
     test::call_service(&app, req.to_request())

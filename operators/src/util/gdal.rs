@@ -237,8 +237,7 @@ pub fn raster_descriptor_from_dataset(
 ) -> Result<RasterResultDescriptor> {
     let rasterband = &dataset.rasterband(band)?;
 
-    let spatial_ref: SpatialReference =
-        dataset.spatial_ref()?.try_into().context(error::DataType)?;
+    let spatial_ref: SpatialReference = dataset.spatial_ref()?.try_into()?;
 
     let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;

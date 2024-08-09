@@ -10,6 +10,7 @@ pub mod config;
 pub mod encryption;
 pub mod extractors;
 pub mod identifiers;
+pub mod middleware;
 pub mod openapi_examples;
 pub mod operators;
 pub mod parsing;
