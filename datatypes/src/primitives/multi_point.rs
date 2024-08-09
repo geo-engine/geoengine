@@ -368,9 +368,7 @@ impl<'r> ToWkt<f64> for MultiPointRef<'r> {
             multi_point.0.push(wkt::types::Point(Some(point.into())));
         }
 
-        Wkt {
-            item: wkt::Geometry::MultiPoint(multi_point),
-        }
+        Wkt::MultiPoint(multi_point)
     }
 }
 
