@@ -637,9 +637,7 @@ impl<'r> ToWkt<f64> for MultiPolygonRef<'r> {
             wkt_multi_polygon.0.push(wkt_polygon);
         }
 
-        Wkt {
-            item: wkt::Geometry::MultiPolygon(wkt_multi_polygon),
-        }
+        Wkt::MultiPolygon(wkt_multi_polygon)
     }
 }
 

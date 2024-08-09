@@ -240,6 +240,7 @@ fn display_strings<S: Display>(strings: &[S]) -> String {
 mod send_sync_ensurance {
     use super::*;
 
+    #[allow(dead_code)]
     trait SendSyncEnsurance: Send + Sync {}
 
     impl SendSyncEnsurance for ExpressionExecutionError {}

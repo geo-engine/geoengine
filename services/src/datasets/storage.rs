@@ -1,7 +1,7 @@
 use super::listing::Provenance;
 use super::postgres::DatasetMetaData;
 use super::{DatasetIdAndName, DatasetName};
-use crate::api::model::services::UpdateDataset;
+use crate::api::model::services::{DataPath, UpdateDataset};
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
@@ -17,7 +17,7 @@ use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRe
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use utoipa::{IntoParams, ToSchema};
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
 
@@ -112,14 +112,11 @@ pub fn validate_tags(tags: &Vec<String>) -> Result<(), ValidationError> {
     Ok(())
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, IntoParams)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SuggestMetaData {
-    #[param(example = "420b06de-0a7e-45cb-9c1c-ea901b46ab69")]
-    pub upload: UploadId,
-    #[param(example = "germany_polygon.gpkg")]
+    pub data_path: DataPath,
     pub main_file: Option<String>,
-    #[param(example = "test_polygon")]
     pub layer_name: Option<String>,
 }
 
@@ -284,6 +281,12 @@ pub trait DatasetStore {
     ) -> Result<DatasetIdAndName>;
 
     async fn update_dataset(&self, dataset: DatasetId, update: UpdateDataset) -> Result<()>;
+
+    async fn update_dataset_loading_info(
+        &self,
+        dataset: DatasetId,
+        meta_data: &MetaDataDefinition,
+    ) -> Result<()>;
 
     async fn update_dataset_symbology(
         &self,

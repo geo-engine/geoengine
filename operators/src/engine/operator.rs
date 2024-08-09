@@ -341,31 +341,6 @@ impl From<Box<dyn PlotOperator>> for TypedOperator {
     }
 }
 
-/// An enum to differentiate between `InitializedOperator` variants
-pub enum TypedInitializedOperator {
-    Vector(Box<dyn InitializedVectorOperator>),
-    Raster(Box<dyn InitializedRasterOperator>),
-    Plot(Box<dyn InitializedPlotOperator>),
-}
-
-impl From<Box<dyn InitializedVectorOperator>> for TypedInitializedOperator {
-    fn from(operator: Box<dyn InitializedVectorOperator>) -> Self {
-        TypedInitializedOperator::Vector(operator)
-    }
-}
-
-impl From<Box<dyn InitializedRasterOperator>> for TypedInitializedOperator {
-    fn from(operator: Box<dyn InitializedRasterOperator>) -> Self {
-        TypedInitializedOperator::Raster(operator)
-    }
-}
-
-impl From<Box<dyn InitializedPlotOperator>> for TypedInitializedOperator {
-    fn from(operator: Box<dyn InitializedPlotOperator>) -> Self {
-        TypedInitializedOperator::Plot(operator)
-    }
-}
-
 #[macro_export]
 macro_rules! call_on_typed_operator {
     ($typed_operator:expr, $operator_var:ident => $function_call:expr) => {

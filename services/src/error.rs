@@ -43,9 +43,11 @@ pub enum Error {
     TokioJoin {
         source: tokio::task::JoinError,
     },
+
     TokioSignal {
         source: std::io::Error,
     },
+    
     Reqwest {
         source: reqwest::Error,
     },
@@ -460,20 +462,12 @@ pub enum Error {
     ProviderDoesNotSupportBrowsing,
 
     InvalidPath,
-    CouldNotGetMlModelPath,
 
     InvalidWorkflowOutputType,
 
     #[snafu(display("Functionality is not implemented: '{}'", message))]
     NotImplemented {
         message: String,
-    },
-
-    // TODO: refactor error
-    #[cfg(feature = "pro")]
-    #[snafu(context(false))]
-    MachineLearning {
-        source: crate::pro::machine_learning::ml_error::MachineLearningError,
     },
 
     #[snafu(display("NotNan error: {}", source))]
@@ -506,6 +500,11 @@ pub enum Error {
     InvalidResourceId {
         resource_type: String,
         resource_id: String,
+    },
+
+    #[snafu(display("Unknown volume name: {}", volume_name))]
+    UnknownVolumeName {
+        volume_name: String,
     },
 }
 
