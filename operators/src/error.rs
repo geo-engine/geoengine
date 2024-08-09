@@ -463,6 +463,15 @@ pub enum Error {
     BandDoesNotExist {
         band_idx: u32,
     },
+    #[snafu(display("MachineLearning error: {}", source))]
+    MachineLearning {
+        // TODO: make `source: MachineLearningError`, once pro features is removed
+        source: Box<dyn ErrorSource>,
+    },
+    #[snafu(display("MustNotHappen: {message}, this is a bug"))]
+    MustNotHappen {
+        message: String,
+    },
 
     #[snafu(display("PostgresError: {}", source))]
     Postgres {
