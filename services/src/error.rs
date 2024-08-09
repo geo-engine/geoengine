@@ -30,6 +30,7 @@ pub enum Error {
     Uuid {
         source: uuid::Error,
     },
+    #[snafu(display("SerdeJson: {}", source))]
     SerdeJson {
         source: serde_json::Error,
     },
