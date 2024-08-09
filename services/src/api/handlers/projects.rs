@@ -10,6 +10,7 @@ use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use actix_web::{web, FromRequest, HttpResponse, Responder, ResponseError};
 use snafu::prelude::*;
 use snafu::ResultExt;
+use std::fmt;
 use strum::IntoStaticStr;
 
 pub(crate) fn init_project_routes<C>(cfg: &mut web::ServiceConfig)
@@ -38,7 +39,7 @@ where
         );
 }
 
-#[derive(Debug, Snafu, IntoStaticStr)]
+#[derive(Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
 pub enum ProjectHandlerError {
     #[snafu(display("Could not create project: {source}"))]
@@ -83,6 +84,12 @@ impl ResponseError for ProjectHandlerError {
 
     fn error_response(&self) -> HttpResponse<actix_http::body::BoxBody> {
         HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
+    }
+}
+
+impl fmt::Debug for ProjectHandlerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&snafu::Report::from_error(self), f)
     }
 }
 
