@@ -190,12 +190,11 @@ pub enum Error {
         name: String,
     },
 
-    #[snafu(display("Problem with dataset metadata: {source}"))]
+    #[snafu(display("Problem with dataset metadata"))]
     DatasetMetaData {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
-    #[snafu(display("Arrow error: {source}"))]
     Arrow {
         source: arrow::error::ArrowError,
     },
@@ -228,7 +227,7 @@ pub enum Error {
 
     FilePathNotRepresentableAsString,
 
-    #[snafu(display("Error when joining task: {source}"))]
+    #[snafu(display("Error when joining task"))]
     TokioJoin {
         source: tokio::task::JoinError,
     },
@@ -420,7 +419,6 @@ pub enum Error {
         found: usize,
     },
 
-    #[snafu(display("Querying processor failed: {source}"))]
     QueryingProcessorFailed {
         source: Box<dyn std::error::Error + Send + Sync>,
     },

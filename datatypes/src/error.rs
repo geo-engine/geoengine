@@ -329,7 +329,7 @@ pub enum Error {
         b: SpatialReference,
     },
 
-    #[snafu(display("Io error: {source}"))]
+    #[snafu(display("IO error"))]
     Io {
         source: std::io::Error,
     },

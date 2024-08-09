@@ -37,19 +37,15 @@ pub enum Error {
     SerdeJson {
         source: serde_json::Error,
     },
-    #[snafu(display("IO error: {source}"))]
     Io {
         source: std::io::Error,
     },
-    #[snafu(display("Error when joining task: {source}"))]
     TokioJoin {
         source: tokio::task::JoinError,
     },
-    #[snafu(display("Tokio signal error: {source}"))]
     TokioSignal {
         source: std::io::Error,
     },
-    #[snafu(display("Reqwest error: {source}"))]
     Reqwest {
         source: reqwest::Error,
     },
@@ -57,12 +53,11 @@ pub enum Error {
     Url {
         source: url::ParseError,
     },
-    #[snafu(display("Proj error: {source}"))]
     Proj {
         source: proj::ProjError,
     },
 
-    #[snafu(display("OpenTelemtry tracing error: {source}"), context(false))]
+    #[snafu(context(false))]
     Trace {
         source: opentelemetry::trace::TraceError,
     },
@@ -135,7 +130,6 @@ pub enum Error {
 
     NoWorkflowForGivenId,
 
-    #[snafu(display("Postgres error: {source}"))]
     TokioPostgres {
         source: bb8_postgres::tokio_postgres::Error,
     },
@@ -156,7 +150,6 @@ pub enum Error {
 
     ConfigLockFailed,
 
-    #[snafu(display("Configuration error: {source}"))]
     Config {
         source: config::ConfigError,
     },
@@ -166,7 +159,7 @@ pub enum Error {
         source: std::net::AddrParseError,
     },
 
-    #[snafu(display("Missing working directory: {source}"))]
+    #[snafu(display("Missing working directory"))]
     MissingWorkingDirectory {
         source: std::io::Error,
     },
@@ -222,7 +215,7 @@ pub enum Error {
     UnknownUploadId,
     UnknownModelId,
     PathIsNotAFile,
-    #[snafu(display("Actix multipart error: {reason}"))]
+    #[snafu(display("Failed loading multipart body: {reason}"))]
     Multipart {
         // TODO: this error is not send, so this does not work
         // source: actix_multipart::MultipartError,
@@ -296,7 +289,7 @@ pub enum Error {
     Nature40UnknownRasterDbname,
     Nature40WcsDatasetMissingLabelInMetadata,
 
-    #[snafu(display("FlexiLogger initialization error: {source}"))]
+    #[snafu(display("FlexiLogger initialization error"))]
     Logger {
         source: flexi_logger::FlexiLoggerError,
     },
@@ -356,12 +349,12 @@ pub enum Error {
         type_names: WorkflowId,
     },
 
-    #[snafu(display("Aruna Provider error: {source}"), context(false))]
+    #[snafu(context(false))]
     ArunaProvider {
         source: ArunaProviderError,
     },
 
-    #[snafu(display("NetCdfCf4D Provider error: {source}"), context(false))]
+    #[snafu(context(false))]
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
@@ -370,7 +363,7 @@ pub enum Error {
 
     BaseUrlMustEndWithSlash,
 
-    #[snafu(display("Layer DB error: {source}"), context(false))]
+    #[snafu(context(false))]
     LayerDb {
         source: crate::layers::LayerDbError,
     },
@@ -401,7 +394,7 @@ pub enum Error {
     InvalidLayerCollectionId,
     InvalidLayerId,
 
-    #[snafu(display("Workflow API error: {source}"), context(false))]
+    #[snafu(context(false))]
     WorkflowApi {
         source: crate::api::handlers::workflows::WorkflowApiError,
     },
@@ -478,7 +471,7 @@ pub enum Error {
 
     // TODO: refactor error
     #[cfg(feature = "pro")]
-    #[snafu(display("ML error: {source}"), context(false))]
+    #[snafu(context(false))]
     MachineLearning {
         source: crate::pro::machine_learning::ml_error::MachineLearningError,
     },
