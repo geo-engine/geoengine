@@ -482,10 +482,6 @@ pub enum Error {
     Bb8Postgres {
         source: bb8::RunError<tokio_postgres::Error>,
     },
-    #[snafu(display("MustNotHappen: {message}, this is a bug"))]
-    MustNotHappen {
-        message: String,
-    },
     #[snafu(context(false), display("BandNeighborhoodAggregate: {source}"))]
     BandNeighborhoodAggregate {
         source: BandNeighborhoodAggregateError,
