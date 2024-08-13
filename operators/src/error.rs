@@ -463,6 +463,15 @@ pub enum Error {
     BandDoesNotExist {
         band_idx: u32,
     },
+    #[snafu(display("MachineLearning error: {}", source))]
+    MachineLearning {
+        // TODO: make `source: MachineLearningError`, once pro features is removed
+        source: Box<dyn ErrorSource>,
+    },
+    #[snafu(display("MustNotHappen: {message}, this is a bug"))]
+    MustNotHappen {
+        message: String,
+    },
 
     #[snafu(display("PostgresError: {}", source))]
     Postgres {
@@ -472,10 +481,6 @@ pub enum Error {
     #[snafu(display("Bb8PostgresError: {}", source))]
     Bb8Postgres {
         source: bb8::RunError<tokio_postgres::Error>,
-    },
-    #[snafu(display("MustNotHappen: {message}, this is a bug"))]
-    MustNotHappen {
-        message: String,
     },
     #[snafu(context(false), display("BandNeighborhoodAggregate: {source}"))]
     BandNeighborhoodAggregate {
