@@ -1,0 +1,113 @@
+# Run server with "--features pro".
+
+@baseUrl = http://localhost:3030/api
+
+###
+
+# Should throw body parsing error.
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+"
+
+###
+
+# Should throw header error.
+POST {{baseUrl}}/login
+Content-Type: text/html
+
+###
+
+# Should throw auth header missing.
+GET {{baseUrl}}/tasks/list
+
+###
+
+# Should succeed.
+# @name login
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+	"email": "admin@localhost",
+	"password": "adminadmin"
+}
+
+###
+
+@token = {{login.response.body.$.id}}
+
+# Should throw dataset not found.
+GET {{baseUrl}}/dataset/asdf
+Authorization: Bearer {{token}}
+
+###
+
+# Should throw upload not found with TokioPostgres.
+POST {{baseUrl}}/dataset
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+	"dataPath": {
+		"upload": "1b71b45b-0a7e-4381-8336-f806ed7c4fee"
+	},
+  "definition": {
+    "properties": {
+        "name": "GermanyBorder2",
+	    "displayName": "Germany Border 2",
+        "description": "The Outline of Germany",
+        "sourceOperator": "OgrSource"
+    },
+    "metaData": {
+      "type": "OgrMetaData",
+      "loadingInfo": {
+        "fileName": "germany_polygon.gpkg",
+        "layerName": "test_germany",
+        "dataType": "MultiPolygon",
+        "time": {
+			"type": "none"
+		},
+        "columns": {
+          "x": "",
+          "y": null,
+          "text": [],
+            "float": [],
+		    "int": []
+        },
+        "forceOgrTimeFilter": false,
+        "onError": "abort"
+      },
+      "resultDescriptor": {
+        "dataType": "MultiPolygon",
+        "spatialReference": "EPSG:4326",
+        "columns": {}
+      }
+    }
+  }
+}
+
+###
+
+# Should succeed.
+# @name registerWorkflow
+POST {{baseUrl}}/workflow
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "type": "Raster",
+  "operator": {
+    "type": "GdalSource",
+    "params": {
+      "data": "land_cover"
+    }
+  }
+}
+
+###
+
+@workflowId = {{registerWorkflow.response.body.$.id}}
+
+GET {{baseUrl}}/workflow/{{workflowId}}/vectorStream?spatialBounds=0,0,0,0&timeInterval
+Authorization: Bearer {{token}}
