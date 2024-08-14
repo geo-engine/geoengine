@@ -109,5 +109,12 @@ Content-Type: application/json
 
 @workflowId = {{registerWorkflow.response.body.$.id}}
 
-GET {{baseUrl}}/workflow/{{workflowId}}/vectorStream?spatialBounds=0,0,0,0&timeInterval
+# Should throw invalid operator type.
+GET {{baseUrl}}/workflow/{{workflowId}}/vectorStream?spatialBounds=0,0,0,0&timeInterval=2012-12-12T12%3A12%3A12Z&spatialResolution=1,1&resultType=arrow
+Authorization: Bearer {{token}}
+
+###
+
+# Should throw not implemented.
+GET {{baseUrl}}/layers/1c3b8042-300b-485c-95b5-0147d9dc068d/capabilities
 Authorization: Bearer {{token}}
