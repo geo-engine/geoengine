@@ -47,7 +47,7 @@ pub enum Error {
     TokioSignal {
         source: std::io::Error,
     },
-    
+
     Reqwest {
         source: reqwest::Error,
     },
