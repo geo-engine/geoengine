@@ -159,6 +159,12 @@ impl Modify for TransformSchemasWithTag {
 
                 let variant_schema_name = match Self::get_title(item) {
                     // Always prefer custom title as variant name.
+                    // The "title" attribute is normally used as an annotation to make
+                    // the schema self-documenting. We (ab)use it to give our enum
+                    // transformationen logic more information on how to generate the
+                    // variant schema names. It completely overwrites the default logic
+                    // below. This is inline with some code generators which base generated
+                    // class names on the "title" attribute.
                     Some(title) => title.to_owned(),
                     None => match Self::get_base_type_name(item) {
                         // If the variant has a single tuple payload, try using
