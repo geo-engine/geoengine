@@ -1,3 +1,4 @@
+mod band_neighborhood_aggregate;
 mod bandwise_expression;
 mod circle_merging_quadtree;
 mod column_range_filter;
@@ -20,6 +21,9 @@ mod time_projection;
 mod time_shift;
 mod vector_join;
 
+pub use band_neighborhood_aggregate::{
+    BandNeighborhoodAggregate, BandNeighborhoodAggregateError, BandNeighborhoodAggregateParams,
+};
 pub use circle_merging_quadtree::{
     InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
 };
