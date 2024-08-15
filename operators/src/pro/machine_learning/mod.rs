@@ -1,6 +1,7 @@
 use geoengine_datatypes::raster::RasterDataType;
 use snafu::Snafu;
 
+pub mod metadata_from_file;
 pub mod onnx;
 
 #[derive(Debug, Snafu)]

@@ -8,6 +8,7 @@ use std::str::FromStr;
 pub mod datasets;
 pub mod ebv;
 pub mod layers;
+pub mod machine_learning;
 pub mod plots;
 pub mod projects;
 pub mod session;

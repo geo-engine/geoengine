@@ -1,6 +1,7 @@
 pub mod collections;
 pub mod dataset;
 pub mod error;
+pub mod machine_learning;
 pub mod operations;
 pub mod plots;
 pub mod primitives;

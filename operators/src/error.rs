@@ -3,6 +3,7 @@ use crate::util::statistics::StatisticsError;
 use bb8_postgres::bb8;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
+use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_datatypes::primitives::{FeatureDataType, TimeInterval};
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
@@ -162,6 +163,15 @@ pub enum Error {
     InvalidDatasetSpec {
         name: String,
         source: serde_json::Error,
+    },
+
+    UnknownMlModelName {
+        name: MlModelName,
+    },
+
+    CannotResolveMlModelName {
+        name: MlModelName,
+        source: Box<dyn ErrorSource>,
     },
 
     WorkerThread {

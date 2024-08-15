@@ -3,6 +3,7 @@ pub mod contexts;
 pub mod datasets;
 pub mod error;
 pub mod layers;
+pub mod machine_learning;
 pub mod projects;
 #[cfg(not(feature = "pro"))]
 pub mod server;
