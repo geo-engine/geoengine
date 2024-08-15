@@ -4,7 +4,7 @@ use crate::contexts::{
     Migration0003GbifConfig, Migration0004DatasetListingProviderPrio,
     Migration0005GbifColumnSelection, Migration0006EbvProvider, Migration0007OwnerRole,
     Migration0008BandNames, Migration0009OidcTokens, Migration0010S2StacTimeBuffers,
-    Migration0011RemoveXgb, Migration0012MultibandColorizer
+    Migration0011RemoveXgb, Migration0012MultibandColorizer,
 };
 use crate::pro::contexts::migrations::database_migration::NoProMigrationImpl;
 
