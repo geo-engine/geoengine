@@ -354,7 +354,6 @@ pub enum ColorizerTypeDbType {
     LinearGradient,
     LogarithmicGradient,
     Palette,
-    Rgba,
 }
 
 impl From<&Colorizer> for ColorizerDbType {
@@ -407,14 +406,9 @@ impl From<&Colorizer> for ColorizerDbType {
                 under_color: None,
                 default_color: Some(*default_color),
             },
-            Colorizer::Rgba => ColorizerDbType {
-                r#type: ColorizerTypeDbType::Rgba,
-                breakpoints: None,
-                no_data_color: None,
-                over_color: None,
-                under_color: None,
-                default_color: None,
-            },
+            Colorizer::Rgba => unreachable!(
+                "only used temporally for multiband colorizer, not part of api and not stored"
+            ),
         }
     }
 }
@@ -465,14 +459,6 @@ impl TryFrom<ColorizerDbType> for Colorizer {
                 no_data_color,
                 default_color,
             )?),
-            ColorizerDbType {
-                r#type: ColorizerTypeDbType::Rgba,
-                breakpoints: None,
-                no_data_color: None,
-                over_color: None,
-                under_color: None,
-                default_color: None,
-            } => Ok(Self::Rgba),
             _ => Err(Error::UnexpectedInvalidDbTypeConversion),
         }
     }

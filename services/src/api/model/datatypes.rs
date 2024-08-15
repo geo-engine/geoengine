@@ -1486,8 +1486,6 @@ pub enum Colorizer {
         no_data_color: RgbaColor,
         default_color: RgbaColor,
     },
-    #[schema(title = "RgbaColorizer")]
-    Rgba,
 }
 
 impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
@@ -1530,7 +1528,9 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 no_data_color: no_data_color.into(),
                 default_color: default_color.into(),
             },
-            geoengine_datatypes::operations::image::Colorizer::Rgba => Self::Rgba,
+            geoengine_datatypes::operations::image::Colorizer::Rgba => unreachable!(
+                "only used temporally for multiband colorizer, not part of api and not stored"
+            ),
         }
     }
 }
@@ -1568,7 +1568,6 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
                 no_data_color: no_data_color.into(),
                 default_color: default_color.into(),
             },
-            Colorizer::Rgba => Self::Rgba,
         }
     }
 }
