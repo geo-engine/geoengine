@@ -40,7 +40,7 @@ where
         Box::new(ProMigrationImpl::from(Migration0009OidcTokens)),
         Box::new(ProMigrationImpl::from(Migration0010S2StacTimeBuffers)),
         Box::new(ProMigrationImpl::from(Migration0011RemoveXgb)),
-        Box::new(NoProMigrationImpl::from(Migration0009MultibandColorizer)),
+        Box::new(NoProMigrationImpl::from(Migration0012MultibandColorizer)),
     ]
 }
 

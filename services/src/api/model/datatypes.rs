@@ -1583,6 +1583,7 @@ pub enum RasterColorizer {
         band_colorizer: Colorizer,
     },
     #[serde(rename_all = "camelCase")]
+    #[schema(title = "MultiBandRasterColorizer")]
     MultiBand {
         /// The band index of the red channel.
         red_band: u32,
