@@ -1,4 +1,6 @@
-use crate::adapters::sparse_tiles_fill_adapter::FillerTileCacheExpirationStrategy;
+use crate::adapters::sparse_tiles_fill_adapter::{
+    FillerTileCacheExpirationStrategy, FillerTimeBounds,
+};
 use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor};
 use crate::error;
@@ -177,6 +179,7 @@ where
         let global_geo_transform = self.current_tile_spec.global_geo_transform;
         let tile_shape = self.current_tile_spec.tile_size_in_pixels;
         let num_bands = self.bands.len() as u32;
+        let query_time_bounds = self.query_rect_to_answer.time_interval;
 
         let s = self.filter_map(|x| async move {
             match x {
@@ -193,6 +196,7 @@ where
             global_geo_transform,
             tile_shape,
             cache_expiration,
+            FillerTimeBounds::from(query_time_bounds), // operator should at least fill the query rect. Adapter will handle overflow at start / end gracefully.
         );
         s_filled.boxed()
     }

@@ -35,7 +35,7 @@ pub type MaterializedRasterTile3D<T> = MaterializedRasterTile<GridShape3D, T>;
 pub struct BaseTile<G> {
     /// The `TimeInterval` where this tile is valid.
     pub time: TimeInterval,
-    /// The tile position is the position of the tile in the gird of tiles with origin at the origin of the global_geo_transform.
+    /// The tile position is the position of the tile in the gird of tiles with origin at the origin of the `global_geo_transform`.
     /// This is NOT a pixel position inside the tile.
     pub tile_position: GridIdx2D,
     // the band of the tile, relevant for multi-band raster

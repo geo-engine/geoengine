@@ -6,16 +6,16 @@ use crate::error::Result;
 use super::database_migration::{DatabaseVersion, Migration};
 
 /// This migration adds the multiband raster colorizer
-pub struct Migration0009MultibandColorizer;
+pub struct Migration0012MultibandColorizer;
 
 #[async_trait]
-impl Migration for Migration0009MultibandColorizer {
+impl Migration for Migration0012MultibandColorizer {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some("0008_band_names".into())
+        Some("0011_remove_xgb".into())
     }
 
     fn version(&self) -> DatabaseVersion {
-        "0009_multiband_colorizer".into()
+        "0012_multiband_colorizer".into()
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {

@@ -774,14 +774,14 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn update_layers(app_ctx: PostgresContext<NoTls>) {
-        async fn update_and_load_latest<Tls: std::fmt::Debug>(
+        async fn update_and_load_latest<Tls>(
             app_ctx: &PostgresContext<Tls>,
             session: &SimpleSession,
             project_id: ProjectId,
             update: UpdateProject,
         ) -> Vec<ProjectLayer>
         where
-            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + std::fmt::Debug + 'static,
             <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
             <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
             <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
@@ -931,14 +931,14 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn update_plots(app_ctx: PostgresContext<NoTls>) {
-        async fn update_and_load_latest<Tls: std::fmt::Debug>(
+        async fn update_and_load_latest<Tls>(
             app_ctx: &PostgresContext<Tls>,
             session: &SimpleSession,
             project_id: ProjectId,
             update: UpdateProject,
         ) -> Vec<Plot>
         where
-            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + std::fmt::Debug + 'static,
             <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
             <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
             <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,

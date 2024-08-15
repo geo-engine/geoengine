@@ -8,135 +8,10 @@ use std::collections::HashMap;
 use std::future::Future;
 use tokio_postgres::NoTls;
 use utoipa::openapi::path::{Parameter, ParameterIn};
-use utoipa::openapi::schema::AdditionalProperties;
 use utoipa::openapi::{
-    Components, KnownFormat, OpenApi, PathItemType, Ref, RefOr, Response, Schema, SchemaFormat,
-    SchemaType,
+    Components, KnownFormat, OpenApi, PathItemType, RefOr, Schema, SchemaFormat, SchemaType,
 };
 use uuid::Uuid;
-
-/// Recursively checks that schemas referenced in the given schema object exist in the provided map.
-fn can_resolve_schema(schema: &RefOr<Schema>, components: &Components) {
-    match schema {
-        RefOr::Ref(reference) => {
-            can_resolve_reference(reference, components);
-        }
-        RefOr::T(concrete) => match concrete {
-            Schema::Array(arr) => {
-                can_resolve_schema(arr.items.as_ref(), components);
-            }
-            Schema::Object(obj) => {
-                for property in obj.properties.values() {
-                    can_resolve_schema(property, components);
-                }
-                if let Some(additional_properties) = &obj.additional_properties {
-                    if let AdditionalProperties::RefOr(properties_schema) =
-                        additional_properties.as_ref()
-                    {
-                        can_resolve_schema(properties_schema, components);
-                    }
-                }
-            }
-            Schema::OneOf(oo) => {
-                for item in &oo.items {
-                    can_resolve_schema(item, components);
-                }
-            }
-            Schema::AllOf(ao) => {
-                for item in &ao.items {
-                    can_resolve_schema(item, components);
-                }
-            }
-            _ => panic!("Unknown schema type"),
-        },
-    }
-}
-
-/// Recursively checks that schemas referenced in the given response object exist in the provided map.
-fn can_resolve_response(response: &RefOr<Response>, components: &Components) {
-    match response {
-        RefOr::Ref(reference) => {
-            can_resolve_reference(reference, components);
-        }
-        RefOr::T(concrete) => {
-            for content in concrete.content.values() {
-                can_resolve_schema(&content.schema, components);
-            }
-        }
-    }
-}
-
-/// Checks that the given reference can be resolved using the provided map.
-fn can_resolve_reference(reference: &Ref, components: &Components) {
-    const SCHEMA_REF_PREFIX: &str = "#/components/schemas/";
-    const RESPONSE_REF_PREFIX: &str = "#/components/responses/";
-
-    if reference.ref_location.starts_with(SCHEMA_REF_PREFIX) {
-        let schema_name = &reference.ref_location[SCHEMA_REF_PREFIX.len()..];
-
-        match components.schemas.get(schema_name) {
-            None => assert!(
-                components.schemas.contains_key(schema_name),
-                "Referenced the unknown schema `{schema_name}`"
-            ),
-            Some(resolved) => can_resolve_schema(resolved, components),
-        }
-    } else if reference.ref_location.starts_with(RESPONSE_REF_PREFIX) {
-        let response_name = &reference.ref_location[RESPONSE_REF_PREFIX.len()..];
-
-        match components.responses.get(response_name) {
-            None => assert!(
-                components.responses.contains_key(response_name),
-                "Referenced the unknown response `{response_name}`"
-            ),
-            Some(resolved) => can_resolve_response(resolved, components),
-        }
-    } else {
-        panic!("Invalid reference type");
-    }
-}
-
-/// Loops through all registered HTTP handlers and ensures that the referenced schemas
-/// (inside of request bodies, parameters or responses) exist and can be resolved.
-///
-/// # Panics
-///
-/// Panics if a referenced schema cannot be resolved.
-///
-pub fn can_resolve_api(api: OpenApi) {
-    let components = api.components.expect("api has at least one component");
-
-    for path_item in api.paths.paths.into_values() {
-        for operation in path_item.operations.into_values() {
-            if let Some(request_body) = operation.request_body {
-                for content in request_body.content.into_values() {
-                    can_resolve_schema(&content.schema, &components);
-                }
-            }
-
-            if let Some(parameters) = operation.parameters {
-                for parameter in parameters {
-                    if let Some(schema) = parameter.schema {
-                        can_resolve_schema(&schema, &components);
-                    }
-                }
-            }
-
-            for response in operation.responses.responses.into_values() {
-                match response {
-                    RefOr::Ref(reference) => {
-                        can_resolve_reference(&reference, &components);
-                    }
-                    RefOr::T(concrete) => {
-                        for content in concrete.content.into_values() {
-                            can_resolve_schema(&content.schema, &components);
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 pub struct RunnableExample<'a, C, F, Fut>
 where
@@ -197,7 +72,7 @@ where
         match ref_or {
             RefOr::Ref(reference) => {
                 const SCHEMA_REF_PREFIX_LEN: usize = "#/components/schemas/".len();
-                can_resolve_reference(reference, self.components);
+                //can_resolve_reference(reference, self.components); checked in can_resolve_api
                 let schema_name = &reference.ref_location[SCHEMA_REF_PREFIX_LEN..];
                 self.resolve_schema(
                     self.components
@@ -392,8 +267,8 @@ pub async fn can_run_examples<F, Fut>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::model::services::Volume;
     use crate::contexts::SimpleApplicationContext;
-    use crate::datasets::upload::Volume;
     use crate::ge_context;
     use crate::util::server::{configure_extractors, render_404, render_405};
     use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
@@ -402,227 +277,10 @@ mod tests {
     use utoipa::openapi::path::{OperationBuilder, ParameterBuilder, PathItemBuilder};
     use utoipa::openapi::request_body::RequestBodyBuilder;
     use utoipa::openapi::{
-        AllOfBuilder, ArrayBuilder, ComponentsBuilder, ContentBuilder, Object, ObjectBuilder,
-        OneOfBuilder, OpenApiBuilder, PathItemType, PathsBuilder, ResponseBuilder,
+        ComponentsBuilder, ContentBuilder, Object, ObjectBuilder, OpenApiBuilder, PathItemType,
+        PathsBuilder,
     };
     use utoipa::ToSchema;
-
-    #[test]
-    #[should_panic(expected = "MissingSchema")]
-    fn detects_missing_array_ref() {
-        can_resolve_schema(
-            &RefOr::T(
-                ArrayBuilder::new()
-                    .items(Ref::from_schema_name("MissingSchema"))
-                    .into(),
-            ),
-            &Components::new(),
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "MissingSchema")]
-    fn detects_missing_object_ref() {
-        can_resolve_schema(
-            &RefOr::T(
-                ObjectBuilder::new()
-                    .property("Prop", Ref::from_schema_name("MissingSchema"))
-                    .into(),
-            ),
-            &Components::new(),
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "MissingSchema")]
-    fn detects_missing_oneof_ref() {
-        can_resolve_schema(
-            &RefOr::T(
-                OneOfBuilder::new()
-                    .item(Ref::from_schema_name("MissingSchema"))
-                    .into(),
-            ),
-            &Components::new(),
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "MissingSchema")]
-    fn detects_missing_allof_ref() {
-        can_resolve_schema(
-            &RefOr::T(
-                AllOfBuilder::new()
-                    .item(Ref::from_schema_name("MissingSchema"))
-                    .into(),
-            ),
-            &Components::new(),
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "Inner")]
-    fn detects_missing_nested_schema() {
-        can_resolve_reference(
-            &Ref::from_schema_name("Outer"),
-            &ComponentsBuilder::new()
-                .schema("Outer", RefOr::Ref(Ref::from_schema_name("Inner")))
-                .into(),
-        );
-    }
-
-    #[test]
-    fn successfull_api_validation() {
-        let api: OpenApi = OpenApiBuilder::new()
-            .paths(
-                PathsBuilder::new().path(
-                    "asdf",
-                    PathItemBuilder::new()
-                        .operation(
-                            PathItemType::Post,
-                            OperationBuilder::new()
-                                .parameter(
-                                    ParameterBuilder::new()
-                                        .schema(Some(Ref::from_schema_name("Schema1"))),
-                                )
-                                .request_body(Some(
-                                    RequestBodyBuilder::new()
-                                        .content(
-                                            "application/json",
-                                            ContentBuilder::new()
-                                                .schema(Ref::from_schema_name("Schema2"))
-                                                .into(),
-                                        )
-                                        .into(),
-                                ))
-                                .response(
-                                    "200",
-                                    ResponseBuilder::new().content(
-                                        "application/json",
-                                        ContentBuilder::new()
-                                            .schema(Ref::from_schema_name("Schema3"))
-                                            .into(),
-                                    ),
-                                ),
-                        )
-                        .into(),
-                ),
-            )
-            .components(Some(
-                ComponentsBuilder::new()
-                    .schemas_from_iter([
-                        ("Schema1", Schema::default()),
-                        ("Schema2", Schema::default()),
-                        ("Schema3", Schema::default()),
-                    ])
-                    .into(),
-            ))
-            .into();
-        can_resolve_api(api);
-    }
-
-    #[test]
-    #[should_panic(expected = "MissingSchema")]
-    fn detect_unresolvable_request_body() {
-        let api: OpenApi = OpenApiBuilder::new()
-            .paths(
-                PathsBuilder::new().path(
-                    "asdf",
-                    PathItemBuilder::new()
-                        .operation(
-                            PathItemType::Post,
-                            OperationBuilder::new().request_body(Some(
-                                RequestBodyBuilder::new()
-                                    .content(
-                                        "application/json",
-                                        ContentBuilder::new()
-                                            .schema(Ref::from_schema_name("MissingSchema"))
-                                            .into(),
-                                    )
-                                    .into(),
-                            )),
-                        )
-                        .into(),
-                ),
-            )
-            .components(Some(
-                ComponentsBuilder::new()
-                    .schemas_from_iter([
-                        ("Schema1", Schema::default()),
-                        ("Schema2", Schema::default()),
-                        ("Schema3", Schema::default()),
-                    ])
-                    .into(),
-            ))
-            .into();
-        can_resolve_api(api);
-    }
-
-    #[test]
-    #[should_panic(expected = "MissingSchema")]
-    fn detect_unresolvable_parameter() {
-        let api: OpenApi = OpenApiBuilder::new()
-            .paths(
-                PathsBuilder::new().path(
-                    "asdf",
-                    PathItemBuilder::new()
-                        .operation(
-                            PathItemType::Post,
-                            OperationBuilder::new().parameter(
-                                ParameterBuilder::new()
-                                    .schema(Some(Ref::from_schema_name("MissingSchema"))),
-                            ),
-                        )
-                        .into(),
-                ),
-            )
-            .components(Some(
-                ComponentsBuilder::new()
-                    .schemas_from_iter([
-                        ("Schema1", Schema::default()),
-                        ("Schema2", Schema::default()),
-                        ("Schema3", Schema::default()),
-                    ])
-                    .into(),
-            ))
-            .into();
-        can_resolve_api(api);
-    }
-
-    #[test]
-    #[should_panic(expected = "MissingSchema")]
-    fn detect_unresolvable_response() {
-        let api: OpenApi = OpenApiBuilder::new()
-            .paths(
-                PathsBuilder::new().path(
-                    "asdf",
-                    PathItemBuilder::new()
-                        .operation(
-                            PathItemType::Post,
-                            OperationBuilder::new().response(
-                                "200",
-                                ResponseBuilder::new().content(
-                                    "application/json",
-                                    ContentBuilder::new()
-                                        .schema(Ref::from_schema_name("MissingSchema"))
-                                        .into(),
-                                ),
-                            ),
-                        )
-                        .into(),
-                ),
-            )
-            .components(Some(
-                ComponentsBuilder::new()
-                    .schemas_from_iter([
-                        ("Schema1", Schema::default()),
-                        ("Schema2", Schema::default()),
-                        ("Schema3", Schema::default()),
-                    ])
-                    .into(),
-            ))
-            .into();
-        can_resolve_api(api);
-    }
 
     #[derive(Deserialize)]
     struct DummyQueryParams {
@@ -728,7 +386,7 @@ mod tests {
 
     #[ge_context::test(expect_panic = "BodyDeserializeError")]
     async fn detects_bodydeserializeerror(app_ctx: PostgresContext<NoTls>) {
-        run_dummy_example(app_ctx, json!({"name": "note-path_field_missing"})).await;
+        run_dummy_example(app_ctx, json!({"path": "note-name_field_missing"})).await;
     }
 
     #[ge_context::test]

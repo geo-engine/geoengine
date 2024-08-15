@@ -464,14 +464,14 @@ mod tests {
         let mut times: Vec<TimeInterval> = vec![TimeInterval::new_unchecked(0, 10); 2];
         times.append(&mut vec![TimeInterval::new_unchecked(10, 20); 2]);
 
-        let data = vec![
+        let data = [
             vec![0, 0, 0, 0, 8, 9, 0, 0, 0],
             vec![0, 0, 0, 10, 11, 0, 0, 0, 0],
             vec![0, 0, 0, 0, 10, 10, 0, 0, 0],
             vec![0, 0, 0, 9, 7, 0, 0, 0, 0],
         ];
 
-        let valid = vec![
+        let valid = [
             vec![false, false, false, false, true, true, false, false, false],
             vec![false, false, false, true, true, false, false, false, false],
             vec![false, false, false, false, true, true, false, false, false],

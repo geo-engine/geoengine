@@ -3,7 +3,8 @@ use crate::contexts::{
     Migration0000Initial, Migration0001RasterStacks, Migration0002DatasetListingProvider,
     Migration0003GbifConfig, Migration0004DatasetListingProviderPrio,
     Migration0005GbifColumnSelection, Migration0006EbvProvider, Migration0007OwnerRole,
-    Migration0008BandNames, Migration0009MultibandColorizer,
+    Migration0008BandNames, Migration0009OidcTokens, Migration0010S2StacTimeBuffers,
+    Migration0011RemoveXgb, Migration0012MultibandColorizer
 };
 use crate::pro::contexts::migrations::database_migration::NoProMigrationImpl;
 
@@ -14,6 +15,9 @@ mod database_migration;
 mod migration_0000_initial;
 mod migration_0004_dataset_listing_provider_prio;
 mod migration_0007_owner_role;
+mod migration_0009_oidc_tokens;
+mod migration_0010_s2_stack_time_buffers;
+mod migration_0011_remove_xgb;
 
 /// Get all regular and pro migrations. This function wraps all regular migrations into a pro migration.
 pub fn pro_migrations() -> Vec<Box<dyn Migration>>
@@ -33,6 +37,9 @@ where
         Box::new(NoProMigrationImpl::from(Migration0006EbvProvider)),
         Box::new(NoProMigrationImpl::from(Migration0007OwnerRole)),
         Box::new(NoProMigrationImpl::from(Migration0008BandNames)),
+        Box::new(ProMigrationImpl::from(Migration0009OidcTokens)),
+        Box::new(ProMigrationImpl::from(Migration0010S2StacTimeBuffers)),
+        Box::new(ProMigrationImpl::from(Migration0011RemoveXgb)),
         Box::new(NoProMigrationImpl::from(Migration0009MultibandColorizer)),
     ]
 }

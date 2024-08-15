@@ -1,5 +1,6 @@
 use crate::{
     api::model::{
+        operators::{GdalLoadingInfoTemporalSlice, GdalMetaDataList},
         responses::datasets::{errors::*, DatasetNameResponse},
         services::{
             AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
@@ -10,7 +11,9 @@ use crate::{
     datasets::{
         listing::{DatasetListOptions, DatasetProvider},
         storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
-        upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName},
+        upload::{
+            AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName, Volumes,
+        },
         DatasetName,
     },
     error::{self, Result},
@@ -28,7 +31,9 @@ use gdal::{
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
-    primitives::{CacheTtlSeconds, FeatureDataType, Measurement, VectorQueryRectangle},
+    primitives::{
+        CacheTtlSeconds, FeatureDataType, Measurement, TimeInterval, VectorQueryRectangle,
+    },
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
@@ -37,7 +42,10 @@ use geoengine_operators::{
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
         OgrSourceErrorSpec, OgrSourceTimeFormat,
     },
-    util::gdal::{gdal_open_dataset, gdal_open_dataset_ex},
+    util::gdal::{
+        gdal_open_dataset, gdal_open_dataset_ex, gdal_parameters_from_dataset,
+        raster_descriptor_from_dataset,
+    },
 };
 use snafu::ResultExt;
 use std::{
@@ -53,12 +61,15 @@ where
 {
     cfg.service(
         web::scope("/dataset")
-            .service(web::resource("/suggest").route(web::get().to(suggest_meta_data_handler::<C>)))
+            .service(
+                web::resource("/suggest").route(web::post().to(suggest_meta_data_handler::<C>)),
+            )
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
                 web::resource("/{dataset}/loadingInfo")
-                    .route(web::get().to(get_loading_info_handler::<C>)),
+                    .route(web::get().to(get_loading_info_handler::<C>))
+                    .route(web::put().to(update_loading_info_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}/symbology")
@@ -88,7 +99,7 @@ where
         (status = 200, description = "OK", body = [Volume],
             example = json!([
                 {
-                    "id": "f6aa9f3d-a211-43e8-9b91-b23ab9632791",
+                    "name": "test_data",
                     "path": "./test_data/"
                 }
             ])
@@ -316,11 +327,56 @@ pub async fn get_loading_info_handler<C: ApplicationContext>(
     Ok(web::Json(dataset))
 }
 
+/// Updates the dataset's loading info
+#[utoipa::path(
+    tag = "Datasets",
+    put,
+    path = "/dataset/{dataset}/loadingInfo",
+    request_body = MetaDataDefinition,
+    responses(
+        (status = 200, description = "OK"),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn update_loading_info_handler<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    dataset: web::Path<DatasetName>,
+    meta_data: web::Json<MetaDataDefinition>,
+) -> Result<HttpResponse> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let real_dataset = dataset.into_inner();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id.ok_or(error::Error::UnknownDatasetName {
+        dataset_name: real_dataset.to_string(),
+    })?;
+
+    session_ctx
+        .update_dataset_loading_info(dataset_id, &meta_data.into_inner().into())
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
 /// Updates the dataset's symbology
 #[utoipa::path(
     tag = "Datasets",
     put,
     path = "/dataset/{dataset}/symbology",
+    request_body = Symbology,
     responses(
         (status = 200, description = "OK"),
         (status = 400, description = "Bad request", body = ErrorResponse),
@@ -721,7 +777,7 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
     let create = create.into_inner();
 
     let main_file_path = upload.id.root_path()?.join(&create.main_file);
-    let meta_data = auto_detect_meta_data_definition(&main_file_path, &create.layer_name)?;
+    let meta_data = auto_detect_vector_meta_data_definition(&main_file_path, &create.layer_name)?;
     let meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
     let properties = AddDataset {
@@ -743,8 +799,9 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
 /// Tries to automatically detect the main file and layer name if not specified.
 #[utoipa::path(
     tag = "Datasets",
-    get,
+    post,
     path = "/dataset/suggest",
+    request_body = SuggestMetaData,
     responses(
         (status = 200, description = "OK", body = MetaDataSuggestion,
             example = json!({
@@ -814,9 +871,6 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
         )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
-    params(
-        SuggestMetaData
-    ),
     security(
         ("session_token" = [])
     )
@@ -824,36 +878,83 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
 pub async fn suggest_meta_data_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    suggest: web::Query<SuggestMetaData>,
+    suggest: web::Json<SuggestMetaData>,
 ) -> Result<impl Responder> {
-    let upload = app_ctx
-        .session_context(session)
-        .db()
-        .load_upload(suggest.upload)
-        .await?;
-
     let suggest = suggest.into_inner();
 
-    let main_file = suggest
-        .main_file
-        .or_else(|| suggest_main_file(&upload))
-        .ok_or(error::Error::NoMainFileCandidateFound)?;
+    let (root_path, main_file) = match suggest.data_path {
+        DataPath::Upload(upload) => {
+            let upload = app_ctx
+                .session_context(session)
+                .db()
+                .load_upload(upload)
+                .await?;
+
+            let main_file = suggest
+                .main_file
+                .or_else(|| suggest_main_file(&upload))
+                .ok_or(error::Error::NoMainFileCandidateFound)?;
+
+            let root_path = upload.id.root_path()?;
+
+            (root_path, main_file)
+        }
+        DataPath::Volume(volume) => {
+            let main_file = suggest
+                .main_file
+                .ok_or(error::Error::NoMainFileCandidateFound)?;
+
+            let volumes = Volumes::default();
+
+            let root_path = volumes.volumes.iter().find(|v| v.name == volume).ok_or(
+                crate::error::Error::UnknownVolumeName {
+                    volume_name: volume.0,
+                },
+            )?;
+
+            (root_path.path.clone(), main_file)
+        }
+    };
 
     let layer_name = suggest.layer_name;
 
-    let main_file_path = path_with_base_path(&upload.id.root_path()?, Path::new(&main_file))?;
+    let main_file_path = path_with_base_path(&root_path, Path::new(&main_file))?;
 
-    let meta_data = auto_detect_meta_data_definition(&main_file_path, &layer_name)?;
+    let dataset = gdal_open_dataset(&main_file_path).context(error::Operator)?;
 
-    let layer_name = meta_data.loading_info.layer_name.clone();
+    if dataset.layer_count() > 0 {
+        let meta_data = auto_detect_vector_meta_data_definition(&main_file_path, &layer_name)?;
 
-    let meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
+        let layer_name = meta_data.loading_info.layer_name.clone();
 
-    Ok(web::Json(MetaDataSuggestion {
-        main_file,
-        layer_name,
-        meta_data: meta_data.into(),
-    }))
+        let meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
+
+        Ok(web::Json(MetaDataSuggestion {
+            main_file,
+            layer_name,
+            meta_data: meta_data.into(),
+        }))
+    } else {
+        let mut gdal_params =
+            gdal_parameters_from_dataset(&dataset, 1, &main_file_path, None, None)?;
+        if let Ok(relative_path) = gdal_params.file_path.strip_prefix(root_path) {
+            gdal_params.file_path = relative_path.to_path_buf();
+        }
+        let result_descriptor = raster_descriptor_from_dataset(&dataset, 1)?;
+
+        Ok(web::Json(MetaDataSuggestion {
+            main_file,
+            layer_name: String::new(),
+            meta_data: MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
+                result_descriptor: result_descriptor.into(),
+                params: vec![GdalLoadingInfoTemporalSlice {
+                    time: TimeInterval::default().into(),
+                    params: Some(gdal_params.into()),
+                    cache_ttl: CacheTtlSeconds::default().into(),
+                }],
+            }),
+        }))
+    }
 }
 
 fn suggest_main_file(upload: &Upload) -> Option<String> {
@@ -891,15 +992,21 @@ fn select_layer_from_dataset<'a>(
     }
 }
 
-fn auto_detect_meta_data_definition(
+fn auto_detect_vector_meta_data_definition(
     main_file_path: &Path,
     layer_name: &Option<String>,
 ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>> {
-    // TODO: handle Raster datasets as well
-
     let dataset = gdal_open_dataset(main_file_path).context(error::Operator)?;
 
-    let layer = select_layer_from_dataset(&dataset, layer_name)?;
+    auto_detect_vector_meta_data_definition_from_dataset(&dataset, main_file_path, layer_name)
+}
+
+fn auto_detect_vector_meta_data_definition_from_dataset(
+    dataset: &Dataset,
+    main_file_path: &Path,
+    layer_name: &Option<String>,
+) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>> {
+    let layer = select_layer_from_dataset(dataset, layer_name)?;
 
     let columns_map = detect_columns(&layer);
     let columns_vecs = column_map_to_column_vecs(&columns_map);
@@ -1758,7 +1865,7 @@ mod tests {
 
     #[test]
     fn it_auto_detects() {
-        let meta_data = auto_detect_meta_data_definition(
+        let meta_data = auto_detect_vector_meta_data_definition(
             test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp"),
             &None,
         )
@@ -1856,7 +1963,7 @@ mod tests {
 
     #[test]
     fn it_detects_time_json() {
-        let meta_data = auto_detect_meta_data_definition(
+        let meta_data = auto_detect_vector_meta_data_definition(
             test_data!("vector/data/points_with_iso_time.json"),
             &None,
         )
@@ -1935,7 +2042,7 @@ mod tests {
 
     #[test]
     fn it_detects_time_gpkg() {
-        let meta_data = auto_detect_meta_data_definition(
+        let meta_data = auto_detect_vector_meta_data_definition(
             test_data!("vector/data/points_with_time.gpkg"),
             &None,
         )
@@ -2014,9 +2121,11 @@ mod tests {
 
     #[test]
     fn it_detects_time_shp() {
-        let meta_data =
-            auto_detect_meta_data_definition(test_data!("vector/data/points_with_date.shp"), &None)
-                .unwrap();
+        let meta_data = auto_detect_vector_meta_data_definition(
+            test_data!("vector/data/points_with_date.shp"),
+            &None,
+        )
+        .unwrap();
 
         let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
@@ -2091,7 +2200,7 @@ mod tests {
 
     #[test]
     fn it_detects_time_start_duration() {
-        let meta_data = auto_detect_meta_data_definition(
+        let meta_data = auto_detect_vector_meta_data_definition(
             test_data!("vector/data/points_with_iso_start_duration.json"),
             &None,
         )
@@ -2163,7 +2272,8 @@ mod tests {
     #[test]
     fn it_detects_csv() {
         let meta_data =
-            auto_detect_meta_data_definition(test_data!("vector/data/lonlat.csv"), &None).unwrap();
+            auto_detect_vector_meta_data_definition(test_data!("vector/data/lonlat.csv"), &None)
+                .unwrap();
 
         let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
@@ -2388,10 +2498,15 @@ mod tests {
 
         assert_eq!(&upload_content, body[0].1);
 
-        let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/suggest?upload={}", upload.id))
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset/suggest")
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(SuggestMetaData {
+                data_path: DataPath::Upload(upload.id),
+                layer_name: None,
+                main_file: None,
+            });
         let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
@@ -2646,6 +2761,87 @@ mod tests {
                 "type": "OgrMetaData"
             })
         );
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_updates_loading_info(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = ctx.session().id();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
+        let ds = AddDataset {
+            name: None,
+            display_name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+        };
+
+        let meta = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        });
+
+        let db = ctx.db();
+        let DatasetIdAndName { id, name: _ } = db.add_dataset(ds.into(), meta).await?;
+
+        let update = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: "foo.bar".into(),
+                layer_name: "baz".to_string(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor,
+            phantom: Default::default(),
+        });
+
+        let req = actix_web::test::TestRequest::put()
+            .uri(&format!("/dataset/{id}/loadingInfo"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(update.clone());
+
+        let res = send_test_request(req, app_ctx).await;
+        assert_eq!(res.status(), 200);
+
+        let loading_info = db.load_loading_info(&id).await.unwrap();
+
+        assert_eq!(loading_info, update);
 
         Ok(())
     }

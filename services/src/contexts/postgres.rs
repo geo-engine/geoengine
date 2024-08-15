@@ -1,9 +1,10 @@
 use super::migrations::{all_migrations, CurrentSchemaMigration, MigrationResult};
 use super::{initialize_database, ExecutionContextImpl, Session, SimpleApplicationContext};
 use crate::api::cli::{add_datasets_from_directory, add_providers_from_directory};
+use crate::api::model::services::Volume;
 use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId, SimpleSession};
 use crate::contexts::{GeoEngineDb, SessionContext};
-use crate::datasets::upload::{Volume, Volumes};
+use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
 use crate::layers::add_from_directory::{
@@ -382,7 +383,16 @@ where
     }
 
     fn volumes(&self) -> Result<Vec<Volume>> {
-        Ok(self.context.volumes.volumes.clone())
+        Ok(self
+            .context
+            .volumes
+            .volumes
+            .iter()
+            .map(|v| Volume {
+                name: v.name.0.clone(),
+                path: Some(v.path.to_string_lossy().to_string()),
+            })
+            .collect())
     }
 
     fn session(&self) -> &Self::Session {
@@ -491,10 +501,12 @@ mod tests {
         ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, RasterSymbology,
         STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
     };
+    use crate::util::encryption::U96;
     use crate::util::postgres::{assert_sql_type, DatabaseConnectionConfig};
     use crate::util::tests::register_ndvi_workflow_helper;
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
+    use aes_gcm::aead::generic_array::arr;
     use bb8_postgres::tokio_postgres::NoTls;
     use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
@@ -4497,6 +4509,15 @@ mod tests {
                     }],
                 }),
             ],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "bytea",
+            [U96::from(
+                arr![u8; 13, 227, 191, 247, 123, 193, 214, 165, 185, 37, 101, 24],
+            )],
         )
         .await;
 

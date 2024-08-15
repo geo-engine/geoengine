@@ -664,6 +664,7 @@ mod tests {
 
     use super::*;
     use crate::contexts::PostgresContext;
+    use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::ge_context;
     use crate::{
         contexts::SimpleApplicationContext,
@@ -718,7 +719,8 @@ mod tests {
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        ctx.db()
+        let provider_id = ctx
+            .db()
             .add_layer_provider(
                 NetCdfCfDataProviderDefinition {
                     name: "test".to_string(),
@@ -786,6 +788,12 @@ mod tests {
         assert!(status["timeStarted"].is_string());
 
         assert!(is_empty(overview_folder.path()));
+
+        assert!(!ctx
+            .db()
+            .overviews_exist(provider_id, "dataset_m.nc")
+            .await
+            .unwrap());
     }
 
     #[ge_context::test]
