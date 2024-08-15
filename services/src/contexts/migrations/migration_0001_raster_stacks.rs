@@ -154,6 +154,7 @@ mod tests {
 
     use super::*;
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_migrates_result_descriptors_and_symbologies() -> Result<()> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;

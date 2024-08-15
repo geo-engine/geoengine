@@ -17,6 +17,8 @@ use crate::{error, util::Result};
 
 use super::abortable_query_execution;
 
+/// # Panics
+/// Panics if not three bands were queried.
 #[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
@@ -57,12 +59,12 @@ where
         -y_query_resolution, // TODO: negative, s.t. geo transform fits...
     );
 
-    let tile_template: Result<RasterTile2D<T>> = Ok(RasterTile2D::new_without_offset(
+    let tile_template: RasterTile2D<T> = RasterTile2D::new_without_offset(
         time.unwrap_or_default(),
         query_geo_transform,
         GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
         CacheHint::max_duration(),
-    ));
+    );
 
     let colorizer = match raster_colorizer {
         Some(RasterColorizer::MultiBand { .. }) => Colorizer::rgba(),
@@ -85,6 +87,7 @@ where
             blue_scale,
             ..
         }) => {
+            const RGB_CHANNEL_COUNT: usize = 3;
             let rgb_params = RgbParams {
                 red_min,
                 red_max,
@@ -96,11 +99,9 @@ where
                 blue_max,
                 blue_scale,
             };
-            const RGB_CHANNEL_COUNT: usize = 3;
-            let tile_template: Result<RasterTile2D<u32>> =
-                Ok(tile_template.unwrap().convert_data_type());
+            let tile_template: RasterTile2D<u32> = tile_template.convert_data_type();
             let output_tile = Box::pin(tile_stream.chunks(RGB_CHANNEL_COUNT).fold(
-                tile_template,
+                Ok(tile_template),
                 |raster2d, chunk| {
                     if chunk.len() != RGB_CHANNEL_COUNT {
                         // if there are not exactly N tiles, it should mean the last tile was an error and the chunker ended prematurely
@@ -139,7 +140,7 @@ where
             ))
         }
         _ => {
-            let output_tile = Box::pin(tile_stream.fold(tile_template, blit_tile));
+            let output_tile = Box::pin(tile_stream.fold(Ok(tile_template), blit_tile));
 
             let result =
                 abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;

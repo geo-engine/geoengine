@@ -352,7 +352,11 @@ async fn wms_map_handler<C: ApplicationContext>(
 
         let attributes = raster_colorizer.as_ref().map_or_else(
             || BandSelection::new_single(0),
-            |o| RasterColorizer::band_selection(o).try_into().unwrap(),
+            |o| {
+                RasterColorizer::band_selection(o)
+                    .try_into()
+                    .expect("conversion of usize to u32 succeeds for small band numbers")
+            },
         );
 
         let query_rect = RasterQueryRectangle {
