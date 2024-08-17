@@ -69,7 +69,7 @@ CREATE TYPE "Breakpoint" AS (
 );
 
 CREATE TYPE "ColorizerType" AS ENUM (
-    'LinearGradient', 'LogarithmicGradient', 'Palette', 'Rgba'
+    'LinearGradient', 'LogarithmicGradient', 'Palette'
 );
 
 CREATE TYPE "Colorizer" AS (
@@ -157,8 +157,7 @@ CREATE TYPE "RasterColorizer" AS (
     blue_band bigint,
     blue_min double precision,
     blue_max double precision,
-    blue_scale double precision,
-    no_data_color "RgbaColor"
+    blue_scale double precision
 );
 
 CREATE TYPE "RasterSymbology" AS (
