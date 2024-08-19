@@ -98,7 +98,7 @@ fn weights_matrix_schema(_gen: &mut SchemaGenerator) -> Schema {
     use schemars::schema::*;
     Schema::Object(SchemaObject {
         metadata: Some(Box::new(Metadata {
-            title: Some("Columns".to_owned()),
+            title: Some("Rows".to_owned()),
             ..Default::default()
         })),
         instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::Array))),
@@ -106,7 +106,7 @@ fn weights_matrix_schema(_gen: &mut SchemaGenerator) -> Schema {
             items: Some(SingleOrVec::Single(Box::new(Schema::Object(
                 SchemaObject {
                     metadata: Some(Box::new(Metadata {
-                        title: Some("Column".to_owned()),
+                        title: Some("Row".to_owned()),
                         ..Default::default()
                     })),
                     instance_type: Some(SingleOrVec::Single(Box::new(InstanceType::Array))),
@@ -157,9 +157,9 @@ impl NeighborhoodParams {
     fn dimensions(&self) -> GridShape2D {
         match self {
             Self::WeightsMatrix { weights } => {
-                let x_size = weights.len();
-                let y_size = weights.first().map_or(0, Vec::len);
-                GridShape2D::new([x_size, y_size])
+                let y_size = weights.len();
+                let x_size = weights.first().map_or(0, Vec::len);
+                GridShape2D::new([y_size, x_size])
             }
             Self::Rectangle { dimensions } => GridShape2D::new(*dimensions),
         }
