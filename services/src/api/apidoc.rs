@@ -411,7 +411,7 @@ mod tests {
 
     #[test]
     fn can_resolve_api() {
-        crate::util::openapi_examples::can_resolve_api(ApiDoc::openapi());
+        crate::util::openapi_visitors::can_resolve_api(&ApiDoc::openapi());
     }
 
     #[ge_context::test]
