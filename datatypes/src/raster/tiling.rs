@@ -1,16 +1,18 @@
 use super::{
     GeoTransform, GridBoundingBox2D, GridIdx, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
+    SpatialGridDefinition,
 };
 use crate::{
     primitives::{
-        AxisAlignedRectangle, RasterSpatialQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+        AxisAlignedRectangle, Coordinate2D, RasterSpatialQueryRectangle, SpatialPartition2D,
+        SpatialPartitioned,
     },
     raster::GridBounds,
     util::test::TestDefault,
 };
 use serde::{Deserialize, Serialize};
 
-/// The static parameters of a `TilingStrategy`
+/// The static parameters required to create a `TilingStrategy`
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingSpecification {
     pub tile_size_in_pixels: GridShape2D,
@@ -23,12 +25,29 @@ impl TilingSpecification {
         }
     }
 
-    /// create a `TilingStrategy` from self and pixel sizes
-    pub fn strategy(self, geo_transform: GeoTransform) -> TilingStrategy {
+    // TODO: maybe a field?
+    pub fn tiling_origin_reference(&self) -> Coordinate2D {
+        Coordinate2D::new(0., 0.)
+    }
+
+    /// create a `TilingStrategy` if the input and the reference are on the same grid.
+    pub fn strategy_exact(self, geo_transform: GeoTransform) -> Option<TilingStrategy> {
         debug_assert!(geo_transform.x_pixel_size() > 0.0);
         debug_assert!(geo_transform.y_pixel_size() < 0.0);
 
-        TilingStrategy::new(self.tile_size_in_pixels, geo_transform)
+        let tiling_geo_transform = GeoTransform::new(
+            self.tiling_origin_reference(),
+            geo_transform.x_pixel_size(),
+            geo_transform.y_pixel_size(),
+        );
+        if tiling_geo_transform.is_valid_pixel_edge(geo_transform.origin_coordinate()) {
+            Some(TilingStrategy::new(
+                self.tile_size_in_pixels,
+                tiling_geo_transform,
+            ))
+        } else {
+            None
+        }
     }
 
     pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
@@ -105,13 +124,6 @@ impl TilingStrategy {
             tile_size_in_pixels: tile_pixel_size,
             geo_transform,
         }
-    }
-
-    pub fn new_with_tiling_spec(
-        tiling_specification: TilingSpecification,
-        geo_transform: GeoTransform,
-    ) -> Self {
-        tiling_specification.strategy(geo_transform)
     }
 
     pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
@@ -220,10 +232,6 @@ impl TileInformation {
             -partition.size_y() / shape.axis_size_y() as f64,
         );
 
-        let _tiling_geotransform = real_geotransform.nearest_pixel_to_zero_based();
-
-        let _tiling_bounds = real_geotransform.shape_to_nearest_to_zero_based(&shape);
-
         Self {
             tile_size_in_pixels: shape,
             global_tile_position: [0, 0].into(),
@@ -296,6 +304,10 @@ impl TileInformation {
             self.global_geo_transform.x_pixel_size(),
             self.global_geo_transform.y_pixel_size(),
         )
+    }
+
+    pub fn spatial_grid_definition(&self) -> SpatialGridDefinition {
+        SpatialGridDefinition::new(self.global_geo_transform, self.global_pixel_bounds())
     }
 }
 

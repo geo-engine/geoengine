@@ -411,7 +411,7 @@ mod tests {
         adapters::QueryWrapper,
         engine::{
             MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
-            RasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
+            RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, WorkflowOperatorPath,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
@@ -425,8 +425,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [0, 4]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [0, 4]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -608,8 +610,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 4]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 4]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -708,8 +712,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
             bands: vec![
                 RasterBandDescriptor::new("mrs1 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs1 band2".to_string(), Measurement::Unitless),
@@ -722,8 +728,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
             bands: vec![
                 RasterBandDescriptor::new("mrs2 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs2 band2".to_string(), Measurement::Unitless),
@@ -999,8 +1007,11 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
+
             bands: vec![
                 RasterBandDescriptor::new("mrs1 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs1 band2".to_string(), Measurement::Unitless),
@@ -1013,8 +1024,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
             bands: vec![
                 RasterBandDescriptor::new("mrs2 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs2 band2".to_string(), Measurement::Unitless),
@@ -1521,8 +1534,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
             bands: vec![
                 RasterBandDescriptor::new("mrs1 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs1 band2".to_string(), Measurement::Unitless),
@@ -1536,8 +1551,9 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+            GeoTransform::test_default(),
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap()),
             bands: vec![RasterBandDescriptor::new(
                 "mrs2 band2".to_string(),
                 Measurement::Unitless,
@@ -1550,8 +1566,9 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+            GeoTransform::test_default(),
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap()),
             bands: vec![
                 RasterBandDescriptor::new("mrs3 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs3 band2".to_string(), Measurement::Unitless),

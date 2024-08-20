@@ -7,22 +7,23 @@ use crate::adapters::{
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterResultDescriptor, SingleRasterSource, SpatialGridDescriptor, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
-use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use geoengine_datatypes::primitives::{BandSelection, CacheHint, Coordinate2D};
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialResolution, TimeInstance,
     TimeInterval,
 };
 use geoengine_datatypes::raster::{
     Bilinear, ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridOrEmpty,
-    InterpolationAlgorithm, NearestNeighbor, Pixel, RasterTile2D, TileInformation,
-    TilingSpecification,
+    InterpolationAlgorithm, NearestNeighbor, Pixel, RasterTile2D, SpatialGridDefinition,
+    TileInformation, TilingSpecification,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -32,14 +33,15 @@ use snafu::{ensure, Snafu};
 #[serde(rename_all = "camelCase")]
 pub struct InterpolationParams {
     pub interpolation: InterpolationMethod,
-    pub output_resolution: InputResolution,
+    pub output_resolution: InterpolationResolution,
+    pub output_origin_reference: Option<Coordinate2D>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase", tag = "type")]
-pub enum InputResolution {
+pub enum InterpolationResolution {
     Resolution(SpatialResolution),
-    Fraction(f64), // FIXME: Must be > 1
+    Fraction(f64), // FIXME: Sould be >= 1 must be >=1/2?
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -52,10 +54,6 @@ pub enum InterpolationMethod {
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)), context(suffix(false)), module(error))]
 pub enum InterpolationError {
-    #[snafu(display(
-        "The input resolution was defined as `source` but the source resolution is unknown.",
-    ))]
-    UnknownInputResolution,
     #[snafu(display("The fraction used to interpolate must be >= 1, was {f}."))]
     FractionMustBeOneOrLarger { f: f64 },
     #[snafu(display("The output resolution must be higher than the input resolution."))]
@@ -83,56 +81,84 @@ impl RasterOperator for Interpolation {
 
         let initialized_sources = self.sources.initialize_sources(path, context).await?;
         let raster_source = initialized_sources.raster;
+        InitializedInterpolation::new_with_source_and_params(
+            name,
+            raster_source,
+            self.params,
+            context.tiling_specification(),
+        )
+        .map(InitializedRasterOperator::boxed)
+    }
+
+    span_fn!(Interpolation);
+}
+
+pub struct InitializedInterpolation<O: InitializedRasterOperator> {
+    name: CanonicOperatorName,
+    output_result_descriptor: RasterResultDescriptor,
+    raster_source: O,
+    interpolation_method: InterpolationMethod,
+    tiling_specification: TilingSpecification,
+}
+
+impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
+    pub fn new_with_source_and_params(
+        name: CanonicOperatorName,
+        raster_source: O,
+        params: InterpolationParams,
+        tiling_specification: TilingSpecification,
+    ) -> Result<Self> {
         let in_descriptor = raster_source.result_descriptor();
+        let in_spatial_grid = in_descriptor.spatial_grid_descriptor();
 
-        let in_geo_transform = in_descriptor.tiling_geo_transform();
-        let in_pixel_bounds = in_descriptor.tiling_pixel_bounds();
-
-        let output_resolution = match self.params.output_resolution {
-            InputResolution::Resolution(res) => {
+        let output_resolution = match params.output_resolution {
+            InterpolationResolution::Resolution(res) => {
                 ensure!(
-                    res.x.abs() <= in_geo_transform.x_pixel_size().abs(),
+                    res.x.abs() <= in_spatial_grid.spatial_resolution().x.abs(),
                     error::OutputMustBeHigherResolutionThanInput {
-                        input: in_geo_transform.spatial_resolution(),
+                        input: in_spatial_grid.spatial_resolution(),
                         output: res
                     }
                 );
                 ensure!(
-                    res.y.abs() <= in_geo_transform.y_pixel_size().abs(),
+                    res.y.abs() <= in_spatial_grid.spatial_resolution().y.abs(),
                     error::OutputMustBeHigherResolutionThanInput {
-                        input: in_geo_transform.spatial_resolution(),
+                        input: in_spatial_grid.spatial_resolution(),
                         output: res
                     }
                 );
                 res
             }
 
-            InputResolution::Fraction(f) => {
+            InterpolationResolution::Fraction(f) => {
                 ensure!(f >= 1.0, error::FractionMustBeOneOrLarger { f });
 
                 SpatialResolution::new(
-                    in_geo_transform.x_pixel_size() / f,
-                    in_geo_transform.y_pixel_size().abs() / f,
+                    in_spatial_grid.spatial_resolution().x / f,
+                    in_spatial_grid.spatial_resolution().y.abs() / f,
                 )
                 .expect("the input resolution is valid")
             }
         };
 
-        let output_geo_transform = GeoTransform::new(
-            in_geo_transform.origin_coordinate,
-            output_resolution.x,
-            -output_resolution.y,
-        );
-
-        let out_pixel_bounds = output_geo_transform
-            .spatial_to_grid_bounds(&in_geo_transform.grid_to_spatial_bounds(&in_pixel_bounds));
+        let out_spatial_grid = if let Some(oc) = params.output_origin_reference {
+            let out_geo_transform = GeoTransform::new(oc, output_resolution.x, output_resolution.y);
+            let out_grid_bounds =
+                out_geo_transform.spatial_to_grid_bounds(&in_spatial_grid.spatial_partition());
+            // TODO: maybe "Merged" is not a good name... Derived?
+            SpatialGridDescriptor::Derived(SpatialGridDefinition::new(
+                out_geo_transform,
+                out_grid_bounds,
+            ))
+        } else {
+            in_spatial_grid.with_changed_resolution(output_resolution)
+        };
 
         let out_descriptor = RasterResultDescriptor {
             spatial_reference: in_descriptor.spatial_reference,
             data_type: in_descriptor.data_type,
             time: in_descriptor.time,
-            geo_transform_x: output_geo_transform,
-            pixel_bounds_x: out_pixel_bounds,
+            spatial_grid: out_spatial_grid,
             bands: in_descriptor.bands.clone(),
         };
 
@@ -140,25 +166,15 @@ impl RasterOperator for Interpolation {
             name,
             output_result_descriptor: out_descriptor,
             raster_source,
-            interpolation_method: self.params.interpolation,
-            tiling_specification: context.tiling_specification(),
+            interpolation_method: params.interpolation,
+            tiling_specification,
         };
 
-        Ok(initialized_operator.boxed())
+        Ok(initialized_operator)
     }
-
-    span_fn!(Interpolation);
 }
 
-pub struct InitializedInterpolation {
-    name: CanonicOperatorName,
-    output_result_descriptor: RasterResultDescriptor,
-    raster_source: Box<dyn InitializedRasterOperator>,
-    interpolation_method: InterpolationMethod,
-    tiling_specification: TilingSpecification,
-}
-
-impl InitializedRasterOperator for InitializedInterpolation {
+impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedInterpolation<O> {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let source_processor = self.raster_source.query_processor()?;
 
@@ -247,36 +263,26 @@ where
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // do not interpolate if the source resolution is already fine enough
 
-        let out_geo_transform = self.out_result_descriptor.tiling_geo_transform();
-        let in_geo_transform = self.source.result_descriptor().tiling_geo_transform();
+        let in_spatial_grid = self.source.result_descriptor().spatial_grid_descriptor();
+        let out_spatial_grid = self.result_descriptor().spatial_grid_descriptor();
 
-        // TODO: This should not be necessary since we already checked this in the initialization
-        ensure!(
-            out_geo_transform.x_pixel_size().abs() <= in_geo_transform.x_pixel_size().abs(),
-            error::OutputMustBeHigherResolutionThanInput {
-                input: in_geo_transform.spatial_resolution(),
-                output: out_geo_transform.spatial_resolution(),
-            },
-        );
-        ensure!(
-            out_geo_transform.y_pixel_size().abs() <= in_geo_transform.y_pixel_size().abs(),
-            error::OutputMustBeHigherResolutionThanInput {
-                input: in_geo_transform.spatial_resolution(),
-                output: out_geo_transform.spatial_resolution(),
-            },
-        );
-
-        // if the output resolution is the same as the input resolution, we can just forward the query
-        if out_geo_transform.spatial_resolution() == in_geo_transform.spatial_resolution() {
+        // if the output resolution is the same as the input resolution, we can just forward the query // TODO: except the origin changes?
+        if in_spatial_grid == out_spatial_grid {
             return self.source.query(query, ctx).await;
         }
 
+        let tiling_grid_definition =
+            out_spatial_grid.tiling_grid_definition(ctx.tiling_specification());
+
         // This is the tiling strategy we want to fill
-        let tiling_strategy = self.tiling_specification.strategy(out_geo_transform);
+        let tiling_strategy: geoengine_datatypes::raster::TilingStrategy =
+            tiling_grid_definition.generate_data_tiling_strategy();
 
         let sub_query = InterpolationSubQuery::<_, P, I> {
-            input_geo_transform: in_geo_transform,
-            output_geo_transform: out_geo_transform,
+            input_geo_transform: in_spatial_grid
+                .tiling_grid_definition(ctx.tiling_specification())
+                .tiling_geo_transform(),
+            output_geo_transform: tiling_grid_definition.tiling_geo_transform(),
             fold_fn: fold_future,
             tiling_specification: self.tiling_specification,
             phantom: PhantomData,
@@ -553,7 +559,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-            RasterOperator, RasterResultDescriptor,
+            RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -582,19 +588,19 @@ mod tests {
 
         let raster = make_raster(CacheHint::max_duration());
 
-        let operator =
-            Interpolation {
-                params: InterpolationParams {
-                    interpolation: InterpolationMethod::NearestNeighbor,
-                    output_resolution: InputResolution::Resolution(
-                        SpatialResolution::zero_point_five(),
-                    ),
-                },
-                sources: SingleRasterSource { raster },
-            }
-            .boxed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await?;
+        let operator = Interpolation {
+            params: InterpolationParams {
+                interpolation: InterpolationMethod::NearestNeighbor,
+                output_resolution: InterpolationResolution::Resolution(
+                    SpatialResolution::zero_point_five(),
+                ),
+                output_origin_reference: None,
+            },
+            sources: SingleRasterSource { raster },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .await?;
 
         let processor = operator.query_processor()?.get_i8().unwrap();
 
@@ -724,8 +730,10 @@ mod tests {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1.0, -1.0),
-                    pixel_bounds_x: GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new(Coordinate2D::new(0., 0.), 1.0, -1.0),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -741,19 +749,19 @@ mod tests {
         let cache_hint = CacheHint::seconds(1234);
         let raster = make_raster(cache_hint);
 
-        let operator =
-            Interpolation {
-                params: InterpolationParams {
-                    interpolation: InterpolationMethod::NearestNeighbor,
-                    output_resolution: InputResolution::Resolution(
-                        SpatialResolution::zero_point_five(),
-                    ),
-                },
-                sources: SingleRasterSource { raster },
-            }
-            .boxed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await?;
+        let operator = Interpolation {
+            params: InterpolationParams {
+                interpolation: InterpolationMethod::NearestNeighbor,
+                output_resolution: InterpolationResolution::Resolution(
+                    SpatialResolution::zero_point_five(),
+                ),
+                output_origin_reference: None,
+            },
+            sources: SingleRasterSource { raster },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .await?;
 
         let processor = operator.query_processor()?.get_i8().unwrap();
 
@@ -782,32 +790,32 @@ mod tests {
     async fn it_interpolates_multiple_bands() -> Result<()> {
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
-        let operator =
-            Interpolation {
-                params: InterpolationParams {
-                    interpolation: InterpolationMethod::NearestNeighbor,
-                    output_resolution: InputResolution::Resolution(
-                        SpatialResolution::zero_point_five(),
-                    ),
-                },
-                sources: SingleRasterSource {
-                    raster: RasterStacker {
-                        params: RasterStackerParams {
-                            rename_bands: RenameBands::Default,
-                        },
-                        sources: MultipleRasterSources {
-                            rasters: vec![
-                                make_raster(CacheHint::max_duration()),
-                                make_raster(CacheHint::max_duration()),
-                            ],
-                        },
-                    }
-                    .boxed(),
-                },
-            }
-            .boxed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await?;
+        let operator = Interpolation {
+            params: InterpolationParams {
+                interpolation: InterpolationMethod::NearestNeighbor,
+                output_resolution: InterpolationResolution::Resolution(
+                    SpatialResolution::zero_point_five(),
+                ),
+                output_origin_reference: None,
+            },
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::Default,
+                    },
+                    sources: MultipleRasterSources {
+                        rasters: vec![
+                            make_raster(CacheHint::max_duration()),
+                            make_raster(CacheHint::max_duration()),
+                        ],
+                    },
+                }
+                .boxed(),
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .await?;
 
         let processor = operator.query_processor()?.get_i8().unwrap();
 

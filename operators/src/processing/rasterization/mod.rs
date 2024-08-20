@@ -3,8 +3,8 @@ use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
     RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    ResultDescriptor, SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    WorkflowOperatorPath,
+    ResultDescriptor, SingleVectorSource, SpatialGridDescriptor, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
 use crate::processing::rasterization::GridOrDensity::Grid;
@@ -95,9 +95,7 @@ impl RasterOperator for Rasterization {
             GridOrDensity::Density(params) => params.origin_coordinate,
         };
 
-        let geo_transform =
-            GeoTransform::new(origin, resolution.x, -resolution.y).nearest_pixel_to_zero_based(); // transform geo transform to tiling based
-        dbg!(geo_transform);
+        let geo_transform = GeoTransform::new(origin, resolution.x, -resolution.y);
 
         let spatial_bounds = in_desc
             .bbox
@@ -118,8 +116,7 @@ impl RasterOperator for Rasterization {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterDataType::F64,
             time: in_desc.time,
-            geo_transform_x: geo_transform,
-            pixel_bounds_x: pixel_bounds,
+            spatial_grid: SpatialGridDescriptor::source_from_parts(geo_transform, pixel_bounds),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -266,78 +263,78 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> util::Result<BoxStream<'a, util::Result<RasterTile2D<Self::RasterType>>>> {
-        let geo_transform = self.result_descriptor.tiling_geo_transform();
-        dbg!(geo_transform);
+        let spatial_grid_desc = self
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification());
+
+        let tiling_strategy = spatial_grid_desc.generate_data_tiling_strategy();
+        let tiling_geo_transform = spatial_grid_desc.tiling_geo_transform();
 
         if let MultiPoint(points_processor) = &self.input {
-            let tiling_strategy =
-                TilingStrategy::new(self.tiling_specification.tile_size_in_pixels, geo_transform);
-
             let query_grid_bounds = query.spatial_query().grid_bounds();
-            let query_spatial_partition = geo_transform
-                .grid_to_spatial_bounds(&query_grid_bounds)
-                .as_bbox();
+            let query_spatial_partition =
+                tiling_geo_transform.grid_to_spatial_bounds(&query_grid_bounds);
 
-            let tiles = stream::iter(
-                tiling_strategy.tile_information_iterator_from_grid_bounds(
+            let tiles =
+                stream::iter(tiling_strategy.tile_information_iterator_from_grid_bounds(
                     query.spatial_query().grid_bounds(),
-                ),
-            )
-            .then(move |tile_info| async move {
-                let tile_spatial_bounds = tile_info.spatial_partition();
-                dbg!(&tile_info);
-
-                let grid_size_x = tile_info.tile_size_in_pixels().axis_size_x();
-
-                let vector_query = VectorQueryRectangle::with_bounds(
-                    tile_spatial_bounds.as_bbox(),
-                    query.time_interval,
-                    ColumnSelection::all(), // FIXME: should be configurable
-                );
-
-                let mut chunks = points_processor.query(vector_query, ctx).await?;
-
-                let mut cache_hint = CacheHint::max_duration();
-
-                let mut grid_data =
-                    GridWithFlexibleBoundType::new_filled(tile_info.global_pixel_bounds(), 0.);
-                while let Some(chunk) = chunks.next().await {
-                    let chunk = chunk?;
-
-                    cache_hint.merge_with(&chunk.cache_hint);
-
-                    grid_data = spawn_blocking(move || {
-                        for &coord in chunk.coordinates() {
-                            if !tile_spatial_bounds.contains_coordinate(&coord)
-                                || !query_spatial_partition.contains_coordinate(&coord)
-                            // TODO: old code checks if the pixel center is in the query bounds.
-                            {
-                                continue;
-                            }
-                            let GridIdx([y, x]) = geo_transform.coordinate_to_grid_idx_2d(coord)
-                                - tile_info.global_upper_left_pixel_idx();
-                            grid_data.data[x as usize + y as usize * grid_size_x] += 1.;
-                        }
-                        grid_data
-                    })
-                    .await
-                    .expect("Should only forward panics from spawned task");
-                }
-
-                let tile_grid = grid_data.unbounded();
-
-                Ok(RasterTile2D::new_with_tile_info(
-                    query.time_interval,
-                    tile_info,
-                    0,
-                    GridOrEmpty::Grid(tile_grid.into()),
-                    cache_hint,
                 ))
-            });
+                .then(move |tile_info| async move {
+                    let tile_spatial_bounds = tile_info.spatial_partition();
+                    dbg!(&tile_info);
+
+                    let grid_size_x = tile_info.tile_size_in_pixels().axis_size_x();
+
+                    let vector_query = VectorQueryRectangle::with_bounds(
+                        tile_spatial_bounds.as_bbox(),
+                        query.time_interval,
+                        ColumnSelection::all(), // FIXME: should be configurable
+                    );
+
+                    let mut chunks = points_processor.query(vector_query, ctx).await?;
+
+                    let mut cache_hint = CacheHint::max_duration();
+
+                    let mut grid_data =
+                        GridWithFlexibleBoundType::new_filled(tile_info.global_pixel_bounds(), 0.);
+                    while let Some(chunk) = chunks.next().await {
+                        let chunk = chunk?;
+
+                        cache_hint.merge_with(&chunk.cache_hint);
+
+                        grid_data = spawn_blocking(move || {
+                            for &coord in chunk.coordinates() {
+                                if !tile_spatial_bounds.contains_coordinate(&coord)
+                                    || !query_spatial_partition.contains_coordinate(&coord)
+                                // TODO: old code checks if the pixel center is in the query bounds.
+                                {
+                                    continue;
+                                }
+                                let GridIdx([y, x]) = tiling_geo_transform
+                                    .coordinate_to_grid_idx_2d(coord)
+                                    - tile_info.global_upper_left_pixel_idx();
+                                grid_data.data[x as usize + y as usize * grid_size_x] += 1.;
+                            }
+                            grid_data
+                        })
+                        .await
+                        .expect("Should only forward panics from spawned task");
+                    }
+
+                    let tile_grid = grid_data.unbounded();
+
+                    Ok(RasterTile2D::new_with_tile_info(
+                        query.time_interval,
+                        tile_info,
+                        0,
+                        GridOrEmpty::Grid(tile_grid.into()),
+                        cache_hint,
+                    ))
+                });
             Ok(tiles.boxed())
         } else {
             Ok(generate_zeroed_tiles(
-                geo_transform,
+                tiling_geo_transform,
                 self.tiling_specification,
                 &query,
             ))
@@ -372,17 +369,20 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> util::Result<BoxStream<'a, util::Result<RasterTile2D<Self::RasterType>>>> {
-        let geo_transform = self.result_descriptor.tiling_geo_transform();
+        let spatial_grid_desc = self
+            .result_descriptor
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(ctx.tiling_specification());
+        let tiling_strategy = spatial_grid_desc.generate_data_tiling_strategy();
+        let tiling_geo_transform = spatial_grid_desc.tiling_geo_transform();
 
         if let MultiPoint(points_processor) = &self.input {
-            let tiling_strategy =
-                TilingStrategy::new(self.tiling_specification.tile_size_in_pixels, geo_transform);
             let tile_shape = tiling_strategy.tile_size_in_pixels;
 
             // Use rounding factor calculated from query resolution to extend in full pixel units
             let rounding_factor = f64::max(
-                1. / geo_transform.x_pixel_size(),
-                1. / geo_transform.y_pixel_size(),
+                1. / tiling_geo_transform.x_pixel_size(),
+                1. / tiling_geo_transform.y_pixel_size(),
             );
             let radius = (self.radius * rounding_factor).ceil() / rounding_factor;
 
@@ -458,7 +458,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
             Ok(tiles.boxed())
         } else {
             Ok(generate_zeroed_tiles(
-                geo_transform,
+                tiling_geo_transform,
                 self.tiling_specification,
                 &query,
             ))
@@ -646,7 +646,7 @@ mod tests {
         let rasterization = Rasterization {
             params: GridOrDensity::Grid(GridParams {
                 spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-                origin_coordinate: [0.9, 0.9].into(),
+                origin_coordinate: [0.0, 0.0].into(),
             }),
             sources: SingleVectorSource {
                 vector: MockPointSource {
@@ -675,7 +675,7 @@ mod tests {
         .unwrap();
 
         let query = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new([-2, -2], [1, 1]).unwrap(),
+            GridBoundingBox2D::new_min_max(-2, 1, -2, 1).unwrap(),
             Default::default(),
             BandSelection::first(),
         );
@@ -685,10 +685,10 @@ mod tests {
         assert_eq!(
             res,
             vec![
-                vec![1., 0., 0., 0.],
-                vec![1., 0., 0., 0.],
-                vec![1., 0., 0., 0.],
-                vec![1., 0., 0., 0.],
+                vec![0., 0., 0., 1.],
+                vec![0., 0., 0., 1.],
+                vec![0., 0., 0., 1.],
+                vec![0., 0., 0., 1.],
             ]
         );
     }

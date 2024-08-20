@@ -363,23 +363,28 @@ mod tests {
     };
     use geoengine_datatypes::{
         primitives::BandSelection,
-        raster::{GeoTransform, GridBoundingBox2D, TilingStrategy},
+        raster::{GeoTransform, GridBoundingBox2D, SpatialGridDefinition, TilingStrategy},
         util::test::TestDefault,
     };
 
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_create_enlarged_tile() {
-        let execution_context = MockExecutionContext::test_default();
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::test_default());
 
-        let tiling_strategy = TilingStrategy::new_with_tiling_spec(
-            execution_context.tiling_specification,
+        let spatial_grid = SpatialGridDefinition::new(
             GeoTransform::new_with_coordinate_x_y(0., 1., 0., -1.),
+            GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap(),
         );
 
-        let grid_bounds = GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap();
+        let tiling_strategy = TilingStrategy::new(
+            execution_context.tiling_specification.tile_size_in_pixels,
+            spatial_grid.geo_transform(),
+        );
+
         let tile_info = tiling_strategy
-            .tile_information_iterator_from_grid_bounds(grid_bounds)
+            .tile_information_iterator_from_grid_bounds(spatial_grid.grid_bounds())
             .next()
             .unwrap();
 

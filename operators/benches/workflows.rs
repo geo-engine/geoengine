@@ -15,6 +15,7 @@ use geoengine_datatypes::raster::{
     GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_operators::engine::SpatialGridDescriptor;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
@@ -322,8 +323,10 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                     RasterDataType::U8,
                     SpatialReference::epsg_4326().into(),
                     None,
-                    tileing_strategy.geo_transform,
-                    query_rect.spatial_query().grid_bounds(),
+                    SpatialGridDescriptor::source_from_parts(
+                        tileing_strategy.geo_transform,
+                        query_rect.spatial_query().grid_bounds(),
+                    ),
                     RasterBandDescriptors::new_single_band(),
                 ),
             },
@@ -411,8 +414,10 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                     RasterDataType::U8,
                     SpatialReference::epsg_4326().into(),
                     None,
-                    tileing_strategy.geo_transform,
-                    query_rect.spatial_query().grid_bounds(),
+                    SpatialGridDescriptor::source_from_parts(
+                        tileing_strategy.geo_transform,
+                        query_rect.spatial_query().grid_bounds(),
+                    ),
                     RasterBandDescriptors::new_single_band(),
                 ),
             },

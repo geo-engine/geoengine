@@ -421,8 +421,8 @@ mod tests {
     use super::*;
     use crate::{
         engine::{
-            ChunkByteSize, MockExecutionContext, MockQueryContext, MultipleRasterSources,
-            QueryContextExtensions, RasterOperator, SingleRasterSource, WorkflowOperatorPath,
+            ChunkByteSize, MockExecutionContext, MultipleRasterSources, QueryContextExtensions,
+            RasterOperator, SingleRasterSource, WorkflowOperatorPath,
         },
         processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
@@ -459,8 +459,8 @@ mod tests {
 
         extensions.insert(tile_cache);
 
-        let query_ctx =
-            MockQueryContext::new_with_query_extensions(ChunkByteSize::test_default(), extensions);
+        let query_ctx = exe_ctx
+            .mock_query_context_with_query_extensions(ChunkByteSize::test_default(), extensions);
 
         let stream = processor
             .query(
@@ -559,8 +559,8 @@ mod tests {
 
         extensions.insert(tile_cache);
 
-        let query_ctx =
-            MockQueryContext::new_with_query_extensions(ChunkByteSize::test_default(), extensions);
+        let query_ctx = exe_ctx
+            .mock_query_context_with_query_extensions(ChunkByteSize::test_default(), extensions);
 
         // query the first two bands
         let stream = processor

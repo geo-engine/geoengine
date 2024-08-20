@@ -99,8 +99,7 @@ impl RasterOperator for Expression {
             data_type: self.params.output_type,
             spatial_reference: in_descriptor.spatial_reference,
             time: in_descriptor.time,
-            geo_transform_x: in_descriptor.geo_transform_x,
-            pixel_bounds_x: in_descriptor.pixel_bounds_x,
+            spatial_grid: in_descriptor.spatial_grid,
             bands: RasterBandDescriptors::new(vec![self
                 .params
                 .output_band
@@ -203,7 +202,7 @@ impl InitializedRasterOperator for InitializedExpression {
 mod tests {
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, MultipleRasterSources, QueryProcessor,
+        MockExecutionContext, MultipleRasterSources, QueryProcessor, SpatialGridDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::{RasterStacker, RasterStackerParams};
@@ -292,7 +291,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(
@@ -348,7 +347,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(
@@ -415,7 +414,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(
@@ -485,7 +484,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(
@@ -556,7 +555,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(
@@ -640,7 +639,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(
@@ -703,7 +702,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(
@@ -765,8 +764,10 @@ mod tests {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    pixel_bounds_x: GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
-                    geo_transform_x: TestDefault::test_default(),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -813,7 +814,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(
@@ -879,7 +880,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(
@@ -947,7 +948,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(

@@ -46,6 +46,7 @@ use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::engine::RasterBandDescriptor;
 use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::engine::RasterResultDescriptor;
+use geoengine_operators::engine::SpatialGridDescriptor;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::FileNotFoundHandling;
 use geoengine_operators::source::GdalDatasetGeoTransform;
@@ -267,8 +268,10 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
                 time: Some(geoengine_datatypes::primitives::TimeInterval::default()),
-                geo_transform_x: GeoTransform::new(Coordinate2D::new(-180.,  90.), 0.1, -0.1), // TODO use tiling geo transform from data geotransform
-                pixel_bounds_x: GridBoundingBox2D::new_min_max(0,0, 3600, 1800).unwrap(),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                 GeoTransform::new(Coordinate2D::new(-180.,  90.), 0.1, -0.1),
+                 GridBoundingBox2D::new_min_max(0,0, 3600, 1800).unwrap(),
+                ),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
                 [
                     (0_u8, "Water Bodies".to_string()),

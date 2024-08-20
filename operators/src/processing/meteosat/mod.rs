@@ -59,7 +59,8 @@ mod test_util {
 
     use crate::engine::{
         MockExecutionContext, MockQueryContext, QueryProcessor, RasterBandDescriptor,
-        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
+        WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::meteosat::{
@@ -188,8 +189,10 @@ mod test_util {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
-                    pixel_bounds_x: GridBoundingBox2D::new([-3, 0], [0, 2]).unwrap(),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
+                        GridBoundingBox2D::new([-3, 0], [0, 2]).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         measurement.unwrap_or_else(|| {
@@ -270,8 +273,10 @@ mod test_util {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81)
                     .into(),
                 time: None,
-                geo_transform_x: GeoTransform::new(origin_coordinate, x_pixel_size, y_pixel_size),
-                pixel_bounds_x: GridShape2D::new_2d(3712, 3712).bounding_box(),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new(origin_coordinate, x_pixel_size, y_pixel_size),
+                    GridShape2D::new_2d(3712, 3712).bounding_box(),
+                ),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                     "band".into(),
                     Measurement::Continuous(ContinuousMeasurement {

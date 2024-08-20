@@ -464,7 +464,7 @@ mod tests {
         spatial_reference::SpatialReferenceOption,
     };
     use geoengine_operators::{
-        engine::{RasterBandDescriptors, StaticMetaData},
+        engine::{RasterBandDescriptors, SpatialGridDescriptor, StaticMetaData},
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular, OgrSourceErrorSpec,
@@ -704,8 +704,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: None,
-            geo_transform_x: GeoTransform::new((0., 0.).into(), 1., -1.),
-            pixel_bounds_x: GridBoundingBox::new([0, 0], [0, 0]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new((0., 0.).into(), 1., -1.),
+                GridBoundingBox::new([0, 0], [0, 0]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 

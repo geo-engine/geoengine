@@ -374,7 +374,8 @@ impl HistogramRasterQueryProcessor {
         // TODO: compute only number of buckets if possible
         let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_geo_transform(
             &query,
-            rd.tiling_geo_transform(),
+            rd.tiling_grid_definition(ctx.tiling_specification())
+                .tiling_geo_transform(),
             BandSelection::new_single(self.band_idx),
         );
 
@@ -402,7 +403,8 @@ impl HistogramRasterQueryProcessor {
 
         let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_geo_transform(
             &query,
-            rd.tiling_geo_transform(),
+            rd.tiling_grid_definition(ctx.tiling_specification())
+                .tiling_geo_transform(),
             BandSelection::new_single(self.band_idx),
         );
 
@@ -679,9 +681,9 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterBandDescriptors,
-        RasterOperator, RasterResultDescriptor, StaticMetaData, VectorColumnInfo, VectorOperator,
-        VectorResultDescriptor,
+        ChunkByteSize, MockExecutionContext, RasterBandDescriptors, RasterOperator,
+        RasterResultDescriptor, SpatialGridDescriptor, StaticMetaData, VectorColumnInfo,
+        VectorOperator, VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -841,8 +843,10 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                    pixel_bounds_x: GridShape2D::new_2d(3, 2).bounding_box(),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        GridShape2D::new_2d(3, 2).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -885,7 +889,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -938,7 +942,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1001,7 +1005,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1070,7 +1074,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1215,8 +1219,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds_x: tile_size_in_pixels.bounding_box(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                tile_size_in_pixels.bounding_box(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
@@ -1267,7 +1273,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1325,7 +1331,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1389,7 +1395,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1417,8 +1423,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds_x: tile_size_in_pixels.bounding_box(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                tile_size_in_pixels.bounding_box(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
@@ -1470,7 +1478,7 @@ mod tests {
                     TimeInterval::new_instant(DateTime::new_utc(2013, 12, 1, 12, 0, 0)).unwrap(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();

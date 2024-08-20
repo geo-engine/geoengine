@@ -8,7 +8,7 @@ use std::{
 use crate::util::Result;
 use crate::{error, util::create_rayon_thread_pool};
 use futures::Stream;
-use geoengine_datatypes::util::test::TestDefault;
+use geoengine_datatypes::{raster::TilingSpecification, util::test::TestDefault};
 use pin_project::pin_project;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,7 @@ impl TestDefault for ChunkByteSize {
 
 pub trait QueryContext: Send + Sync {
     fn chunk_byte_size(&self) -> ChunkByteSize;
+    fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
 
     /// get the `QueryContextExtensions` that contain additional information
@@ -138,6 +139,7 @@ impl QueryAbortTrigger {
 
 pub struct MockQueryContext {
     pub chunk_byte_size: ChunkByteSize,
+    pub tiling_specification: TilingSpecification,
     pub thread_pool: Arc<ThreadPool>,
 
     pub extensions: QueryContextExtensions,
@@ -150,6 +152,7 @@ impl TestDefault for MockQueryContext {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size: ChunkByteSize::test_default(),
+            tiling_specification: TilingSpecification::test_default(),
             thread_pool: create_rayon_thread_pool(0),
             extensions: QueryContextExtensions::default(),
             abort_registration,
@@ -159,10 +162,11 @@ impl TestDefault for MockQueryContext {
 }
 
 impl MockQueryContext {
-    pub fn new(chunk_byte_size: ChunkByteSize) -> Self {
+    pub fn new(chunk_byte_size: ChunkByteSize, tiling_specification: TilingSpecification) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
+            tiling_specification,
             thread_pool: create_rayon_thread_pool(0),
             extensions: QueryContextExtensions::default(),
             abort_registration,
@@ -172,11 +176,13 @@ impl MockQueryContext {
 
     pub fn new_with_query_extensions(
         chunk_byte_size: ChunkByteSize,
+        tiling_specification: TilingSpecification,
         extensions: QueryContextExtensions,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
+            tiling_specification,
             thread_pool: create_rayon_thread_pool(0),
             extensions,
             abort_registration,
@@ -186,11 +192,13 @@ impl MockQueryContext {
 
     pub fn with_chunk_size_and_thread_count(
         chunk_byte_size: ChunkByteSize,
+        tiling_specification: TilingSpecification,
         num_threads: usize,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
+            tiling_specification,
             thread_pool: create_rayon_thread_pool(num_threads),
             extensions: QueryContextExtensions::default(),
             abort_registration,
@@ -220,5 +228,9 @@ impl QueryContext for MockQueryContext {
         self.abort_trigger
             .take()
             .ok_or(error::Error::AbortTriggerAlreadyUsed)
+    }
+
+    fn tiling_specification(&self) -> TilingSpecification {
+        self.tiling_specification
     }
 }

@@ -165,8 +165,8 @@ impl InitializedVectorOperator for InitializedMockPointSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::MockExecutionContext;
     use crate::engine::QueryProcessor;
-    use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection};
@@ -211,7 +211,8 @@ mod tests {
             TimeInterval::default(),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
+        let ctx =
+            execution_context.mock_query_context((2 * std::mem::size_of::<Coordinate2D>()).into());
 
         let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();
 

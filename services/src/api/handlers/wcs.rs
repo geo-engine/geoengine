@@ -1,5 +1,4 @@
 use crate::api::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
-use crate::api::model::datatypes::TimeInterval;
 use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::api::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::contexts::{ApplicationContext, SessionContext};
@@ -12,16 +11,13 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialPartition2D,
+    AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialPartition2D, TimeInterval,
 };
-use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
-use geoengine_operators::engine::{CanonicOperatorName, ExecutionContext, WorkflowOperatorPath};
-use geoengine_operators::engine::{ResultDescriptor, SingleRasterOrVectorSource};
-use geoengine_operators::processing::{
-    DeriveOutRasterSpecsSource, InitializedRasterReprojection, Reprojection, ReprojectionParams,
+use geoengine_operators::engine::{
+    ExecutionContext, InitializedRasterOperator, WorkflowOperatorPath,
 };
-use geoengine_operators::util::input::RasterOrVectorOperator;
 use geoengine_operators::util::raster_stream_to_geotiff::{
     raster_stream_to_multiband_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
 };
@@ -341,21 +337,14 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
             .map(Duration::from_secs),
     );
 
+    let request_spatial_ref: SpatialReference = request.spatial_ref().map(Into::into)?;
+    let request_resolution = request.spatial_resolution().transpose()?;
     let request_partition = request.spatial_partition()?;
-
-    if let Some(gridorigin) = request.gridorigin {
-        ensure!(
-            gridorigin.coordinate(request.gridbasecrs)? == request_partition.upper_left(),
-            error::WcsGridOriginMustEqualBoundingboxUpperLeft
-        );
-    }
-
-    if let Some(bbox_spatial_reference) = request.boundingbox.spatial_reference {
-        ensure!(
-            request.gridbasecrs == bbox_spatial_reference,
-            error::WcsBoundingboxCrsMustEqualGridBaseCrs
-        );
-    }
+    let request_time: TimeInterval = request
+        .time
+        .map(Into::into)
+        .unwrap_or_else(default_time_from_config);
+    let request_no_data_value = request.nodatavalue;
 
     let ctx = app_ctx.session_context(session);
 
@@ -373,73 +362,35 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         .await
         .context(error::Operator)?;
 
-    // handle request and workflow crs matching
-    let workflow_spatial_ref: Option<SpatialReference> =
-        initialized.result_descriptor().spatial_reference().into();
-    let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
+    let tiling_spec = execution_context.tiling_specification();
 
-    let request_spatial_ref: SpatialReference = request.gridbasecrs.into();
-    let request_no_data_value = request.nodatavalue;
-
-    // perform reprojection if necessary
-    let initialized = if request_spatial_ref == workflow_spatial_ref {
-        initialized
-    } else {
-        log::debug!(
-            "WCS query srs: {}, workflow srs: {} --> injecting reprojection",
-            request_spatial_ref,
-            workflow_spatial_ref
-        );
-
-        let reprojection_params = ReprojectionParams {
-            target_spatial_reference: request_spatial_ref,
-            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
-        };
-
-        // create the reprojection operator in order to get the canonic operator name
-        let reprojected_workflow = Reprojection {
-            params: reprojection_params,
-            sources: SingleRasterOrVectorSource {
-                source: RasterOrVectorOperator::Raster(operator),
-            },
-        };
-
-        // create the inititalized operator directly, to avoid re-initializing everything
-        let irp = InitializedRasterReprojection::try_new_with_input(
-            CanonicOperatorName::from(&reprojected_workflow),
-            reprojection_params,
+    // TODO: add resample push down!
+    let wrapped =
+        geoengine_operators::util::WrapWithProjectionAndResample::new_create_result_descriptor(
+            operator,
             initialized,
-            execution_context.tiling_specification(),
         )
-        .context(error::Operator)?;
+        .wrap_with_projection_and_resample(
+            Some(request_partition.upper_left()), // TODO: set none if not changed? But how to handle mapping to grid?
+            request_resolution,
+            request_spatial_ref,
+            tiling_spec,
+        )?;
 
-        Box::new(irp)
-    };
+    let query_tiling_pixel_grid = wrapped
+        .result_descriptor
+        .spatial_grid_descriptor()
+        .tiling_grid_definition(tiling_spec)
+        .tiling_spatial_grid_definition()
+        .spatial_bounds_to_compatible_spatial_grid(request_partition);
 
-    let processor = initialized.query_processor().context(error::Operator)?;
-
-    let query_interval_larger_then_data_rangspatial_resolution: SpatialResolution =
-        if let Some(spatial_resolution) = request.spatial_resolution() {
-            spatial_resolution?
-        } else {
-            //
-            processor
-                .result_descriptor()
-                .tiling_geo_transform()
-                .spatial_resolution()
-        };
-
-    // FIXME: do something with the resolution
-
-    let query_pixel_bounds = processor
-        .result_descriptor()
-        .tiling_geo_transform()
-        .spatial_to_grid_bounds(&request_partition);
     let query_rect = RasterQueryRectangle::new_with_grid_bounds(
-        query_pixel_bounds,
-        request.time.unwrap_or_else(default_time_from_config).into(),
+        query_tiling_pixel_grid.grid_bounds(),
+        request_time,
         BandSelection::first(),
     );
+
+    let processor = wrapped.initialized_operator.query_processor()?;
 
     let query_ctx = ctx.query_context()?;
 
@@ -481,7 +432,7 @@ fn default_time_from_config() -> TimeInterval {
                     .and_then(|ogc| ogc.default_time)
                     .map_or_else(
                         || {
-                            geoengine_datatypes::primitives::TimeInterval::new_instant(
+                            TimeInterval::new_instant(
                                 geoengine_datatypes::primitives::TimeInstance::now(),
                             )
                             .expect("is a valid time interval")

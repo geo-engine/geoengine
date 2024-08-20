@@ -375,8 +375,8 @@ mod tests {
     use std::str::FromStr;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor,
-        RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+        ChunkByteSize, MockExecutionContext, QueryProcessor, RasterBandDescriptor,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -505,7 +505,7 @@ mod tests {
                     TimeInterval::default(),
                     ColumnSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &exe_ctc.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap()
@@ -582,7 +582,7 @@ mod tests {
                     TimeInterval::default(),
                     ColumnSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &exe_ctc.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap()
@@ -662,7 +662,7 @@ mod tests {
                     TimeInterval::default(),
                     ColumnSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &exe_ctc.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap()
@@ -758,8 +758,10 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform_x: GeoTransform::test_default(),
-                    pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::test_default(),
+                        GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
                         RasterBandDescriptor::new_unitless("band_1".into()),
@@ -777,8 +779,10 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform_x: GeoTransform::test_default(),
-                    pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::test_default(),
+                        GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
                         RasterBandDescriptor::new_unitless("band_1".into()),

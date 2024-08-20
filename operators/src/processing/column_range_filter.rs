@@ -186,7 +186,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::engine::MockExecutionContext;
     use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::collections::{
         ChunksEqualIgnoringCacheHint, FeatureCollectionModifications, MultiPointCollection,
@@ -269,11 +269,10 @@ mod tests {
         }
         .boxed();
 
+        let exe_ctx = MockExecutionContext::test_default();
+
         let initialized = filter
-            .initialize(
-                WorkflowOperatorPath::initialize_root(),
-                &MockExecutionContext::test_default(),
-            )
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -289,7 +288,7 @@ mod tests {
             ColumnSelection::all(),
         );
 
-        let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
+        let ctx = exe_ctx.mock_query_context((2 * std::mem::size_of::<Coordinate2D>()).into());
 
         let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();
 

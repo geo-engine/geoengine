@@ -6,16 +6,15 @@ use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefiniti
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
-use crate::workflows::workflow::Workflow;
 use float_cmp::approx_eq;
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{BandSelection, TimeInterval};
-use geoengine_datatypes::raster::{GridBoundingBox2D, GridIntersection};
+use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::engine::{
-    ExecutionContext, InitializedRasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
+    ExecutionContext, InitializedRasterOperator, QueryContext, RasterResultDescriptor,
 };
 use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
@@ -59,6 +58,7 @@ impl RasterDatasetFromWorkflowParams {
     pub fn from_request_and_result_descriptor(
         request: RasterDatasetFromWorkflow,
         result_descriptor: &RasterResultDescriptor,
+        tiling_spec: TilingSpecification,
     ) -> error::Result<Self> {
         let query = request.query;
 
@@ -67,17 +67,25 @@ impl RasterDatasetFromWorkflowParams {
         ensure!(
             approx_eq!(
                 f64,
-                result_descriptor.geo_transform_x.x_pixel_size(),
+                result_descriptor
+                    .spatial_grid_descriptor()
+                    .spatial_resolution()
+                    .x,
                 query.spatial_resolution.x
             ) && approx_eq!(
                 f64,
-                result_descriptor.geo_transform_x.y_pixel_size(),
+                result_descriptor
+                    .spatial_grid_descriptor()
+                    .spatial_resolution()
+                    .y,
                 query.spatial_resolution.y
             ),
             error::ResolutionMissmatch,
         );
 
         let grid_bounds = result_descriptor
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(tiling_spec)
             .tiling_geo_transform()
             .spatial_to_grid_bounds(&query.spatial_bounds.into()); // TODO: somehow clean up api and inner structs
 
@@ -113,9 +121,9 @@ pub struct RasterDatasetFromWorkflowResult {
 
 impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
 
-pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
+pub struct RasterDatasetFromWorkflowTask<C: SessionContext, R: InitializedRasterOperator> {
     pub source_name: String,
-    pub workflow: Workflow,
+    pub initialized_operator: R,
     pub ctx: Arc<C>,
     pub info: RasterDatasetFromWorkflowParams,
     pub upload: UploadId,
@@ -123,24 +131,12 @@ pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
     pub compression_num_threads: GdalCompressionNumThreads,
 }
 
-impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
+impl<C: SessionContext, R: InitializedRasterOperator> RasterDatasetFromWorkflowTask<C, R> {
     async fn process(&self) -> error::Result<RasterDatasetFromWorkflowResult> {
-        let operator = self.workflow.operator.clone();
+        let result_descriptor = self.initialized_operator.result_descriptor();
 
-        let operator = operator.get_raster().context(crate::error::Operator)?;
-
-        let execution_context = self.ctx.execution_context()?;
-
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
-
-        let initialized = operator
-            .initialize(workflow_operator_path_root, &execution_context)
-            .await
-            .context(crate::error::Operator)?;
-
-        let result_descriptor = initialized.result_descriptor();
-
-        let processor = initialized
+        let processor = self
+            .initialized_operator
             .query_processor()
             .context(crate::error::Operator)?;
 
@@ -154,6 +150,11 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
                 .ok_or(crate::error::Error::MissingSpatialReference)?;
         let tile_limit = None; // TODO: set a reasonable limit or make configurable?
+
+        let tiling_strat = result_descriptor
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(query_ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         // build the geotiff
         let res =
@@ -173,7 +174,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             },
             tile_limit,
             Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
-            execution_context.tiling_specification().strategy(result_descriptor.tiling_geo_transform()),
+            tiling_strat,
         ).await)?
             .map_err(crate::error::Error::from)?;
 
@@ -195,7 +196,9 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
 }
 
 #[async_trait::async_trait]
-impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
+impl<C: SessionContext, R: InitializedRasterOperator> Task<C::TaskContext>
+    for RasterDatasetFromWorkflowTask<C, R>
+{
     async fn run(
         &self,
         _ctx: C::TaskContext,
@@ -237,9 +240,12 @@ impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C
     }
 }
 
-pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
+pub async fn schedule_raster_dataset_from_workflow_task<
+    C: SessionContext,
+    R: InitializedRasterOperator + 'static,
+>(
     source_name: String,
-    workflow: Workflow,
+    initialized_operator: R,
     ctx: Arc<C>,
     info: RasterDatasetFromWorkflowParams,
     compression_num_threads: GdalCompressionNumThreads,
@@ -268,7 +274,7 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
 
     let task = RasterDatasetFromWorkflowTask {
         source_name,
-        workflow,
+        initialized_operator,
         ctx: ctx.clone(),
         info,
         upload,
@@ -303,17 +309,22 @@ async fn create_dataset<C: SessionContext>(
         .end();
     let result_time_interval = TimeInterval::new(first_start, last_end)?;
 
+    let exe_ctx = ctx.execution_context()?;
+
+    let source_tiling_spatial_grid =
+        origin_result_descriptor.tiling_grid_definition(exe_ctx.tiling_specification());
+    let query_tiling_spatial_grid =
+        source_tiling_spatial_grid.with_other_bounds(query_rectangle.spatial_query.grid_bounds());
+    let result_descriptor_bounds = origin_result_descriptor
+        .spatial_grid_descriptor()
+        .intersection_with_tiling_grid(&query_tiling_spatial_grid)
+        .ok_or(error::Error::EmptyDatasetCannotBeImported)?; // TODO: maybe allow empty datasets?
+
     let result_descriptor = RasterResultDescriptor {
         data_type: origin_result_descriptor.data_type,
         spatial_reference: origin_result_descriptor.spatial_reference,
         time: Some(result_time_interval),
-        geo_transform_x: origin_result_descriptor.tiling_geo_transform(),
-        pixel_bounds_x: origin_result_descriptor
-            .tiling_pixel_bounds()
-            .intersection(&query_rectangle.spatial_query.grid_bounds())
-            .unwrap_or(
-                GridBoundingBox2D::new_min_max(0, 0, 1, 1).expect("is a valid static value"),
-            ), // FIXME: to something if intersection is empty
+        spatial_grid: result_descriptor_bounds,
         bands: origin_result_descriptor.bands.clone(),
     };
     //TODO: Recognize MetaDataDefinition::GdalMetaDataRegular

@@ -51,8 +51,7 @@ impl RasterOperator for RasterTypeConversion {
             spatial_reference: in_desc.spatial_reference,
             data_type: out_data_type,
             time: in_desc.time,
-            geo_transform_x: in_desc.tiling_geo_transform(),
-            pixel_bounds_x: in_desc.tiling_pixel_bounds(),
+            spatial_grid: in_desc.spatial_grid,
             bands: in_desc.bands.clone(),
         };
 
@@ -161,7 +160,9 @@ mod tests {
     };
 
     use crate::{
-        engine::{ChunkByteSize, MockExecutionContext, RasterBandDescriptors},
+        engine::{
+            ChunkByteSize, MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor,
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -175,8 +176,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds_x: tile_size_in_pixels.bounding_box(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                tile_size_in_pixels.bounding_box(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification = TilingSpecification::new(tile_size_in_pixels);

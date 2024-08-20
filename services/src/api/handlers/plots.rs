@@ -235,6 +235,7 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
         PlotOperator, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+        SpatialGridDescriptor,
     };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::plot::{
@@ -247,8 +248,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
+            ),
             time: None,
             bands: RasterBandDescriptors::new_single_band(),
         };

@@ -500,7 +500,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-            SingleRasterSource,
+            SingleRasterSource, SpatialGridDescriptor,
         },
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
@@ -813,8 +813,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
-            pixel_bounds_x: GridShape2D::new_2d(3, 4).bounding_box(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
+                GridShape2D::new_2d(3, 4).bounding_box(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
@@ -987,8 +989,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds_x: GridBoundingBox2D::new([-3, 0], [0, 4]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, 0], [0, 4]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification = TilingSpecification::new(tile_size_in_pixels);

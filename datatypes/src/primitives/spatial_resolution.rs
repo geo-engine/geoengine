@@ -2,6 +2,7 @@ use std::{convert::TryFrom, ops::Add, ops::Div, ops::Mul, ops::Sub};
 
 use crate::primitives::error;
 use crate::util::Result;
+use float_cmp::{approx_eq, ApproxEq, F64Margin};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -87,6 +88,15 @@ impl Div<f64> for SpatialResolution {
             x: self.x / rhs,
             y: self.y / rhs,
         }
+    }
+}
+
+impl ApproxEq for SpatialResolution {
+    type Margin = F64Margin;
+
+    fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
+        let m = margin.into();
+        approx_eq!(f64, self.x, other.x, m) && approx_eq!(f64, self.y, other.y, m)
     }
 }
 

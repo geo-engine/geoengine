@@ -25,7 +25,7 @@ use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
 use actix_web::{web, FromRequest, HttpResponse, Responder};
 use geoengine_datatypes::primitives::{BandSelection, SpatialGridQueryRectangle};
-use geoengine_operators::engine::WorkflowOperatorPath;
+use geoengine_operators::engine::{ExecutionContext, WorkflowOperatorPath};
 use serde::{Deserialize, Serialize};
 
 use utoipa::IntoParams;
@@ -787,7 +787,11 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let result_descriptor = raster_operator.result_descriptor();
 
-    let sqr = SpatialGridQueryRectangle::new(result_descriptor.tiling_pixel_bounds());
+    let sqr = SpatialGridQueryRectangle::new(
+        result_descriptor
+            .tiling_grid_definition(execution_context.tiling_specification())
+            .tiling_grid_bounds(),
+    );
 
     let qr = geoengine_datatypes::primitives::RasterQueryRectangle::new(
         sqr,
@@ -808,7 +812,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("layer {item}"),
-        layer.workflow,
+        raster_operator,
         ctx,
         from_workflow,
         compression_num_threads,
@@ -1087,8 +1091,9 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        ExecutionContext, InitializedRasterOperator, RasterBandDescriptors, RasterOperator,
-        RasterResultDescriptor, SingleRasterOrVectorSource, TypedOperator,
+        ExecutionContext, InitializedRasterOperator, QueryProcessor, RasterBandDescriptors,
+        RasterOperator, RasterResultDescriptor, SingleRasterOrVectorSource, SpatialGridDescriptor,
+        TypedOperator,
     };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::processing::{TimeShift, TimeShiftParams};
@@ -1540,8 +1545,10 @@ mod tests {
                 } else {
                     None
                 },
-                pixel_bounds_x: GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
-                geo_transform_x: GeoTransform::test_default(),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::test_default(),
+                    GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             };
 
@@ -1699,11 +1706,11 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let tiling_strat = exe_ctx.tiling_specification().strategy(
-            query_processor
-                .raster_result_descriptor()
-                .tiling_geo_transform(),
-        );
+        let tiling_strat = query_processor
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(exe_ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         raster_stream_to_geotiff_bytes(
             query_processor,

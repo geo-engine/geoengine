@@ -3,6 +3,7 @@ use crate::identifier;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
+use geoengine_datatypes::raster::GridBounds;
 use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
@@ -728,6 +729,109 @@ impl From<BoundingBox2D> for geoengine_datatypes::primitives::BoundingBox2D {
             bbox.lower_left_coordinate.into(),
             bbox.upper_right_coordinate.into(),
         )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SpatialGridDefinition {
+    pub geo_transform: GeoTransform,
+    pub grid_bounds: GridBoundingBox2D,
+}
+
+impl From<geoengine_datatypes::raster::SpatialGridDefinition> for SpatialGridDefinition {
+    fn from(value: geoengine_datatypes::raster::SpatialGridDefinition) -> Self {
+        Self {
+            geo_transform: value.geo_transform().into(),
+            grid_bounds: value.grid_bounds().into(),
+        }
+    }
+}
+
+impl From<SpatialGridDefinition> for geoengine_datatypes::raster::SpatialGridDefinition {
+    fn from(value: SpatialGridDefinition) -> Self {
+        geoengine_datatypes::raster::SpatialGridDefinition::new(
+            value.geo_transform.into(),
+            value.grid_bounds.into(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoTransform {
+    pub origin_coordinate: Coordinate2D,
+    x_pixel_size: f64,
+    y_pixel_size: f64,
+}
+
+impl From<geoengine_datatypes::raster::GeoTransform> for GeoTransform {
+    fn from(value: geoengine_datatypes::raster::GeoTransform) -> Self {
+        GeoTransform {
+            origin_coordinate: value.origin_coordinate().into(),
+            x_pixel_size: value.x_pixel_size(),
+            y_pixel_size: value.y_pixel_size(),
+        }
+    }
+}
+
+impl From<GeoTransform> for geoengine_datatypes::raster::GeoTransform {
+    fn from(value: GeoTransform) -> Self {
+        geoengine_datatypes::raster::GeoTransform::new(
+            value.origin_coordinate.into(),
+            value.x_pixel_size,
+            value.y_pixel_size,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GridIdx2D {
+    y_idx: isize,
+    x_idx: isize,
+}
+
+impl From<geoengine_datatypes::raster::GridIdx2D> for GridIdx2D {
+    fn from(value: geoengine_datatypes::raster::GridIdx2D) -> Self {
+        Self {
+            y_idx: value.y(),
+            x_idx: value.x(),
+        }
+    }
+}
+
+impl From<GridIdx2D> for geoengine_datatypes::raster::GridIdx2D {
+    fn from(value: GridIdx2D) -> Self {
+        geoengine_datatypes::raster::GridIdx::new_y_x(value.y_idx, value.x_idx)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GridBoundingBox2D {
+    top_left_idx: GridIdx2D,
+    bottom_right_idx: GridIdx2D,
+}
+
+impl From<geoengine_datatypes::raster::GridBoundingBox2D> for GridBoundingBox2D {
+    fn from(value: geoengine_datatypes::raster::GridBoundingBox2D) -> Self {
+        Self {
+            top_left_idx: value.min_index().into(),
+            bottom_right_idx: value.max_index().into(),
+        }
+    }
+}
+
+impl From<GridBoundingBox2D> for geoengine_datatypes::raster::GridBoundingBox2D {
+    fn from(value: GridBoundingBox2D) -> Self {
+        geoengine_datatypes::raster::GridBoundingBox2D::new_min_max(
+            value.top_left_idx.y_idx,
+            value.bottom_right_idx.y_idx,
+            value.top_left_idx.x_idx,
+            value.bottom_right_idx.x_idx,
+        )
+        .expect("Bounds were correct before") // TODO: maybe try from?
     }
 }
 

@@ -102,6 +102,7 @@ pub trait GeoEngineDb:
 
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
+    tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
     extensions: QueryContextExtensions,
     abort_registration: QueryAbortRegistration,
@@ -109,10 +110,15 @@ pub struct QueryContextImpl {
 }
 
 impl QueryContextImpl {
-    pub fn new(chunk_byte_size: ChunkByteSize, thread_pool: Arc<ThreadPool>) -> Self {
+    pub fn new(
+        chunk_byte_size: ChunkByteSize,
+        tiling_specification: TilingSpecification,
+        thread_pool: Arc<ThreadPool>,
+    ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
             chunk_byte_size,
+            tiling_specification,
             thread_pool,
             extensions: Default::default(),
             abort_registration,
@@ -122,12 +128,14 @@ impl QueryContextImpl {
 
     pub fn new_with_extensions(
         chunk_byte_size: ChunkByteSize,
+        tiling_specification: TilingSpecification,
         thread_pool: Arc<ThreadPool>,
         extensions: QueryContextExtensions,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
             chunk_byte_size,
+            tiling_specification,
             thread_pool,
             extensions,
             abort_registration,
@@ -157,6 +165,10 @@ impl QueryContext for QueryContextImpl {
         self.abort_trigger
             .take()
             .ok_or(geoengine_operators::error::Error::AbortTriggerAlreadyUsed)
+    }
+
+    fn tiling_specification(&self) -> TilingSpecification {
+        self.tiling_specification
     }
 }
 

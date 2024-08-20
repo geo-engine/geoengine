@@ -720,6 +720,7 @@ mod tests {
             MultiPolygonCollection,
         },
         primitives::{BoundingBox2D, ColumnSelection, MultiPoint, MultiPolygon, TimeInterval},
+        raster::TilingSpecification,
         util::test::TestDefault,
     };
 
@@ -783,6 +784,8 @@ mod tests {
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
+        let exe_ctx = MockExecutionContext::test_default();
+
         let operator = VectorExpression {
             params: VectorExpressionParams {
                 input_columns: vec!["foo".into()],
@@ -794,10 +797,7 @@ mod tests {
             sources: point_source.into(),
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -808,7 +808,7 @@ mod tests {
             TimeInterval::default(),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -872,6 +872,7 @@ mod tests {
         .unwrap();
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
+        let exe_ctx = MockExecutionContext::test_default();
 
         let operator = VectorExpression {
             params: VectorExpressionParams {
@@ -884,10 +885,7 @@ mod tests {
             sources: point_source.into(),
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -898,7 +896,7 @@ mod tests {
             TimeInterval::default(),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -1207,7 +1205,7 @@ mod tests {
         let query_processor: Box<dyn VectorQueryProcessor<VectorType = C>> =
             operator.query_processor().unwrap().try_into().unwrap();
 
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 

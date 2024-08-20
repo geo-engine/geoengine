@@ -446,6 +446,8 @@ mod tests {
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
+        let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
+
         let polygon_source =
             MockFeatureCollectionSource::single(MultiPolygonCollection::from_data(
                 vec![MultiPolygon::new(vec![vec![vec![
@@ -469,10 +471,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -482,7 +481,7 @@ mod tests {
             TimeInterval::default(),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -518,6 +517,8 @@ mod tests {
             )?)
             .boxed();
 
+        let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
+
         let operator = PointInPolygonFilter {
             params: PointInPolygonFilterParams {},
             sources: PointInPolygonFilterSource {
@@ -526,10 +527,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -539,7 +537,7 @@ mod tests {
             TimeInterval::default(),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -586,6 +584,8 @@ mod tests {
             )?)
             .boxed();
 
+        let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
+
         let operator = PointInPolygonFilter {
             params: PointInPolygonFilterParams {},
             sources: PointInPolygonFilterSource {
@@ -594,10 +594,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -607,7 +604,7 @@ mod tests {
             TimeInterval::default(),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -675,6 +672,8 @@ mod tests {
         ])
         .boxed();
 
+        let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
+
         let operator = PointInPolygonFilter {
             params: PointInPolygonFilterParams {},
             sources: PointInPolygonFilterSource {
@@ -683,10 +682,7 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -697,8 +693,8 @@ mod tests {
             ColumnSelection::all(),
         );
 
-        let ctx_one_chunk = MockQueryContext::new(ChunkByteSize::MAX);
-        let ctx_minimal_chunks = MockQueryContext::new(ChunkByteSize::MIN);
+        let ctx_one_chunk = exe_ctx.mock_query_context(ChunkByteSize::MAX);
+        let ctx_minimal_chunks = exe_ctx.mock_query_context(ChunkByteSize::MIN);
 
         let query = query_processor
             .query(query_rectangle.clone(), &ctx_minimal_chunks)

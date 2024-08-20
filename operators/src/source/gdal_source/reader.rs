@@ -1,6 +1,6 @@
 use geoengine_datatypes::raster::{
-    BoundedGrid, GeoTransform, GridBoundingBox2D, GridBoundingBoxExt, GridBounds, GridIdx2D,
-    GridIntersection, GridOrEmpty2D, GridShape2D, GridShapeAccess, GridSize, RasterProperties,
+    BoundedGrid, GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridIntersection,
+    GridOrEmpty2D, GridShape2D, GridShapeAccess, GridSize, RasterProperties, SpatialGridDefinition,
 };
 
 /// This struct is used to advise the GDAL reader how to read the data from the dataset.
@@ -38,11 +38,12 @@ pub enum GdalReaderMode {
 
 impl GdalReaderMode {
     /// check if the dataset intersects the given bounds
-    pub fn dataset_intersects_bounds(&self, bounds: &GridBoundingBox2D) -> bool {
+    pub fn is_dataset_intersection_tile(&self, tile: &SpatialGridDefinition) -> bool {
         match self {
             GdalReaderMode::OriginalResolution(reader_state) => {
-                reader_state.intersection_tiling_bounds(bounds).is_some()
+                reader_state.dataset_itersection_tile(tile).is_some()
             }
+
             GdalReaderMode::OverviewLevel(_overview_reader_state) => {
                 unimplemented!()
             }
@@ -52,11 +53,11 @@ impl GdalReaderMode {
     /// Returns the read advise for the tiling based bounds
     pub fn tiling_to_dataset_read_advise(
         &self,
-        tiling_based_bounds: GridBoundingBox2D,
+        tile: &SpatialGridDefinition,
     ) -> Option<GdalReadAdvise> {
         match self {
             GdalReaderMode::OriginalResolution(reader_state) => {
-                reader_state.tiling_to_dataset_read_advise(tiling_based_bounds)
+                reader_state.tiling_to_dataset_read_advise(tile)
             }
             GdalReaderMode::OverviewLevel(_overview_reader_state) => {
                 unimplemented!()
@@ -67,81 +68,79 @@ impl GdalReaderMode {
 
 #[derive(Copy, Clone, Debug)]
 pub struct ReaderState {
-    pub dataset_shape: GridShape2D,
-    pub dataset_geo_transform: GeoTransform,
+    pub dataset_spatial_grid: SpatialGridDefinition,
 }
 
 impl ReaderState {
     #[inline]
     fn dataset_bounds(&self) -> GridBoundingBox2D {
-        self.dataset_shape.bounding_box()
+        self.dataset_spatial_grid.bounding_box()
     }
 
     #[inline]
-    fn dataset_geo_transform(&self) -> GeoTransform {
-        // todo: only allow if the origin is in the upper left corner?
-        self.dataset_geo_transform
-    }
-
-    #[inline]
-    fn tiling_to_dataset_bounds(
+    /// returns the intersection of the dataset and the tile in dataset pixels!
+    fn dataset_itersection_tile(
         &self,
-        tiling_based_bounds: GridBoundingBox2D,
-    ) -> (GridBoundingBox2D, GridIdx2D) {
-        let dataset_geo_transform = self.dataset_geo_transform();
-        let offset = dataset_geo_transform.nearest_pixel_to_zero();
-        let tiling_to_dataset = tiling_based_bounds.shift_by_offset(offset);
-
-        (tiling_to_dataset, offset)
-    }
-
-    #[inline]
-    fn intersection_tiling_bounds(&self, other: &GridBoundingBox2D) -> Option<GridBoundingBox2D> {
-        let dataset_bounds = self.dataset_bounds();
-        let (tiling_to_dataset_bounds, offset) = self.tiling_to_dataset_bounds(*other);
-
-        dataset_bounds
-            .intersection(&tiling_to_dataset_bounds)
-            .map(|i| i.shift_by_offset(offset * -1))
+        tile: &SpatialGridDefinition,
+    ) -> Option<SpatialGridDefinition> {
+        // todo: only allow if the origin is in the upper left corner?
+        self.dataset_spatial_grid.intersection(tile)
     }
 
     #[inline]
     fn tiling_to_dataset_read_advise(
         &self,
-        tiling_based_bounds: GridBoundingBox2D,
+        tile: &SpatialGridDefinition,
     ) -> Option<GdalReadAdvise> {
         // we need to shift the tiling based bounds to the dataset bounds
-        let dataset_geo_transform = self.dataset_geo_transform();
-        let offset = dataset_geo_transform.nearest_pixel_to_zero();
-        let tiling_to_dataset_bounds = tiling_based_bounds.shift_by_offset(offset);
+        // TODO: we could calculate the offset once...
+        let tile_in_dataset_space = tile.with_moved_origin_exact_grid(
+            self.dataset_spatial_grid.geo_transform().origin_coordinate,
+        )?;
 
+        let tile_in_dataset_space_bounds = tile_in_dataset_space.grid_bounds();
         //we can only read the intersection of the tiling based bounds and the dataset bounds from GDAL. If the intersection is empty we can't read anything.
-        let tiling_dataset_intersection =
-            tiling_to_dataset_bounds.intersection(&self.dataset_bounds())?;
+        let tile_dataset_intersection =
+            tile_in_dataset_space_bounds.intersection(&self.dataset_bounds())?;
 
         // generate the read window for GDAL
         let read_window = GdalReadWindow::new(
-            tiling_dataset_intersection.min_index(),
-            tiling_dataset_intersection.grid_shape(),
+            tile_dataset_intersection.min_index(),
+            tile_dataset_intersection.grid_shape(),
         );
 
         // if the read window has the same shape as the tiling based bounds we can fill that completely
-        if tiling_dataset_intersection.grid_shape() == tiling_based_bounds.grid_shape() {
+        if tile_dataset_intersection.grid_shape() == tile_in_dataset_space_bounds.grid_shape() {
+            debug_assert_eq!(tile_dataset_intersection, tile_in_dataset_space_bounds);
+
             return Some(GdalReadAdvise {
                 gdal_read_widow: read_window,
-                read_window_bounds: tiling_based_bounds,
-                bounds_of_target: tiling_based_bounds,
+                read_window_bounds: tile.grid_bounds,
+                bounds_of_target: tile.grid_bounds,
                 flip_y: false,
             });
         };
 
+        // we need to crop the window to the intersection of the tiling based bounds and the dataset bounds
+        let crop_tl =
+            tile_dataset_intersection.min_index() - tile_in_dataset_space_bounds.min_index();
+        let crop_lr =
+            tile_dataset_intersection.max_index() - tile_in_dataset_space_bounds.max_index();
+
+        let shifted_tl = tile.grid_bounds.min_index() + crop_tl;
+        let shifted_lr = tile.grid_bounds.max_index() + crop_lr;
+
         // now we need to adapt the target pixel space read window to the clipped dataset intersection area
-        let shifted_readable_bounds = tiling_dataset_intersection.shift_by_offset(offset * -1);
+        let shifted_readable_bounds = GridBoundingBox2D::new_unchecked(shifted_tl, shifted_lr);
+        debug_assert!(
+            tile.grid_bounds().contains(&shifted_readable_bounds),
+            "readable bounds must be contained in tile bounds"
+        );
 
         Some(GdalReadAdvise {
             gdal_read_widow: read_window,
             read_window_bounds: shifted_readable_bounds,
-            bounds_of_target: tiling_based_bounds,
+            bounds_of_target: tile.grid_bounds,
             flip_y: false,
         })
     }
@@ -220,7 +219,10 @@ pub struct GridAndProperties<T> {
 mod tests {
     use geoengine_datatypes::{
         primitives::Coordinate2D,
-        raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, GridShape2D},
+        raster::{
+            BoundedGrid, GeoTransform, GridBoundingBox2D, GridIdx2D, GridShape2D,
+            SpatialGridDefinition,
+        },
     };
 
     use crate::source::gdal_source::reader::{GdalReadWindow, ReaderState};
@@ -228,8 +230,10 @@ mod tests {
     #[test]
     fn reader_state_dataset_bounds() {
         let reader_state = ReaderState {
-            dataset_shape: GridShape2D::new([1024, 1024]),
-            dataset_geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            dataset_spatial_grid: SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridShape2D::new([1024, 1024]).bounding_box(),
+            ),
         };
 
         assert_eq!(
@@ -241,12 +245,14 @@ mod tests {
     #[test]
     fn reader_state_dataset_geo_transform() {
         let reader_state = ReaderState {
-            dataset_shape: GridShape2D::new([1024, 1024]),
-            dataset_geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            dataset_spatial_grid: SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridShape2D::new([1024, 1024]).bounding_box(),
+            ),
         };
 
         assert_eq!(
-            reader_state.dataset_geo_transform(),
+            reader_state.dataset_spatial_grid.geo_transform(),
             GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.)
         );
     }
@@ -254,51 +260,71 @@ mod tests {
     #[test]
     fn reader_state_tiling_to_dataset_bounds_no_change() {
         let reader_state = ReaderState {
-            dataset_shape: GridShape2D::new([1024, 1024]),
-            dataset_geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            dataset_spatial_grid: SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridShape2D::new([1024, 1024]).bounding_box(),
+            ),
         };
 
-        let (tiling_to_dataset_bounds, offset) = reader_state.tiling_to_dataset_bounds(
-            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap(),
+        let res = reader_state
+            .dataset_itersection_tile(&SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap(),
+            ))
+            .unwrap();
+
+        assert_eq!(
+            res.geo_transform(),
+            GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.)
         );
 
         assert_eq!(
-            tiling_to_dataset_bounds,
+            res.grid_bounds(),
             GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap()
-        );
-
-        assert_eq!(offset, GridIdx2D::new([0, 0]));
+        )
     }
 
     #[test]
     fn reader_state_tiling_to_dataset_bounds_shifted() {
         let reader_state = ReaderState {
-            dataset_shape: GridShape2D::new([180, 360]),
-            dataset_geo_transform: GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+            dataset_spatial_grid: SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+                GridShape2D::new([180, 360]).bounding_box(),
+            ),
         };
 
-        let (tiling_to_dataset_bounds, offset) = reader_state.tiling_to_dataset_bounds(
-            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([89, 179])).unwrap(),
-        );
+        let res = reader_state
+            .dataset_itersection_tile(&SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([89, 179])).unwrap(),
+            ))
+            .unwrap();
 
         assert_eq!(
-            tiling_to_dataset_bounds,
+            res.grid_bounds(),
             GridBoundingBox2D::new(GridIdx2D::new([90, 180]), GridIdx2D::new([179, 359])).unwrap()
         );
 
-        assert_eq!(offset, GridIdx2D::new([90, 180]));
+        assert_eq!(
+            res.geo_transform(),
+            GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.)
+        );
     }
 
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_no_change() {
         let reader_state = ReaderState {
-            dataset_shape: GridShape2D::new([1024, 1024]),
-            dataset_geo_transform: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            dataset_spatial_grid: SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridShape2D::new([1024, 1024]).bounding_box(),
+            ),
         };
 
-        let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
-            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap(),
-        );
+        let tiling_to_dataset_read_advise =
+            reader_state.tiling_to_dataset_read_advise(&SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap(),
+            ));
 
         assert!(tiling_to_dataset_read_advise.is_some());
 
@@ -330,13 +356,17 @@ mod tests {
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_shifted() {
         let reader_state = ReaderState {
-            dataset_shape: GridShape2D::new([180, 360]),
-            dataset_geo_transform: GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+            dataset_spatial_grid: SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+                GridShape2D::new([180, 360]).bounding_box(),
+            ),
         };
 
-        let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
-            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([89, 179])).unwrap(),
-        );
+        let tiling_to_dataset_read_advise =
+            reader_state.tiling_to_dataset_read_advise(&SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([89, 179])).unwrap(),
+            ));
 
         assert!(tiling_to_dataset_read_advise.is_some());
 
@@ -368,13 +398,18 @@ mod tests {
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_shifted_and_clipped() {
         let reader_state = ReaderState {
-            dataset_shape: GridShape2D::new([180, 360]),
-            dataset_geo_transform: GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+            dataset_spatial_grid: SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+                GridShape2D::new([180, 360]).bounding_box(),
+            ),
         };
 
-        let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
-            GridBoundingBox2D::new(GridIdx2D::new([10, 10]), GridIdx2D::new([99, 189])).unwrap(),
-        );
+        let tiling_to_dataset_read_advise =
+            reader_state.tiling_to_dataset_read_advise(&SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new(GridIdx2D::new([10, 10]), GridIdx2D::new([99, 189]))
+                    .unwrap(),
+            ));
 
         assert!(tiling_to_dataset_read_advise.is_some());
 
@@ -406,39 +441,49 @@ mod tests {
     #[test]
     fn intersection_tiling_bounds() {
         let reader_state = ReaderState {
-            dataset_shape: GridShape2D::new([180, 360]),
-            dataset_geo_transform: GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+            dataset_spatial_grid: SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+                GridShape2D::new([180, 360]).bounding_box(),
+            ),
         };
 
-        let intersection = reader_state.intersection_tiling_bounds(
-            &GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([89, 179])).unwrap(),
-        );
+        let intersection = reader_state
+            .dataset_itersection_tile(&SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([89, 179])).unwrap(),
+            ))
+            .unwrap();
 
         assert_eq!(
-            intersection,
-            Some(
-                GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([89, 179])).unwrap()
-            )
+            intersection.grid_bounds(),
+            GridBoundingBox2D::new(GridIdx2D::new([90, 180]), GridIdx2D::new([179, 359])).unwrap()
         );
     }
 
     #[test]
     fn intersection_tiling_bounds_clipped() {
         let reader_state = ReaderState {
-            dataset_shape: GridShape2D::new([180, 360]),
-            dataset_geo_transform: GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+            dataset_spatial_grid: SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+                GridShape2D::new([180, 360]).bounding_box(),
+            ),
         };
 
-        let intersection = reader_state.intersection_tiling_bounds(
-            &GridBoundingBox2D::new(GridIdx2D::new([10, 10]), GridIdx2D::new([99, 189])).unwrap(),
-        );
+        let intersection = reader_state
+            .dataset_itersection_tile(&SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new(GridIdx2D::new([10, 10]), GridIdx2D::new([179, 359]))
+                    .unwrap(),
+            ))
+            .unwrap();
 
         assert_eq!(
-            intersection,
-            Some(
-                GridBoundingBox2D::new(GridIdx2D::new([10, 10]), GridIdx2D::new([89, 179]))
-                    .unwrap()
+            intersection.grid_bounds,
+            GridBoundingBox2D::new(
+                GridIdx2D::new([90 + 10, 180 + 10]),
+                GridIdx2D::new([179, 359])
             )
+            .unwrap()
         );
     }
 

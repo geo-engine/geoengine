@@ -1,7 +1,8 @@
 use crate::engine::{
-    CreateSpan, ExecutionContext, ExecutionContextExtensions, InitializedPlotOperator,
-    InitializedRasterOperator, InitializedVectorOperator, MetaData, MetaDataProvider,
-    MockExecutionContext, ResultDescriptor, WorkflowOperatorPath,
+    ChunkByteSize, CreateSpan, ExecutionContext, ExecutionContextExtensions,
+    InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator, MetaData,
+    MetaDataProvider, MockExecutionContext, MockQueryContext, QueryContextExtensions,
+    ResultDescriptor, WorkflowOperatorPath,
 };
 use crate::pro::meta::wrapper::InitializedOperatorWrapper;
 use crate::util::Result;
@@ -22,6 +23,20 @@ impl TestDefault for StatisticsWrappingMockExecutionContext {
         Self {
             inner: MockExecutionContext::test_default(),
         }
+    }
+}
+
+impl StatisticsWrappingMockExecutionContext {
+    pub fn mock_query_context_with_query_extensions(
+        &self,
+        chunk_byte_size: ChunkByteSize,
+        extensions: QueryContextExtensions,
+    ) -> MockQueryContext {
+        MockQueryContext::new_with_query_extensions(
+            chunk_byte_size,
+            self.tiling_specification(),
+            extensions,
+        )
     }
 }
 

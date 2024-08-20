@@ -14,7 +14,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::engine::RasterResultDescriptor;
 use geoengine_operators::{
-    engine::{ChunkByteSize, MockQueryContext, QueryContext, RasterQueryProcessor},
+    engine::{ChunkByteSize, MockQueryContext, RasterQueryProcessor},
     mock::MockRasterSourceProcessor,
     source::{GdalMetaDataRegular, GdalSourceProcessor},
     util::gdal::create_ndvi_meta_data,
@@ -148,23 +148,24 @@ fn bench_raster_processor<
     T: Pixel,
     F: Fn(TilingSpecification) -> S,
     S: RasterQueryProcessor<RasterType = T>,
-    C: QueryContext,
 >(
     bench_id: &'static str,
     list_of_named_querys: &[(&str, RasterQueryRectangle)],
     list_of_tiling_specs: &[TilingSpecification],
     tile_producing_operator_builderr: F,
-    ctx: &C,
     run_time: &tokio::runtime::Runtime,
 ) {
     for tiling_spec in list_of_tiling_specs {
+        let ctx =
+            MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, *tiling_spec, 8);
+
         let operator = (tile_producing_operator_builderr)(*tiling_spec);
 
         for &(qrect_name, ref qrect) in list_of_named_querys {
             run_time.block_on(async {
                 // query the operator
                 let start_query = Instant::now();
-                let query = operator.raster_query(qrect.clone(), ctx).await.unwrap();
+                let query = operator.raster_query(qrect.clone(), &ctx).await.unwrap();
                 let query_elapsed = start_query.elapsed();
 
                 let start = Instant::now();
@@ -240,14 +241,12 @@ fn bench_no_data_tiles() {
     let tiling_specs = vec![TilingSpecification::new([600, 600].into())];
 
     let run_time = tokio::runtime::Runtime::new().unwrap();
-    let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, 8);
 
     bench_raster_processor(
         "no_data_tiles",
         &qrects,
         &tiling_specs,
         setup_mock_source,
-        &ctx,
         &run_time,
     );
     bench_raster_processor(
@@ -255,7 +254,6 @@ fn bench_no_data_tiles() {
         &qrects,
         &tiling_specs,
         |ts| setup_gdal_source(create_ndvi_meta_data(), ts),
-        &ctx,
         &run_time,
     );
 }
@@ -271,7 +269,6 @@ fn bench_tile_size() {
     )];
 
     let run_time = tokio::runtime::Runtime::new().unwrap();
-    let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, 8);
 
     let tiling_specs = vec![
         TilingSpecification::new([32, 32].into()),
@@ -292,7 +289,6 @@ fn bench_tile_size() {
         &qrects,
         &tiling_specs,
         |ts| setup_gdal_source(create_ndvi_meta_data(), ts),
-        &ctx,
         &run_time,
     );
 }

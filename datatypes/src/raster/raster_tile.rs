@@ -6,6 +6,7 @@ use super::{
 };
 use super::{
     BoundedGrid, ChangeGridBounds, GridBoundingBox2D, GridIndexAccessMut, RasterProperties,
+    SpatialGridDefinition,
 };
 use crate::primitives::CacheHint;
 use crate::primitives::{
@@ -67,6 +68,26 @@ where
             self.tile_position,
             [self.grid_array.axis_size_y(), self.grid_array.axis_size_x()].into(),
             self.global_geo_transform,
+        )
+    }
+
+    pub fn global_pixel_spatial_grid_definition(&self) -> SpatialGridDefinition {
+        let global_upper_left_idx = self.tile_position
+            * [
+                self.grid_array.axis_size_y() as isize,
+                self.grid_array.axis_size_x() as isize,
+            ];
+
+        SpatialGridDefinition::new(
+            self.global_geo_transform,
+            GridBoundingBox2D::new_unchecked(
+                global_upper_left_idx,
+                global_upper_left_idx
+                    + [
+                        self.grid_array.axis_size_y() as isize,
+                        self.grid_array.axis_size_x() as isize,
+                    ],
+            ),
         )
     }
 

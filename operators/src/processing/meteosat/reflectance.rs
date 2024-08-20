@@ -113,8 +113,7 @@ impl RasterOperator for Reflectance {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
             time: in_desc.time,
-            geo_transform_x: in_desc.tiling_geo_transform(),
-            pixel_bounds_x: in_desc.tiling_pixel_bounds(),
+            spatial_grid: in_desc.spatial_grid,
             bands: RasterBandDescriptors::new(
                 in_desc
                     .bands

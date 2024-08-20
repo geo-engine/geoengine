@@ -16,13 +16,7 @@ use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D};
-use geoengine_operators::engine::{
-    CanonicOperatorName, ExecutionContext, SingleRasterOrVectorSource, WorkflowOperatorPath,
-};
-use geoengine_operators::processing::{
-    DeriveOutRasterSpecsSource, InitializedRasterReprojection, Reprojection, ReprojectionParams,
-};
-use geoengine_operators::util::input::RasterOrVectorOperator;
+use geoengine_operators::engine::{ExecutionContext, WorkflowOperatorPath};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
@@ -275,7 +269,17 @@ async fn wms_map_handler<C: ApplicationContext>(
                 .map(Duration::from_secs),
         );
 
+        // TODO: use a default spatial reference if it is not set?
+        let request_spatial_ref: SpatialReference =
+            request.crs.ok_or(error::Error::MissingSpatialReference)?;
+
+        let request_bounds: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
+
+        let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
+
         let ctx = app_ctx.session_context(session);
+
+        let tiling_spec = ctx.execution_context()?.tiling_specification();
 
         let workflow = ctx
             .db()
@@ -294,73 +298,24 @@ async fn wms_map_handler<C: ApplicationContext>(
             .await
             .context(error::Operator)?;
 
-        let result_descriptor = initialized.result_descriptor();
-
-        tracing::debug!(?result_descriptor, "data result descriptor");
-
-        // handle request and workflow crs matching
-        let workflow_spatial_ref: SpatialReferenceOption =
-            result_descriptor.spatial_reference.into();
-        let workflow_spatial_ref: Option<SpatialReference> = workflow_spatial_ref.into();
-        let workflow_spatial_ref =
-            workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
-
-        // TODO: use a default spatial reference if it is not set?
-        let request_spatial_ref: SpatialReference =
-            request.crs.ok_or(error::Error::MissingSpatialReference)?;
-
-        // perform reprojection if necessary
-        let initialized = if request_spatial_ref == workflow_spatial_ref {
-            initialized
-        } else {
-            log::debug!(
-                "WMS query srs: {}, workflow srs: {} --> injecting reprojection",
-                request_spatial_ref,
-                workflow_spatial_ref
-            );
-
-            let reprojection_params = ReprojectionParams {
-                target_spatial_reference: request_spatial_ref.into(),
-                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
-            };
-
-            // create the reprojection operator in order to get the canonic operator name
-            let reprojected_workflow = Reprojection {
-                params: reprojection_params,
-                sources: SingleRasterOrVectorSource {
-                    source: RasterOrVectorOperator::Raster(operator),
-                },
-            };
-
-            let irp = InitializedRasterReprojection::try_new_with_input(
-                CanonicOperatorName::from(&reprojected_workflow),
-                reprojection_params,
+        let wrapped =
+            geoengine_operators::util::WrapWithProjectionAndResample::new_create_result_descriptor(
+                operator,
                 initialized,
-                execution_context.tiling_specification(),
             )
-            .context(error::Operator)?;
+            .wrap_with_projection(request_spatial_ref.into(), None, tiling_spec)?;
+        // TODO: add a resammple operator for downsampling AND resample push down!
 
-            Box::new(irp)
-        };
-
-        let result_descriptor = initialized.result_descriptor();
-
-        tracing::debug!(
-            ?result_descriptor,
-            "data result descriptor after reprojection"
-        );
+        let initialized = wrapped.initialized_operator;
 
         let processor = initialized.query_processor().context(error::Operator)?;
 
-        let request_bounds: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
-        let query_pixel_bounds = processor
-            .result_descriptor()
-            .tiling_geo_transform()
-            .spatial_to_grid_bounds(&request_bounds);
-
-        tracing::debug!(?query_pixel_bounds, "query_pixel_bunds");
-
-        let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
+        let query_tiling_pixel_grid = wrapped
+            .result_descriptor
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(tiling_spec)
+            .tiling_spatial_grid_definition()
+            .spatial_bounds_to_compatible_spatial_grid(request_bounds);
 
         let (attributes, colorizer) = match raster_colorizer {
             Some(RasterColorizer::SingleBand {
@@ -371,15 +326,14 @@ async fn wms_map_handler<C: ApplicationContext>(
         };
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
-            query_pixel_bounds,
+            query_tiling_pixel_grid.grid_bounds(),
             request.time.unwrap_or_else(default_time_from_config).into(),
             attributes,
         );
 
-        tracing::debug!(?query_rect, "query_rect");
-
         let query_ctx = ctx.query_context()?;
 
+        // The raster to png code already resamples when the tiles are filled. We should add resample for lower resolutions
         call_on_generic_raster_processor!(
             processor,
             p =>

@@ -288,7 +288,7 @@ impl CollectorKind {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator};
+    use crate::engine::{ChunkByteSize, MockExecutionContext, VectorOperator};
     use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, NoGeometry, PlotQueryRectangle, PlotSeriesSelection,
@@ -387,7 +387,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -463,7 +463,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -647,7 +647,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -699,7 +699,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -753,7 +753,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -833,7 +833,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();

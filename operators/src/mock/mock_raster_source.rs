@@ -14,7 +14,7 @@ use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::{CacheExpiration, TimeInstance};
 use geoengine_datatypes::raster::{
     GridIntersection, GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D,
-    TilingSpecification, TilingStrategy,
+    TilingSpecification,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -153,10 +153,11 @@ where
 
         let inner_stream = stream::iter(parts.into_iter().map(Result::Ok));
 
-        let tiling_strategy = TilingStrategy::new_with_tiling_spec(
-            self.tiling_specification,
-            self.result_descriptor.tiling_geo_transform(),
-        );
+        let tiling_grid_spec = self
+            .result_descriptor
+            .tiling_grid_definition(self.tiling_specification);
+
+        let tiling_strategy = tiling_grid_spec.generate_data_tiling_strategy();
 
         // use SparseTilesFillAdapter to fill all the gaps
         Ok(SparseTilesFillAdapter::new(
@@ -321,6 +322,7 @@ mod tests {
     use super::*;
     use crate::engine::{
         MockExecutionContext, MockQueryContext, QueryProcessor, RasterBandDescriptors,
+        SpatialGridDescriptor,
     };
     use geoengine_datatypes::primitives::{BandSelection, CacheHint, TimeInterval};
     use geoengine_datatypes::raster::{
@@ -356,8 +358,10 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform_x: GeoTransform::new((0., 0.).into(), 1., -1.),
-                    pixel_bounds_x: GridShape2D::new_2d(3, 2).bounding_box(),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., 0.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 2).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -511,8 +515,10 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform_x: GeoTransform::new((0., -3.).into(), 1., -1.),
-                    pixel_bounds_x: GridShape2D::new_2d(3, 4).bounding_box(),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },

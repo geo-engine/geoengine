@@ -10,8 +10,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::{
-    ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor, VectorOperator,
-    WorkflowOperatorPath,
+    ChunkByteSize, MockExecutionContext, QueryProcessor, VectorOperator, WorkflowOperatorPath,
 };
 use geoengine_operators::mock::MockFeatureCollectionSource;
 use geoengine_operators::processing::{
@@ -27,6 +26,8 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
 
     let polygon_source = MockFeatureCollectionSource::single(polygons).boxed();
 
+    let exe_ctx = MockExecutionContext::test_default();
+
     let operator = PointInPolygonFilter {
         params: PointInPolygonFilterParams {},
         sources: PointInPolygonFilterSource {
@@ -35,10 +36,7 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
         },
     }
     .boxed()
-    .initialize(
-        WorkflowOperatorPath::initialize_root(),
-        &MockExecutionContext::test_default(),
-    )
+    .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
     .await
     .unwrap();
 
@@ -49,7 +47,8 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
         TimeInterval::default(),
         ColumnSelection::all(),
     );
-    let ctx = MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, num_threads);
+    let ctx = exe_ctx
+        .mock_query_context_with_chunk_size_and_thread_count(ChunkByteSize::MAX, num_threads);
 
     let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 

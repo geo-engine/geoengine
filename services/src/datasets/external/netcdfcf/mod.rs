@@ -29,12 +29,14 @@ use geoengine_datatypes::primitives::{
     CacheTtlSeconds, DateTime, Measurement, RasterQueryRectangle, TimeInstance,
     VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{GdalGeoTransform, GeoTransform, GridShape2D, RasterDataType};
+use geoengine_datatypes::raster::{
+    BoundedGrid, GdalGeoTransform, GeoTransform, GridShape2D, RasterDataType,
+};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::util::gdal::ResamplingMethod;
-use geoengine_operators::engine::RasterBandDescriptor;
 use geoengine_operators::engine::RasterBandDescriptors;
+use geoengine_operators::engine::{RasterBandDescriptor, SpatialGridDescriptor};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
 };
@@ -530,8 +532,6 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
         let pixel_shape = GridShape2D::new_2d(params.height as usize, params.width as usize);
         let geo_transform =
             GeoTransform::try_from(params.geo_transform).expect("GeoTransform must be valid"); // TODO: check how the axis in netcfd are stored;
-        let tiling_geo_transform = geo_transform.nearest_pixel_to_zero_based();
-        let tiling_pixel_bounds = geo_transform.shape_to_nearest_to_zero_based(&pixel_shape);
 
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::from_gdal_data_type(
@@ -548,8 +548,10 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
             .context(error::CannotParseCrs)?
             .into(),
             time: None,
-            geo_transform_x: tiling_geo_transform,
-            pixel_bounds_x: tiling_pixel_bounds,
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                geo_transform,
+                pixel_shape.bounding_box(),
+            ),
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "band".into(),
                 derive_measurement(data_array.unit()),
@@ -1960,16 +1962,14 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
                 time: None,
-                geo_transform_x: GeoTransform::new(
-                    (3_580_000.0, 2_370_000.0).into(),
-                    1000.0,
-                    -1000.0
-                ), // FIXME: move to tiling bounds
-                pixel_bounds_x: GridBoundingBox2D::new(
-                    [0, 0], // 0
-                    [9, 9]  // 10
-                )
-                .unwrap(),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((3_580_000.0, 2_370_000.0).into(), 1000.0, -1000.0), // FIXME: move to tiling bounds
+                    GridBoundingBox2D::new(
+                        [0, 0], // 0
+                        [9, 9]  // 10
+                    )
+                    .unwrap(),
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );
@@ -2095,16 +2095,14 @@ mod tests {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
                 time: None,
-                geo_transform_x: GeoTransform::new(
-                    (3_580_000.0, 2_370_000.0).into(),
-                    1000.0,
-                    -1000.0
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((3_580_000.0, 2_370_000.0).into(), 1000.0, -1000.0),
+                    GridBoundingBox2D::new(
+                        [0, 0], // 0
+                        [9, 9]  // 10
+                    )
+                    .unwrap(),
                 ),
-                pixel_bounds_x: GridBoundingBox2D::new(
-                    [0, 0], // 0
-                    [9, 9]  // 10
-                )
-                .unwrap(),
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );

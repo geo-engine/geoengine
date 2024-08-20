@@ -12,9 +12,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{time_interval_extent, BandSelection, RasterQueryRectangle};
-use geoengine_datatypes::raster::{
-    DynamicRasterDataType, GridBoundingBoxExt, Pixel, RasterTile2D, RenameBands,
-};
+use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D, RenameBands};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -77,26 +75,17 @@ impl RasterOperator for RasterStacker {
             }
         );
 
-        // FIXME: refine checkings add regridding if necessary
-        for &other_descriptor in in_descriptors.iter().skip(1) {
-            ensure!(
-                in_descriptors[0].spatial_tiling_compat(other_descriptor),
-                crate::error::RasterResultsIncompatible {
-                    a: in_descriptors[0].clone(),
-                    b: other_descriptor.clone(),
-                }
-            );
-        }
-
-        let tiling_geo_transform = in_descriptors[0].tiling_geo_transform();
+        let first_spatial_grid = in_descriptors[0].spatial_grid;
+        let result_spatial_grid = in_descriptors
+            .iter()
+            .skip(1)
+            .map(|x| x.spatial_grid_descriptor())
+            .try_fold(first_spatial_grid, |a, &b| {
+                a.merge(&b)
+                    .ok_or(crate::error::Error::CantMergeSpatialGridDescriptor { a, b })
+            })?;
 
         let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
-
-        let bbox = in_descriptors
-            .iter()
-            .map(|&d| d.tiling_pixel_bounds())
-            .reduce(|a, b| a.extended(&b))
-            .expect("at least one input");
 
         let data_type = in_descriptors[0].data_type;
         let spatial_reference = in_descriptors[0].spatial_reference;
@@ -125,8 +114,7 @@ impl RasterOperator for RasterStacker {
             data_type,
             spatial_reference,
             time,
-            geo_transform_x: tiling_geo_transform,
-            pixel_bounds_x: bbox,
+            spatial_grid: result_spatial_grid,
             bands: output_band_descriptors,
         };
 
@@ -365,7 +353,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
-            SingleRasterSource,
+            SingleRasterSource, SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams},
@@ -492,8 +480,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: Some(TimeInterval::new_unchecked(0, 10)),
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -740,8 +730,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new(vec![
                 RasterBandDescriptor::new_unitless("band_0".into()),
                 RasterBandDescriptor::new_unitless("band_1".into()),
@@ -917,8 +909,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 

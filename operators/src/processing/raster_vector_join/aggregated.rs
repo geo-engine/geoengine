@@ -95,6 +95,7 @@ where
             let spatial_bounds = query.spatial_query.spatial_bounds();
 
             let pixel_bounds = rd
+                .tiling_grid_definition(ctx.tiling_specification())
                 .tiling_geo_transform()
                 .bounding_box_2d_to_grid_bounds(&spatial_bounds);
 
@@ -297,19 +298,17 @@ mod tests {
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors,
-        RasterResultDescriptor, VectorColumnInfo, VectorOperator, WorkflowOperatorPath,
+        RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, VectorColumnInfo,
+        VectorOperator, WorkflowOperatorPath,
     };
-    use crate::engine::{MockQueryContext, RasterOperator};
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::collections::{
         ChunksEqualIgnoringCacheHint, MultiPointCollection, MultiPolygonCollection, VectorDataType,
     };
-    use geoengine_datatypes::primitives::MultiPolygon;
+
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureDataRef, MultiPoint, TimeInterval,
-    };
-    use geoengine_datatypes::primitives::{
-        CacheHint, Coordinate2D, FeatureData, FeatureDataType, Measurement,
+        BoundingBox2D, CacheHint, Coordinate2D, FeatureData, FeatureDataRef, FeatureDataType,
+        Measurement, MultiPoint, MultiPolygon, TimeInterval,
     };
     use geoengine_datatypes::raster::{
         GeoTransform, Grid2D, GridBoundingBox2D, RasterTile2D, TileInformation, TilingSpecification,
@@ -337,8 +336,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds_x: GridBoundingBox2D::new([0, 0], [2, 1]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([0, 0], [2, 1]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -387,7 +388,7 @@ mod tests {
                 Default::default(),
                 ColumnSelection::all(),
             ),
-            &MockQueryContext::new(ChunkByteSize::MIN),
+            &execution_context.mock_query_context(ChunkByteSize::MIN),
         )
         .await
         .unwrap();
@@ -433,8 +434,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds_x: GridBoundingBox2D::new([0, 0], [2, 1]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([0, 0], [2, 1]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -483,7 +486,7 @@ mod tests {
                 TimeInterval::new(0, 20).unwrap(),
                 ColumnSelection::all(),
             ),
-            &MockQueryContext::new(ChunkByteSize::MIN),
+            &execution_context.mock_query_context(ChunkByteSize::MIN),
         )
         .await
         .unwrap();
@@ -555,8 +558,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds_x: GridBoundingBox2D::new([0, 0], [2, 3]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([0, 0], [2, 3]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -606,7 +611,7 @@ mod tests {
                 TimeInterval::new(0, 20).unwrap(),
                 ColumnSelection::all(),
             ),
-            &MockQueryContext::new(ChunkByteSize::MIN),
+            &execution_context.mock_query_context(ChunkByteSize::MIN),
         )
         .await
         .unwrap();
@@ -708,8 +713,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            pixel_bounds_x: GridBoundingBox2D::new([0, 0], [2, 5]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([0, 0], [2, 5]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -763,7 +770,7 @@ mod tests {
                 TimeInterval::new(0, 20).unwrap(),
                 ColumnSelection::all(),
             ),
-            &MockQueryContext::new(ChunkByteSize::MIN),
+            &execution_context.mock_query_context(ChunkByteSize::MIN),
         )
         .await
         .unwrap();
@@ -963,8 +970,10 @@ mod tests {
                     data_type: RasterDataType::U16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform_x: TestDefault::test_default(),
-                    pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 2, 0, 5).unwrap(),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(0, 2, 0, 5).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
                         RasterBandDescriptor::new_unitless("band_1".into()),
@@ -1044,7 +1053,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 20),
                     ColumnSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MAX),
+                &execution_context.mock_query_context(ChunkByteSize::MAX),
             )
             .await
             .unwrap()

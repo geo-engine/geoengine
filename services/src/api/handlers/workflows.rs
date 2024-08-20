@@ -481,11 +481,12 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
     let info = RasterDatasetFromWorkflowParams::from_request_and_result_descriptor(
         info.into_inner(),
         result_descriptor,
+        ctx.execution_context()?.tiling_specification(),
     )?;
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("workflow {id}"),
-        workflow,
+        operator,
         ctx,
         info,
         compression_num_threads,
@@ -573,6 +574,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
 
     let query_bounds = initialized_operator
         .result_descriptor()
+        .tiling_grid_definition(execution_context.tiling_specification())
         .tiling_geo_transform()
         .spatial_to_grid_bounds(&query.spatial_bounds);
     let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
@@ -732,7 +734,7 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
         ExecutionContext, MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
-        RasterBandDescriptors, TypedOperator,
+        RasterBandDescriptors, SpatialGridDescriptor, TypedOperator,
     };
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
@@ -1039,12 +1041,11 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         time: None,
-                        geo_transform_x: GeoTransform::test_default(),
-                        pixel_bounds_x: geoengine_datatypes::raster::GridBoundingBox2D::new(
-                            [0, 0],
-                            [1, 1],
-                        )
-                        .unwrap(), // FIXME: change to somethiing that is tested!
+                        spatial_grid: SpatialGridDescriptor::source_from_parts(
+                            GeoTransform::test_default(),
+                            geoengine_datatypes::raster::GridBoundingBox2D::new([0, 0], [1, 1])
+                                .unwrap(), // FIXME: change to somethiing that is tested!
+                        ),
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
@@ -1493,9 +1494,11 @@ mod tests {
             geoengine_datatypes::primitives::BandSelection::first(),
         );
 
-        let tiling_strategy = exe_ctx
-            .tiling_specification()
-            .strategy(o.result_descriptor().tiling_geo_transform());
+        let tiling_strategy = o
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(exe_ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         let processor = o.query_processor().unwrap().get_u8().unwrap();
 

@@ -8,9 +8,8 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        ChunkByteSize, InitializedRasterOperator, MockExecutionContext, MockQueryContext,
-        QueryContextExtensions, QueryProcessor, RasterOperator, SingleRasterSource,
-        WorkflowOperatorPath,
+        ChunkByteSize, InitializedRasterOperator, MockExecutionContext, QueryContextExtensions,
+        QueryProcessor, RasterOperator, SingleRasterSource, WorkflowOperatorPath,
     },
     pro::cache::{cache_operator::InitializedCacheOperator, shared_cache::SharedCache},
     processing::{
@@ -61,7 +60,7 @@ async fn main() {
     extensions.insert(tile_cache);
 
     let query_ctx =
-        MockQueryContext::new_with_query_extensions(ChunkByteSize::test_default(), extensions);
+        exe_ctx.mock_query_context_with_query_extensions(ChunkByteSize::test_default(), extensions);
 
     let start = std::time::Instant::now();
 

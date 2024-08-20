@@ -16,8 +16,7 @@ use geoengine_datatypes::{
         time_interval_extent, BandSelection, RasterQueryRectangle, RasterSpatialQueryRectangle,
     },
     raster::{
-        FromIndexFn, GridBoundingBoxExt, GridIndexAccess, GridOrEmpty, GridShapeAccess,
-        RasterDataType, RasterTile2D,
+        FromIndexFn, GridIndexAccess, GridOrEmpty, GridShapeAccess, RasterDataType, RasterTile2D,
     },
     spatial_reference::SpatialReferenceOption,
 };
@@ -174,28 +173,15 @@ impl RasterOperator for Rgb {
         let first_result_descriptor = sources.red.result_descriptor();
         let spatial_reference = first_result_descriptor.spatial_reference;
 
-        let geo_transform = first_result_descriptor.tiling_geo_transform();
-        let bounds = sources
+        let first_spatial_grid = *sources.red.result_descriptor().spatial_grid_descriptor();
+        let result_spatial_grid = sources
             .iter()
-            .map(|op| {
-                op.result_descriptor()
-                    .tiling_geo_transform()
-                    .shape_to_nearest_to_zero_based(&op.result_descriptor().tiling_pixel_bounds())
-            })
-            .reduce(|a, b| a.extended(&b))
-            .expect("There should be data..."); // Fixme
-
-        ensure!(
-            sources
-                .iter()
-                .skip(1)
-                .all(|rd| rd.result_descriptor().spatial_reference == spatial_reference),
-            error::DifferentSpatialReferences {
-                red: sources.red.result_descriptor().spatial_reference,
-                green: sources.green.result_descriptor().spatial_reference,
-                blue: sources.blue.result_descriptor().spatial_reference,
-            }
-        );
+            .skip(1)
+            .map(|x| x.result_descriptor().spatial_grid_descriptor())
+            .try_fold(first_spatial_grid, |a, &b| {
+                a.merge(&b)
+                    .ok_or(crate::error::Error::CantMergeSpatialGridDescriptor { a, b })
+            })?;
 
         let time =
             time_interval_extent(sources.iter().map(|source| source.result_descriptor().time));
@@ -204,8 +190,7 @@ impl RasterOperator for Rgb {
             data_type: RasterDataType::U32,
             spatial_reference,
             time,
-            geo_transform_x: geo_transform,
-            pixel_bounds_x: bounds,
+            spatial_grid: result_spatial_grid,
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -416,7 +401,7 @@ pub enum RgbOperatorError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
+    use crate::engine::{MockExecutionContext, QueryProcessor, SpatialGridDescriptor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
@@ -523,7 +508,7 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_u32().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(
@@ -625,8 +610,10 @@ mod tests {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                    pixel_bounds_x: GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },

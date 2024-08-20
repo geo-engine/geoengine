@@ -790,6 +790,7 @@ mod tests {
         test_data,
         util::gdal::hide_gdal_errors,
     };
+    use geoengine_operators::engine::SpatialGridDescriptor;
     use geoengine_operators::{
         engine::{RasterBandDescriptors, RasterResultDescriptor},
         source::{
@@ -841,8 +842,10 @@ mod tests {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform_x: GeoTransform::new((0., 0.).into(), 1., -1.), // Fixme: find correct values
-                    pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 5, 5).unwrap(), // Fixme: find correct values
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., 0.).into(), 1., -1.), // Fixme: find correct values
+                        GridBoundingBox2D::new_min_max(0, 0, 5, 5).unwrap(), // Fixme: find correct values
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: vec![
@@ -1005,8 +1008,10 @@ mod tests {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform_x: GeoTransform::new((0., 0.).into(), 1., -1.), // Fixme: find correct values
-                    pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 5, 5).unwrap(), // Fixme: find correct values
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., 0.).into(), 1., -1.), // Fixme: find correct values
+                        GridBoundingBox2D::new_min_max(0, 0, 5, 5).unwrap(), // Fixme: find correct values
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: vec![

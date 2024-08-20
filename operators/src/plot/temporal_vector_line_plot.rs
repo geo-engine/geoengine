@@ -274,7 +274,7 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
 mod tests {
     use super::*;
     use crate::{
-        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator},
+        engine::{ChunkByteSize, MockExecutionContext, VectorOperator},
         mock::MockFeatureCollectionSource,
     };
     use geoengine_datatypes::primitives::PlotQueryRectangle;
@@ -353,7 +353,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &exe_ctc.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -500,7 +500,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &exe_ctc.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -610,7 +610,7 @@ mod tests {
         )
         .boxed();
 
-        let exe_ctc = MockExecutionContext::test_default();
+        let exe_ctx = MockExecutionContext::test_default();
 
         let operator = FeatureAttributeValuesOverTime {
             params: FeatureAttributeValuesOverTimeParams {
@@ -622,7 +622,7 @@ mod tests {
 
         let operator = operator
             .boxed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -635,7 +635,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &exe_ctx.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();

@@ -2,12 +2,17 @@ use crate::error::{
     Error, RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique,
 };
 use crate::util::Result;
+use geoengine_datatypes::operations::reproject::{CoordinateProjection, ReprojectClipped};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, Coordinate2D,
     FeatureDataType, Measurement, PlotSeriesSelection, QueryAttributeSelection, QueryRectangle,
-    SpatialGridQueryRectangle, SpatialPartition2D, TimeInterval, VectorSpatialQueryRectangle,
+    SpatialGridQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+    VectorSpatialQueryRectangle,
 };
-use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, GridShape2D, TilingStrategy};
+use geoengine_datatypes::raster::{
+    GeoTransform, GeoTransformAccess, Grid, GridBoundingBox2D, SpatialGridDefinition,
+    TilingSpatialGridDefinition, TilingSpecification,
+};
 use geoengine_datatypes::util::ByteSize;
 use geoengine_datatypes::{
     collections::VectorDataType, raster::RasterDataType, spatial_reference::SpatialReferenceOption,
@@ -70,16 +75,183 @@ pub trait ResultDescriptor: Clone + Serialize {
 }
 
 /// A `ResultDescriptor` for raster queries
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSql, FromSql)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum SpatialGridDescriptor {
+    Source(SpatialGridDefinition),
+    Derived(SpatialGridDefinition),
+}
+
+impl SpatialGridDescriptor {
+    pub fn new_source(spatial_grid_def: SpatialGridDefinition) -> Self {
+        Self::Source(spatial_grid_def)
+    }
+
+    pub fn source_from_parts(geo_transform: GeoTransform, grid_bounds: GridBoundingBox2D) -> Self {
+        Self::new_source(SpatialGridDefinition::new(geo_transform, grid_bounds))
+    }
+
+    pub fn merge(&self, other: &SpatialGridDescriptor) -> Option<Self> {
+        // TODO: merge directly to tiling origin?
+        match (self, other) {
+            (SpatialGridDescriptor::Source(s), SpatialGridDescriptor::Source(o)) => {
+                let m = s.merge(o)?;
+                if m.grid_bounds == s.grid_bounds && m.grid_bounds == o.grid_bounds {
+                    Some(SpatialGridDescriptor::Source(m))
+                } else {
+                    Some(SpatialGridDescriptor::Derived(m))
+                }
+            }
+            (SpatialGridDescriptor::Source(s), SpatialGridDescriptor::Derived(o)) => {
+                Some(SpatialGridDescriptor::Derived(s.merge(o)?))
+            }
+            (SpatialGridDescriptor::Derived(s), SpatialGridDescriptor::Source(o)) => {
+                Some(SpatialGridDescriptor::Derived(s.merge(o)?))
+            }
+            (SpatialGridDescriptor::Derived(s), SpatialGridDescriptor::Derived(o)) => {
+                Some(SpatialGridDescriptor::Derived(s.merge(o)?))
+            }
+        }
+    }
+
+    pub fn map<F: Fn(&SpatialGridDefinition) -> SpatialGridDefinition>(&self, map_fn: F) -> Self {
+        match self {
+            SpatialGridDescriptor::Source(s) => SpatialGridDescriptor::Source(map_fn(s)),
+            SpatialGridDescriptor::Derived(m) => SpatialGridDescriptor::Derived(map_fn(m)),
+        }
+    }
+
+    pub fn try_map<F: Fn(&SpatialGridDefinition) -> Result<SpatialGridDefinition>>(
+        &self,
+        map_fn: F,
+    ) -> Result<Self> {
+        match self {
+            SpatialGridDescriptor::Source(s) => Ok(SpatialGridDescriptor::Source(map_fn(s)?)),
+            SpatialGridDescriptor::Derived(m) => Ok(SpatialGridDescriptor::Derived(map_fn(m)?)),
+        }
+    }
+
+    pub fn is_compatible_grid_generic<G: GeoTransformAccess>(&self, g: &G) -> bool {
+        match self {
+            SpatialGridDescriptor::Source(s) => s.is_compatible_grid_generic(g),
+            SpatialGridDescriptor::Derived(m) => m.is_compatible_grid_generic(g),
+        }
+    }
+
+    pub fn is_compatible_grid(&self, other: &Self) -> bool {
+        let b = match other {
+            SpatialGridDescriptor::Source(s) => s,
+            SpatialGridDescriptor::Derived(m) => m,
+        };
+
+        self.is_compatible_grid_generic(b)
+    }
+
+    pub fn tiling_grid_definition(
+        &self,
+        tiling_specification: TilingSpecification,
+    ) -> TilingSpatialGridDefinition {
+        // TODO: we could also store the tiling_origin_reference and then use that directly?
+        let grid_def = match self {
+            SpatialGridDescriptor::Source(s) => s,
+            SpatialGridDescriptor::Derived(m) => m,
+        };
+        TilingSpatialGridDefinition::new(*grid_def, tiling_specification)
+    }
+
+    pub fn is_source(&self) -> bool {
+        match self {
+            SpatialGridDescriptor::Source(_) => true,
+            SpatialGridDescriptor::Derived(_) => false,
+        }
+    }
+
+    pub fn source_spatial_grid_definition(&self) -> Option<SpatialGridDefinition> {
+        match self {
+            SpatialGridDescriptor::Source(s) => Some(*s),
+            SpatialGridDescriptor::Derived(_) => None,
+        }
+    }
+
+    pub fn merged_spatial_grid_definition(&self) -> Option<SpatialGridDefinition> {
+        match self {
+            SpatialGridDescriptor::Source(_) => None,
+            SpatialGridDescriptor::Derived(m) => Some(*m),
+        }
+    }
+
+    pub fn spatial_partition(&self) -> SpatialPartition2D {
+        let grid_def = match self {
+            SpatialGridDescriptor::Source(s) => s,
+            SpatialGridDescriptor::Derived(m) => m,
+        };
+        grid_def.spatial_partition()
+    }
+
+    pub fn spatial_resolution(&self) -> SpatialResolution {
+        match self {
+            SpatialGridDescriptor::Source(s) => s.geo_transform().spatial_resolution(),
+            SpatialGridDescriptor::Derived(m) => m.geo_transform().spatial_resolution(),
+        }
+    }
+
+    pub fn with_changed_resolution(&self, new_res: SpatialResolution) -> Self {
+        self.map(|x| x.with_changed_resolution(new_res))
+    }
+
+    pub fn with_replaced_origin(&self, new_origin: Coordinate2D) -> Self {
+        self.map(|x| x.with_replaced_origin(new_origin))
+    }
+
+    pub fn reproject_clipped<P: CoordinateProjection>(
+        &self,
+        projector: &P,
+    ) -> Result<Option<Self>> {
+        match self {
+            SpatialGridDescriptor::Source(s) => Ok(s
+                .reproject_clipped(projector)?
+                .map(SpatialGridDescriptor::Source)),
+            SpatialGridDescriptor::Derived(m) => Ok(m
+                .reproject_clipped(projector)?
+                .map(SpatialGridDescriptor::Derived)),
+        }
+    }
+
+    pub fn generate_coord_grid_pixel_center(&self) -> Grid<GridBoundingBox2D, Coordinate2D> {
+        match self {
+            SpatialGridDescriptor::Source(s) => s.generate_coord_grid_pixel_center(),
+            SpatialGridDescriptor::Derived(m) => m.generate_coord_grid_pixel_center(),
+        }
+    }
+
+    pub fn spatial_bounds_to_compatible_spatial_grid(
+        &self,
+        spatial_partition: SpatialPartition2D,
+    ) -> Self {
+        self.map(|x| x.spatial_bounds_to_compatible_spatial_grid(spatial_partition))
+    }
+
+    pub fn intersection_with_tiling_grid(
+        &self,
+        tiling_grid: &TilingSpatialGridDefinition,
+    ) -> Option<Self> {
+        let tiling_spatial_grid = tiling_grid.tiling_spatial_grid_definition();
+        let intersect = match self {
+            SpatialGridDescriptor::Source(s) => s.intersection(&tiling_spatial_grid),
+            SpatialGridDescriptor::Derived(d) => d.intersection(&tiling_spatial_grid),
+        };
+        intersect.map(SpatialGridDescriptor::Derived)
+    }
+}
+
+/// A `ResultDescriptor` for raster queries
+#[derive(Debug, Clone, Serialize, Deserialize, ToSql, FromSql, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
     pub time: Option<TimeInterval>,
-    #[serde(rename = "geoTransform")]
-    pub geo_transform_x: GeoTransform, // FIXME: we should rename this back to geo_transform when we have checked that all instances use the corect tiling geo transform. OR we must add a constructor that normalizes the geo transform
-    #[serde(rename = "pixelBounds")]
-    pub pixel_bounds_x: GridBoundingBox2D,
+    pub spatial_grid: SpatialGridDescriptor, // FIXME: we should rename this back to geo_transform when we have checked that all instances use the corect tiling geo transform. OR we must add a constructor that normalizes the geo transform
     pub bands: RasterBandDescriptors,
 }
 
@@ -152,65 +324,33 @@ impl RasterResultDescriptor {
         data_type: RasterDataType,
         spatial_reference: SpatialReferenceOption,
         time: Option<TimeInterval>,
-        geo_transform: GeoTransform,
-        pixel_bounds: GridBoundingBox2D,
+        spatial_grid: SpatialGridDescriptor,
         bands: RasterBandDescriptors,
     ) -> Self {
         Self {
             data_type,
             spatial_reference,
             time,
-            geo_transform_x: geo_transform,
-            pixel_bounds_x: pixel_bounds,
+            spatial_grid,
             bands,
         }
     }
 
-    /// Returns the geo transform of the data, i.e. the transformation from pixel coordinates to world coordinates.
-    pub fn not_normalized_geo_transform(&self) -> GeoTransform {
-        self.geo_transform_x
+    pub fn spatial_grid_descriptor(&self) -> &SpatialGridDescriptor {
+        &self.spatial_grid
     }
 
-    /// Returns the tiling origin of the data, i.e. the upper left corner of the pixel nearest to zero.
-    pub fn tiling_origin(&self) -> Coordinate2D {
-        self.tiling_geo_transform().origin_coordinate
-    }
-
-    pub fn tiling_pixel_bounds(&self) -> GridBoundingBox2D {
-        self.geo_transform_x
-            .shape_to_nearest_to_zero_based(&self.pixel_bounds_x)
-    }
-
-    pub fn tiling_geo_transform(&self) -> GeoTransform {
-        self.geo_transform_x.nearest_pixel_to_zero_based()
-    }
-
-    /// Returns the data tiling strategy for the given tile size in pixels.
-    pub fn generate_data_tiling_strategy<X: Into<GridShape2D>>(
+    /// Returns tiling grid definition of the data.
+    pub fn tiling_grid_definition(
         &self,
-        tile_size_in_pixels: X,
-    ) -> TilingStrategy {
-        TilingStrategy {
-            geo_transform: self.geo_transform_x.nearest_pixel_to_zero_based(),
-            tile_size_in_pixels: tile_size_in_pixels.into(),
-        }
-    }
-
-    pub fn spatial_tiling_equals(&self, other: &Self) -> bool {
-        self.spatial_reference == other.spatial_reference
-            && self.tiling_origin() == other.tiling_origin()
-            && self.geo_transform_x.x_pixel_size() == other.geo_transform_x.x_pixel_size()
-            && self.geo_transform_x.y_pixel_size() == other.geo_transform_x.y_pixel_size()
-    }
-
-    /// Returns `true` if the spatial reference, tiling origin and resolution are the same.
-    pub fn spatial_tiling_compat(&self, other: &Self) -> bool {
-        self.spatial_tiling_equals(other)
+        tiling_specification: TilingSpecification,
+    ) -> TilingSpatialGridDefinition {
+        self.spatial_grid
+            .tiling_grid_definition(tiling_specification)
     }
 
     pub fn spatial_bounds(&self) -> SpatialPartition2D {
-        self.geo_transform_x
-            .grid_to_spatial_bounds(&self.pixel_bounds_x)
+        self.spatial_grid.spatial_partition()
     }
 
     pub fn with_datatype_and_num_bands(
@@ -223,8 +363,10 @@ impl RasterResultDescriptor {
             data_type,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: None,
-            geo_transform_x: geo_transform,
-            pixel_bounds_x: pixel_bounds,
+            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
+                geo_transform,
+                pixel_bounds,
+            )),
             bands: RasterBandDescriptors::new(
                 (0..num_bands)
                     .map(|n| RasterBandDescriptor::new(format!("{n}"), Measurement::Unitless))
@@ -726,6 +868,50 @@ mod db_types {
         }
     }
 
+    #[derive(Debug, ToSql, FromSql)]
+    pub enum SpatialGridDescriptorState {
+        /// The spatial grid represents the original data
+        Source,
+        /// The spatial grid was created by merging two non equal spatial grids
+        Merged,
+    }
+
+    #[derive(Debug, ToSql, FromSql)]
+    #[postgres(name = "SpatialGridDescriptor")]
+    pub struct SpatialGridDescriptorDbType {
+        state: SpatialGridDescriptorState,
+        spatial_grid: SpatialGridDefinition,
+    }
+
+    impl From<&SpatialGridDescriptor> for SpatialGridDescriptorDbType {
+        fn from(value: &SpatialGridDescriptor) -> Self {
+            match value {
+                SpatialGridDescriptor::Source(s) => Self {
+                    spatial_grid: *s,
+                    state: SpatialGridDescriptorState::Source,
+                },
+                SpatialGridDescriptor::Derived(m) => Self {
+                    spatial_grid: *m,
+                    state: SpatialGridDescriptorState::Merged,
+                },
+            }
+        }
+    }
+
+    impl From<SpatialGridDescriptorDbType> for SpatialGridDescriptor {
+        fn from(value: SpatialGridDescriptorDbType) -> SpatialGridDescriptor {
+            match value.state {
+                SpatialGridDescriptorState::Source => {
+                    SpatialGridDescriptor::Source(value.spatial_grid)
+                }
+                SpatialGridDescriptorState::Merged => {
+                    SpatialGridDescriptor::Derived(value.spatial_grid)
+                }
+            }
+        }
+    }
+
+    delegate_from_to_sql!(SpatialGridDescriptor, SpatialGridDescriptorDbType);
     delegate_from_to_sql!(VectorResultDescriptor, VectorResultDescriptorDbType);
     delegate_from_to_sql!(TypedResultDescriptor, TypedResultDescriptorDbType);
 }
@@ -733,8 +919,7 @@ mod db_types {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use float_cmp::assert_approx_eq;
-    use geoengine_datatypes::{raster::BoundedGrid, spatial_reference::SpatialReference};
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use serde_json::json;
 
     #[test]
@@ -776,58 +961,59 @@ mod tests {
         );
     }
 
-    #[test]
-    fn raster_tiling_origin() {
-        let descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReferenceOption::Unreferenced,
-            time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.3, -0.3),
-            pixel_bounds_x: GridShape2D::new([36, 30]).bounding_box(),
-            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                "foo".into(),
-                Measurement::Unitless,
-            )])
-            .unwrap(),
-        };
+    /* FIXME: bring back?
+        #[test]
+        fn raster_tiling_origin() {
+            let descriptor = RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                time: None,
+                geo_transform_x: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.3, -0.3),
+                pixel_bounds_x: GridShape2D::new([36, 30]).bounding_box(),
+                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                    "foo".into(),
+                    Measurement::Unitless,
+                )])
+                .unwrap(),
+            };
 
-        let to = descriptor.tiling_origin();
+            let to = descriptor.tiling_origin();
 
-        assert_approx_eq!(f64, to.x, -0.09999, epsilon = 0.00001); // we are only interested in a number thats smaller then the pixel size
-        assert_approx_eq!(f64, to.y, 0.09999, epsilon = 0.00001);
-    }
+            assert_approx_eq!(f64, to.x, -0.09999, epsilon = 0.00001); // we are only interested in a number thats smaller then the pixel size
+            assert_approx_eq!(f64, to.y, 0.09999, epsilon = 0.00001);
+        }
 
-    #[test]
-    fn raster_tiling_equals() {
-        let descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReferenceOption::Unreferenced,
-            time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(-15., 15.), 0.5, -0.5),
-            pixel_bounds_x: GridShape2D::new([50, 50]).bounding_box(),
-            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                "foo".into(),
-                Measurement::Unitless,
-            )])
-            .unwrap(),
-        };
+        #[test]
+        fn raster_tiling_equals() {
+            let descriptor = RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                time: None,
+                geo_transform_x: GeoTransform::new(Coordinate2D::new(-15., 15.), 0.5, -0.5),
+                pixel_bounds_x: GridShape2D::new([50, 50]).bounding_box(),
+                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                    "foo".into(),
+                    Measurement::Unitless,
+                )])
+                .unwrap(),
+            };
 
-        let descriptor2 = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReferenceOption::Unreferenced,
-            time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.5, -0.5),
-            pixel_bounds_x: GridShape2D::new([9, 11]).bounding_box(),
-            bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                "foo".into(),
-                Measurement::Unitless,
-            )])
-            .unwrap(),
-        };
+            let descriptor2 = RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                time: None,
+                geo_transform_x: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.5, -0.5),
+                pixel_bounds_x: GridShape2D::new([9, 11]).bounding_box(),
+                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                    "foo".into(),
+                    Measurement::Unitless,
+                )])
+                .unwrap(),
+            };
 
-        assert!(descriptor.spatial_tiling_equals(&descriptor2));
-    }
-
+            assert!(descriptor.spatial_tiling_equals(&descriptor2));
+        }
+    */
     #[test]
     fn it_checks_duplicate_bands() {
         assert!(RasterBandDescriptors::new(vec![

@@ -74,7 +74,7 @@ type BenchmarkElementCounts = HashMap<String, u64>;
 
 fn setup_contexts() -> (StatisticsWrappingMockExecutionContext, MockQueryContext) {
     let exe_ctx = StatisticsWrappingMockExecutionContext::test_default();
-    let query_ctx = MockQueryContext::new_with_query_extensions(
+    let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
         ChunkByteSize::test_default(),
         create_necessary_extensions(),
     );

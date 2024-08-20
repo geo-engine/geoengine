@@ -1,7 +1,6 @@
-use super::query::QueryAbortRegistration;
 use super::{
     CreateSpan, InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator,
-    MockQueryContext, WorkflowOperatorPath,
+    MockQueryContext, QueryContextExtensions, WorkflowOperatorPath,
 };
 use crate::engine::{
     ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
@@ -185,14 +184,31 @@ impl MockExecutionContext {
     }
 
     pub fn mock_query_context(&self, chunk_byte_size: ChunkByteSize) -> MockQueryContext {
-        let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
-        MockQueryContext {
+        MockQueryContext::new(chunk_byte_size, self.tiling_specification)
+    }
+
+    pub fn mock_query_context_with_query_extensions(
+        &self,
+        chunk_byte_size: ChunkByteSize,
+        extensions: QueryContextExtensions,
+    ) -> MockQueryContext {
+        MockQueryContext::new_with_query_extensions(
             chunk_byte_size,
-            thread_pool: self.thread_pool.clone(),
-            extensions: Default::default(),
-            abort_registration,
-            abort_trigger: Some(abort_trigger),
-        }
+            self.tiling_specification,
+            extensions,
+        )
+    }
+
+    pub fn mock_query_context_with_chunk_size_and_thread_count(
+        &self,
+        chunk_byte_size: ChunkByteSize,
+        num_threads: usize,
+    ) -> MockQueryContext {
+        MockQueryContext::with_chunk_size_and_thread_count(
+            chunk_byte_size,
+            self.tiling_specification,
+            num_threads,
+        )
     }
 }
 

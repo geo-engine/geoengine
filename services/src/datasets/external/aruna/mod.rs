@@ -37,8 +37,8 @@ use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-    RasterResultDescriptor, ResultDescriptor, TypedOperator, VectorColumnInfo, VectorOperator,
-    VectorResultDescriptor,
+    RasterResultDescriptor, ResultDescriptor, SpatialGridDescriptor, TypedOperator,
+    VectorColumnInfo, VectorOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -519,15 +519,11 @@ impl ArunaDataProvider {
         let geo_transform = GeoTransform::try_from(info.geo_transform) // TODO: convert into tiling based bounds?
             .expect("GeoTransform should be valid"); // TODO: check if that can be false
 
-        let tiling_geo_transform = geo_transform.nearest_pixel_to_zero_based(); // TODO use tiling origin hint not always 0.0
-        let tiling_bounds = geo_transform.shape_to_nearest_to_zero_based(&shape);
-
         Ok(RasterResultDescriptor {
             data_type: info.data_type,
             spatial_reference: crs,
             time: Some(info.time_interval),
-            geo_transform_x: tiling_geo_transform,
-            pixel_bounds_x: tiling_bounds,
+            spatial_grid: SpatialGridDescriptor::source_from_parts(geo_transform, shape),
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "band".into(),
                 info.measurement

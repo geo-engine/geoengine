@@ -246,6 +246,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -348,8 +349,10 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: TestDefault::test_default(),
-            pixel_bounds_x: GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                TestDefault::test_default(),
+                GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 

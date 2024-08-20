@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, Rem, Sub};
+use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
@@ -394,5 +394,13 @@ impl GridIdx3D {
 
     pub fn new_z_y_x(z: isize, y: isize, x: isize) -> Self {
         GridIdx([z, y, x])
+    }
+}
+
+impl Neg for GridIdx2D {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        GridIdx::new_y_x(-self.y(), -self.x())
     }
 }

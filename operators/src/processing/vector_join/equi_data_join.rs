@@ -421,7 +421,7 @@ mod tests {
 
     use super::*;
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator, WorkflowOperatorPath,
+        ChunkByteSize, MockExecutionContext, VectorOperator, WorkflowOperatorPath,
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::processing::vector_join::util::translation_table;
@@ -455,7 +455,7 @@ mod tests {
             ColumnSelection::all(),
         );
 
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let ctx = execution_context.mock_query_context(ChunkByteSize::MAX);
 
         let processor = EquiGeoToDataJoinProcessor::new(
             VectorResultDescriptor {

@@ -24,7 +24,7 @@ use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataTyp
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, OperatorName, RasterBandDescriptors, RasterOperator,
-    RasterResultDescriptor, TypedOperator, VectorResultDescriptor,
+    RasterResultDescriptor, SpatialGridDescriptor, TypedOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -746,8 +746,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             )
             .into(),
             time: None,
-            geo_transform_x: GeoTransform::new((0., 0.).into(), 1., -1.), // FIXME: we will need to query the actual data for this
-            pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 0, 0).unwrap(), // FIXME: derive from loading info
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new((0., 0.).into(), 1., -1.), // FIXME: we will need to query the actual data for this
+                GridBoundingBox2D::new_min_max(0, 0, 0, 0).unwrap(), // FIXME: derive from loading info
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         })
     }
@@ -1020,7 +1022,7 @@ mod tests {
             BandSelection::first(),
         );
 
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let ctx = exe.mock_query_context(ChunkByteSize::MAX);
 
         let result = processor
             .raster_query(query, &ctx)
@@ -1371,8 +1373,10 @@ mod tests {
                     data_type: RasterDataType::U16,
                     spatial_reference: SpatialReference::from_str("EPSG:32736").unwrap().into(),
                     time: None,
-                    geo_transform_x: GeoTransform::new((0., 0.).into(), 1., -1.), // FIXME: find out correct geo transform
-                    pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 0, 0).unwrap(), // FIXME: find out the correct pixel bounds
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., 0.).into(), 1., -1.), // FIXME: find out correct geo transform
+                        GridBoundingBox2D::new_min_max(0, 0, 0, 0).unwrap(), // FIXME: find out the correct pixel bounds
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
                 params,

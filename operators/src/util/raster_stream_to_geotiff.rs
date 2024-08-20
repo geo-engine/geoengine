@@ -46,12 +46,9 @@ pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'stat
 where
     T: Pixel + GdalType,
 {
-    let result_descriptor = processor.raster_result_descriptor();
-    let raster_geo_transform = result_descriptor.tiling_geo_transform();
-    let tiling_strategy = TilingStrategy {
-        tile_size_in_pixels: tiling_specification.tile_size_in_pixels,
-        geo_transform: raster_geo_transform,
-    };
+    let result_descriptor = processor.raster_result_descriptor(); // TODO: we can now push the "real" data bounds to the GTiff?
+    let tiling_grid_def = result_descriptor.tiling_grid_definition(tiling_specification);
+    let tiling_strategy = tiling_grid_def.generate_data_tiling_strategy();
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
@@ -998,7 +995,7 @@ mod tests {
     use std::marker::PhantomData;
     use std::ops::Add;
 
-    use crate::engine::RasterResultDescriptor;
+    use crate::engine::{ChunkByteSize, RasterResultDescriptor};
     use crate::mock::MockRasterSourceProcessor;
     use crate::util::gdal::gdal_open_dataset;
     use crate::{
@@ -1014,21 +1011,24 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_with_no_data_from_stream() {
-        let ctx = MockQueryContext::test_default();
+        let ctx = MockQueryContext::new(
+            ChunkByteSize::test_default(),
+            TilingSpecification::new([600, 600].into()),
+        );
         let metadata = create_ndvi_meta_data();
-
-        let tiling_specification = TilingSpecification::new([600, 600].into());
-
-        let tiling_strategy =
-            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
 
         let gdal_source = GdalSourceProcessor::<u8> {
             result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification,
+            tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
+
+        let tiling_strategy = gdal_source
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1069,22 +1069,25 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_with_mask_from_stream() {
-        let ctx = MockQueryContext::test_default();
+        let ctx = MockQueryContext::new(
+            ChunkByteSize::test_default(),
+            TilingSpecification::new([600, 600].into()),
+        );
 
         let metadata = create_ndvi_meta_data();
 
-        let tiling_specification = TilingSpecification::new([600, 600].into());
-
-        let tiling_strategy =
-            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
-
         let gdal_source = GdalSourceProcessor::<u8> {
             result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification,
+            tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
+
+        let tiling_strategy = gdal_source
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1120,22 +1123,25 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_big_tiff_from_stream() {
-        let ctx = MockQueryContext::test_default();
+        let ctx = MockQueryContext::new(
+            ChunkByteSize::test_default(),
+            TilingSpecification::new([600, 600].into()),
+        );
 
         let metadata = create_ndvi_meta_data();
 
-        let tiling_specification = TilingSpecification::new([600, 600].into());
-
-        let tiling_strategy =
-            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
-
         let gdal_source = GdalSourceProcessor::<u8> {
             result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification,
+            tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
+
+        let tiling_strategy = gdal_source
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1175,21 +1181,25 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_big_tiff_from_stream() {
-        let ctx = MockQueryContext::test_default();
+        let ctx = MockQueryContext::new(
+            ChunkByteSize::test_default(),
+            TilingSpecification::new([600, 600].into()),
+        );
 
         let metadata = create_ndvi_meta_data();
 
-        let tiling_specification = TilingSpecification::new([600, 600].into());
-
-        let tiling_strategy =
-            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
         let gdal_source = GdalSourceProcessor::<u8> {
             result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification,
+            tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
+
+        let tiling_strategy = gdal_source
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1232,22 +1242,25 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_from_stream() {
-        let ctx = MockQueryContext::test_default();
+        let ctx = MockQueryContext::new(
+            ChunkByteSize::test_default(),
+            TilingSpecification::new([600, 600].into()),
+        );
 
         let metadata = create_ndvi_meta_data();
 
-        let tiling_specification = TilingSpecification::new([600, 600].into());
-
-        let tiling_strategy =
-            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
-
         let gdal_source = GdalSourceProcessor::<u8> {
             result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification,
+            tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
+
+        let tiling_strategy = gdal_source
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1290,22 +1303,25 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_multiple_timesteps_from_stream() {
-        let ctx = MockQueryContext::test_default();
+        let ctx = MockQueryContext::new(
+            ChunkByteSize::test_default(),
+            TilingSpecification::new([600, 600].into()),
+        );
 
         let metadata = create_ndvi_meta_data();
 
-        let tiling_specification = TilingSpecification::new([600, 600].into());
-
-        let tiling_strategy =
-            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
-
         let gdal_source = GdalSourceProcessor::<u8> {
             result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification,
+            tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
+
+        let tiling_strategy = gdal_source
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         let mut bytes = raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1362,22 +1378,25 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_multiple_timesteps_from_stream_wrong_request() {
-        let ctx = MockQueryContext::test_default();
+        let ctx = MockQueryContext::new(
+            ChunkByteSize::test_default(),
+            TilingSpecification::new([600, 600].into()),
+        );
 
         let metadata = create_ndvi_meta_data();
 
-        let tiling_specification = TilingSpecification::new([600, 600].into());
-
-        let tiling_strategy =
-            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
-
         let gdal_source = GdalSourceProcessor::<u8> {
             result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification,
+            tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
+
+        let tiling_strategy = gdal_source
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1407,22 +1426,25 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_from_stream_limit() {
-        let ctx = MockQueryContext::test_default();
+        let ctx = MockQueryContext::new(
+            ChunkByteSize::test_default(),
+            TilingSpecification::new([600, 600].into()),
+        );
 
         let metadata = create_ndvi_meta_data();
 
-        let tiling_specification = TilingSpecification::new([600, 600].into());
-
-        let tiling_strategy =
-            tiling_specification.strategy(metadata.result_descriptor.tiling_geo_transform());
-
         let gdal_source = GdalSourceProcessor::<u8> {
             result_descriptor: metadata.result_descriptor.clone(),
-            tiling_specification,
+            tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
             _phantom_data: PhantomData,
         };
+
+        let tiling_strategy = gdal_source
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
@@ -1497,22 +1519,28 @@ mod tests {
             },
         ];
 
+        let ctx = MockQueryContext::new(
+            ChunkByteSize::test_default(),
+            TilingSpecification::new([600, 600].into()),
+        );
+
         let result_descriptor = RasterResultDescriptor::with_datatype_and_num_bands(
             RasterDataType::U8,
             1,
             GridBoundingBox2D::new([-4, -4], [4, 4]).unwrap(),
             GeoTransform::test_default(),
         );
-        let tiling_specification = TilingSpecification::new([600, 600].into());
-        let tiling_stratgy =
-            tiling_specification.strategy(result_descriptor.tiling_geo_transform());
+
+        let tiling_strategy = result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
+
         let query_time = TimeInterval::new(data[0].time.start(), data[1].time.end()).unwrap();
 
-        let ctx = MockQueryContext::test_default();
         let processor = MockRasterSourceProcessor {
             result_descriptor,
             data,
-            tiling_specification,
+            tiling_specification: ctx.tiling_specification(),
         }
         .boxed();
 
@@ -1543,7 +1571,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_stratgy,
+            tiling_strategy,
         )
         .await
         .unwrap();

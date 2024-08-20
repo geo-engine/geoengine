@@ -12,7 +12,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, FromSql, ToSql)]
+#[derive(Serialize, Deserialize, Debug, Clone, FromSql, ToSql, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
@@ -79,7 +79,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 /// sets `step` time apart. The `time_placeholders` in the file path of the dataset are replaced with the
 /// specified time `reference` in specified time `format`. Inside the `data_time` the gdal source will load the data
 /// from the files and outside it will create nodata.
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataRegular {
     pub result_descriptor: RasterResultDescriptor,
@@ -155,7 +155,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 /// Meta data for 4D `NetCDF` CF datasets
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetadataNetCdfCf {
     pub result_descriptor: RasterResultDescriptor,
@@ -232,7 +232,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 // TODO: custom deserializer that checks that that params are sorted and do not overlap
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, FromSql, ToSql)]
+#[derive(Serialize, Deserialize, Debug, Clone, FromSql, ToSql, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataList {
     pub result_descriptor: RasterResultDescriptor,
@@ -624,7 +624,7 @@ mod tests {
     };
 
     use crate::{
-        engine::RasterBandDescriptors,
+        engine::{RasterBandDescriptors, SpatialGridDescriptor},
         source::{FileNotFoundHandling, GdalDatasetGeoTransform, TimeReference},
     };
 
@@ -638,8 +638,10 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
-                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GridShape2D::new_2d(180, 360).bounding_box(),
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -684,8 +686,10 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
-                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GridShape2D::new_2d(180, 360).bounding_box()
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );
@@ -903,8 +907,10 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
-                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GridShape2D::new_2d(180, 360).bounding_box(),
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: vec![
@@ -971,8 +977,10 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
-                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GridShape2D::new_2d(180, 360).bounding_box()
+                ),
                 bands: RasterBandDescriptors::new_single_band()
             }
         );
@@ -1014,8 +1022,10 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform_x: GeoTransform::new((0., 0.).into(), 1., -1.),
-                pixel_bounds_x: GridShape2D::new_2d(128, 128).bounding_box(),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((0., 0.).into(), 1., -1.),
+                    GridShape2D::new_2d(128, 128).bounding_box(),
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -1081,8 +1091,10 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
-                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GridShape2D::new_2d(180, 360).bounding_box(),
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -1148,8 +1160,10 @@ mod tests {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: None,
-                geo_transform_x: GeoTransform::new((-180., -90.).into(), 1., -1.),
-                pixel_bounds_x: GridShape2D::new_2d(180, 360).bounding_box(),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GridShape2D::new_2d(180, 360).bounding_box(),
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {

@@ -650,7 +650,7 @@ mod tests {
     use super::*;
     use crate::engine::{
         MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
-        RasterResultDescriptor, WorkflowOperatorPath,
+        RasterResultDescriptor, SpatialGridDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
@@ -704,8 +704,10 @@ mod tests {
             RasterDataType::U8,
             SpatialReference::epsg_4326().into(),
             None,
-            GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
             RasterBandDescriptors::new_single_band(),
         );
 
@@ -726,7 +728,8 @@ mod tests {
         );
 
         let query_ctx = MockQueryContext::test_default();
-        let tiling_strat = result_descriptor.generate_data_tiling_strategy([2, 2]);
+        let tiling_grid = result_descriptor.tiling_grid_definition(tiling_specification);
+        let tiling_strat = tiling_grid.generate_data_tiling_strategy();
 
         let op = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

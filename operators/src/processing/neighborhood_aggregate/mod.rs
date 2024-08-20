@@ -265,12 +265,16 @@ where
                 self.tiling_specification,
             );
 
-            let geo_transform = self.source.result_descriptor().tiling_geo_transform();
+            let tiling_strat = self
+                .source
+                .result_descriptor()
+                .tiling_grid_definition(self.tiling_specification)
+                .generate_data_tiling_strategy();
 
             Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
                 &self.source,
                 query,
-                self.tiling_specification.strategy(geo_transform),
+                tiling_strat,
                 ctx,
                 sub_query,
             )
@@ -293,7 +297,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-            RasterOperator, RasterResultDescriptor,
+            RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -644,8 +648,10 @@ mod tests {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    geo_transform_x: GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                    pixel_bounds_x: GridBoundingBox2D::new([-3, 0], [0, 6]).unwrap(),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        GridBoundingBox2D::new([-3, 0], [0, 6]).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -683,9 +689,11 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_u8().unwrap();
         let result_descriptor = processor.result_descriptor();
+        let query_ctx = MockQueryContext::test_default();
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
             result_descriptor
+                .tiling_grid_definition(query_ctx.tiling_specification())
                 .tiling_geo_transform()
                 .spatial_to_grid_bounds(
                     &SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
@@ -693,7 +701,6 @@ mod tests {
             TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -756,8 +763,11 @@ mod tests {
         let processor = operator.query_processor().unwrap().get_u8().unwrap();
         let result_descriptor = processor.result_descriptor();
 
+        let query_ctx = MockQueryContext::test_default();
+
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
             result_descriptor
+                .tiling_grid_definition(query_ctx.tiling_specification())
                 .tiling_geo_transform()
                 .spatial_to_grid_bounds(
                     &SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
@@ -765,7 +775,6 @@ mod tests {
             TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
 
         // let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
 

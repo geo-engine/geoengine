@@ -11,7 +11,7 @@ use geoengine_datatypes::primitives::{
     CacheHint, RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
-    GeoTransform, Grid2D, GridBoundingBox2D, GridIndexAccess, GridIntersection, GridSize,
+    Grid2D, GridIndexAccess, GridIntersection, GridSize, SpatialGridDefinition,
     UpdateIndexedElementsParallel,
 };
 use geoengine_datatypes::{
@@ -34,10 +34,8 @@ use super::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator};
 
 #[derive(Debug, Clone, Copy)]
 pub struct TileReprojectionSubqueryGridInfo {
-    pub in_geo_tansform: GeoTransform,
-    pub in_pixel_bounds: GridBoundingBox2D,
-    pub out_geo_tansform: GeoTransform,
-    pub out_pixel_bounds: GridBoundingBox2D,
+    pub in_spatial_grid: SpatialGridDefinition,
+    pub out_spatial_grid: SpatialGridDefinition,
 }
 
 #[derive(Debug)]
@@ -91,14 +89,24 @@ where
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         // this are the pixels we are interested in
+        debug_assert_eq!(
+            tile_info.global_geo_transform,
+            self.state.out_spatial_grid.geo_transform()
+        );
+
         let valid_pixel_bounds = self
             .state
-            .out_pixel_bounds
+            .out_spatial_grid
+            .grid_bounds()
             .intersection(&tile_info.global_pixel_bounds())
             .and_then(|b| b.intersection(&query_rect.spatial_query.grid_bounds()));
 
-        let valid_spatial_bounds =
-            valid_pixel_bounds.map(|pb| self.state.out_geo_tansform.grid_to_spatial_bounds(&pb));
+        let valid_spatial_bounds = valid_pixel_bounds.map(|pb| {
+            self.state
+                .out_spatial_grid
+                .geo_transform()
+                .grid_to_spatial_bounds(&pb)
+        });
 
         if let Some(bounds) = valid_spatial_bounds {
             let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
@@ -106,7 +114,10 @@ where
 
             match projected_bounds {
                 Ok(pb) => Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
-                    self.state.in_geo_tansform.spatial_to_grid_bounds(&pb),
+                    self.state
+                        .in_spatial_grid
+                        .geo_transform()
+                        .spatial_to_grid_bounds(&pb),
                     TimeInterval::new_instant(start_time)?,
                     band_idx.into(),
                 ))),
@@ -146,9 +157,7 @@ fn build_accu<T: Pixel>(
             tile_info,
             out_srs,
             in_srs,
-            &state
-                .out_geo_tansform
-                .grid_to_spatial_bounds(&state.out_pixel_bounds),
+            &state.out_spatial_grid.spatial_partition(),
         )?;
 
         Ok(TileWithProjectionCoordinates {
@@ -376,8 +385,9 @@ mod tests {
     use geoengine_datatypes::{
         primitives::BandSelection,
         raster::{
-            BoundedGrid, GeoTransform, Grid, GridShape, GridShape2D, RasterDataType,
-            TilesEqualIgnoringCacheHint, TilingSpecification,
+            BoundedGrid, GeoTransform, Grid, GridBoundingBox2D, GridShape, GridShape2D,
+            RasterDataType, SpatialGridDefinition, TilesEqualIgnoringCacheHint,
+            TilingSpecification,
         },
         util::test::TestDefault,
     };
@@ -386,7 +396,7 @@ mod tests {
         adapters::RasterSubQueryAdapter,
         engine::{
             MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor, WorkflowOperatorPath,
+            RasterResultDescriptor, SpatialGridDescriptor, WorkflowOperatorPath,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
@@ -444,16 +454,17 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
-            geo_transform_x: GeoTransform::new(Coordinate2D::new(0., -2.), 1., -1.),
-            pixel_bounds_x: GridShape::new_2d(2, 4).bounding_box(),
+            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., -2.), 1., -1.),
+                GridShape::new_2d(2, 4).bounding_box(),
+            )),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
         let tiling_spec = TilingSpecification::new(GridShape2D::new([2, 2]));
 
-        let tiling_strat = result_descriptor.generate_data_tiling_strategy([2, 2]);
-
-        let geo_transform = tiling_strat.geo_transform;
+        let tiling_grid = result_descriptor.tiling_grid_definition(tiling_spec);
+        let tiling_strat = tiling_grid.generate_data_tiling_strategy();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_spec.clone());
 
@@ -473,8 +484,6 @@ mod tests {
 
         let query_ctx = MockQueryContext::test_default();
 
-        let data_bounds = GridBoundingBox2D::new([-4, -1], [0, 7]).unwrap();
-
         let op = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
@@ -487,10 +496,8 @@ mod tests {
             out_srs: projection,
             fold_fn: fold_by_coordinate_lookup_future,
             state: TileReprojectionSubqueryGridInfo {
-                in_geo_tansform: geo_transform,
-                in_pixel_bounds: data_bounds,
-                out_geo_tansform: geo_transform,
-                out_pixel_bounds: data_bounds,
+                in_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
+                out_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
             },
             _phantom_data: PhantomData,
         };

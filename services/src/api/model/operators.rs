@@ -1,17 +1,16 @@
 use super::datatypes::{
-    BoundingBox2D, FeatureDataType, Measurement, RasterDataType, SpatialPartition2D,
+    BoundingBox2D, FeatureDataType, Measurement, RasterDataType, SpatialGridDefinition,
     SpatialReferenceOption, TimeInterval, VectorDataType,
 };
 use crate::api::model::datatypes::{
     CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, GdalConfigOption, MultiLineString,
     MultiPoint, MultiPolygon, NoGeometry, QueryRectangle, RasterPropertiesEntryType,
-    RasterPropertiesKey, SpatialResolution, TimeInstance, TimeStep, VectorQueryRectangle,
+    RasterPropertiesKey, TimeInstance, TimeStep, VectorQueryRectangle,
 };
 use crate::error::{
     RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique, Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::AxisAlignedRectangle;
 use geoengine_datatypes::util::ByteSize;
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
@@ -33,9 +32,39 @@ pub struct RasterResultDescriptor {
     #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
     pub time: Option<TimeInterval>,
-    pub bbox: Option<SpatialPartition2D>,
-    pub resolution: Option<SpatialResolution>,
+    pub spatial_grid: SpatialGridDescriptor,
     pub bands: RasterBandDescriptors,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SpatialGridDescriptor {
+    Source(SpatialGridDefinition),
+    Derived(SpatialGridDefinition),
+}
+
+impl From<geoengine_operators::engine::SpatialGridDescriptor> for SpatialGridDescriptor {
+    fn from(value: geoengine_operators::engine::SpatialGridDescriptor) -> Self {
+        match value {
+            geoengine_operators::engine::SpatialGridDescriptor::Source(s) => Self::Source(s.into()),
+            geoengine_operators::engine::SpatialGridDescriptor::Derived(d) => {
+                Self::Derived(d.into())
+            }
+        }
+    }
+}
+
+impl From<SpatialGridDescriptor> for geoengine_operators::engine::SpatialGridDescriptor {
+    fn from(value: SpatialGridDescriptor) -> Self {
+        match value {
+            SpatialGridDescriptor::Source(s) => {
+                geoengine_operators::engine::SpatialGridDescriptor::Source(s.into())
+            }
+            SpatialGridDescriptor::Derived(d) => {
+                geoengine_operators::engine::SpatialGridDescriptor::Derived(d.into())
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
@@ -114,8 +143,7 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
             time: value.time.map(Into::into),
-            bbox: Some(value.spatial_bounds().into()), // TODO: maybe change the field to GeoTransform and pixel bounds
-            resolution: Some(value.tiling_geo_transform().spatial_resolution().into()),
+            spatial_grid: value.spatial_grid.into(),
             bands: value.bands.into(),
         }
     }
@@ -125,38 +153,11 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
     fn from(value: RasterResultDescriptor) -> Self {
         // FIXME: this is a hack to get the geo transform from the bbox and resolution
 
-        let bbox: geoengine_datatypes::primitives::SpatialPartition2D = value
-            .bbox
-            .expect("we need the bbox to create a geo transform")
-            .into();
-        let resolution: geoengine_datatypes::primitives::SpatialResolution = value
-            .resolution
-            .expect("we need the resolution to create a geo transform")
-            .into();
-
-        let geo_transform = geoengine_datatypes::raster::GeoTransform::new(
-            bbox.upper_left(),
-            resolution.x,
-            -resolution.y,
-        );
-
-        let pixel_bounds = geoengine_datatypes::raster::GridBoundingBox2D::new_min_max(
-            0,
-            (bbox.size_y() / resolution.y).ceil() as isize,
-            0,
-            (bbox.size_x() / resolution.x).ceil() as isize,
-        )
-        .expect("creating pixel bounds with 0., 0. start should work");
-
-        let tiling_bounds = geo_transform.shape_to_nearest_to_zero_based(&pixel_bounds);
-        let tiling_geo_transform = geo_transform.nearest_pixel_to_zero_based();
-
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
             time: value.time.map(Into::into),
-            geo_transform_x: tiling_geo_transform,
-            pixel_bounds_x: tiling_bounds,
+            spatial_grid: value.spatial_grid.into(),
             bands: value.bands.into(),
         }
     }

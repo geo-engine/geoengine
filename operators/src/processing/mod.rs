@@ -1,6 +1,7 @@
 mod bandwise_expression;
 mod circle_merging_quadtree;
 mod column_range_filter;
+mod downsample;
 mod expression;
 mod interpolation;
 mod line_simplification;
@@ -23,11 +24,18 @@ mod vector_join;
 pub use circle_merging_quadtree::{
     InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
 };
+pub use downsample::{
+    Downsampling, DownsamplingError, DownsamplingMethod, DownsamplingParams,
+    DownsamplingResolution, InitializedDownsampling,
+};
 pub use expression::{
     initialize_expression_dependencies, Expression, ExpressionParams, RasterExpressionError,
     VectorExpression, VectorExpressionError, VectorExpressionParams,
 };
-pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
+pub use interpolation::{
+    InitializedInterpolation, Interpolation, InterpolationError, InterpolationMethod,
+    InterpolationParams, InterpolationResolution,
+};
 pub use line_simplification::{
     LineSimplification, LineSimplificationError, LineSimplificationParams,
 };

@@ -46,8 +46,8 @@ where
         }
 
         let map_fn = |gidx: GridIdx2D| {
-            let coordinate = out_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(gidx);
-            let pixel_in_input = in_geo_transform.coordinate_to_grid_idx_2d(coordinate); // TODO: maybe need to use round / center somewhere here
+            let coordinate = out_geo_transform.grid_idx_to_pixel_center_coordinate_2d(gidx); // use center coordinate similar to ArgGIS
+            let pixel_in_input = in_geo_transform.coordinate_to_grid_idx_2d(coordinate);
 
             input.get_at_grid_index_unchecked(pixel_in_input)
         };
@@ -167,7 +167,7 @@ where
             value.map(|v| P::from_(v))
         };
 
-        let out_data = GridOrEmpty::from_index_fn_parallel(&out_bounds, map_fn); // TODO: this will check for empty tiles. Change to MaskedGrid::from.. to avoid this.
+        let out_data = GridOrEmpty::from_index_fn_parallel(&out_bounds, map_fn);
 
         Ok(out_data)
     }

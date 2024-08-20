@@ -1,4 +1,4 @@
-use crate::engine::RasterResultDescriptor;
+use crate::engine::SpatialGridDescriptor;
 use crate::util::statistics::StatisticsError;
 use bb8_postgres::bb8;
 use geoengine_datatypes::dataset::{DataId, NamedData};
@@ -342,6 +342,10 @@ pub enum Error {
         source: crate::processing::InterpolationError,
     },
     #[snafu(context(false))]
+    DownsampleOperator {
+        source: crate::processing::DownsamplingError,
+    },
+    #[snafu(context(false))]
     TimeShift {
         source: crate::processing::TimeShiftError,
     },
@@ -412,9 +416,9 @@ pub enum Error {
     },
 
     #[snafu(display("RasterResults are incompatible error: {a:?} vs {b:?}"))]
-    RasterResultsIncompatible {
-        a: RasterResultDescriptor,
-        b: RasterResultDescriptor,
+    CantMergeSpatialGridDescriptor {
+        a: SpatialGridDescriptor,
+        b: SpatialGridDescriptor,
     },
 
     #[snafu(display("Input stream {stream_index} is not temporally aligned. Expected {expected:?}, found {found:?}."))]

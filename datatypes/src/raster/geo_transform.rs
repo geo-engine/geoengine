@@ -4,11 +4,11 @@ use crate::{
     },
     util::test::TestDefault,
 };
-use float_cmp::{ApproxEq, F64Margin};
+use float_cmp::{approx_eq, ApproxEq, F64Margin};
 use postgres_types::{FromSql, ToSql};
 use serde::{de, Deserialize, Deserializer, Serialize};
 
-use super::{GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D};
+use super::{GeoTransformAccess, GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D};
 
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
@@ -118,6 +118,7 @@ impl GeoTransform {
     }
 
     /// Transforms an SRS coordinate (x,y) into a grid coordinate (row, column) ~ (y, x)
+    /// This method selects the grid index with the center nearest to the coordinate.
     ///
     /// # Examples
     ///
@@ -257,15 +258,6 @@ impl GeoTransform {
         self.coordinate_to_grid_idx_2d(Coordinate2D { x: 0., y: 0. }) // TODO: currently this is the pixel thats starts top left of 0.0, 0.0. Its coordinate is not the nearest to 0.0, 0.0 if it is more than half a pixel away
     }
 
-    pub fn nearest_pixel_to_zero_based(&self) -> Self {
-        GeoTransform {
-            origin_coordinate: self
-                .grid_idx_to_pixel_upper_left_coordinate_2d(self.nearest_pixel_to_zero()),
-            x_pixel_size: self.x_pixel_size,
-            y_pixel_size: self.y_pixel_size,
-        }
-    }
-
     pub fn shape_to_nearest_to_zero_based<S: GridBounds<IndexArray = [isize; 2]>>(
         &self,
         shape: &S,
@@ -280,6 +272,31 @@ impl GeoTransform {
             x_pixel_size: self.x_pixel_size,
             y_pixel_size: self.y_pixel_size,
         }
+    }
+
+    pub fn distance_to_nearest_pixel_edge(&self, coordinate: Coordinate2D) -> Coordinate2D {
+        let pixel_edge = self
+            .grid_idx_to_pixel_upper_left_coordinate_2d(self.coordinate_to_grid_idx_2d(coordinate));
+        coordinate - pixel_edge
+    }
+
+    pub fn is_valid_pixel_edge(&self, coordinate: Coordinate2D) -> bool {
+        // TODO: maybe use fraction of pixel size as M?
+        approx_eq!(
+            Coordinate2D,
+            self.distance_to_nearest_pixel_edge(coordinate),
+            Coordinate2D::new(0., 0.)
+        )
+    }
+
+    pub fn is_compatible_grid(&self, other: GeoTransform) -> bool {
+        self.is_valid_pixel_edge(other.origin_coordinate)
+            && approx_eq!(f64, self.x_pixel_size(), other.x_pixel_size())
+            && approx_eq!(f64, self.y_pixel_size(), other.y_pixel_size())
+    }
+
+    pub fn is_compatible_grid_generic<G: GeoTransformAccess>(&self, g: &G) -> bool {
+        self.is_compatible_grid(g.geo_transform())
     }
 }
 
@@ -601,5 +618,26 @@ mod tests {
     fn nearest_pixel_to_zero() {
         let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
         assert_eq!(geo_transform.nearest_pixel_to_zero(), [0, 0].into());
+    }
+
+    #[test]
+    fn coordinate_to_nearest_grid_center_idx_2d() {
+        let geo_transform = GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.);
+
+        let coord = Coordinate2D::new(0.1, -0.1);
+        let center_coord_idx = geo_transform.coordinate_to_grid_idx_2d(coord);
+        assert_eq!(center_coord_idx, [0, 0].into());
+
+        let coord = Coordinate2D::new(0.5, -0.5);
+        let center_coord_idx = geo_transform.coordinate_to_grid_idx_2d(coord);
+        assert_eq!(center_coord_idx, [0, 0].into());
+
+        let coord = Coordinate2D::new(0.9, -0.9);
+        let center_coord_idx = geo_transform.coordinate_to_grid_idx_2d(coord);
+        assert_eq!(center_coord_idx, [0, 0].into());
+
+        let coord = Coordinate2D::new(1.0, -1.0);
+        let center_coord_idx = geo_transform.coordinate_to_grid_idx_2d(coord);
+        assert_eq!(center_coord_idx, [1, 1].into());
     }
 }

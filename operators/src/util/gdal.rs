@@ -1,7 +1,7 @@
 use crate::{
     engine::{
         MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
-        StaticMetaData, VectorColumnInfo, VectorResultDescriptor,
+        SpatialGridDescriptor, StaticMetaData, VectorColumnInfo, VectorResultDescriptor,
     },
     error::{self, Error},
     source::{
@@ -94,8 +94,10 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
                 TimeInstance::from_str("2014-07-01T00:00:00.000Z")
                     .expect("it should only be used in tests"),
             )),
-            geo_transform_x: GeoTransform::new((0., 0.).into(), 0.1, -0.1),
-            pixel_bounds_x: GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new((-180., 90.).into(), 0.1, -0.1),
+                GridBoundingBox2D::new([0, 0], [3599, 1799]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         },
         cache_ttl,
@@ -143,8 +145,10 @@ pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds_with_cache_ttl(
         result_descriptor: RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            geo_transform_x: GeoTransform::new((0., 0.).into(), 0.1, -0.1),
-            pixel_bounds_x: GridBoundingBox2D::new([-850, -1800], [-845, -1799]).unwrap(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new((0., 0.).into(), 0.1, -0.1),
+                GridBoundingBox2D::new([-850, -1800], [-845, -1799]).unwrap(),
+            ),
             time: Some(TimeInterval::new_unchecked(
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
                 TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
@@ -315,8 +319,10 @@ pub fn raster_descriptor_from_dataset(
         data_type,
         spatial_reference: spatial_ref.into(),
         time: None,
-        geo_transform_x: data_geo_transfrom,
-        pixel_bounds_x: data_shape.bounding_box(),
+        spatial_grid: SpatialGridDescriptor::source_from_parts(
+            data_geo_transfrom,
+            data_shape.bounding_box(),
+        ),
         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO: derive better name?
             measurement_from_rasterband(dataset, band)?,
@@ -342,8 +348,10 @@ pub fn raster_descriptor_from_dataset_and_sref(
         data_type,
         spatial_reference: spatial_ref.into(),
         time: None,
-        geo_transform_x: data_geo_transfrom,
-        pixel_bounds_x: data_shape.bounding_box(),
+        spatial_grid: SpatialGridDescriptor::source_from_parts(
+            data_geo_transfrom,
+            data_shape.bounding_box(),
+        ),
         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO derive better name?
             measurement_from_rasterband(dataset, band)?,

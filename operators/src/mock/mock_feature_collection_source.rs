@@ -248,6 +248,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, CacheHint, ColumnSelection, Coordinate2D, FeatureData, TimeInterval,
     };
+    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::util::test::TestDefault;
 
     #[test]
@@ -388,7 +389,10 @@ mod tests {
             TimeInterval::default(),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
+        let ctx = MockQueryContext::new(
+            (2 * std::mem::size_of::<Coordinate2D>()).into(),
+            TilingSpecification::test_default(),
+        );
 
         let stream = processor.query(query_rectangle, &ctx).await.unwrap();
 

@@ -24,7 +24,8 @@ use geoengine_datatypes::raster::{BoundedGrid, GeoTransform, GridShape2D, Raster
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
-    StaticMetaData, TypedOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+    SpatialGridDescriptor, StaticMetaData, TypedOperator, VectorColumnInfo, VectorOperator,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -692,8 +693,10 @@ impl EdrCollectionMetaData {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: Some(self.get_time_interval()?),
-            geo_transform_x: geo_transform,
-            pixel_bounds_x: grid_shape.bounding_box(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                geo_transform,
+                grid_shape.bounding_box(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         })
     }
@@ -1841,12 +1844,14 @@ mod tests {
                     1_692_144_000_000,
                     1_692_500_400_000
                 )),
-                geo_transform_x: GeoTransform::new(
-                    (0., -90.).into(),
-                    0.499_305_555_555_555_6,
-                    -0.498_614_958_448_753_5
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new(
+                        (0., -90.).into(),
+                        0.499_305_555_555_555_6,
+                        -0.498_614_958_448_753_5
+                    ),
+                    GridBoundingBox2D::new_min_max(0, 0, 720, 361).unwrap(),
                 ),
-                pixel_bounds_x: GridBoundingBox2D::new_min_max(0, 0, 720, 361).unwrap(),
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );

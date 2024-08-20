@@ -291,8 +291,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, StaticMetaData, VectorColumnInfo,
-        VectorOperator, VectorResultDescriptor,
+        ChunkByteSize, MockExecutionContext, StaticMetaData, VectorColumnInfo, VectorOperator,
+        VectorResultDescriptor,
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{
@@ -410,7 +410,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -485,7 +485,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -630,7 +630,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap_err();
@@ -677,7 +677,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -756,7 +756,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -819,7 +819,7 @@ mod tests {
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
