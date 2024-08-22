@@ -1,3 +1,4 @@
+mod band_extractor;
 mod feature_collection_merger;
 mod raster_stacker;
 mod raster_subquery;
@@ -6,6 +7,7 @@ mod raster_time_substream;
 mod simple_raster_stacker;
 mod sparse_tiles_fill_adapter;
 
+use band_extractor::BandExtractor;
 pub use feature_collection_merger::FeatureCollectionChunkMerger;
 pub use raster_stacker::{RasterStackerAdapter, RasterStackerSource};
 pub use raster_subquery::{
@@ -56,6 +58,17 @@ where
         Fut: Future<Output = Accum>,
     {
         RasterTimeMultiFold::new(self, accum_init_fn, fold_fn)
+    }
+
+    fn extract_bands(
+        self,
+        selected_bands: Vec<u32>,
+        num_bands_in_source: u32,
+    ) -> BandExtractor<Self, P>
+    where
+        Self: Sized,
+    {
+        BandExtractor::new(self, selected_bands, num_bands_in_source)
     }
 }
 

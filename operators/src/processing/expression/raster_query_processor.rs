@@ -260,7 +260,9 @@ where
                     return Err(e);
                 }
                 // if there is no error, the source did not produce all bands, which likely means a bug in an operator
-                unreachable!("the source did not produce all bands");
+                return Err(crate::error::Error::MustNotHappen {
+                    message: "source did not produce all bands".to_string(),
+                });
             }
 
             let [a, b]: [Result<RasterTile2D<f64>>; 2] = chunk
@@ -410,7 +412,9 @@ macro_rules! impl_expression_tuple_processor {
                             return Err(e);
                         }
                         // if there is no error, the source did not produce all bands, which likely means a bug in an operator
-                        unreachable!("the source did not produce all bands");
+                        return Err(crate::error::Error::MustNotHappen {
+                            message: "source did not produce all bands".to_string(),
+                        });
                     }
 
                     let mut ok_tiles = Vec::with_capacity($N);

@@ -313,8 +313,11 @@ impl From<PlotResultDescriptor> for geoengine_operators::engine::PlotResultDescr
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum TypedResultDescriptor {
+    #[schema(title = "TypedPlotResultDescriptor")]
     Plot(PlotResultDescriptor),
+    #[schema(title = "TypedRasterResultDescriptor")]
     Raster(RasterResultDescriptor),
+    #[schema(title = "TypedVectorResultDescriptor")]
     Vector(VectorResultDescriptor),
 }
 
@@ -818,6 +821,7 @@ impl Default for OgrSourceDatasetTimeType {
 pub enum OgrSourceDurationSpec {
     Infinite,
     Zero,
+    #[schema(title = "OgrSourceDurationSpecValue")]
     Value(TimeStep),
 }
 

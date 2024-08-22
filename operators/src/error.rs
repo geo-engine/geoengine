@@ -1,4 +1,5 @@
 use crate::engine::SpatialGridDescriptor;
+use crate::processing::BandNeighborhoodAggregateError;
 use crate::util::statistics::StatisticsError;
 use bb8_postgres::bb8;
 use geoengine_datatypes::dataset::{DataId, NamedData};
@@ -473,6 +474,15 @@ pub enum Error {
     BandDoesNotExist {
         band_idx: u32,
     },
+    #[snafu(display("MachineLearning error: {}", source))]
+    MachineLearning {
+        // TODO: make `source: MachineLearningError`, once pro features is removed
+        source: Box<dyn ErrorSource>,
+    },
+    #[snafu(display("MustNotHappen: {message}, this is a bug"))]
+    MustNotHappen {
+        message: String,
+    },
 
     ReprojectionFailed,
 
@@ -484,6 +494,10 @@ pub enum Error {
     #[snafu(display("Bb8PostgresError: {}", source))]
     Bb8Postgres {
         source: bb8::RunError<tokio_postgres::Error>,
+    },
+    #[snafu(context(false), display("BandNeighborhoodAggregate: {source}"))]
+    BandNeighborhoodAggregate {
+        source: BandNeighborhoodAggregateError,
     },
 }
 

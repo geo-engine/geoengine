@@ -661,6 +661,12 @@ impl TryFrom<Vec<RasterBandDescriptor>> for RasterBandDescriptors {
     }
 }
 
+impl From<&RasterBandDescriptors> for BandSelection {
+    fn from(value: &RasterBandDescriptors) -> Self {
+        Self::new_unchecked((0..value.len() as u32).collect())
+    }
+}
+
 impl Index<usize> for RasterBandDescriptors {
     type Output = RasterBandDescriptor;
 
