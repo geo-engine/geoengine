@@ -9,6 +9,7 @@ use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use geoengine_datatypes::dataset::LayerId;
 use geoengine_datatypes::error::ErrorSource;
+use geoengine_datatypes::util::helpers::ge_report;
 use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::fmt;
@@ -524,7 +525,7 @@ impl actix_web::error::ResponseError for Error {
 
 impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&snafu::Report::from_error(self), f)
+        write!(f, "{}", ge_report(self))
     }
 }
 

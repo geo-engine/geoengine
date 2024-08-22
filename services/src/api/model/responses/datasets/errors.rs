@@ -2,6 +2,7 @@ use crate::api::model::responses::ErrorResponse;
 use crate::error;
 use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, ResponseError};
+use geoengine_datatypes::util::helpers::ge_report;
 use snafu::prelude::*;
 use std::fmt;
 use strum::IntoStaticStr;
@@ -51,7 +52,7 @@ impl ResponseError for CreateDatasetError {
 
 impl fmt::Debug for CreateDatasetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&snafu::Report::from_error(self), f)
+        write!(f, "{}", ge_report(self))
     }
 }
 
@@ -74,7 +75,7 @@ impl ResponseError for GetDatasetError {
 
 impl fmt::Debug for GetDatasetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&snafu::Report::from_error(self), f)
+        write!(f, "{}", ge_report(self))
     }
 }
 
@@ -100,6 +101,6 @@ impl ResponseError for UpdateDatasetError {
 
 impl fmt::Debug for UpdateDatasetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&snafu::Report::from_error(self), f)
+        write!(f, "{}", ge_report(self))
     }
 }

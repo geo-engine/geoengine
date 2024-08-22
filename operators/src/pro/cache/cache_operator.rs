@@ -19,8 +19,8 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
+use geoengine_datatypes::util::helpers::ge_report;
 use pin_project::{pin_project, pinned_drop};
-use snafu::Report;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -314,13 +314,13 @@ where
                     .stream_event_sender
                     .send(SourceStreamEvent::Element(element.clone()));
                 if let Err(e) = r {
-                    log::warn!("could not send tile to cache: {}", Report::from_error(e));
+                    log::warn!("could not send tile to cache: {}", ge_report(e));
                 }
             } else {
                 // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
                 let r = this.stream_event_sender.send(SourceStreamEvent::Abort);
                 if let Err(e) = r {
-                    log::warn!("could not send abort to cache: {}", Report::from_error(e));
+                    log::warn!("could not send abort to cache: {}", ge_report(e));
                 }
             }
         } else {
@@ -328,16 +328,13 @@ where
                 // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
                 let r = this.stream_event_sender.send(SourceStreamEvent::Abort);
                 if let Err(e) = r {
-                    log::warn!("could not send abort to cache: {}", Report::from_error(e));
+                    log::warn!("could not send abort to cache: {}", ge_report(e));
                 }
             } else {
                 // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
                 let r = this.stream_event_sender.send(SourceStreamEvent::Finished);
                 if let Err(e) = r {
-                    log::warn!(
-                        "could not send finished to cache: {}",
-                        Report::from_error(e)
-                    );
+                    log::warn!("could not send finished to cache: {}", ge_report(e));
                 }
                 log::debug!("stream finished, mark cache entry as finished.");
             }

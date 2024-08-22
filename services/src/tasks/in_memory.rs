@@ -5,7 +5,10 @@ use super::{
 use crate::{contexts::Db, error::Result};
 use futures::channel::oneshot;
 use futures::StreamExt;
-use geoengine_datatypes::{error::ErrorSource, util::Identifier};
+use geoengine_datatypes::{
+    error::ErrorSource,
+    util::{helpers::ge_report, Identifier},
+};
 use log::warn;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -301,7 +304,7 @@ fn run_task(
                 log::error!(
                     "Task {} failed with: {}",
                     task_id,
-                    snafu::Report::from_error(Arc::clone(&err))
+                    ge_report(Arc::clone(&err))
                 );
                 *task_handle.status.write().await = TaskStatus::failed(
                     Arc::clone(&err),

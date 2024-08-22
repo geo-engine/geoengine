@@ -8,6 +8,7 @@ use crate::projects::{
 };
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use actix_web::{web, FromRequest, HttpResponse, Responder, ResponseError};
+use geoengine_datatypes::util::helpers::ge_report;
 use snafu::prelude::*;
 use snafu::ResultExt;
 use std::fmt;
@@ -89,7 +90,7 @@ impl ResponseError for ProjectHandlerError {
 
 impl fmt::Debug for ProjectHandlerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&snafu::Report::from_error(self), f)
+        write!(f, "{}", ge_report(self))
     }
 }
 
