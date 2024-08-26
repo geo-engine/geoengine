@@ -17,7 +17,7 @@ pub struct MlModelName {
 pub struct MlModelMetadata {
     pub file_path: PathBuf,
     pub input_type: RasterDataType,
-    pub num_input_bands: usize, // number of features per sample (bands per pixel)
+    pub num_input_bands: u32, // number of features per sample (bands per pixel)
     pub output_type: RasterDataType, // TODO: support multiple outputs, e.g. one band for the probability of prediction
                                      // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
 }

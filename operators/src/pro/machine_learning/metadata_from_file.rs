@@ -66,7 +66,7 @@ pub fn load_model_metadata(path: &Path) -> Result<MlModelMetadata, MachineLearni
     Ok(MlModelMetadata {
         file_path: path.to_owned(),
         input_type: try_raster_datatype_from_tensor_element_type(*input_tensor_element_type)?,
-        num_input_bands: input_dimensions[1] as usize,
+        num_input_bands: input_dimensions[1] as u32,
         output_type: try_raster_datatype_from_tensor_element_type(*output_tensor_element_type)?,
     })
 }

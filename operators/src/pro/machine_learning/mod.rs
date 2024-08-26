@@ -32,8 +32,8 @@ pub enum MachineLearningError {
     },
     #[snafu(display("Number of bands in source ({source_bands}) does not match the model input bands ({model_input_bands})."))]
     InputBandsMismatch {
-        model_input_bands: usize,
-        source_bands: usize,
+        model_input_bands: u32,
+        source_bands: u32,
     },
     #[snafu(display("Raster data types of source ({source_type:?}) does not match model input type ({model_input_type:?})."))]
     InputTypeMismatch {

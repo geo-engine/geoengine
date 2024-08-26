@@ -173,6 +173,9 @@ pub enum Error {
         name: MlModelName,
         source: Box<dyn ErrorSource>,
     },
+    LoadingMlMetadataFailed {
+        source: Box<dyn ErrorSource>,
+    },
 
     WorkerThread {
         reason: String,

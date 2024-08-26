@@ -873,3 +873,20 @@ CREATE TABLE ebv_provider_loading_infos (
         file_name
     ) ON DELETE CASCADE DEFERRABLE
 );
+
+CREATE TYPE "MLModelMetadata" (
+    upload uuid NOT NULL REFERENCES uploads (id),
+    input_type "RasterDataType" NOT NULL,
+    num_input_bands OID NOT NULL,
+    output_type "RasterDataType" NOT NULL
+);
+
+CREATE TYPE "MlModelName" AS (namespace text, name text);
+
+CREATE TABLE ml_models (
+    id uuid PRIMARY KEY,
+    name "MlModelName" UNIQUE NOT NULL,
+    display_name text NOT NULL,
+    description text NOT NULL,
+    metadata "MLModelMetadata"
+);

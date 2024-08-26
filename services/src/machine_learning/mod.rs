@@ -1,9 +1,10 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use error::MachineLearningError;
-use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
+use error::{error::CouldNotFindMlModelFileMachineLearningError, MachineLearningError};
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
 use tokio_postgres::{
     tls::{MakeTlsConnect, TlsConnect},
     Socket,
@@ -12,14 +13,99 @@ use utoipa::{IntoParams, ToSchema};
 use validator::{Validate, ValidationError};
 
 use crate::{
-    api::handlers::machine_learning::MlModelListOptions,
+    api::model::datatypes::RasterDataType,
     contexts::PostgresDb,
+    datasets::upload::{UploadId, UploadRootPath},
+    identifier,
     util::config::{get_config_element, MachineLearning},
 };
 
-use super::api::handlers::machine_learning::MlModel;
-
 pub mod error;
+
+identifier!(MlModelId);
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, FromSql, ToSql)]
+pub struct MlModelName {
+    pub namespace: Option<String>,
+    pub name: String,
+}
+
+impl From<MlModelName> for geoengine_datatypes::machine_learning::MlModelName {
+    fn from(name: MlModelName) -> Self {
+        Self {
+            namespace: name.namespace.clone(),
+            name: name.name.clone(),
+        }
+    }
+}
+
+impl From<geoengine_datatypes::machine_learning::MlModelName> for MlModelName {
+    fn from(name: geoengine_datatypes::machine_learning::MlModelName) -> Self {
+        Self {
+            namespace: name.namespace.clone(),
+            name: name.name.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema, FromSql, ToSql)]
+#[serde(rename_all = "camelCase")]
+pub struct MlModel {
+    pub name: MlModelName,
+    pub display_name: String,
+    pub description: String,
+    pub metadata: MlModelMetadata,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema, FromSql, ToSql)]
+#[serde(rename_all = "camelCase")]
+pub struct MlModelMetadata {
+    pub upload: UploadId,
+    pub input_type: RasterDataType,
+    pub num_input_bands: u32, // number of features per sample (bands per pixel)
+    pub output_type: RasterDataType, // TODO: support multiple outputs, e.g. one band for the probability of prediction
+                                     // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
+}
+
+impl TryFrom<MlModelMetadata> for geoengine_datatypes::machine_learning::MlModelMetadata {
+    type Error = MachineLearningError;
+
+    fn try_from(value: MlModelMetadata) -> Result<Self, Self::Error> {
+        Ok(Self {
+            file_path: value
+                .upload
+                .root_path()
+                .context(CouldNotFindMlModelFileMachineLearningError)?
+                .join("model.onnx"), // TODO: file name?
+            input_type: value.input_type.into(),
+            num_input_bands: value.num_input_bands,
+            output_type: value.output_type.into(),
+        })
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, IntoParams, Validate)]
+#[into_params(parameter_in = Query)]
+pub struct MlModelListOptions {
+    #[param(example = 0)]
+    pub offset: u32,
+    #[param(example = 2)]
+    #[validate(custom = "validate_list_limit")]
+    pub limit: u32,
+}
+
+fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
+    let limit = get_config_element::<MachineLearning>()
+        .expect("should exist because it is defined in the default config")
+        .list_limit;
+    if value <= limit {
+        return Ok(());
+    }
+
+    let mut err = ValidationError::new("limit (too large)");
+    err.add_param::<u32>(Cow::Borrowed("max limit"), &limit);
+    Err(err)
+}
 
 #[async_trait]
 pub trait MlModelDb {

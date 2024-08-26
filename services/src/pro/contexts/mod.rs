@@ -200,12 +200,21 @@ where
         &self,
         name: &MlModelName,
     ) -> Result<MlModelMetadata, geoengine_operators::error::Error> {
-        self.db.load_model_metadata(name).await.map_err(|source| {
-            geoengine_operators::error::Error::CannotResolveMlModelName {
-                name: name.clone(),
-                source: Box::new(source),
-            }
-        })
+        self.db
+            .load_model_metadata(&(name.clone().into()))
+            .await
+            .map_err(
+                |source| geoengine_operators::error::Error::CannotResolveMlModelName {
+                    name: name.clone(),
+                    source: Box::new(source),
+                },
+            )?
+            .try_into()
+            .map_err(
+                |source| geoengine_operators::error::Error::LoadingMlMetadataFailed {
+                    source: Box::new(source),
+                },
+            )
     }
 
     fn extensions(&self) -> &ExecutionContextExtensions {

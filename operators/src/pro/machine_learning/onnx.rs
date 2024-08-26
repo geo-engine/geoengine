@@ -59,10 +59,10 @@ impl RasterOperator for Onnx {
 
         // check that number of input bands fits number of model features
         ensure!(
-            model_metadata.num_input_bands == in_descriptor.bands.count() as usize,
+            model_metadata.num_input_bands == in_descriptor.bands.count(),
             InputBandsMismatch {
                 model_input_bands: model_metadata.num_input_bands,
-                source_bands: in_descriptor.bands.count() as usize,
+                source_bands: in_descriptor.bands.count(),
             }
         );
 
