@@ -51,6 +51,8 @@ use crate::layers::layer::{
 use crate::layers::listing::{
     LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
 };
+use crate::machine_learning::name::MlModelName;
+use crate::machine_learning::{MlModel, MlModelId, MlModelListOptions, MlModelMetadata};
 use crate::pro;
 use crate::pro::api::handlers::users::{Quota, UpdateQuota};
 use crate::pro::permissions::{
@@ -143,6 +145,9 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::update_loading_info_handler,
         handlers::datasets::update_dataset_symbology_handler,
         handlers::datasets::update_dataset_provenance_handler,
+        handlers::machine_learning::add_ml_model,
+        handlers::machine_learning::get_ml_model,
+        handlers::machine_learning::list_ml_models,
         handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::plots::get_plot_handler,
         handlers::projects::list_projects_handler,
@@ -399,6 +404,10 @@ use utoipa::{Modify, OpenApi};
             RoleDescription,
             Role,
 
+            MlModel,
+            MlModelId,
+            MlModelName,
+            MlModelMetadata
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),

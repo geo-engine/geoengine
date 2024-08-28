@@ -15,7 +15,8 @@ use crate::{
             },
             MachineLearningError,
         },
-        MlModel, MlModelDb, MlModelId, MlModelListOptions, MlModelMetadata, MlModelName,
+        name::MlModelName,
+        MlModel, MlModelDb, MlModelId, MlModelListOptions, MlModelMetadata,
     },
     util::postgres::PostgresErrorExt,
 };
@@ -48,6 +49,7 @@ where
                     m.name,
                     m.display_name,
                     m.description,
+                    m.upload,
                     m.metadata
                 FROM 
                     user_permitted_ml_models u JOIN ml_models m ON (u.ml_model_id = m.id)
@@ -70,7 +72,8 @@ where
                 name: row.get(1),
                 display_name: row.get(2),
                 description: row.get(3),
-                metadata: row.get(4),
+                upload: row.get(4),
+                metadata: row.get(5),
             })
             .collect();
 
@@ -91,11 +94,12 @@ where
                     m.name,
                     m.display_name,
                     m.description,
+                    m.upload,
                     m.metadata
                 FROM 
                     user_permitted_ml_models u JOIN ml_models m ON (u.ml_model_id = m.id)
                 WHERE 
-                    u.user_id = $1 AND m.name = $2",
+                    u.user_id = $1 AND m.name = $2::\"MlModelName\"",
                 &[&self.session.user.id, name],
             )
             .await
@@ -108,7 +112,8 @@ where
             name: row.get(1),
             display_name: row.get(2),
             description: row.get(3),
-            metadata: row.get(4),
+            upload: row.get(4),
+            metadata: row.get(5),
         })
     }
 
@@ -142,6 +147,8 @@ where
     }
 
     async fn add_model(&self, model: MlModel) -> Result<(), MachineLearningError> {
+        self.check_ml_model_namespace(&model.name)?;
+
         let mut conn = self
             .conn_pool
             .get()
@@ -162,13 +169,15 @@ where
                     name, 
                     display_name, 
                     description,
+                    upload,
                     metadata
-                ) VALUES ($1, $2, $3, $4) RETURNING id;",
+                ) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;",
             &[
                 &id,
                 &model.name,
                 &model.display_name,
                 &model.description,
+                &model.upload,
                 &model.metadata,
             ],
         )
@@ -181,7 +190,7 @@ where
 
         let stmt = tx
             .prepare(
-                "INSERT INTO permissions (role_id, permission, project_id) VALUES ($1, $2, $3);",
+                "INSERT INTO permissions (role_id, permission, ml_model_id) VALUES ($1, $2, $3);",
             )
             .await
             .context(PostgresMachineLearningError)?;

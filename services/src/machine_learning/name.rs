@@ -1,16 +1,10 @@
-use std::path::PathBuf;
-
+use postgres_types::{FromSql, ToSql};
 use serde::{de::Visitor, Deserialize, Serialize};
-
-use crate::{
-    dataset::{is_invalid_name_char, SYSTEM_NAMESPACE},
-    raster::RasterDataType,
-};
+use utoipa::ToSchema;
 
 const NAME_DELIMITER: char = ':';
 
-// TODO: custom serialization as ns:name
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, FromSql, ToSql)]
 pub struct MlModelName {
     pub namespace: Option<String>,
     pub name: String,
@@ -33,6 +27,36 @@ impl MlModelName {
         Self {
             namespace,
             name: name.into(),
+        }
+    }
+}
+
+impl From<MlModelName> for geoengine_datatypes::machine_learning::MlModelName {
+    fn from(name: MlModelName) -> Self {
+        Self {
+            namespace: name.namespace.clone(),
+            name: name.name.clone(),
+        }
+    }
+}
+
+impl From<geoengine_datatypes::machine_learning::MlModelName> for MlModelName {
+    fn from(name: geoengine_datatypes::machine_learning::MlModelName) -> Self {
+        Self {
+            namespace: name.namespace.clone(),
+            name: name.name.clone(),
+        }
+    }
+}
+
+impl std::fmt::Display for MlModelName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let d = NAME_DELIMITER;
+        match (&self.namespace, &self.name) {
+            (None, name) => write!(f, "{name}"),
+            (Some(namespace), name) => {
+                write!(f, "{namespace}{d}{name}")
+            }
         }
     }
 }
@@ -88,7 +112,10 @@ impl<'de> Visitor<'de> for MlModelNameDeserializeVisitor {
                 return Err(E::custom("empty part in named data"));
             }
 
-            if let Some(c) = part.matches(is_invalid_name_char).next() {
+            if let Some(c) = part
+                .matches(geoengine_datatypes::dataset::is_invalid_name_char)
+                .next()
+            {
                 return Err(E::custom(format!("invalid character '{c}' in named model")));
             }
 
@@ -101,7 +128,10 @@ impl<'de> Visitor<'de> for MlModelNameDeserializeVisitor {
 
         match strings {
             [Some(namespace), Some(name)] => Ok(MlModelName {
-                namespace: MlModelName::canonicalize(namespace, SYSTEM_NAMESPACE),
+                namespace: MlModelName::canonicalize(
+                    namespace,
+                    geoengine_datatypes::dataset::SYSTEM_NAMESPACE,
+                ),
                 name,
             }),
             [Some(name), None] => Ok(MlModelName {
@@ -113,13 +143,12 @@ impl<'de> Visitor<'de> for MlModelNameDeserializeVisitor {
     }
 }
 
-// For now we assume all models are pixel-wise, i.e., they take a single pixel with multiple bands as input and produce a single output value.
-// To support different inputs, we would need a more sophisticated logic to produce the inputs for the model.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
-pub struct MlModelMetadata {
-    pub file_path: PathBuf,
-    pub input_type: RasterDataType,
-    pub num_input_bands: u32, // number of features per sample (bands per pixel)
-    pub output_type: RasterDataType, // TODO: support multiple outputs, e.g. one band for the probability of prediction
-                                     // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
+impl<'a> ToSchema<'a> for MlModelName {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        use utoipa::openapi::*;
+        (
+            "MlModelName",
+            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+        )
+    }
 }

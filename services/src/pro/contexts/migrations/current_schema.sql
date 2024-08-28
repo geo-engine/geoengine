@@ -237,7 +237,7 @@ CREATE TABLE oidc_session_tokens (
     refresh_token_encryption_nonce bytea
 );
 
-CREATE VIEW user_permitted_ml_mosels
+CREATE VIEW user_permitted_ml_models
 AS
 SELECT
     r.user_id,

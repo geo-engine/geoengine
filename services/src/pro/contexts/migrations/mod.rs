@@ -1,4 +1,4 @@
-use crate::contexts::Migration;
+use crate::contexts::{Migration, Migration0012MlModelDb};
 use crate::contexts::{
     Migration0000Initial, Migration0001RasterStacks, Migration0002DatasetListingProvider,
     Migration0003GbifConfig, Migration0004DatasetListingProviderPrio,
@@ -18,6 +18,7 @@ mod migration_0007_owner_role;
 mod migration_0009_oidc_tokens;
 mod migration_0010_s2_stack_time_buffers;
 mod migration_0011_remove_xgb;
+mod migration_0012_ml_model_db;
 
 /// Get all regular and pro migrations. This function wraps all regular migrations into a pro migration.
 pub fn pro_migrations() -> Vec<Box<dyn Migration>>
@@ -40,6 +41,7 @@ where
         Box::new(ProMigrationImpl::from(Migration0009OidcTokens)),
         Box::new(ProMigrationImpl::from(Migration0010S2StacTimeBuffers)),
         Box::new(ProMigrationImpl::from(Migration0011RemoveXgb)),
+        Box::new(NoProMigrationImpl::from(Migration0012MlModelDb)),
     ]
 }
 

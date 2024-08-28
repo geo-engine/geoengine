@@ -33,7 +33,7 @@ pub use migrations::{
     Migration0004DatasetListingProviderPrio, Migration0005GbifColumnSelection,
     Migration0006EbvProvider, Migration0007OwnerRole, Migration0008BandNames,
     Migration0009OidcTokens, Migration0010S2StacTimeBuffers, Migration0011RemoveXgb,
-    MigrationResult,
+    Migration0012MlModelDb, MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
@@ -293,7 +293,7 @@ where
         name: &MlModelName,
     ) -> Result<MlModelMetadata, geoengine_operators::error::Error> {
         self.db
-            .load_model_metadata(&(name.clone().into()))
+            .load_model(&(name.clone().into()))
             .await
             .map_err(
                 |source| geoengine_operators::error::Error::CannotResolveMlModelName {
@@ -301,7 +301,7 @@ where
                     source: Box::new(source),
                 },
             )?
-            .try_into()
+            .metadata_for_operator()
             .map_err(
                 |source| geoengine_operators::error::Error::LoadingMlMetadataFailed {
                     source: Box::new(source),

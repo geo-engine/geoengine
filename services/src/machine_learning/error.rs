@@ -1,8 +1,9 @@
 use snafu::Snafu;
+use strum::IntoStaticStr;
 
 use super::MlModelName;
 
-#[derive(Debug, Snafu)]
+#[derive(Debug, Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(MachineLearningError)), module(error))] // disables default `Snafu` suffix
 pub enum MachineLearningError {
@@ -13,6 +14,9 @@ pub enum MachineLearningError {
         name: MlModelName,
     },
     DuplicateMlModelName {
+        name: MlModelName,
+    },
+    InvalidModelNamespace {
         name: MlModelName,
     },
     #[snafu(display("An unexpected database error occurred."))]
