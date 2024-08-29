@@ -4,7 +4,6 @@ use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 use crate::layers::listing::LayerCollectionProvider;
 use crate::layers::storage::{LayerDb, LayerProviderDb};
-use crate::machine_learning::error::MachineLearningError;
 use crate::machine_learning::MlModelDb;
 use crate::tasks::{TaskContext, TaskManager};
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};

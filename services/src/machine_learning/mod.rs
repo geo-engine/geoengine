@@ -119,23 +119,23 @@ where
 {
     async fn list_models(
         &self,
-        options: &MlModelListOptions,
+        _options: &MlModelListOptions,
     ) -> Result<Vec<MlModel>, MachineLearningError> {
-        todo!()
+        unimplemented!()
     }
 
-    async fn load_model(&self, name: &MlModelName) -> Result<MlModel, MachineLearningError> {
-        todo!()
+    async fn load_model(&self, _name: &MlModelName) -> Result<MlModel, MachineLearningError> {
+        unimplemented!()
     }
 
     async fn load_model_metadata(
         &self,
-        name: &MlModelName,
+        _name: &MlModelName,
     ) -> Result<MlModelMetadata, MachineLearningError> {
-        todo!()
+        unimplemented!()
     }
 
-    async fn add_model(&self, model: MlModel) -> Result<(), MachineLearningError> {
-        todo!()
+    async fn add_model(&self, _model: MlModel) -> Result<(), MachineLearningError> {
+        unimplemented!()
     }
 }

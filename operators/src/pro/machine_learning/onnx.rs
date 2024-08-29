@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
@@ -6,10 +6,7 @@ use crate::engine::{
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
-use crate::pro::machine_learning::error::{
-    InputBandsMismatch, InputTypeMismatch, InvalidInputDimensions, InvalidOutputDimensions,
-    MultipleInputsNotSupported, Ort,
-};
+use crate::pro::machine_learning::error::{InputBandsMismatch, InputTypeMismatch, Ort};
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use ndarray::Array2;
 use ort::{IntoTensorElementType, PrimitiveTensorElementType};
@@ -21,11 +18,9 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
-    Grid, GridIdx2D, GridIndexAccess, GridSize, Pixel, RasterDataType, RasterTile2D,
+    Grid, GridIdx2D, GridIndexAccess, GridSize, Pixel, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
-
-use super::MachineLearningError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -312,7 +307,9 @@ mod tests {
     use approx::assert_abs_diff_eq;
     use geoengine_datatypes::{
         primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{GridOrEmpty, GridShape, RenameBands, TilesEqualIgnoringCacheHint},
+        raster::{
+            GridOrEmpty, GridShape, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint,
+        },
         spatial_reference::SpatialReference,
         test_data,
         util::test::TestDefault,

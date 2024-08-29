@@ -52,7 +52,7 @@ use crate::layers::listing::{
     LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
 };
 use crate::machine_learning::name::MlModelName;
-use crate::machine_learning::{MlModel, MlModelId, MlModelListOptions, MlModelMetadata};
+use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
 use crate::pro;
 use crate::pro::api::handlers::users::{Quota, UpdateQuota};
 use crate::pro::permissions::{

@@ -9,10 +9,7 @@ use tokio_postgres::{
 use crate::{
     machine_learning::{
         error::{
-            error::{
-                Bb8MachineLearningError, DuplicateMlModelNameMachineLearningError,
-                PostgresMachineLearningError,
-            },
+            error::{Bb8MachineLearningError, PostgresMachineLearningError},
             MachineLearningError,
         },
         name::MlModelName,

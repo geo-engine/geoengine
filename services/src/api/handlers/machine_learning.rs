@@ -1,19 +1,11 @@
-use std::{borrow::Cow, error::Error};
-
 use actix_web::{web, FromRequest, HttpResponse, ResponseError};
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
-use validator::{Validate, ValidationError};
 
 use crate::{
-    api::model::{datatypes::RasterDataType, responses::ErrorResponse},
+    api::model::responses::ErrorResponse,
     contexts::{ApplicationContext, SessionContext},
-    datasets::upload::UploadId,
     machine_learning::{
         error::MachineLearningError, name::MlModelName, MlModel, MlModelDb, MlModelListOptions,
     },
-    util::config::{get_config_element, MachineLearning},
 };
 
 pub(crate) fn init_ml_routes<C>(cfg: &mut web::ServiceConfig)
