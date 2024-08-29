@@ -58,7 +58,7 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>)
-            .configure(handlers::machine_learning::init_ml_routes::<C>)
+            .configure(pro::api::handlers::machine_learning::init_ml_routes::<C>)
             .route(
                 "/available",
                 web::get().to(crate::util::server::available_handler),

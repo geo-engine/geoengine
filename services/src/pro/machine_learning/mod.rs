@@ -58,7 +58,11 @@ where
                     $2
                 LIMIT 
                     $3",
-                &[&self.session.user.id, &options.offset, &options.limit],
+                &[
+                    &self.session.user.id,
+                    &i64::from(options.offset),
+                    &i64::from(options.limit),
+                ],
             )
             .await
             .context(PostgresMachineLearningError)?;

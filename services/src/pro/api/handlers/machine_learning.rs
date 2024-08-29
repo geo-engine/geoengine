@@ -126,3 +126,98 @@ pub(crate) async fn get_ml_model<C: ApplicationContext>(
         .await?;
     Ok(web::Json(models))
 }
+
+#[cfg(test)]
+mod tests {
+    use actix_http::header;
+    use actix_web::test;
+    use actix_web_httpauth::headers::authorization::Bearer;
+    use tokio_postgres::NoTls;
+
+    use crate::{
+        api::model::{datatypes::RasterDataType, responses::IdResponse},
+        contexts::Session,
+        datasets::upload::UploadId,
+        machine_learning::MlModelMetadata,
+        pro::{
+            contexts::ProPostgresContext, ge_context, users::UserAuth,
+            util::tests::send_pro_test_request,
+        },
+        util::tests::{SetMultipartBody, TestDataUploads},
+    };
+
+    use super::*;
+
+    #[ge_context::test]
+    async fn it_stores_ml_models_for_application(app_ctx: ProPostgresContext<NoTls>) {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let session_id = session.id();
+
+        let body = vec![(
+            "model.onnx",
+            include_bytes!("../../../../../test_data/pro/ml/onnx/test_classification.onnx"),
+        )];
+
+        let req = test::TestRequest::post()
+            .uri("/upload")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_multipart(body);
+
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        let upload: IdResponse<UploadId> = test::read_body_json(res).await;
+        test_data.uploads.push(upload.id);
+
+        let model = MlModel {
+            name: MlModelName::new(Some(session.user.id.to_string()), "test_classification"),
+            display_name: "Test Classification".to_string(),
+            description: "Test Classification Model".to_string(),
+            upload: upload.id,
+            metadata: MlModelMetadata {
+                file_name: "model.onnx".to_string(),
+                input_type: RasterDataType::F32,
+                num_input_bands: 2,
+                output_type: RasterDataType::I64,
+            },
+        };
+
+        let req = test::TestRequest::post()
+            .uri("/ml/models")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(&model);
+
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        let req = test::TestRequest::get()
+            .uri("/ml/models?offset=0&limit=10")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        let models: Vec<MlModel> = test::read_body_json(res).await;
+
+        assert_eq!(models.len(), 1);
+
+        assert_eq!(model, models[0]);
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/ml/models/{}", model.name))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_pro_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+
+        let res_model: MlModel = test::read_body_json(res).await;
+
+        assert_eq!(model, res_model);
+    }
+}
