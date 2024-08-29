@@ -47,7 +47,7 @@ strum = { version = "0.26", features = ["derive"] }
 
 [dev-dependencies]
 criterion = "0.5"
-tempfile = "3.10"
+tempfile = "3.12"
 
 [[bench]]
 name = "multi_point_collection"
