@@ -16,53 +16,19 @@ use tracing_subscriber::Layer;
 
 #[tokio::main]
 async fn main() {
-    initialize_expression_dependencies()
-        .await
-        .expect("successful compilation process is necessary for expression operators to work");
+    #[cfg(not(feature = "pro"))]
+    {
+        panic!("The pro feature has to be enabled to start the server");
+    }
 
-    start_server().await.expect("the server has to start");
-}
+    #[cfg(feature = "pro")]
+    {
+        initialize_expression_dependencies()
+            .await
+            .expect("successful compilation process is necessary for expression operators to work");
 
-#[cfg(not(feature = "pro"))]
-/// Starts the server.
-///
-///  # Panics
-///  - if the logging configuration is not valid
-///
-pub async fn start_server() -> Result<()> {
-    reroute_gdal_logging();
-    let logging_config: config::Logging = get_config_element()?;
-
-    // get a new tracing subscriber registry to add all log and tracing layers to
-    let registry = tracing_subscriber::Registry::default();
-
-    // create a filter for the log message level in console output
-    let console_filter =
-        EnvFilter::try_new(&logging_config.log_spec).expect("to have a valid log spec");
-
-    // create a log layer for output to the console and add it to the registry
-    let registry = registry.with(console_layer_with_filter(console_filter));
-
-    // create a filter for the log message level in file output. Since the console_filter is not copy or clone, we have to create a new one. TODO: allow a different log level for file output.
-    let file_filter =
-        EnvFilter::try_new(&logging_config.log_spec).expect("to have a valid log spec");
-
-    // create a log layer for output to a file and add it to the registry
-    let (file_layer, _fw_drop_guard) = if logging_config.log_to_file {
-        let (file_layer, fw_drop_guard) = file_layer_with_filter(
-            &logging_config.filename_prefix,
-            logging_config.log_directory.as_deref(),
-            file_filter,
-        );
-        (Some(file_layer), Some(fw_drop_guard))
-    } else {
-        (None, None)
-    };
-    let registry = registry.with(file_layer);
-
-    registry.init();
-
-    geoengine_services::server::start_server(None).await
+        start_server().await.expect("the server has to start");
+    }
 }
 
 #[cfg(feature = "pro")]
