@@ -249,6 +249,7 @@ pub struct Logging {
     pub log_to_file: bool,
     pub filename_prefix: String,
     pub log_directory: Option<String>,
+    pub raw_error_messages: bool,
 }
 
 impl ConfigElement for Logging {

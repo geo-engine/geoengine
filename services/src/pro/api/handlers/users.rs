@@ -1853,8 +1853,8 @@ mod tests {
         ErrorResponse::assert(
             res,
             200,
-            "Operator",
-            "Operator: CreatingProcessorFailed: QuotaExhausted",
+            "CreatingProcessorFailed",
+            "CreatingProcessorFailed: QuotaExhausted",
         )
         .await;
 

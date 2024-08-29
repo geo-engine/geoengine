@@ -1014,7 +1014,7 @@ impl TryFrom<BandSelection> for geoengine_datatypes::primitives::BandSelection {
         geoengine_datatypes::primitives::BandSelection::new(
             value.0.into_iter().map(|b| b as u32).collect(),
         )
-        .context(error::DataType)
+        .map_err(Into::into)
     }
 }
 

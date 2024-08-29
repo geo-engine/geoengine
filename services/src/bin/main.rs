@@ -32,6 +32,7 @@ async fn main() {
 pub async fn start_server() -> Result<()> {
     reroute_gdal_logging();
     let logging_config: config::Logging = get_config_element()?;
+    configure_error_report_formatting(&logging_config);
 
     // get a new tracing subscriber registry to add all log and tracing layers to
     let registry = tracing_subscriber::Registry::default();
@@ -74,6 +75,7 @@ pub async fn start_server() -> Result<()> {
 pub async fn start_server() -> Result<()> {
     reroute_gdal_logging();
     let logging_config: config::Logging = get_config_element()?;
+    configure_error_report_formatting(&logging_config);
 
     // get a new tracing subscriber registry to add all log and tracing layers to
     let registry = tracing_subscriber::Registry::default();
@@ -233,4 +235,11 @@ fn reroute_gdal_logging() {
             }
         };
     });
+}
+
+fn configure_error_report_formatting(logging_config: &config::Logging) {
+    if logging_config.raw_error_messages {
+        // there is no way to configure snafu::Report other than through env variables
+        std::env::set_var("SNAFU_RAW_ERROR_MESSAGES", "1");
+    }
 }
