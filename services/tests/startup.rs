@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in tests
 
-use assert_cmd::prelude::*;
 use geoengine_services::test_data;
 use std::{
     io::BufRead,
@@ -19,8 +18,12 @@ impl Drop for DroppingServer {
 
 impl DroppingServer {
     fn new(schema_name: &str) -> Self {
-        let process = Command::cargo_bin("main")
-            .unwrap()
+        let process = Command::new("cargo")
+            .arg("run")
+            .arg("--bin")
+            .arg("main")
+            .arg("--features")
+            .arg("pro")
             .env("GEOENGINE_WEB__BACKEND", "postgres")
             .env("GEOENGINE_POSTGRES__SCHEMA", schema_name)
             .stderr(Stdio::piped())
