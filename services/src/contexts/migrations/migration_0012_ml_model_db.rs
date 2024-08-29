@@ -11,7 +11,7 @@ pub struct Migration0012MlModelDb;
 #[async_trait]
 impl Migration for Migration0012MlModelDb {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some("0010_s2_stac_time_buffers".into())
+        Some("0011_remove_xgb".into())
     }
 
     fn version(&self) -> DatabaseVersion {

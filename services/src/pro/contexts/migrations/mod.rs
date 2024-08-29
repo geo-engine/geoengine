@@ -41,7 +41,7 @@ where
         Box::new(ProMigrationImpl::from(Migration0009OidcTokens)),
         Box::new(ProMigrationImpl::from(Migration0010S2StacTimeBuffers)),
         Box::new(ProMigrationImpl::from(Migration0011RemoveXgb)),
-        Box::new(NoProMigrationImpl::from(Migration0012MlModelDb)),
+        Box::new(ProMigrationImpl::from(Migration0012MlModelDb)),
     ]
 }
 
