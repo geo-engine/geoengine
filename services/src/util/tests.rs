@@ -101,7 +101,7 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
-                    band_colorizer: Colorizer::Rgba,
+                    band_colorizer: Colorizer::test_default(),
                 },
             }),
         })]),

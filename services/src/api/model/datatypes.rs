@@ -1486,8 +1486,6 @@ pub enum Colorizer {
         no_data_color: RgbaColor,
         default_color: RgbaColor,
     },
-    #[schema(title = "RgbaColorizer")]
-    Rgba,
 }
 
 impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
@@ -1530,7 +1528,9 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 no_data_color: no_data_color.into(),
                 default_color: default_color.into(),
             },
-            geoengine_datatypes::operations::image::Colorizer::Rgba => Self::Rgba,
+            geoengine_datatypes::operations::image::Colorizer::Rgba => unreachable!(
+                "only used temporally for multiband colorizer, not part of api and not stored"
+            ),
         }
     }
 }
@@ -1568,12 +1568,11 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
                 no_data_color: no_data_color.into(),
                 default_color: default_color.into(),
             },
-            Colorizer::Rgba => Self::Rgba,
         }
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum RasterColorizer {
     #[serde(rename_all = "camelCase")]
@@ -1582,18 +1581,57 @@ pub enum RasterColorizer {
         band: u32,
         band_colorizer: Colorizer,
     },
-    // TODO: multiband colorizer, e.g.
-    // MultiBand {
-    //     red: ...,
-    //     green: ...,
-    //     blue: ..,
-    // },
+    #[serde(rename_all = "camelCase")]
+    #[schema(title = "MultiBandRasterColorizer")]
+    MultiBand {
+        /// The band index of the red channel.
+        red_band: u32,
+        /// The minimum value for the red channel.
+        red_min: f64,
+        /// The maximum value for the red channel.
+        red_max: f64,
+        /// A scaling factor for the red channel between 0 and 1.
+        #[serde(default = "num_traits::One::one")]
+        red_scale: f64,
+
+        /// The band index of the green channel.
+        green_band: u32,
+        /// The minimum value for the red channel.
+        green_min: f64,
+        /// The maximum value for the red channel.
+        green_max: f64,
+        /// A scaling factor for the green channel between 0 and 1.
+        #[serde(default = "num_traits::One::one")]
+        green_scale: f64,
+
+        /// The band index of the blue channel.
+        blue_band: u32,
+        /// The minimum value for the red channel.
+        blue_min: f64,
+        /// The maximum value for the red channel.
+        blue_max: f64,
+        /// A scaling factor for the blue channel between 0 and 1.
+        #[serde(default = "num_traits::One::one")]
+        blue_scale: f64,
+    },
 }
+
+impl Eq for RasterColorizer {}
 
 impl RasterColorizer {
     pub fn band_selection(&self) -> BandSelection {
         match self {
             RasterColorizer::SingleBand { band, .. } => BandSelection(vec![*band as usize]),
+            RasterColorizer::MultiBand {
+                red_band,
+                green_band,
+                blue_band,
+                ..
+            } => BandSelection(vec![
+                *red_band as usize,
+                *green_band as usize,
+                *blue_band as usize,
+            ]),
         }
     }
 }
@@ -1608,9 +1646,78 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
                 band,
                 band_colorizer: colorizer.into(),
             },
+            geoengine_datatypes::operations::image::RasterColorizer::MultiBand {
+                red_band,
+                red_min,
+                red_max,
+                red_scale,
+                green_band,
+                green_min,
+                green_max,
+                green_scale,
+                blue_band,
+                blue_min,
+                blue_max,
+                blue_scale,
+            } => Self::MultiBand {
+                red_band,
+                red_min,
+                red_max,
+                red_scale,
+                green_band,
+                green_min,
+                green_max,
+                green_scale,
+                blue_band,
+                blue_min,
+                blue_max,
+                blue_scale,
+            },
         }
     }
 }
+
+impl From<RasterColorizer> for geoengine_datatypes::operations::image::RasterColorizer {
+    fn from(v: RasterColorizer) -> Self {
+        match v {
+            RasterColorizer::SingleBand {
+                band,
+                band_colorizer: colorizer,
+            } => Self::SingleBand {
+                band,
+                band_colorizer: colorizer.into(),
+            },
+            RasterColorizer::MultiBand {
+                red_band,
+                red_min,
+                red_max,
+                red_scale,
+                green_band,
+                green_min,
+                green_max,
+                green_scale,
+                blue_band,
+                blue_min,
+                blue_max,
+                blue_scale,
+            } => Self::MultiBand {
+                red_band,
+                red_min,
+                red_max,
+                red_scale,
+                green_band,
+                green_min,
+                green_max,
+                green_scale,
+                blue_band,
+                blue_min,
+                blue_max,
+                blue_scale,
+            },
+        }
+    }
+}
+
 /// A map from value to color
 ///
 /// It is assumed that is has at least one and at most 256 entries.

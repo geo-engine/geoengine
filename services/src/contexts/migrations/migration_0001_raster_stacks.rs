@@ -142,22 +142,19 @@ impl Migration for Migration0001RasterStacks {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
-    use geoengine_datatypes::{dataset::DatasetId, test_data};
+    use geoengine_datatypes::test_data;
+    use serde_json::json;
     use tokio_postgres::NoTls;
 
     use crate::{
-        contexts::{
-            migrate_database, migrations::migration_0000_initial::Migration0000Initial, PostgresDb,
-        },
-        datasets::listing::DatasetProvider,
+        contexts::{migrate_database, migrations::migration_0000_initial::Migration0000Initial},
         util::config::get_config_element,
     };
 
     use super::*;
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_migrates_result_descriptors_and_symbologies() -> Result<()> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
@@ -177,17 +174,136 @@ mod tests {
         // perform current migration
         migrate_database(&mut conn, &[Box::new(Migration0001RasterStacks)]).await?;
 
-        // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
-        drop(conn);
-
-        // create `PostgresDb` on migrated database and test methods
-        let db = PostgresDb::new(pool.clone());
-
         // verify dataset (including result descriptor) is loaded correctly
-        let _ = db
-            .load_dataset(&DatasetId::from_str("6cc80129-eea4-4140-b09c-6bcfbd76ad5f").unwrap())
-            .await
-            .unwrap();
+        let row = conn
+            .query_one(
+                "
+                SELECT to_json(result_descriptor),
+                       to_json(meta_data),
+                       to_json(symbology)
+                FROM datasets
+                WHERE id = '6cc80129-eea4-4140-b09c-6bcfbd76ad5f'
+            ",
+                &[],
+            )
+            .await?;
+
+        let result_descriptor: serde_json::Value = row.get(0);
+        let expected_result_descriptor = json!({
+                "data_type": "U8",
+                "spatial_reference": {
+                    "authority": "Epsg",
+                    "code": "4326"
+                },
+                "time": {
+                    "start": 0,
+                    "end": 0
+                },
+                "bbox": {
+                    "upper_left_coordinate": {
+                        "x": -180,
+                        "y": -90
+                    },
+                    "lower_right_coordinate": {
+                        "x": 180,
+                        "y": 90
+                    }
+                },
+                "resolution": {
+                    "x": 0.1,
+                    "y": 0.1
+                },
+                "bands": [
+                    {
+                        "name": "band",
+                        "measurement": {
+                            "continuous": null,
+                            "classification": null
+                        }
+                    }
+                ]
+        });
+        pretty_assertions::assert_eq!(
+            result_descriptor,
+            json!({
+                "raster": expected_result_descriptor,
+                "vector": null,
+                "plot": null
+            }),
+        );
+
+        let meta_data: serde_json::Value = row.get(1);
+        pretty_assertions::assert_eq!(
+            meta_data,
+            json!({
+                "mock_meta_data": null,
+                "ogr_meta_data": null,
+                "gdal_meta_data_regular": null,
+                "gdal_static": {
+                    "time": {
+                        "start": 0,
+                        "end": 0
+                    },
+                    "params": {
+                        "file_path": "foo/bar.tiff",
+                        "rasterband_channel": 0,
+                        "geo_transform": {
+                            "origin_coordinate": {
+                                "x": 0,
+                                "y": 0
+                            },
+                            "x_pixel_size": 0.1,
+                            "y_pixel_size": 0.1
+                        },
+                        "width": 3600,
+                        "height": 1800,
+                        "file_not_found_handling": "Error",
+                        "no_data_value": 0,
+                        "properties_mapping": [],
+                        "gdal_open_options": [],
+                        "gdal_config_options": [],
+                        "allow_alphaband_as_mask": false,
+                        "retry": {
+                            "max_retries": 0
+                        }
+                    },
+                    "result_descriptor": expected_result_descriptor,
+                    "cache_ttl": 0
+                },
+                "gdal_metadata_net_cdf_cf": null,
+                "gdal_meta_data_list": null
+            })
+        );
+
+        let symbology: serde_json::Value = row.get(2);
+        pretty_assertions::assert_eq!(
+            symbology,
+            json!({
+                "raster": {
+                    "opacity": 1,
+                    "raster_colorizer": {
+                        "type": "SingleBand",
+                        "band": 0,
+                        "band_colorizer": {
+                            "type": "LinearGradient",
+                            "breakpoints": [
+                                {
+                                    "value": 0,
+                                    "color": [128, 128, 128, 255]
+                                }
+                            ],
+                            "no_data_color": [0, 0, 0, 0],
+                            "over_color": [0, 0, 0, 0],
+                            "under_color": [0, 0, 0, 0],
+                            "default_color": null
+                        }
+                    }
+                },
+                "point": null,
+                "line": null,
+                "polygon": null
+            })
+        );
 
         Ok(())
     }

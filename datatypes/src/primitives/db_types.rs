@@ -200,8 +200,22 @@ impl TryFrom<BreakpointDbType> for Breakpoint {
 #[postgres(name = "RasterColorizer")]
 pub struct RasterColorizerDbType {
     r#type: RasterColorizerDbTypeType,
-    band: i64,
-    band_colorizer: ColorizerDbType,
+
+    band: Option<i64>,
+    band_colorizer: Option<ColorizerDbType>,
+
+    red_band: Option<i64>,
+    red_min: Option<f64>,
+    red_max: Option<f64>,
+    red_scale: Option<f64>,
+    green_band: Option<i64>,
+    green_min: Option<f64>,
+    green_max: Option<f64>,
+    green_scale: Option<f64>,
+    blue_band: Option<i64>,
+    blue_min: Option<f64>,
+    blue_max: Option<f64>,
+    blue_scale: Option<f64>,
 }
 
 #[derive(Debug, PartialEq, ToSql, FromSql)]
@@ -209,7 +223,7 @@ pub struct RasterColorizerDbType {
 #[postgres(name = "RasterColorizerType")]
 pub enum RasterColorizerDbTypeType {
     SingleBand,
-    // MultiBandColorizer
+    MultiBand,
 }
 
 impl From<&RasterColorizer> for RasterColorizerDbType {
@@ -220,8 +234,50 @@ impl From<&RasterColorizer> for RasterColorizerDbType {
                 band_colorizer,
             } => Self {
                 r#type: RasterColorizerDbTypeType::SingleBand,
-                band: i64::from(*band),
-                band_colorizer: band_colorizer.into(),
+                band: Some(i64::from(*band)),
+                band_colorizer: Some(band_colorizer.into()),
+                red_band: None,
+                red_min: None,
+                red_max: None,
+                red_scale: None,
+                green_band: None,
+                green_min: None,
+                green_max: None,
+                green_scale: None,
+                blue_band: None,
+                blue_min: None,
+                blue_max: None,
+                blue_scale: None,
+            },
+            RasterColorizer::MultiBand {
+                red_band,
+                red_min,
+                red_max,
+                red_scale,
+                green_band,
+                green_min,
+                green_max,
+                green_scale,
+                blue_band,
+                blue_min,
+                blue_max,
+                blue_scale,
+            } => Self {
+                r#type: RasterColorizerDbTypeType::SingleBand,
+                band: None,
+                band_colorizer: None,
+                red_band: Some(i64::from(*red_band)),
+                red_min: Some(*red_min),
+                red_max: Some(*red_max),
+                red_scale: Some(*red_scale),
+                green_band: Some(i64::from(*green_band)),
+                green_min: Some(*green_min),
+                green_max: Some(*green_max),
+                green_scale: Some(*green_scale),
+                blue_band: Some(i64::from(*blue_band)),
+                blue_min: Some(*blue_min),
+                blue_max: Some(*blue_max),
+                blue_scale: Some(*blue_scale),
             },
         }
     }
@@ -234,12 +290,46 @@ impl TryFrom<RasterColorizerDbType> for RasterColorizer {
         match value {
             RasterColorizerDbType {
                 r#type: RasterColorizerDbTypeType::SingleBand,
-                band,
-                band_colorizer: colorizer,
+                band: Some(band),
+                band_colorizer: Some(colorizer),
+                ..
             } => Ok(Self::SingleBand {
                 band: u32::try_from(band).map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,
                 band_colorizer: colorizer.try_into()?,
             }),
+            RasterColorizerDbType {
+                r#type: RasterColorizerDbTypeType::MultiBand,
+                red_band: Some(red_band),
+                red_min: Some(red_min),
+                red_max: Some(red_max),
+                red_scale: Some(red_scale),
+                green_band: Some(green_band),
+                green_min: Some(green_min),
+                green_max: Some(green_max),
+                green_scale: Some(green_scale),
+                blue_band: Some(blue_band),
+                blue_min: Some(blue_min),
+                blue_max: Some(blue_max),
+                blue_scale: Some(blue_scale),
+                ..
+            } => Ok(Self::MultiBand {
+                red_band: u32::try_from(red_band)
+                    .map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,
+                red_min,
+                red_max,
+                red_scale,
+                green_band: u32::try_from(green_band)
+                    .map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,
+                green_min,
+                green_max,
+                green_scale,
+                blue_band: u32::try_from(blue_band)
+                    .map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,
+                blue_min,
+                blue_max,
+                blue_scale,
+            }),
+            _ => Err(Error::UnexpectedInvalidDbTypeConversion),
         }
     }
 }
@@ -264,7 +354,6 @@ pub enum ColorizerTypeDbType {
     LinearGradient,
     LogarithmicGradient,
     Palette,
-    Rgba,
 }
 
 impl From<&Colorizer> for ColorizerDbType {
@@ -317,14 +406,9 @@ impl From<&Colorizer> for ColorizerDbType {
                 under_color: None,
                 default_color: Some(*default_color),
             },
-            Colorizer::Rgba => ColorizerDbType {
-                r#type: ColorizerTypeDbType::Rgba,
-                breakpoints: None,
-                no_data_color: None,
-                over_color: None,
-                under_color: None,
-                default_color: None,
-            },
+            Colorizer::Rgba => unreachable!(
+                "only used temporally for multiband colorizer, not part of api and not stored"
+            ),
         }
     }
 }
@@ -375,14 +459,6 @@ impl TryFrom<ColorizerDbType> for Colorizer {
                 no_data_color,
                 default_color,
             )?),
-            ColorizerDbType {
-                r#type: ColorizerTypeDbType::Rgba,
-                breakpoints: None,
-                no_data_color: None,
-                over_color: None,
-                under_color: None,
-                default_color: None,
-            } => Ok(Self::Rgba),
             _ => Err(Error::UnexpectedInvalidDbTypeConversion),
         }
     }

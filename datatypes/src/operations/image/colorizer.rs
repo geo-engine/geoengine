@@ -1,6 +1,7 @@
 use crate::error::{self, Error};
 use crate::operations::image::RgbaTransmutable;
 use crate::raster::Pixel;
+use crate::util::test::TestDefault;
 use crate::util::Result;
 use ordered_float::{FloatIsNan, NotNan};
 use postgres_types::{FromSql, ToSql};
@@ -10,7 +11,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum RasterColorizer {
     #[serde(rename_all = "camelCase")]
@@ -18,12 +19,49 @@ pub enum RasterColorizer {
         band: u32,
         band_colorizer: Colorizer,
     },
-    // TODO: multiband colorizer, e.g.
-    // MultiBand {
-    //     red: ...,
-    //     green: ...,
-    //     blue: ..,
-    // },
+    #[serde(rename_all = "camelCase")]
+    MultiBand {
+        /// The band index of the red channel.
+        red_band: u32,
+        /// The minimum value for the red channel.
+        red_min: f64,
+        /// The maximum value for the red channel.
+        red_max: f64,
+        /// A scaling factor for the red channel between 0 and 1.
+        #[serde(default = "num_traits::One::one")]
+        red_scale: f64,
+
+        /// The band index of the green channel.
+        green_band: u32,
+        /// The minimum value for the red channel.
+        green_min: f64,
+        /// The maximum value for the red channel.
+        green_max: f64,
+        /// A scaling factor for the green channel between 0 and 1.
+        #[serde(default = "num_traits::One::one")]
+        green_scale: f64,
+
+        /// The band index of the blue channel.
+        blue_band: u32,
+        /// The minimum value for the red channel.
+        blue_min: f64,
+        /// The maximum value for the red channel.
+        blue_max: f64,
+        /// A scaling factor for the blue channel between 0 and 1.
+        #[serde(default = "num_traits::One::one")]
+        blue_scale: f64,
+    },
+}
+
+impl Eq for RasterColorizer {}
+
+impl From<Colorizer> for RasterColorizer {
+    fn from(value: Colorizer) -> Self {
+        Self::SingleBand {
+            band: 0,
+            band_colorizer: value,
+        }
+    }
 }
 
 /// A colorizer specifies a mapping between raster values and an output image
@@ -51,6 +89,8 @@ pub enum Colorizer {
         no_data_color: RgbaColor,
         default_color: RgbaColor,
     },
+    /// Only for internal purposes. Should not be a part of the API or db schema.
+    /// At the moment this is only used by the multiband raster colorizer.
     Rgba,
 }
 
@@ -473,6 +513,22 @@ impl Colorizer {
                 colorizer: "rgba".to_string(),
             }),
         }
+    }
+}
+
+impl TestDefault for Colorizer {
+    #[allow(clippy::unwrap_used)]
+    fn test_default() -> Self {
+        Colorizer::linear_gradient(
+            vec![
+                (1.0, RgbaColor::white()).try_into().unwrap(),
+                (2.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::white(),
+            RgbaColor::black(),
+        )
+        .unwrap()
     }
 }
 
