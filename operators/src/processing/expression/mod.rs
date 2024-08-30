@@ -51,6 +51,25 @@ pub fn get_expression_dependencies(
         .map_err(Clone::clone)
 }
 
+/// Replaces all non-alphanumeric characters in a string with underscores.
+/// Prepends an underscore if the string is empty or starts with a number.
+fn canonicalize_name(name: &str) -> String {
+    let prepend_underscore = name.chars().next().map_or(true, char::is_numeric);
+
+    let mut canonicalized_name =
+        String::with_capacity(name.len() + usize::from(prepend_underscore));
+
+    if prepend_underscore {
+        canonicalized_name.push('_');
+    }
+
+    for c in name.chars() {
+        canonicalized_name.push(if c.is_alphanumeric() { c } else { '_' });
+    }
+
+    canonicalized_name
+}
+
 /// Convenience trait for converting [`geoengine_datatypes`] types to [`geoengine_expression`] types.
 trait AsExpressionGeo: AsGeoOption {
     type ExpressionGeometryType: Send;
