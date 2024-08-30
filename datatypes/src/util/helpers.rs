@@ -245,9 +245,26 @@ pub fn indices_for_split_at(
     (left_index, left_length_right_index, right_length)
 }
 
+pub fn ge_report<E: snafu::Error>(error: E) -> String {
+    //newline same on every os for report
+    const NOTE_MARKER: &str = "\nNOTE:";
+    const REDUNDANCY_MARKER: &str = " *\n";
+
+    let full = snafu::Report::from_error(error).to_string();
+    //split once from end to skip potential markers inside messages
+    if let Some(note_pos) = full.rfind(NOTE_MARKER) {
+        let message = &full[0..note_pos];
+        message.replace(REDUNDANCY_MARKER, "\n")
+    } else {
+        full
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+
+    use crate::{collections::FeatureCollectionError, error::Error};
 
     use super::*;
 
@@ -351,5 +368,37 @@ mod tests {
         let (left_index, left_length_right_index, right_length) = indices_for_split_at(0, 3, 1);
         assert_eq!((left_index, left_length_right_index), (0, 1));
         assert_eq!((left_length_right_index, right_length), (1, 3));
+    }
+
+    #[test]
+    fn it_removes_note_from_report() {
+        assert_eq!(
+            std::env::var("SNAFU_RAW_ERROR_MESSAGES"),
+            Err(std::env::VarError::NotPresent),
+            "Precondition failed"
+        );
+        let error = Error::FeatureCollection {
+            source: FeatureCollectionError::EmptyPredicate,
+        };
+        assert_eq!(
+            snafu::Report::from_error(&error).to_string(),
+            r"Feature collection error *
+
+Caused by this error:
+  1: EmptyPredicate
+
+NOTE: Some redundant information has been removed from the lines marked with *. Set SNAFU_RAW_ERROR_MESSAGES=1 to disable this behavior.
+",
+            "Precondition failed"
+        );
+
+        assert_eq!(
+            ge_report(error),
+            r"Feature collection error
+
+Caused by this error:
+  1: EmptyPredicate
+"
+        );
     }
 }

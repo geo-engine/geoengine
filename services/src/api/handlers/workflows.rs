@@ -26,7 +26,7 @@ use geoengine_operators::engine::{
     ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
 };
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, Snafu};
+use snafu::Snafu;
 use std::collections::HashMap;
 use std::io::{Cursor, Write};
 use std::sync::Arc;
@@ -132,18 +132,15 @@ async fn register_workflow_handler<C: ApplicationContext>(
     match workflow.clone().operator {
         TypedOperator::Vector(o) => {
             o.initialize(workflow_operator_path_root, &execution_context)
-                .await
-                .context(crate::error::Operator)?;
+                .await?;
         }
         TypedOperator::Raster(o) => {
             o.initialize(workflow_operator_path_root, &execution_context)
-                .await
-                .context(crate::error::Operator)?;
+                .await?;
         }
         TypedOperator::Plot(o) => {
             o.initialize(workflow_operator_path_root, &execution_context)
-                .await
-                .context(crate::error::Operator)?;
+                .await?;
         }
     }
 
@@ -227,7 +224,7 @@ async fn workflow_metadata<C: SessionContext>(
         operator => {
             let operator = operator
                 .initialize(workflow_operator_path_root, &execution_context).await
-                .context(crate::error::Operator)?;
+                ?;
 
             #[allow(clippy::clone_on_copy)]
             operator.result_descriptor().clone().into()
@@ -1227,7 +1224,7 @@ mod tests {
         let res_body = read_body_string(res).await;
         assert_eq!(
             res_body,
-            json!({"error": "Operator", "message": "Operator: Invalid operator type: expected Vector found Raster"}).to_string()
+            json!({"error": "InvalidOperatorType", "message": "Invalid operator type: expected Vector found Raster"}).to_string()
         );
     }
 
