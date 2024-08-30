@@ -1,0 +1,7 @@
+GET https://geoservice.dlr.de/eoc/ogc/stac/v1/collections/ENMAP_HSI_L2A/items?f=application/geo%2Bjson
+Accept: application/json
+
+###
+
+GET https://geoservice.dlr.de/eoc/ogc/stac/collections/ENMAP_HSI_L2A?f=json
+Accept: application/json

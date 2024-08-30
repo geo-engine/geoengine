@@ -41,7 +41,7 @@ use log::debug;
 use postgres_types::{FromSql, ToSql};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt};
+use snafu::{ensure, OptionExt, ResultExt};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
@@ -597,8 +597,13 @@ impl SentinelS2L2aCogsMetaData {
         let mut collection = self.load_collection(params, 1).await?;
         features.append(&mut collection.features);
 
-        let num_pages =
-            (collection.context.matched as f64 / collection.context.limit as f64).ceil() as u32;
+        let context = collection
+            .context
+            .as_ref()
+            .context(error::StacMissingRequiredProperty {
+                property: "context".to_string(),
+            })?;
+        let num_pages = (context.matched as f64 / context.limit as f64).ceil() as u32;
 
         for page in 2..=num_pages {
             let mut collection = self.load_collection(params, page).await?;

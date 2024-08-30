@@ -1,17 +1,16 @@
-use std::{collections::HashMap, convert::TryFrom};
-
+use crate::util::parsing::{deserialize_as_f64_opt, deserialize_as_string};
 use geo::Rect;
 use geoengine_datatypes::primitives::DateTime;
 use serde::{de::value::MapDeserializer, de::Error, Deserialize, Deserializer};
 use serde_with::with_prefix;
-
 use snafu::Snafu;
+use std::{collections::HashMap, convert::TryFrom};
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub struct FeatureCollection {
     pub stac_version: String,
-    pub stac_extensions: Vec<String>,
-    pub context: Context,
+    pub stac_extensions: Option<Vec<String>>,
+    pub context: Option<Context>,
     pub features: Vec<Feature>,
     pub links: Vec<Link>,
 }
@@ -49,20 +48,29 @@ pub struct Feature {
 pub struct Properties {
     pub datetime: DateTime,
     pub platform: String,
-    pub constellation: String,
-    pub instruments: Vec<String>,
-    pub gsd: f64,
+    pub constellation: Option<String>,
+    pub instruments: Option<Vec<String>>,
+    pub gsd: Option<f64>,
     #[serde(rename = "view:off_nadir")]
-    pub view_off_nadir: f64,
+    pub view_off_nadir: Option<f64>,
     #[serde(rename = "proj:epsg")]
     pub proj_epsg: Option<u32>,
     #[serde(flatten, with = "prefix_sentinel")]
     pub sentinel: Option<SentinelProperties>,
-    #[serde(rename = "eo:cloud_cover")]
-    pub eo_cloud_cover: Option<f32>,
+    #[serde(
+        rename = "eo:cloud_cover",
+        default,
+        deserialize_with = "deserialize_as_f64_opt"
+    )]
+    pub eo_cloud_cover: Option<f64>,
     pub created: DateTime,
     pub updated: DateTime,
     pub collection: Option<String>,
+
+    #[serde(alias = "raster:data_type")]
+    pub data_type: Option<String>,
+    #[serde(alias = "raster:nodata")]
+    pub nodata: Option<String>,
 }
 
 with_prefix!(prefix_sentinel "sentinel:");
@@ -79,26 +87,47 @@ pub struct SentinelProperties {
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub struct EoBand {
+    #[serde(deserialize_with = "deserialize_as_string")]
     name: String,
     common_name: Option<String>,
     center_wavelenght: Option<f64>,
     full_width_half_max: Option<f64>,
+
+    #[serde(alias = "enmap:gain_of_band")]
+    gain_of_band: Option<f64>,
+    #[serde(alias = "enmap:offset_of_band")]
+    offset_of_band: Option<f64>,
+}
+
+/// Cf. [`https://github.com/stac-extensions/raster`]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct StacRasterBand {
+    data_type: String,
+    scale: f64,
+    offset: f64,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub struct StacAsset {
+    pub href: String,
     pub title: String,
     #[serde(rename = "type")]
     pub mime_type: String,
     pub roles: Option<Vec<String>>,
+
     pub gsd: Option<f64>,
+
     #[serde(rename = "eo:bands")]
     pub eo_bands: Option<Vec<EoBand>>,
-    pub href: String,
+    #[serde(rename = "raster:bands")]
+    pub raster_bands: Option<Vec<StacRasterBand>>,
+
     #[serde(rename = "proj:shape")]
     pub proj_shape: Option<[u32; 2]>,
     #[serde(rename = "proj:transform")]
     pub proj_transform: Option<[f64; 9]>,
+    #[serde(rename = "proj:epsg")]
+    pub proj_epsg: Option<u32>,
 }
 
 impl StacAsset {
@@ -231,10 +260,17 @@ impl TryFrom<geojson::Feature> for Feature {
 
 #[derive(Debug, Snafu)]
 pub enum StacError {
-    MissingRequiredField { field_name: String },
+    MissingRequiredField {
+        field_name: String,
+    },
     InvalidBoundingBox,
-    GeoJsonError { source: Box<geojson::Error> },
-    SerdeJsonError { source: serde_json::Error },
+    GeoJsonError {
+        source: Box<geojson::Error>,
+    },
+    #[snafu(display("Error parsing json response: {source}"))]
+    SerdeJsonError {
+        source: serde_json::Error,
+    },
     Deserialization,
 }
 

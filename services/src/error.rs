@@ -258,6 +258,10 @@ pub enum Error {
         response: String,
         error: serde_json::Error,
     },
+    #[snafu(display("Missing required STAC field: {property}"))]
+    StacMissingRequiredProperty {
+        property: String,
+    },
     RasterDataTypeNotSupportByGdal,
 
     MissingSpatialReference,
@@ -490,6 +494,12 @@ pub enum Error {
     InvalidResourceId {
         resource_type: String,
         resource_id: String,
+    },
+
+    #[cfg(feature = "pro")] // TODO: refactor error path
+    #[snafu(context(false), display("Error in DLR EOC STAC Provider: {source}"))]
+    DlrEocStac {
+        source: crate::pro::datasets::DlrEocStacDataProviderError,
     },
 }
 

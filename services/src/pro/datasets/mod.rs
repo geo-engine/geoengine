@@ -2,6 +2,7 @@ mod external;
 mod postgres;
 
 pub use external::{
-    GdalRetries, SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacBand, StacZone,
+    DlrEocStacDataProviderError, DlrEocStacProviderDefinition, GdalRetries,
+    SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacBand, StacZone,
     TypedProDataProviderDefinition,
 };

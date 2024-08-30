@@ -180,6 +180,230 @@ where
     Ok(api_prefix)
 }
 
+/// Deserialize and convert to `f64`.
+///
+/// # Possible types
+///  - `null`
+///  - `str`
+///  - `f64`
+///  - `u64`
+///  - `i64`
+///
+/// # Errors
+/// Returns an error if a string is non-empty and not a valid numeric value.
+///
+pub fn deserialize_as_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct DeserializeF64Visitor;
+
+    impl<'de> de::Visitor<'de> for DeserializeF64Visitor {
+        type Value = f64;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a float or a string")
+        }
+
+        fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(v as f64)
+        }
+
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(v as f64)
+        }
+
+        fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(v)
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if let Ok(f) = v.parse::<f64>() {
+                Ok(f)
+            } else if v.is_empty() {
+                Ok(0.0)
+            } else {
+                Err(E::invalid_value(serde::de::Unexpected::Str(v), &self))
+            }
+        }
+
+        /// We encounter a `null` value; this default implementation returns a
+        /// "zero" value.
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(0.0)
+        }
+    }
+
+    deserializer.deserialize_any(DeserializeF64Visitor)
+}
+
+/// Deserialize and convert to `Option<f64>`.
+///
+/// # Possible types
+///  - `null`
+///  - `str`
+///  - `f64`
+///  - `u64`
+///  - `i64`
+///
+/// # Errors
+/// Returns an error if a string is non-empty and not a valid numeric value.
+///
+pub fn deserialize_as_f64_opt<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct DeserializeF64OptVisitor;
+
+    impl<'de> de::Visitor<'de> for DeserializeF64OptVisitor {
+        type Value = Option<f64>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a float or a string")
+        }
+
+        fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            self.visit_f64(v as f64)
+        }
+
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            self.visit_f64(v as f64)
+        }
+
+        fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v))
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if let Ok(f) = v.parse::<f64>() {
+                self.visit_f64(f)
+            } else if v.is_empty() {
+                Ok(None)
+            } else {
+                Err(E::invalid_value(serde::de::Unexpected::Str(v), &self))
+            }
+        }
+
+        /// We encounter a `null` value; this default implementation returns a
+        /// "zero" value.
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+    }
+
+    deserializer.deserialize_any(DeserializeF64OptVisitor)
+}
+
+/// Deserialize and convert to `Option<String>`.
+///
+/// # Possible types
+///  - `null`
+///  - `str`
+///  - `f64`
+///  - `u64`
+///  - `i64`
+///
+pub fn deserialize_as_string_opt<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct DeserializeStringOptVisitor;
+
+    impl<'de> de::Visitor<'de> for DeserializeStringOptVisitor {
+        type Value = Option<String>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a float or a string")
+        }
+
+        fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v.to_string()))
+        }
+
+        fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v.to_string()))
+        }
+
+        fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v.to_string()))
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(v.to_string()))
+        }
+
+        /// We encounter a `null` value; this default implementation returns a
+        /// "zero" value.
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+    }
+
+    deserializer.deserialize_any(DeserializeStringOptVisitor)
+}
+
+/// Deserialize and convert to `String`.
+///
+/// # Possible types
+///  - `null`
+///  - `str`
+///  - `f64`
+///  - `u64`
+///  - `i64`
+///
+pub fn deserialize_as_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let string_opt = deserialize_as_string_opt(deserializer)?;
+    Ok(string_opt.unwrap_or_default())
+}
+
 #[cfg(test)]
 mod tests {
     use std::fmt::Display;

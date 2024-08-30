@@ -1,3 +1,4 @@
+mod dlr_eoc_stac;
 mod netcdfcf;
 mod sentinel_s2_l2a_cogs;
 
@@ -5,6 +6,7 @@ use crate::contexts::GeoEngineDb;
 use crate::error::Result;
 use crate::layers::external::{DataProvider, DataProviderDefinition};
 use async_trait::async_trait;
+pub use dlr_eoc_stac::{DlrEocStacDataProviderError, DlrEocStacProviderDefinition};
 use geoengine_datatypes::dataset::DataProviderId;
 pub use sentinel_s2_l2a_cogs::{
     GdalRetries, SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacBand, StacZone,
