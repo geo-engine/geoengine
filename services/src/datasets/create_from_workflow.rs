@@ -14,7 +14,7 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::engine::{
-    ExecutionContext, InitializedRasterOperator, QueryContext, RasterResultDescriptor,
+    ExecutionContext, InitializedRasterOperator, RasterResultDescriptor,
 };
 use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
@@ -151,11 +151,6 @@ impl<C: SessionContext, R: InitializedRasterOperator> RasterDatasetFromWorkflowT
                 .ok_or(crate::error::Error::MissingSpatialReference)?;
         let tile_limit = None; // TODO: set a reasonable limit or make configurable?
 
-        let tiling_strat = result_descriptor
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(query_ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
         // build the geotiff
         let res =
             call_on_generic_raster_processor_gdal_types!(processor, p => raster_stream_to_geotiff(
@@ -174,7 +169,7 @@ impl<C: SessionContext, R: InitializedRasterOperator> RasterDatasetFromWorkflowT
             },
             tile_limit,
             Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
-            tiling_strat,
+            
         ).await)?
             .map_err(crate::error::Error::from)?;
 

@@ -609,7 +609,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let result_stream = processor.query(query_rect, &query_ctx).await?;
 
@@ -824,7 +824,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 20),
             [0, 1].try_into().unwrap(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let result_stream = processor.query(query_rect, &query_ctx).await?;
 

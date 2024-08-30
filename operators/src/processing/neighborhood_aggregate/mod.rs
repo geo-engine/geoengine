@@ -689,7 +689,7 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_u8().unwrap();
         let result_descriptor = processor.result_descriptor();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
             result_descriptor
@@ -727,7 +727,7 @@ mod tests {
         .unwrap();
 
         // Use for getting the image to compare against
-        // geoengine_datatypes::util::test::save_test_bytes(&bytes, "gaussian_blur.png");
+        geoengine_datatypes::util::test::save_test_bytes(&bytes, "gaussian_blur_bla.png");
 
         assert_eq!(
             bytes,

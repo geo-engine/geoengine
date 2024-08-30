@@ -171,8 +171,7 @@ impl RasterOperator for Onnx {
             data_type: model_metadata.output_type,
             spatial_reference: in_descriptor.spatial_reference,
             time: in_descriptor.time,
-            bbox: in_descriptor.bbox,
-            resolution: in_descriptor.resolution,
+            spatial_grid: in_descriptor.spatial_grid,
             bands: vec![RasterBandDescriptor::new(
                 "prediction".to_string(), // TODO: parameter of the operator?
                 Measurement::Unitless,    // TODO: get output measurement from model metadata
@@ -405,8 +404,10 @@ impl_no_data_value_zero!(i8, u8, i16, u16, i32, u32, i64, u64);
 mod tests {
     use approx::assert_abs_diff_eq;
     use geoengine_datatypes::{
-        primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{GridOrEmpty, GridShape, RenameBands, TilesEqualIgnoringCacheHint},
+        primitives::{CacheHint, TimeInterval},
+        raster::{
+            GridBoundingBox2D, GridOrEmpty, GridShape, RenameBands, TilesEqualIgnoringCacheHint,
+        },
         spatial_reference::SpatialReference,
         test_data,
         util::test::TestDefault,
@@ -416,6 +417,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -586,8 +588,10 @@ mod tests {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -601,8 +605,10 @@ mod tests {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -635,12 +641,11 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 5),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: [0].try_into().unwrap(),
-        };
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            [0].try_into().unwrap(),
+        );
 
         let query_ctx = MockQueryContext::test_default();
 
@@ -772,8 +777,10 @@ mod tests {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -787,8 +794,10 @@ mod tests {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -802,8 +811,10 @@ mod tests {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -836,12 +847,11 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 5),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: [0].try_into().unwrap(),
-        };
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            [0].try_into().unwrap(),
+        );
 
         let query_ctx = MockQueryContext::test_default();
 

@@ -76,7 +76,7 @@ pub trait ResultDescriptor: Clone + Serialize {
 
 /// A `ResultDescriptor` for raster queries
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum SpatialGridDescriptor {
     Source(SpatialGridDefinition),
     Derived(SpatialGridDefinition),
@@ -210,7 +210,7 @@ impl SpatialGridDescriptor {
         match self {
             SpatialGridDescriptor::Source(s) => Ok(s
                 .reproject_clipped(projector)?
-                .map(SpatialGridDescriptor::Source)),
+                .map(SpatialGridDescriptor::Derived)),
             SpatialGridDescriptor::Derived(m) => Ok(m
                 .reproject_clipped(projector)?
                 .map(SpatialGridDescriptor::Derived)),

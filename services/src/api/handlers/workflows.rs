@@ -733,7 +733,7 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        ExecutionContext, MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
+        MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
         RasterBandDescriptors, SpatialGridDescriptor, TypedOperator,
     };
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
@@ -1494,12 +1494,6 @@ mod tests {
             geoengine_datatypes::primitives::BandSelection::first(),
         );
 
-        let tiling_strategy = o
-            .result_descriptor()
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(exe_ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
         let processor = o.query_processor().unwrap().get_u8().unwrap();
 
         let result = single_timestep_raster_stream_to_geotiff_bytes(
@@ -1519,7 +1513,6 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_strategy,
         )
         .await
         .unwrap();

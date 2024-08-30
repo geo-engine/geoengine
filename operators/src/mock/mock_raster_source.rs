@@ -53,11 +53,9 @@ where
         data: Vec<RasterTile2D<T>>,
         tiling_specification: TilingSpecification,
     ) -> Self {
-        Self {
-            result_descriptor,
-            data,
-            tiling_specification,
-        }
+        // use expect here since the mock source should not be used in production and this provides valuable debug information
+        Self::_new(result_descriptor, data, tiling_specification)
+            .expect("can initialize from inputs")
     }
 
     fn _new(
@@ -415,17 +413,20 @@ mod tests {
                     "dataType": "U8",
                     "spatialReference": "EPSG:4326",
                     "time": null,
-                    "geoTransform": {
-                        "originCoordinate": {
-                            "x": 0.0,
-                            "y": 0.0
+                    "spatialGrid": {
+                        "type": "source",
+                        "geoTransform": {
+                            "originCoordinate": {
+                                "x": 0.0,
+                                "y": 0.0
+                            },
+                            "xPixelSize": 1.0,
+                            "yPixelSize": -1.0
                         },
-                        "xPixelSize": 1.0,
-                        "yPixelSize": -1.0
-                    },
-                    "pixelBounds": {
-                        "max": [2, 1],
-                        "min": [0, 0]
+                        "gridBounds": {
+                            "max": [2, 1],
+                            "min": [0, 0]
+                        }
                     },
                     "bands": [
                         {

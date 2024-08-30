@@ -6,6 +6,9 @@ use crate::{
         MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialQueryRectangle,
         SpatialResolution,
     },
+    raster::{
+        BoundedGrid, GeoTransform, GridBounds, GridIdx, GridShape, GridSize, SpatialGridDefinition,
+    },
     spatial_reference::SpatialReference,
     util::Result,
 };
@@ -386,6 +389,82 @@ pub fn suggest_pixel_size_like_gdal<P: CoordinateProjection, B: AxisAlignedRecta
     ))
 }
 
+pub fn suggest_output_spatial_grid_like_gdal_helper(
+    spatial_grid: &SpatialGridDefinition,
+    source_srs: SpatialReference,
+    target_srs: SpatialReference,
+) -> Result<SpatialGridDefinition> {
+    let projector = CoordinateProjector::from_known_srs(source_srs, target_srs)?;
+
+    suggest_output_spatial_grid_like_gdal(spatial_grid, &projector)
+}
+
+pub fn suggest_output_spatial_grid_like_gdal<P: CoordinateProjection>(
+    spatial_grid: &SpatialGridDefinition,
+    projector: &P,
+) -> Result<SpatialGridDefinition> {
+    const ROUND_UP_SIZE: bool = false;
+
+    let in_x_pixels = spatial_grid.grid_bounds().axis_size_x();
+    let in_y_pixels = spatial_grid.grid_bounds().axis_size_y();
+
+    let proj_bbox = spatial_grid.spatial_partition().reproject(projector)?;
+    let out_x_distance = proj_bbox.size_x();
+    let out_y_distance = proj_bbox.size_y();
+
+    let out_diagonal_dist =
+        (out_x_distance * out_x_distance + out_y_distance * out_y_distance).sqrt();
+
+    let pixel_size =
+        out_diagonal_dist / ((in_x_pixels * in_x_pixels + in_y_pixels * in_y_pixels) as f64).sqrt();
+
+    let x_pixels_with_frac = out_x_distance / pixel_size;
+    let y_pixels_with_frac = out_y_distance / pixel_size;
+
+    let (x_pixels, y_pixels) = if ROUND_UP_SIZE {
+        const EPS_FROM_GDAL: f64 = 1e-5;
+        (
+            (x_pixels_with_frac - EPS_FROM_GDAL).ceil() as usize,
+            (y_pixels_with_frac - EPS_FROM_GDAL).ceil() as usize,
+        )
+    } else {
+        (
+            (x_pixels_with_frac + 0.5) as usize,
+            (y_pixels_with_frac + 0.5) as usize,
+        )
+    };
+
+    // TODO: gdal does some magic to fit to the bounds which might change the pixel size again.
+    // let x_pixel_size = out_x_distance / x_pixels as f64;
+    // let y_pixel_size = out_y_distance / y_pixels as f64;
+    let x_pixel_size = pixel_size;
+    let y_pixel_size = pixel_size;
+
+    let geo_transform = GeoTransform::new(proj_bbox.upper_left(), x_pixel_size, -y_pixel_size);
+    let grid_bounds = GridShape::new_2d(y_pixels, x_pixels).bounding_box();
+    let out_spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
+
+    // if the input grid is anchored at the upper left idx then we don't have to move the origin of the geo transform
+    if spatial_grid.grid_bounds.min_index() == GridIdx([0, 0]) {
+        return Ok(SpatialGridDefinition::new(geo_transform, grid_bounds));
+    };
+
+    let proj_origin = spatial_grid
+        .geo_transform()
+        .origin_coordinate()
+        .reproject(projector)?;
+
+    let (out_spatial_grid_moved_origin, distance) =
+        out_spatial_grid.with_moved_origin_to_nearest_grid_edge_with_distance(proj_origin);
+    dbg!(
+        spatial_grid,
+        out_spatial_grid,
+        out_spatial_grid_moved_origin,
+        distance
+    );
+    Ok(out_spatial_grid_moved_origin.with_replaced_origin(proj_origin))
+}
+
 pub fn suggest_pixel_size_from_diag_cross_helper<B: AxisAlignedRectangle>(
     bbox: B,
     spatial_resolution: SpatialResolution,
@@ -430,7 +509,7 @@ pub fn suggest_pixel_size_from_diag_cross_projected<B: AxisAlignedRectangle>(
     bbox_projected: B,
     spatial_resolution: SpatialResolution,
 ) -> Result<SpatialResolution> {
-    let diag_pixels = euclidian_pixel_distance(bbox, spatial_resolution)?.ceil();
+    let diag_pixels = euclidian_pixel_distance(bbox, spatial_resolution)?;
 
     let proj_ul_lr_distance =
         diag_distance(bbox_projected.upper_left(), bbox_projected.lower_right());

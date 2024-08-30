@@ -36,7 +36,7 @@ num-traits = "0.2"
 num = "0.4"
 ouroboros = "0.18"
 ordered-float = { version = "4.2", features = ["serde"] }
-ort = "2.0.0-rc.2"
+ort = "2.0.0-rc.4"
 paste = "1.0"
 pin-project = "1.1"
 postgres-protocol = "0.6.6"

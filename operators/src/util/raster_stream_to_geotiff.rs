@@ -1,3 +1,4 @@
+use crate::engine::QueryProcessor;
 use crate::error;
 use crate::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
@@ -244,7 +245,6 @@ pub async fn single_timestep_raster_stream_to_geotiff_bytes<T, C: QueryContext +
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
-    tiling_strategy: TilingStrategy,
 ) -> Result<Vec<u8>>
 where
     T: Pixel + GdalType,
@@ -257,7 +257,6 @@ where
         gdal_tiff_options,
         tile_limit,
         conn_closed,
-        tiling_strategy,
     )
     .await?;
 
@@ -282,7 +281,6 @@ pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
-    tiling_strategy: TilingStrategy,
 ) -> Result<Vec<Vec<u8>>>
 where
     T: Pixel + GdalType,
@@ -298,7 +296,6 @@ where
         gdal_tiff_options,
         tile_limit,
         conn_closed,
-        tiling_strategy,
     )
     .await?
     .into_iter()
@@ -321,7 +318,6 @@ pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
-    tiling_strategy: TilingStrategy,
 ) -> Result<Vec<GdalLoadingInfoTemporalSlice>>
 where
     P: Pixel + GdalType,
@@ -335,6 +331,12 @@ where
     );
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
+
+    let tiling_strategy = processor
+        .result_descriptor()
+        .spatial_grid_descriptor()
+        .tiling_grid_definition(query_ctx.tiling_specification())
+        .generate_data_tiling_strategy();
 
     // TODO: create file path if it doesn't exist
 
@@ -1025,15 +1027,10 @@ mod tests {
             _phantom_data: PhantomData,
         };
 
-        let tiling_strategy = gdal_source
-            .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle::new_with_grid_bounds(
-                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
             ),
@@ -1049,7 +1046,6 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_strategy,
         )
         .await
         .unwrap();
@@ -1084,15 +1080,10 @@ mod tests {
             _phantom_data: PhantomData,
         };
 
-        let tiling_strategy = gdal_source
-            .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle::new_with_grid_bounds(
-                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
             ),
@@ -1108,7 +1099,6 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_strategy,
         )
         .await
         .unwrap();
@@ -1138,15 +1128,10 @@ mod tests {
             _phantom_data: PhantomData,
         };
 
-        let tiling_strategy = gdal_source
-            .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle::new_with_grid_bounds(
-                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
             ),
@@ -1162,7 +1147,6 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_strategy,
         )
         .await
         .unwrap();
@@ -1196,15 +1180,10 @@ mod tests {
             _phantom_data: PhantomData,
         };
 
-        let tiling_strategy = gdal_source
-            .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle::new_with_grid_bounds(
-                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
             ),
@@ -1220,7 +1199,6 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_strategy,
         )
         .await
         .unwrap();
@@ -1257,15 +1235,10 @@ mod tests {
             _phantom_data: PhantomData,
         };
 
-        let tiling_strategy = gdal_source
-            .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle::new_with_grid_bounds(
-                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
             ),
@@ -1281,7 +1254,6 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_strategy,
         )
         .await
         .unwrap();
@@ -1318,15 +1290,10 @@ mod tests {
             _phantom_data: PhantomData,
         };
 
-        let tiling_strategy = gdal_source
-            .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
         let mut bytes = raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle::new_with_grid_bounds(
-                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 7_776_000_000).unwrap(),
                 BandSelection::first(),
             ),
@@ -1342,7 +1309,6 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_strategy,
         )
         .await
         .unwrap();
@@ -1393,15 +1359,10 @@ mod tests {
             _phantom_data: PhantomData,
         };
 
-        let tiling_strategy = gdal_source
-            .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle::new_with_grid_bounds(
-                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 7_776_000_000).unwrap(),
                 BandSelection::first(),
             ),
@@ -1417,7 +1378,6 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_strategy,
         )
         .await;
 
@@ -1441,15 +1401,10 @@ mod tests {
             _phantom_data: PhantomData,
         };
 
-        let tiling_strategy = gdal_source
-            .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle::new_with_grid_bounds(
-                GridBoundingBox2D::new([200, -100], [799, 499]).unwrap(),
+                GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
             ),
@@ -1465,7 +1420,6 @@ mod tests {
             },
             Some(1),
             Box::pin(futures::future::pending()),
-            tiling_strategy,
         )
         .await;
 
@@ -1531,10 +1485,6 @@ mod tests {
             GeoTransform::test_default(),
         );
 
-        let tiling_strategy = result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
         let query_time = TimeInterval::new(data[0].time.start(), data[1].time.end()).unwrap();
 
         let processor = MockRasterSourceProcessor {
@@ -1571,7 +1521,6 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_strategy,
         )
         .await
         .unwrap();

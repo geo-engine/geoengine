@@ -96,7 +96,7 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
             )),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new((-180., 90.).into(), 0.1, -0.1),
-                GridBoundingBox2D::new([0, 0], [3599, 1799]).unwrap(),
+                GridBoundingBox2D::new([0, 0], [1799, 3599]).unwrap(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         },

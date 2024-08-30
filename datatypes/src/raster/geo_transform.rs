@@ -258,14 +258,6 @@ impl GeoTransform {
         self.coordinate_to_grid_idx_2d(Coordinate2D { x: 0., y: 0. }) // TODO: currently this is the pixel thats starts top left of 0.0, 0.0. Its coordinate is not the nearest to 0.0, 0.0 if it is more than half a pixel away
     }
 
-    pub fn shape_to_nearest_to_zero_based<S: GridBounds<IndexArray = [isize; 2]>>(
-        &self,
-        shape: &S,
-    ) -> GridBoundingBox2D {
-        let nearest = self.nearest_pixel_to_zero();
-        GridBoundingBox2D::new_unchecked(shape.min_index() - nearest, shape.max_index() - nearest)
-    }
-
     pub fn shift_by_pixel_offset(&self, offset: GridIdx2D) -> Self {
         GeoTransform {
             origin_coordinate: self.grid_idx_to_pixel_upper_left_coordinate_2d(offset),

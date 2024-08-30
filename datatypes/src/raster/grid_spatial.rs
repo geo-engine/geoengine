@@ -4,8 +4,7 @@ use super::{
 };
 use crate::{
     operations::reproject::{
-        suggest_pixel_size_from_diag_cross_projected, CoordinateProjection, Reproject,
-        ReprojectClipped,
+        suggest_output_spatial_grid_like_gdal, CoordinateProjection, Reproject, ReprojectClipped,
     },
     primitives::{
         AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialPartitioned,
@@ -18,6 +17,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, ToSql, FromSql, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct SpatialGridDefinition {
     pub geo_transform: GeoTransform,
     pub grid_bounds: GridBoundingBox2D,
@@ -277,23 +277,7 @@ impl<P: CoordinateProjection> Reproject<P> for SpatialGridDefinition {
     type Out = Self;
 
     fn reproject(&self, projector: &P) -> Result<Self::Out> {
-        let spatial_bounds = self.spatial_partition();
-        let projected_bounds = spatial_bounds.reproject(projector)?;
-        let out_res: SpatialResolution = suggest_pixel_size_from_diag_cross_projected(
-            spatial_bounds,
-            projected_bounds,
-            self.geo_transform().spatial_resolution(), // FIXME: sign should go through method
-        )?;
-        let out_geo_transform = GeoTransform::new(
-            projected_bounds.upper_left(),
-            out_res.x,
-            -out_res.y, // FIXME: sign should go through method
-        );
-        let out_grid_bounds = out_geo_transform.spatial_to_grid_bounds(&projected_bounds);
-        Ok(SpatialGridDefinition::new(
-            out_geo_transform,
-            out_grid_bounds,
-        ))
+        suggest_output_spatial_grid_like_gdal(&self, projector)
     }
 }
 
@@ -301,31 +285,42 @@ impl<P: CoordinateProjection> ReprojectClipped<P> for SpatialGridDefinition {
     type Out = Self;
 
     fn reproject_clipped(&self, projector: &P) -> Result<Option<Self::Out>> {
-        let target_bounds: Option<SpatialPartition2D> = projector
-            .target_srs()
-            .area_of_use_intersection(&projector.source_srs())?;
-        if target_bounds.is_none() {
+        let target_bounds_in_source_srs: Option<SpatialPartition2D> = projector
+            .source_srs()
+            .area_of_use_intersection(&projector.target_srs())?;
+        if target_bounds_in_source_srs.is_none() {
             return Ok(None);
         };
-        let target_bounds = target_bounds.expect("case checked above");
-        let intersection_grid_bounds = target_bounds.intersection(&self.spatial_partition());
+        let target_bounds_in_source_srs = target_bounds_in_source_srs.expect("case checked above");
+        let intersection_grid_bounds =
+            target_bounds_in_source_srs.intersection(&self.spatial_partition());
         if intersection_grid_bounds.is_none() {
             return Ok(None);
         };
         let intersection_grid_bounds = intersection_grid_bounds.expect("case checked above");
-        let usable_grid_bounds = self
-            .geo_transform()
-            .spatial_to_grid_bounds(&intersection_grid_bounds);
-        // TODO: maybe we need to crop a pixel at lr if the intersection is within the pixel at lr...
-        let temp_grid = SpatialGridDefinition::new(self.geo_transform(), usable_grid_bounds);
-        temp_grid.reproject(projector).map(Option::Some)
+        let intersecting_grid =
+            self.spatial_bounds_to_compatible_spatial_grid(intersection_grid_bounds);
+        let compatible_intersecting_grid = if target_bounds_in_source_srs
+            .contains_coordinate(&self.geo_transform().origin_coordinate())
+        {
+            intersecting_grid
+        } else {
+            intersecting_grid.with_moved_origin_to_nearest_grid_edge(
+                intersecting_grid.spatial_partition().upper_left(),
+            )
+        };
+        compatible_intersecting_grid
+            .reproject(projector)
+            .map(Option::Some)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
+        operations::reproject::suggest_output_spatial_grid_like_gdal_helper,
         primitives::AxisAlignedRectangle,
+        raster::{BoundedGrid, GridShape},
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
         test_data,
         util::gdal::gdal_open_dataset,
@@ -433,17 +428,21 @@ mod tests {
         ))
         .unwrap();
         let geotransform_3857 = dataset_3857.geo_transform().unwrap();
-        let res_3857 = SpatialResolution::new(geotransform_3857[1], -geotransform_3857[5]).unwrap();
 
         // ndvi was projected from 4326 to 3857. The calculated source_resolution for getting the raster in 3857 with `res_3857`
         // should thus roughly be like the original `res_4326`
-        let result_res = suggest_pixel_size_from_diag_cross_projected::<SpatialPartition2D>(
-            epsg_3857.area_of_use_projected().unwrap(),
-            epsg_4326.area_of_use_projected().unwrap(),
-            res_3857,
-        )
-        .unwrap();
-        assert!(1. - (result_res.x / res_4326.x).abs() < 0.02);
-        assert!(1. - (result_res.y / res_4326.y).abs() < 0.02);
+
+        let spatial_grid_3857 = SpatialGridDefinition::new(
+            geotransform_3857.into(),
+            GridShape::new_2d(dataset_3857.raster_size().1, dataset_3857.raster_size().0)
+                .bounding_box(),
+        );
+
+        let result_res =
+            suggest_output_spatial_grid_like_gdal_helper(&spatial_grid_3857, epsg_3857, epsg_4326)
+                .unwrap();
+
+        assert!(1. - (result_res.geo_transform().x_pixel_size() / res_4326.x).abs() < 0.02);
+        assert!(1. - (result_res.geo_transform().y_pixel_size() / res_4326.y).abs() < 0.02);
     }
 }

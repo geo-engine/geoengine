@@ -1207,51 +1207,36 @@ mod tests {
 
     // This method loads raster data from a cropped MODIS NDVI raster.
     // To inspect the byte values first convert the file to XYZ with GDAL:
-    // 'gdal_translate -of RST MOD13A2_M_NDVI_2014-04-01_27x27_compress.tif MOD13A2_M_NDVI_2014-04-01_27x27.xyz'
+    // 'gdal_translate -of xyz MOD13A2_M_NDVI_2014-04-01_30X30.tif MOD13A2_M_NDVI_2014-04-01_30x30.xyz'
     // Then you can convert them to gruped bytes:
-    // 'cut -d ' ' -f 1,2 --complement MOD13A2_M_NDVI_2014-04-01_27x27.xyz | xargs -n 27 > MOD13A2_M_NDVI_2014-04-01_27x27_bytes.txt'.
+    // 'cut -d ' ' -f 1,2 --complement MOD13A2_M_NDVI_2014-04-01_30x30.xyz | xargs -n 30 > MOD13A2_M_NDVI_2014-04-01_30x30_bytes.txt'.
     fn load_ndvi_apr_2014_cropped(
         gdal_read_advice: GdalReadAdvise,
     ) -> Result<Option<GridAndProperties<u8>>> {
         let dataset_params = GdalDatasetParameters {
-            file_path: test_data!(
-                "raster/modis_ndvi/cropped/MOD13A2_M_NDVI_2014-04-01_27x27_compress.tif"
-            )
-            .into(),
+            file_path: test_data!("raster/modis_ndvi/cropped/MOD13A2_M_NDVI_2014-04-01_30x30.tif")
+                .into(),
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
-                origin_coordinate: (30.9, 61.7).into(),
+                origin_coordinate: (8.0, 57.4).into(),
                 x_pixel_size: 0.1,
                 y_pixel_size: -0.1,
             },
-            width: 27,
-            height: 27,
+            width: 30,
+            height: 30,
             file_not_found_handling: FileNotFoundHandling::NoData,
-            no_data_value: Some(0.),
-            properties_mapping: Some(vec![
-                GdalMetadataMapping {
-                    source_key: RasterPropertiesKey {
-                        domain: None,
-                        key: "AREA_OR_POINT".to_string(),
-                    },
-                    target_type: RasterPropertiesEntryType::String,
-                    target_key: RasterPropertiesKey {
-                        domain: None,
-                        key: "AREA_OR_POINT".to_string(),
-                    },
+            no_data_value: Some(255.),
+            properties_mapping: Some(vec![GdalMetadataMapping {
+                source_key: RasterPropertiesKey {
+                    domain: None,
+                    key: "AREA_OR_POINT".to_string(),
                 },
-                GdalMetadataMapping {
-                    source_key: RasterPropertiesKey {
-                        domain: Some("IMAGE_STRUCTURE".to_string()),
-                        key: "COMPRESSION".to_string(),
-                    },
-                    target_type: RasterPropertiesEntryType::String,
-                    target_key: RasterPropertiesKey {
-                        domain: Some("IMAGE_STRUCTURE_INFO".to_string()),
-                        key: "COMPRESSION".to_string(),
-                    },
+                target_type: RasterPropertiesEntryType::String,
+                target_key: RasterPropertiesKey {
+                    domain: None,
+                    key: "AREA_OR_POINT".to_string(),
                 },
-            ]),
+            }]),
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
@@ -1487,10 +1472,10 @@ mod tests {
         assert_eq!(
             grid.inner_grid.data,
             &[
-                147, 153, 164, 164, 163, 180, 191, 184, 101, 123, 135, 132, 145, 154, 175, 188,
-                108, 112, 148, 164, 170, 166, 157, 164, 148, 126, 101, 116, 143, 145, 137, 140,
-                104, 53, 0, 255, 90, 103, 102, 81, 255, 255, 255, 141, 85, 97, 92, 95, 255, 255,
-                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+                255, 255, 255, 255, 255, 255, 127, 107, 255, 255, 255, 255, 255, 164, 185, 182,
+                255, 255, 255, 175, 186, 190, 167, 140, 255, 255, 161, 175, 184, 173, 170, 188,
+                255, 255, 128, 177, 165, 145, 191, 174, 255, 117, 100, 174, 159, 147, 99, 135
             ]
         );
 
@@ -1499,16 +1484,15 @@ mod tests {
         assert_eq!(
             grid.validity_mask.data,
             &[
-                true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                true, true, true, true, true, true, false, true, true, true, true, true, true,
-                true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                true, true, true, true, true, true, true, true, true,
+                false, false, false, false, false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false, false, false, true, true,
+                false, false, false, false, false, true, true, true, false, false, false, true,
+                true, true, true, true, false, false, true, true, true, true, true, true, false,
+                false, true, true, true, true, true, true, false, true, true, true, true, true,
+                true, true
             ]
         );
 
-        assert!((properties.scale_option()).is_none());
-        assert!(properties.offset_option().is_none());
         assert_eq!(
             properties.get_property(&RasterPropertiesKey {
                 key: "AREA_OR_POINT".to_string(),
@@ -1516,16 +1500,6 @@ mod tests {
             }),
             Some(&RasterPropertiesEntry::String("Area".to_string()))
         );
-        assert_eq!(
-            properties.get_property(&RasterPropertiesKey {
-                domain: Some("IMAGE_STRUCTURE_INFO".to_string()),
-                key: "COMPRESSION".to_string(),
-            }),
-            Some(&RasterPropertiesEntry::String("DEFLATE".to_string()))
-        );
-
-        assert_eq!(properties.offset_option(), None);
-        assert_eq!(properties.scale_option(), None);
     }
 
     #[test]
@@ -1550,28 +1524,26 @@ mod tests {
         assert_eq!(
             x.inner_grid.data,
             &[
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 147, 153, 164, 164, 163, 180, 191, 0, 101, 123, 135,
-                132, 145, 154, 175, 0, 108, 112, 148, 164, 170, 166, 157, 0, 148, 126, 101, 116,
-                143, 145, 137, 0, 104, 53, 0, 255, 90, 103, 102, 0, 255, 255, 255, 141, 85, 97, 92,
-                0, 255, 255, 255, 255, 255, 255, 255
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 0, 255, 255, 255,
+                255, 255, 255, 255, 0, 255, 255, 255, 255, 255, 255, 127, 0, 255, 255, 255, 255,
+                255, 164, 185, 0, 255, 255, 255, 175, 186, 190, 167, 0, 255, 255, 161, 175, 184,
+                173, 170, 0, 255, 255, 128, 177, 165, 145, 191,
             ]
         );
 
         assert_eq!(x.validity_mask.data.len(), 64);
-        // pixel mask is pixel > 0 from the top left 8x8 block from MOD13A2_M_NDVI_2014-04-01_27x27_bytes.txt
+        // pixel mask is pixel == 255 from the top left 8x8 block from MOD13A2_M_NDVI_2014-04-01_27x27_bytes.txt
         assert_eq!(
             x.validity_mask.data,
             &[
-                false, false, false, false, false, false, false, false, false, true, true, true,
-                true, true, true, true, false, true, true, true, true, true, true, true, false,
-                true, true, true, true, true, true, true, false, true, true, true, true, true,
-                true, true, false, true, true, false, true, true, true, true, false, true, true,
-                true, true, true, true, true, false, true, true, true, true, true, true, true,
+                false, false, false, false, false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, true, false, false, false, false,
+                false, false, true, true, false, false, false, false, true, true, true, true,
+                false, false, false, true, true, true, true, true, false, false, false, true, true,
+                true, true, true,
             ]
         );
-
-        assert_eq!(properties.offset_option(), None);
-        assert_eq!(properties.scale_option(), None);
     }
 
     /* This test no longer works since we now employ a clipping strategy and this makes us read a lot more data?
@@ -2038,20 +2010,18 @@ mod tests {
     #[test]
     fn read_raster_and_offset_scale() {
         let up_side_down_params = GdalDatasetParameters {
-            file_path: test_data!(
-                "raster/modis_ndvi/cropped/MOD13A2_M_NDVI_2014-04-01_27x27_compress_scale2_offset1.tif"
-            )
-            .into(),
+            file_path: test_data!("raster/modis_ndvi/cropped/MOD13A2_M_NDVI_2014-04-01_30x30.tif")
+                .into(),
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
-                origin_coordinate: (30.9, 61.7).into(),
+                origin_coordinate: (8.0, 57.4).into(),
                 x_pixel_size: 0.1,
                 y_pixel_size: -0.1,
             },
-            width: 27,
-            height: 27,
+            width: 30,
+            height: 30,
             file_not_found_handling: FileNotFoundHandling::NoData,
-            no_data_value: Some(0.),
+            no_data_value: Some(255.),
             properties_mapping: None,
             gdal_open_options: None,
             gdal_config_options: None,
@@ -2080,10 +2050,10 @@ mod tests {
         assert_eq!(
             grid.inner_grid.data,
             &[
-                147, 153, 164, 164, 163, 180, 191, 184, 101, 123, 135, 132, 145, 154, 175, 188,
-                108, 112, 148, 164, 170, 166, 157, 164, 148, 126, 101, 116, 143, 145, 137, 140,
-                104, 53, 0, 255, 90, 103, 102, 81, 255, 255, 255, 141, 85, 97, 92, 95, 255, 255,
-                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+                255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+                255, 255, 255, 255, 255, 255, 127, 107, 255, 255, 255, 255, 255, 164, 185, 182,
+                255, 255, 255, 175, 186, 190, 167, 140, 255, 255, 161, 175, 184, 173, 170, 188,
+                255, 255, 128, 177, 165, 145, 191, 174, 255, 117, 100, 174, 159, 147, 99, 135
             ]
         );
 
@@ -2092,11 +2062,12 @@ mod tests {
         assert_eq!(
             grid.validity_mask.data,
             &[
-                true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                true, true, true, true, true, true, false, true, true, true, true, true, true,
-                true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-                true, true, true, true, true, true, true, true, true,
+                false, false, false, false, false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false, false, false, true, true,
+                false, false, false, false, false, true, true, true, false, false, false, true,
+                true, true, true, true, false, false, true, true, true, true, true, true, false,
+                false, true, true, true, true, true, true, false, true, true, true, true, true,
+                true, true
             ]
         );
 

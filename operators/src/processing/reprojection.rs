@@ -79,7 +79,6 @@ pub struct InitializedRasterReprojection<O: InitializedRasterOperator> {
     state: TileReprojectionSubqueryGridInfo,
     source_srs: SpatialReference,
     target_srs: SpatialReference,
-    tiling_spec: TilingSpecification,
 }
 
 impl InitializedVectorReprojection {
@@ -147,10 +146,10 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
                 .spatial_grid_descriptor()
                 .reproject_clipped(&proj_from_to)?,
             DeriveOutRasterSpecsSource::ProjectionBounds => {
-                let proj_area_grid: SpatialPartition2D = in_srs.area_of_use()?; // TODO: since we clip in projection anyway, we could use the AOU of the source projection?
+                let in_srs_area: SpatialPartition2D = in_srs.area_of_use_projected()?; // TODO: since we clip in projection anyway, we could use the AOU of the source projection?
                 let target_proj_total_grid = in_desc
                     .spatial_grid_descriptor()
-                    .spatial_bounds_to_compatible_spatial_grid(proj_area_grid)
+                    .spatial_bounds_to_compatible_spatial_grid(in_srs_area)
                     .reproject_clipped(&proj_from_to)?;
                 // jetzt grid mit origin (tl) auf grid vom dataset. dann umprojeziren. Dann intersection mit boundingbox in dataset
                 let spatial_bounds_proj =
@@ -189,7 +188,6 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
             state,
             source_srs: in_srs,
             target_srs: params.target_spatial_reference,
-            tiling_spec,
         })
     }
 }
@@ -431,7 +429,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
                     self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
-                    self.tiling_spec,
                     self.state,
                 )))
             }
@@ -444,7 +441,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
                     self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
-                    self.tiling_spec,
                     self.state,
                 )))
             }
@@ -458,7 +454,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
                     self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
-                    self.tiling_spec,
                     self.state,
                 )))
             }
@@ -471,7 +466,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
                     self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
-                    self.tiling_spec,
                     self.state,
                 )))
             }
@@ -484,7 +478,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
                     self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
-                    self.tiling_spec,
                     self.state,
                 )))
             }
@@ -497,7 +490,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
                     self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
-                    self.tiling_spec,
                     self.state,
                 )))
             }
@@ -510,7 +502,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
                     self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
-                    self.tiling_spec,
                     self.state,
                 )))
             }
@@ -523,7 +514,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
                     self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
-                    self.tiling_spec,
                     self.state,
                 )))
             }
@@ -536,7 +526,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
                     self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
-                    self.tiling_spec,
                     self.state,
                 )))
             }
@@ -549,7 +538,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
                     self.result_descriptor.clone(),
                     self.source_srs,
                     self.target_srs,
-                    self.tiling_spec,
                     self.state,
                 )))
             }
@@ -569,7 +557,6 @@ where
     result_descriptor: RasterResultDescriptor,
     from: SpatialReference,
     to: SpatialReference,
-    tiling_spec: TilingSpecification, // TODO: remove?
     state: TileReprojectionSubqueryGridInfo,
     _phantom_data: PhantomData<P>,
 }
@@ -589,7 +576,6 @@ where
         result_descriptor: RasterResultDescriptor,
         from: SpatialReference,
         to: SpatialReference,
-        tiling_spec: TilingSpecification,
         state: TileReprojectionSubqueryGridInfo,
     ) -> Self {
         Self {
@@ -597,7 +583,6 @@ where
             result_descriptor,
             from,
             to,
-            tiling_spec,
             state,
             _phantom_data: PhantomData,
         }
@@ -668,7 +653,7 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
-        GdalSourceTimePlaceholder, TimeReference,
+        GdalMetaDataStatic, GdalSourceTimePlaceholder, TimeReference,
     };
     use crate::util::gdal::add_ndvi_dataset_cropped_to_valid_webmercator_bounds;
     use crate::{
@@ -706,6 +691,7 @@ mod tests {
         },
     };
     use std::collections::HashMap;
+    use std::path::PathBuf;
     use std::str::FromStr;
 
     #[tokio::test]
@@ -939,10 +925,7 @@ mod tests {
 
     #[tokio::test]
     async fn raster_identity() -> Result<()> {
-        let projection = SpatialReference::new(
-            geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
-            4326,
-        );
+        let projection = SpatialReference::epsg_4326();
 
         let data = vec![
             RasterTile2D {
@@ -950,13 +933,35 @@ mod tests {
                 tile_position: [-1, 0].into(),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
+                grid_array: Grid::new([2, 2].into(), vec![1_u8, 2, 3, 4])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![1_u8, 2, 3, 4])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [0, 1].into(),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
@@ -985,6 +990,28 @@ mod tests {
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [0, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [0, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![19, 20, 21, 22])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
         ];
 
         let geo_transform = GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.);
@@ -995,7 +1022,7 @@ mod tests {
             time: None,
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 geo_transform,
-                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                GridBoundingBox2D::new([-2, 0], [1, 3]).unwrap(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1003,7 +1030,7 @@ mod tests {
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1032,7 +1059,7 @@ mod tests {
             .unwrap();
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            GridBoundingBox2D::new([-2, 0], [1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
         );
@@ -1051,11 +1078,12 @@ mod tests {
     #[tokio::test]
     async fn raster_ndvi_3857() -> Result<()> {
         let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset_cropped_to_valid_webmercator_bounds(&mut exe_ctx);
 
         let tile_size = GridShape2D::new_2d(512, 512);
         exe_ctx.tiling_specification = TilingSpecification::new(tile_size);
+
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let time_interval = TimeInterval::new_unchecked(1_396_303_200_000, 1_396_389_600_000);
         // 2014-04-01
@@ -1088,11 +1116,11 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let result_descritptor = qp.result_descriptor();
+        let result_descritptor = dbg!(qp.result_descriptor());
 
         assert_approx_eq!(
             f64,
-            14236.77502413757, // TODO: GDAL output is 14228.560819126376373
+            14255.015508816849, // TODO: GDAL output is 14228.560819126376373
             result_descritptor
                 .spatial_grid_descriptor()
                 .spatial_resolution()
@@ -1102,7 +1130,7 @@ mod tests {
 
         assert_approx_eq!(
             f64,
-            14236.77502413757, // TODO: GDAL output is -14233.615370039031404
+            14255.015508816849, // TODO: GDAL output is -14233.615370039031404
             result_descritptor
                 .spatial_grid_descriptor()
                 .spatial_resolution()
@@ -1117,9 +1145,6 @@ mod tests {
         let query_tl_pixel = tlz.tile_idx_to_global_pixel_idx([-1, 0].into());
         let query_bounds =
             GridBoundingBox2D::new(query_tl_pixel, query_tl_pixel + [511, 511]).unwrap();
-        // get the spatial bounds:
-        // dbg!(tlz.geo_transform.grid_to_spatial_bounds(&query_bounds));
-        // dbg!(query_bounds);
 
         let qrect = RasterQueryRectangle::new_with_grid_bounds(
             query_bounds,
@@ -1127,64 +1152,19 @@ mod tests {
             BandSelection::first(),
         );
 
-        let qs = qp.raster_query(qrect, &query_ctx).await.unwrap();
+        let qs = qp.raster_query(qrect.clone(), &query_ctx).await.unwrap();
 
         let res = qs
             .map(Result::unwrap)
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
 
-        // FIXME: Why is the same tile twice in the results?
-        //assert_eq!(res.len(), 1);
-
-        /*
-
-                let colorizer = geoengine_datatypes::operations::image::Colorizer::linear_gradient(
-                    vec![
-                        (
-                            0.0,
-                            geoengine_datatypes::operations::image::RgbaColor::white(),
-                        )
-                            .try_into()
-                            .unwrap(),
-                        (
-                            255.0,
-                            geoengine_datatypes::operations::image::RgbaColor::black(),
-                        )
-                            .try_into()
-                            .unwrap(),
-                    ],
-                    geoengine_datatypes::operations::image::RgbaColor::transparent(),
-                    geoengine_datatypes::operations::image::RgbaColor::white(),
-                    geoengine_datatypes::operations::image::RgbaColor::black(),
-                )
-                .unwrap();
-
-                let (bytes, _) = crate::util::raster_stream_to_png::raster_stream_to_png_bytes(
-                    qp,
-                    qrect,
-                    query_ctx,
-                    query_bounds.axis_size_x() as u32,
-                    query_bounds.axis_size_y() as u32,
-                    None,
-                    Some(colorizer),
-                    Box::pin(futures::future::pending()),
-                )
-                .await
-                .unwrap();
-
-                // Use for getting the image to compare against
-                geoengine_datatypes::util::test::save_test_bytes(
-                    &bytes,
-                    "MOD13A2_M_NDVI_2014-04-01_tile-20_v4.png",
-                );
-        */
         // get the worldfile
         // println!("{}", res[0].tile_geo_transform().worldfile_string());
 
         // Write the tile to a file
         /*
-        let mut buffer = std::fs::File::create("MOD13A2_M_NDVI_2014-04-01_tile-20_v4.rst")?;
+        let mut buffer = std::fs::File::create("MOD13A2_M_NDVI_2014-04-01_tile-20_v5.rst")?;
 
         std::io::Write::write(
             &mut buffer,
@@ -1197,17 +1177,17 @@ mod tests {
                 .as_slice(),
         )?;
         */
+
         // This check is against a tile produced by the operator itself. It was visually validated. TODO: rebuild when open issues are solved.
         // A perfect validation would be against a GDAL output generated like this:
         // gdalwarp -t_srs EPSG:3857 -r near -te_srs EPSG:3857 -of GTiff ./MOD13A2_M_NDVI_2014-04-01.TIFF ./MOD13A2_M_NDVI_2014-04-01.TIFF
 
-        // FIXME: the result still wobbles one pixel to the right. We need to find the cause of this.
         assert_eq!(
             include_bytes!(
-                "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20_v4.rst"
-            ) as &[u8],
-            res[0].clone().into_materialized_tile().grid_array.inner_grid.data.as_slice()
-        );
+               "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20_v5.rst"
+          ) as &[u8],
+          res[0].clone().into_materialized_tile().grid_array.inner_grid.data.as_slice()
+         );
 
         Ok(())
     }
@@ -1301,7 +1281,6 @@ mod tests {
         let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
             tile_size_in_pixels,
         ));
-        let query_ctx = MockQueryContext::test_default();
 
         let id: DataId = DatasetId::new().into();
         let name = NamedData::with_system_name("ndvi");
@@ -1318,7 +1297,7 @@ mod tests {
         let initialized_operator = RasterOperator::boxed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::epsg_4326(),
-                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
+                derive_out_spec: DeriveOutRasterSpecsSource::DataBounds,
             },
             sources: SingleRasterOrVectorSource {
                 source: gdal_op.into(),
@@ -1334,6 +1313,7 @@ mod tests {
             .unwrap();
 
         let qr = qp.result_descriptor();
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let qs = qp
             .raster_query(
@@ -1363,7 +1343,6 @@ mod tests {
         Ok(())
     }
 
-    /*
     #[tokio::test]
     async fn query_outside_projection_area_of_use_produces_empty_tiles() {
         let tile_size_in_pixels = [600, 600].into();
@@ -1371,12 +1350,14 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636).into(),
             time: None,
-            geo_transform: GeoTransform::new(
-                Coordinate2D::new(166_021.44, 9_329_005.188),
-                534_994.66 - 166_021.444,
-                -9_329_005.18,
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(
+                    Coordinate2D::new(166_021.44, 9_329_005.188),
+                    534_994.66 - 166_021.444,
+                    -9_329_005.18,
+                ),
+                GridBoundingBox2D::new_min_max(0, 100, 0, 100).unwrap(),
             ),
-            pixel_bounds: GridBoundingBox2D::new_min_max(0, 0, 100, 100).unwrap(),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -1404,28 +1385,26 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(tile_size_in_pixels),
-        );
-        let query_ctx = MockQueryContext::test_default();
+        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            tile_size_in_pixels,
+        ));
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let id: DataId = DatasetId::new().into();
         let name = NamedData::with_system_name("ndvi");
         exe_ctx.add_meta_data(id.clone(), name.clone(), Box::new(m));
 
-        let output_shape: GridShape2D = [1000, 1000].into();
-        let output_bounds =
-            SpatialPartition2D::new_unchecked((-180., 0.).into(), (180., -90.).into());
         let time_interval = TimeInterval::new_instant(1_388_534_400_000).unwrap(); // 2014-01-01
 
         let gdal_op = GdalSource {
-            params: GdalSourceParameters { data: name },
+            params: GdalSourceParameters::new(name),
         }
         .boxed();
 
         let initialized_operator = RasterOperator::boxed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::epsg_4326(),
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource {
                 source: gdal_op.into(),
@@ -1435,11 +1414,6 @@ mod tests {
         .await
         .unwrap();
 
-        let x_query_resolution = output_bounds.size_x() / output_shape.axis_size_x() as f64;
-        let y_query_resolution = output_bounds.size_y() / (output_shape.axis_size_y()) as f64;
-        let spatial_resolution =
-            SpatialResolution::new_unchecked(x_query_resolution, y_query_resolution);
-
         let qp = initialized_operator
             .query_processor()
             .unwrap()
@@ -1448,10 +1422,8 @@ mod tests {
 
         let result = qp
             .raster_query(
-                RasterQueryRectangle::with_partition_and_resolution_and_origin(
-                    output_bounds,
-                    spatial_resolution,
-                    exe_ctx.tiling_specification.origin_coordinate,
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new_min_max(500, 1000, 500, 1000).unwrap(),
                     time_interval,
                     BandSelection::first(),
                 ),
@@ -1469,7 +1441,6 @@ mod tests {
             assert!(r.is_empty());
         }
     }
-     */
 
     #[tokio::test]
     async fn points_from_wgs84_to_utm36n() {
@@ -1551,7 +1522,7 @@ mod tests {
     #[tokio::test]
     async fn points_from_utm36n_to_wgs84() {
         let exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let point_source = MockFeatureCollectionSource::with_collections_and_sref(
             vec![MultiPointCollection::from_data(

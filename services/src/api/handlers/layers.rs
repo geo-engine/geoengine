@@ -1091,9 +1091,8 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        ExecutionContext, InitializedRasterOperator, QueryProcessor, RasterBandDescriptors,
-        RasterOperator, RasterResultDescriptor, SingleRasterOrVectorSource, SpatialGridDescriptor,
-        TypedOperator,
+        InitializedRasterOperator, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+        SingleRasterOrVectorSource, SpatialGridDescriptor, TypedOperator,
     };
     use geoengine_operators::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_operators::processing::{TimeShift, TimeShiftParams};
@@ -1706,12 +1705,6 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let tiling_strat = query_processor
-            .result_descriptor()
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(exe_ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-
         raster_stream_to_geotiff_bytes(
             query_processor,
             query_rectangle,
@@ -1729,7 +1722,6 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_strat,
         )
         .await
     }
