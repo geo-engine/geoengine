@@ -526,6 +526,7 @@ mod tests {
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::{NotNanF64, StringPair};
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
@@ -3086,7 +3087,6 @@ mod tests {
                     RgbaColor::new(5, 6, 7, 8),
                 )
                 .unwrap(),
-                Colorizer::Rgba,
             ],
         )
         .await;
@@ -3100,7 +3100,7 @@ mod tests {
                 },
                 ColorParam::Derived(DerivedColor {
                     attribute: "foobar".to_string(),
-                    colorizer: Colorizer::Rgba,
+                    colorizer: Colorizer::test_default(),
                 }),
             ],
         )

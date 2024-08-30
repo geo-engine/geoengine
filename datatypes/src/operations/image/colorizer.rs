@@ -1,6 +1,7 @@
 use crate::error::{self, Error};
 use crate::operations::image::RgbaTransmutable;
 use crate::raster::Pixel;
+use crate::util::test::TestDefault;
 use crate::util::Result;
 use ordered_float::{FloatIsNan, NotNan};
 use postgres_types::{FromSql, ToSql};
@@ -88,6 +89,8 @@ pub enum Colorizer {
         no_data_color: RgbaColor,
         default_color: RgbaColor,
     },
+    /// Only for internal purposes. Should not be a part of the API or db schema.
+    /// At the moment this is only used by the multiband raster colorizer.
     Rgba,
 }
 
@@ -510,6 +513,22 @@ impl Colorizer {
                 colorizer: "rgba".to_string(),
             }),
         }
+    }
+}
+
+impl TestDefault for Colorizer {
+    #[allow(clippy::unwrap_used)]
+    fn test_default() -> Self {
+        Colorizer::linear_gradient(
+            vec![
+                (1.0, RgbaColor::white()).try_into().unwrap(),
+                (2.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::white(),
+            RgbaColor::black(),
+        )
+        .unwrap()
     }
 }
 
