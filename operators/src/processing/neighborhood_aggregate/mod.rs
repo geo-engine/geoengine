@@ -727,7 +727,7 @@ mod tests {
         .unwrap();
 
         // Use for getting the image to compare against
-        geoengine_datatypes::util::test::save_test_bytes(&bytes, "gaussian_blur_bla.png");
+        // geoengine_datatypes::util::test::save_test_bytes(&bytes, "gaussian_blur_bla.png");
 
         assert_eq!(
             bytes,
