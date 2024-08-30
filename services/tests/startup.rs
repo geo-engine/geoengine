@@ -60,7 +60,7 @@ async fn it_starts_without_warnings_and_accepts_connections() {
         // read log output and check for warnings
         let mut startup_succesful = false;
         for line in server.stderr_lines().take(200) {
-            // eprintln!("Line: {line}");
+            eprintln!("Line: {line}");
 
             assert!(!line.contains("WARN"), "Warning in log output: {line}");
 
