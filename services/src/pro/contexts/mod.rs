@@ -8,15 +8,15 @@ use std::sync::Arc;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_operators::cache::cache_operator::InitializedCacheOperator;
 use geoengine_operators::engine::{
     CreateSpan, ExecutionContext, ExecutionContextExtensions, InitializedPlotOperator,
     InitializedVectorOperator, MetaData, MetaDataProvider, RasterResultDescriptor,
     VectorResultDescriptor, WorkflowOperatorPath,
 };
+use geoengine_operators::meta::quota::QuotaCheck;
+use geoengine_operators::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::pro::cache::cache_operator::InitializedCacheOperator;
-use geoengine_operators::pro::meta::quota::QuotaCheck;
-use geoengine_operators::pro::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 
 pub use postgres::ProPostgresContext;

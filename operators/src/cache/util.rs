@@ -92,7 +92,7 @@ impl CacheSize {
     pub fn try_add_bytes(&mut self, bytes: usize) -> Result<(), CacheError> {
         ensure!(
             self.can_fit_bytes(bytes),
-            crate::pro::cache::error::NotEnoughSpaceInCache
+            crate::cache::error::NotEnoughSpaceInCache
         );
         self.add_bytes(bytes);
         Ok(())
@@ -108,7 +108,7 @@ impl CacheSize {
     pub fn try_remove_bytes(&mut self, bytes: usize) -> Result<(), CacheError> {
         ensure!(
             self.byte_size_used >= bytes,
-            crate::pro::cache::error::NegativeSizeOfCache
+            crate::cache::error::NegativeSizeOfCache
         );
         self.remove_bytes(bytes);
         Ok(())

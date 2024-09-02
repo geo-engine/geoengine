@@ -2,13 +2,13 @@ use super::cache_chunks::CacheElementSpatialBounds;
 use super::error::CacheError;
 use super::shared_cache::CacheElement;
 use crate::adapters::FeatureCollectionChunkMerger;
+use crate::cache::shared_cache::{AsyncCache, SharedCache};
 use crate::engine::{
     CanonicOperatorName, ChunkByteSize, InitializedRasterOperator, InitializedVectorOperator,
     QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
     TypedRasterQueryProcessor,
 };
 use crate::error::Error;
-use crate::pro::cache::shared_cache::{AsyncCache, SharedCache};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};

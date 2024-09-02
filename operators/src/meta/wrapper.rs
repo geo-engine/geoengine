@@ -1,13 +1,11 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
-
+use crate::adapters::StreamStatisticsAdapter;
 use crate::engine::{
     CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
     QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorResultDescriptor,
     WorkflowOperatorPath,
 };
-use crate::pro::adapters::stream_statistics_adapter::StreamStatisticsAdapter;
-use crate::pro::meta::quota::{QuotaChecker, QuotaTracking};
+use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -15,6 +13,7 @@ use futures::StreamExt;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, QueryAttributeSelection, QueryRectangle,
 };
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{span, Level};
 
 // A wrapper around an initialized operator that adds statistics and quota tracking

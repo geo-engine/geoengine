@@ -6,7 +6,7 @@ use crate::engine::{
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
-use crate::pro::machine_learning::error::{
+use crate::machine_learning::error::{
     InputBandsMismatch, InputTypeMismatch, InvalidInputDimensions, InvalidOutputDimensions,
     MultipleInputsNotSupported, Ort,
 };

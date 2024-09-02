@@ -9,12 +9,12 @@ use geoengine_datatypes::{
     util::test::TestDefault,
 };
 use geoengine_operators::{
+    cache::{cache_operator::InitializedCacheOperator, shared_cache::SharedCache},
     engine::{
         ChunkByteSize, InitializedRasterOperator, MockExecutionContext, MockQueryContext,
         QueryContextExtensions, QueryProcessor, RasterOperator, SingleRasterSource,
         WorkflowOperatorPath,
     },
-    pro::cache::{cache_operator::InitializedCacheOperator, shared_cache::SharedCache},
     processing::{
         AggregateFunctionParams, NeighborhoodAggregate, NeighborhoodAggregateParams,
         NeighborhoodParams,

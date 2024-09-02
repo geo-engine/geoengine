@@ -31,15 +31,11 @@ use geoengine_operators::{
     engine::{
         ChunkByteSize, ExecutionContext, InitializedRasterOperator, MockQueryContext, QueryContext,
         QueryContextExtensions, QueryProcessor, RasterOperator, RasterQueryProcessor,
-        SingleRasterSource, SingleVectorMultipleRasterSources, TypedRasterQueryProcessor,
-        VectorOperator, VectorQueryProcessor, WorkflowOperatorPath,
+        SingleRasterSource, SingleVectorMultipleRasterSources,
+        StatisticsWrappingMockExecutionContext, TypedRasterQueryProcessor, VectorOperator,
+        VectorQueryProcessor, WorkflowOperatorPath,
     },
-    pro::{
-        engine::StatisticsWrappingMockExecutionContext,
-        meta::quota::{
-            ComputationContext, ComputationUnit, QuotaCheck, QuotaChecker, QuotaTracking,
-        },
-    },
+    meta::quota::{ComputationContext, ComputationUnit, QuotaCheck, QuotaChecker, QuotaTracking},
     processing::{
         AggregateFunctionParams, ColumnNames, FeatureAggregationMethod, NeighborhoodAggregate,
         NeighborhoodAggregateParams, NeighborhoodParams, RasterVectorJoin, RasterVectorJoinParams,
@@ -404,7 +400,7 @@ impl PollNextForwarder {
         // dbg!(&record);
 
         if record["level"] != "DEBUG"
-            || record["target"] != "geoengine_operators::pro::adapters::stream_statistics_adapter"
+            || record["target"] != "geoengine_operators::adapters::stream_statistics_adapter"
             || record["fields"]["empty"] != false
             || record["span"]["name"].is_null()
         {

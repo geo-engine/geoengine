@@ -168,7 +168,7 @@ mod tests {
         raster::{GeoTransform, Grid2D, GridIdx2D, RasterTile2D},
     };
 
-    use crate::pro::cache::{
+    use crate::cache::{
         cache_chunks::CompressedFeatureCollection,
         cache_stream::CacheStreamInner,
         cache_tiles::{CompressedRasterTile2D, CompressedRasterTileExt},

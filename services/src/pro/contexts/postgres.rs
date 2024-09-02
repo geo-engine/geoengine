@@ -31,11 +31,11 @@ use bb8_postgres::{
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
+use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::{
     ChunkByteSize, ExecutionContextExtensions, QueryContextExtensions,
 };
-use geoengine_operators::pro::cache::shared_cache::SharedCache;
-use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
+use geoengine_operators::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::info;
 use rayon::ThreadPool;
