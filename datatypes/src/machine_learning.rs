@@ -9,7 +9,6 @@ use crate::{
 
 const NAME_DELIMITER: char = ':';
 
-// TODO: custom serialization as ns:name
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct MlModelName {
     pub namespace: Option<String>,

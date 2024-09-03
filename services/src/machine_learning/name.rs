@@ -34,8 +34,8 @@ impl MlModelName {
 impl From<MlModelName> for geoengine_datatypes::machine_learning::MlModelName {
     fn from(name: MlModelName) -> Self {
         Self {
-            namespace: name.namespace.clone(),
-            name: name.name.clone(),
+            namespace: name.namespace,
+            name: name.name,
         }
     }
 }
@@ -43,8 +43,8 @@ impl From<MlModelName> for geoengine_datatypes::machine_learning::MlModelName {
 impl From<geoengine_datatypes::machine_learning::MlModelName> for MlModelName {
     fn from(name: geoengine_datatypes::machine_learning::MlModelName) -> Self {
         Self {
-            namespace: name.namespace.clone(),
-            name: name.name.clone(),
+            namespace: name.namespace,
+            name: name.name,
         }
     }
 }

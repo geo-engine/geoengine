@@ -9,7 +9,6 @@ use crate::pro::machine_learning::error::{
 
 use super::MachineLearningError;
 
-// TODO: extract metadata during model import and load it from database here instead of accessing the model file here
 pub fn load_model_metadata(path: &Path) -> Result<MlModelMetadata, MachineLearningError> {
     // TODO: proper error if model file cannot be found
     let session = ort::Session::builder()
