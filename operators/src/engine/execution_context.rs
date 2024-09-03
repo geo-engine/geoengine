@@ -12,7 +12,6 @@ use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
-use core::any::TypeId;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
@@ -58,34 +57,6 @@ pub trait ExecutionContext: Send
     ) -> Box<dyn InitializedPlotOperator>;
 
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId>;
-
-    /// get the `ExecutionContextExtensions` that contain additional information
-    fn extensions(&self) -> &ExecutionContextExtensions;
-}
-
-/// This type allows adding additional information to the `ExecutionContext`.
-/// It acts like a type map, allowing one to store one value per type.
-#[derive(Default)]
-pub struct ExecutionContextExtensions {
-    map: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
-}
-
-impl ExecutionContextExtensions {
-    pub fn insert<T: 'static + Send + Sync>(&mut self, val: T) -> Option<T> {
-        self.map
-            .insert(TypeId::of::<T>(), Box::new(val))
-            .and_then(downcast_owned)
-    }
-
-    pub fn get<T: 'static + Send + Sync>(&self) -> Option<&T> {
-        self.map
-            .get(&TypeId::of::<T>())
-            .and_then(|boxed: &Box<dyn Any + Send + Sync>| boxed.downcast_ref())
-    }
-}
-
-fn downcast_owned<T: 'static + Send + Sync>(boxed: Box<dyn Any + Send + Sync>) -> Option<T> {
-    boxed.downcast().ok().map(|boxed| *boxed)
 }
 
 #[async_trait]
@@ -121,7 +92,6 @@ pub struct MockExecutionContext {
     pub meta_data: HashMap<DataId, Box<dyn Any + Send + Sync>>,
     pub named_data: HashMap<NamedData, DataId>,
     pub tiling_specification: TilingSpecification,
-    pub extensions: ExecutionContextExtensions,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -131,7 +101,6 @@ impl TestDefault for MockExecutionContext {
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
-            extensions: Default::default(),
         }
     }
 }
@@ -143,7 +112,6 @@ impl MockExecutionContext {
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
             tiling_specification,
-            extensions: Default::default(),
         }
     }
 
@@ -156,7 +124,6 @@ impl MockExecutionContext {
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
             tiling_specification,
-            extensions: Default::default(),
         }
     }
 
@@ -241,10 +208,6 @@ impl ExecutionContext for MockExecutionContext {
             .get(data)
             .cloned()
             .ok_or_else(|| Error::UnknownDatasetName { name: data.clone() })
-    }
-
-    fn extensions(&self) -> &ExecutionContextExtensions {
-        &self.extensions
     }
 }
 
@@ -430,10 +393,6 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
 
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId> {
         self.inner.resolve_named_data(data).await
-    }
-
-    fn extensions(&self) -> &ExecutionContextExtensions {
-        self.inner.extensions()
     }
 }
 

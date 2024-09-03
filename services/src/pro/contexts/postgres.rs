@@ -32,7 +32,7 @@ use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::cache::shared_cache::SharedCache;
-use geoengine_operators::engine::{ChunkByteSize, ExecutionContextExtensions};
+use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::info;
@@ -314,16 +314,11 @@ where
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {
-        let extensions = ExecutionContextExtensions::default();
-
-        Ok(
-            ExecutionContextImpl::<ProPostgresDb<Tls>>::new_with_extensions(
-                self.db(),
-                self.context.thread_pool.clone(),
-                self.context.exe_ctx_tiling_spec,
-                extensions,
-            ),
-        )
+        Ok(ExecutionContextImpl::<ProPostgresDb<Tls>>::new(
+            self.db(),
+            self.context.thread_pool.clone(),
+            self.context.exe_ctx_tiling_spec,
+        ))
     }
 
     fn volumes(&self) -> Result<Vec<Volume>> {

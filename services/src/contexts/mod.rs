@@ -12,10 +12,10 @@ use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::{
-    ChunkByteSize, CreateSpan, ExecutionContext, ExecutionContextExtensions,
-    InitializedPlotOperator, InitializedVectorOperator, MetaData, MetaDataProvider,
-    QueryAbortRegistration, QueryAbortTrigger, QueryContext, RasterResultDescriptor,
-    VectorResultDescriptor, WorkflowOperatorPath,
+    ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
+    InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
+    QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
+    WorkflowOperatorPath,
 };
 use geoengine_operators::meta::quota::{QuotaChecker, QuotaTracking};
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
@@ -185,7 +185,6 @@ where
     db: D,
     thread_pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
-    extensions: ExecutionContextExtensions,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -201,21 +200,6 @@ where
             db,
             thread_pool,
             tiling_specification,
-            extensions: Default::default(),
-        }
-    }
-
-    pub fn new_with_extensions(
-        db: D,
-        thread_pool: Arc<ThreadPool>,
-        tiling_specification: TilingSpecification,
-        extensions: ExecutionContextExtensions,
-    ) -> Self {
-        Self {
-            db,
-            thread_pool,
-            tiling_specification,
-            extensions,
         }
     }
 }
@@ -299,10 +283,6 @@ where
             .ok_or(geoengine_operators::error::Error::UnknownDatasetName { name: data.clone() })?;
 
         Ok(dataset_id.into())
-    }
-
-    fn extensions(&self) -> &ExecutionContextExtensions {
-        &self.extensions
     }
 }
 
