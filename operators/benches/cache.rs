@@ -12,8 +12,7 @@ use geoengine_operators::{
     cache::{cache_operator::InitializedCacheOperator, shared_cache::SharedCache},
     engine::{
         ChunkByteSize, InitializedRasterOperator, MockExecutionContext, MockQueryContext,
-        QueryContextExtensions, QueryProcessor, RasterOperator, SingleRasterSource,
-        WorkflowOperatorPath,
+        QueryProcessor, RasterOperator, SingleRasterSource, WorkflowOperatorPath,
     },
     processing::{
         AggregateFunctionParams, NeighborhoodAggregate, NeighborhoodAggregateParams,
@@ -58,12 +57,12 @@ async fn main() {
 
     let tile_cache = Arc::new(SharedCache::test_default());
 
-    let mut extensions = QueryContextExtensions::default();
-
-    extensions.insert(tile_cache);
-
-    let query_ctx =
-        MockQueryContext::new_with_query_extensions(ChunkByteSize::test_default(), extensions);
+    let query_ctx = MockQueryContext::new_with_query_extensions(
+        ChunkByteSize::test_default(),
+        Some(tile_cache),
+        None,
+        None,
+    );
 
     let start = std::time::Instant::now();
 

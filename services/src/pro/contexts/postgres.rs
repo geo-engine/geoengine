@@ -32,9 +32,7 @@ use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::cache::shared_cache::SharedCache;
-use geoengine_operators::engine::{
-    ChunkByteSize, ExecutionContextExtensions, QueryContextExtensions,
-};
+use geoengine_operators::engine::{ChunkByteSize, ExecutionContextExtensions};
 use geoengine_operators::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::info;
@@ -302,19 +300,16 @@ where
     fn query_context(&self) -> Result<Self::QueryContext> {
         // TODO: load config only once
 
-        let mut extensions = QueryContextExtensions::default();
-        extensions.insert(
-            self.context
-                .quota
-                .create_quota_tracking(&self.session, ComputationContext::new()),
-        );
-        extensions.insert(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker);
-        extensions.insert(self.context.tile_cache.clone());
-
         Ok(QueryContextImpl::new_with_extensions(
             self.context.query_ctx_chunk_size,
             self.context.thread_pool.clone(),
-            extensions,
+            Some(self.context.tile_cache.clone()),
+            Some(
+                self.context
+                    .quota
+                    .create_quota_tracking(&self.session, ComputationContext::new()),
+            ),
+            Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
         ))
     }
 

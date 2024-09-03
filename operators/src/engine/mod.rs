@@ -19,7 +19,6 @@ pub use operator_impl::{
 };
 pub use query::{
     ChunkByteSize, MockQueryContext, QueryAbortRegistration, QueryAbortTrigger, QueryContext,
-    QueryContextExtensions,
 };
 pub use query_processor::{
     BoxRasterQueryProcessor, PlotQueryProcessor, QueryProcessor, QueryProcessorExt,

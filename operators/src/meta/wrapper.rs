@@ -5,7 +5,6 @@ use crate::engine::{
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorResultDescriptor,
     WorkflowOperatorPath,
 };
-use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -188,16 +187,14 @@ where
         let _query_span_enter = query_span.as_ref().map(tracing::Span::enter);
 
         let quota_checker = ctx
-            .extensions()
-            .get::<QuotaChecker>()
+            .quota_checker()
             .expect("`QuotaChecker` extension should be set during `ProContext` creation");
 
         // TODO: check the quota only once per query and not for every operator
         quota_checker.ensure_quota_available().await?;
 
         let quota_tracker = ctx
-            .extensions()
-            .get::<QuotaTracking>()
+            .quota_tracking()
             .expect("`QuotaTracking` extension should be set during `ProContext` creation")
             .clone();
 
