@@ -69,7 +69,7 @@ filename_prefix = "geo_engine"
 # If true, messages will contain redundant information at the end of the line
 # when the source is part of #[snafu(display())]. But in some cases this could
 # improve debugging.
-raw_error_messages = true
+raw_error_messages = false
 
 [ogc.default_time]
 # type "Value" with start/end as ISO strings or "Now" for using the current time, use wcs.default_time etc. for override
