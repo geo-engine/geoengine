@@ -13,6 +13,7 @@ use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
 use core::any::TypeId;
 use geoengine_datatypes::dataset::{DataId, NamedData};
+use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
@@ -57,6 +58,8 @@ pub trait ExecutionContext: Send
     ) -> Box<dyn InitializedPlotOperator>;
 
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId>;
+
+    async fn ml_model_metadata(&self, name: &MlModelName) -> Result<MlModelMetadata>;
 
     /// get the `ExecutionContextExtensions` that contain additional information
     fn extensions(&self) -> &ExecutionContextExtensions;
@@ -119,6 +122,7 @@ pub struct MockExecutionContext {
     pub thread_pool: Arc<ThreadPool>,
     pub meta_data: HashMap<DataId, Box<dyn Any + Send + Sync>>,
     pub named_data: HashMap<NamedData, DataId>,
+    pub ml_models: HashMap<MlModelName, MlModelMetadata>,
     pub tiling_specification: TilingSpecification,
     pub extensions: ExecutionContextExtensions,
 }
@@ -129,6 +133,7 @@ impl TestDefault for MockExecutionContext {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
+            ml_models: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
             extensions: Default::default(),
         }
@@ -141,6 +146,7 @@ impl MockExecutionContext {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
+            ml_models: HashMap::default(),
             tiling_specification,
             extensions: Default::default(),
         }
@@ -154,6 +160,7 @@ impl MockExecutionContext {
             thread_pool: create_rayon_thread_pool(num_threads),
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
+            ml_models: HashMap::default(),
             tiling_specification,
             extensions: Default::default(),
         }
@@ -238,6 +245,13 @@ impl ExecutionContext for MockExecutionContext {
             .get(data)
             .cloned()
             .ok_or_else(|| Error::UnknownDatasetName { name: data.clone() })
+    }
+
+    async fn ml_model_metadata(&self, name: &MlModelName) -> Result<MlModelMetadata> {
+        self.ml_models
+            .get(name)
+            .cloned()
+            .ok_or_else(|| Error::UnknownMlModelName { name: name.clone() })
     }
 
     fn extensions(&self) -> &ExecutionContextExtensions {
