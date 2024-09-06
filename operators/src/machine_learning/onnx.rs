@@ -302,6 +302,14 @@ impl_no_data_value_zero!(i8, u8, i16, u16, i32, u32, i64, u64);
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        engine::{
+            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+        },
+        machine_learning::metadata_from_file::load_model_metadata,
+        mock::{MockRasterSource, MockRasterSourceParams},
+        processing::{RasterStacker, RasterStackerParams},
+    };
     use approx::assert_abs_diff_eq;
     use geoengine_datatypes::{
         primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
@@ -313,15 +321,6 @@ mod tests {
         util::test::TestDefault,
     };
     use ndarray::{arr2, array, Array1, Array2};
-
-    use crate::{
-        engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-        },
-        mock::{MockRasterSource, MockRasterSourceParams},
-        pro::machine_learning::metadata_from_file::load_model_metadata,
-        processing::{RasterStacker, RasterStackerParams},
-    };
 
     use super::*;
 
