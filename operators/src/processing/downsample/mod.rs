@@ -18,9 +18,9 @@ use geoengine_datatypes::primitives::{
     TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    BoundedGrid, ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D,
-    GridIndexAccess, GridOrEmpty, Pixel, RasterTile2D, SpatialGridDefinition, TileInformation,
-    TilingSpecification, UpdateIndexedElementsParallel,
+    ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D, GridIndexAccess,
+    GridOrEmpty, Pixel, RasterTile2D, SpatialGridDefinition, TileInformation, TilingSpecification,
+    UpdateIndexedElementsParallel,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -474,20 +474,15 @@ where
         return Ok(accu);
     }
 
-    dbg!(&accu, &tile);
-
     // copy all input tiles into the accu to have all data for interpolation
     let mut accu_tile = accu.output_grid.into_materialized_masked_grid();
-    let accu_tile_bounds = accu_tile.bounding_box();
     let in_tile_grid = tile.into_inner_positioned_grid();
     let accu_geo_transform = accu.output_tile_info.global_geo_transform;
     let in_geo_transform = accu.input_global_geo_transform;
-    dbg!(accu_tile_bounds, accu_geo_transform, in_geo_transform);
 
     let map_fn = |grid_idx: GridIdx2D, current_value: Option<T>| -> Option<T> {
         let accu_pixel_coord = accu_geo_transform.grid_idx_to_pixel_center_coordinate_2d(grid_idx);
         let source_pixel_idx = in_geo_transform.coordinate_to_grid_idx_2d(accu_pixel_coord);
-        dbg!(grid_idx, accu_pixel_coord, source_pixel_idx);
 
         let new_value = if in_tile_grid.contains(&source_pixel_idx) {
             in_tile_grid.get_at_grid_index_unchecked(source_pixel_idx)

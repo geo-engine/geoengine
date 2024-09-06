@@ -1116,7 +1116,7 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let result_descritptor = dbg!(qp.result_descriptor());
+        let result_descritptor = qp.result_descriptor();
 
         assert_approx_eq!(
             f64,

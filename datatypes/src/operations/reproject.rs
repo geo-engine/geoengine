@@ -454,14 +454,9 @@ pub fn suggest_output_spatial_grid_like_gdal<P: CoordinateProjection>(
         .origin_coordinate()
         .reproject(projector)?;
 
-    let (out_spatial_grid_moved_origin, distance) =
-        out_spatial_grid.with_moved_origin_to_nearest_grid_edge_with_distance(proj_origin);
-    dbg!(
-        spatial_grid,
-        out_spatial_grid,
-        out_spatial_grid_moved_origin,
-        distance
-    );
+    let out_spatial_grid_moved_origin =
+        out_spatial_grid.with_moved_origin_to_nearest_grid_edge(proj_origin);
+
     Ok(out_spatial_grid_moved_origin.with_replaced_origin(proj_origin))
 }
 

@@ -167,7 +167,6 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
                 ))
                 .then(move |tile_info| async move {
                     let tile_spatial_bounds = tile_info.spatial_partition();
-                    dbg!(&tile_info);
 
                     let grid_size_x = tile_info.tile_size_in_pixels().axis_size_x();
 

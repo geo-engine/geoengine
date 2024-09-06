@@ -1671,7 +1671,6 @@ mod tests {
 
         let task_response =
             serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
-        dbg!(&task_response);
 
         let task_manager = Arc::new(ctx.session_context(session).tasks());
         wait_for_task_to_finish(task_manager.clone(), task_response.task_id).await;
@@ -1680,8 +1679,6 @@ mod tests {
             .get_task_status(task_response.task_id)
             .await
             .unwrap();
-
-        dbg!(&status);
 
         let response = if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()
@@ -1739,7 +1736,6 @@ mod tests {
     #[ge_context::test(tiling_spec = "test_raster_layer_to_dataset_success_tiling_spec")]
     async fn test_raster_layer_to_dataset_success(app_ctx: PostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, 0);
-        dbg!(&mock_source.query_rectangle);
         raster_layer_to_dataset_success(app_ctx, mock_source).await;
     }
 

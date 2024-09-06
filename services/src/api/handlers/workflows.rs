@@ -1441,7 +1441,6 @@ mod tests {
             }"#,
             );
         let res = send_test_request(req, app_ctx.clone()).await;
-        dbg!(&res);
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
 

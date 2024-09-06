@@ -83,7 +83,6 @@ impl RasterDatasetFromWorkflowParams {
             error::ResolutionMissmatch,
         );
 
-        dbg!(&result_descriptor);
 
         let grid_bounds = result_descriptor
             .spatial_grid_descriptor()
@@ -325,7 +324,6 @@ async fn create_dataset<C: SessionContext>(
     };
 
     let dataset_spatial_grid = geoengine_operators::engine::SpatialGridDescriptor::new_source(dataset_source_descriptor_spatial_grid);
-    dbg!(dataset_spatial_grid);
 
     let result_descriptor = RasterResultDescriptor {
         data_type: origin_result_descriptor.data_type,
