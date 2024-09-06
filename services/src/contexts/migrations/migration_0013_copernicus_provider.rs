@@ -6,16 +6,16 @@ use crate::error::Result;
 use super::database_migration::{DatabaseVersion, Migration};
 
 /// This migration the Copernicus provider
-pub struct Migration0012CopernicusProvider;
+pub struct Migration0013CopernicusProvider;
 
 #[async_trait]
-impl Migration for Migration0012CopernicusProvider {
+impl Migration for Migration0013CopernicusProvider {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some("0011_remove_xgb".into())
+        Some("0012_ml_model_db".into())
     }
 
     fn version(&self) -> DatabaseVersion {
-        "0012_copernicus_provider".into()
+        "0013_copernicus_provider".into()
     }
 
     async fn migrate(&self, _tx: &Transaction<'_>) -> Result<()> {

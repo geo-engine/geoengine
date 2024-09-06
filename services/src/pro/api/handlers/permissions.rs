@@ -44,9 +44,13 @@ pub struct PermissionRequest {
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type", content = "id")]
 pub enum Resource {
+    #[schema(title = "LayerResource")]
     Layer(LayerId),
+    #[schema(title = "LayerCollectionResource")]
     LayerCollection(LayerCollectionId),
+    #[schema(title = "ProjectResource")]
     Project(ProjectId),
+    #[schema(title = "DatasetResource")]
     Dataset(DatasetId),
 }
 

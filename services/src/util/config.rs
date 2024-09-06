@@ -249,6 +249,7 @@ pub struct Logging {
     pub log_to_file: bool,
     pub filename_prefix: String,
     pub log_directory: Option<String>,
+    pub raw_error_messages: bool,
 }
 
 impl ConfigElement for Logging {
@@ -396,4 +397,15 @@ pub struct Data {
 
 impl ConfigElement for Data {
     const KEY: &'static str = "data";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MachineLearning {
+    pub storage_volume: VolumeName,
+    pub model_path: PathBuf,
+    pub list_limit: u32,
+}
+
+impl ConfigElement for MachineLearning {
+    const KEY: &'static str = "machine_learning";
 }

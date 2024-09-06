@@ -527,7 +527,7 @@ where
             dataset.tags
         );
 
-        self.check_namespace(&name)?;
+        self.check_dataset_namespace(&name)?;
 
         let typed_meta_data = meta_data.to_typed_metadata();
 

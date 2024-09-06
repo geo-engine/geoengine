@@ -2,10 +2,10 @@ use async_trait::async_trait;
 use tokio_postgres::Transaction;
 
 use super::database_migration::{ProMigration, ProMigrationImpl};
-use crate::{contexts::Migration0012CopernicusProvider, error::Result};
+use crate::{contexts::Migration0013CopernicusProvider, error::Result};
 
 #[async_trait]
-impl ProMigration for ProMigrationImpl<Migration0012CopernicusProvider> {
+impl ProMigration for ProMigrationImpl<Migration0013CopernicusProvider> {
     async fn pro_migrate(&self, tx: &Transaction<'_>) -> Result<()> {
         tx.batch_execute(
             r#"

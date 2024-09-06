@@ -1,6 +1,6 @@
 use super::{
-    error::vector as error, get_expression_dependencies, AsExpressionGeo, FromExpressionGeo,
-    VectorExpressionError,
+    canonicalize_name, error::vector as error, get_expression_dependencies, AsExpressionGeo,
+    FromExpressionGeo, VectorExpressionError,
 };
 use crate::{
     engine::{
@@ -155,7 +155,7 @@ impl VectorOperator for VectorExpression {
 
         let mut expression_input_names = Vec::with_capacity(self.params.input_columns.len());
         for input_column in &self.params.input_columns {
-            let variable_name = canonicalize_column_name(input_column);
+            let variable_name = canonicalize_name(input_column);
 
             if !is_allowed_variable_name(&variable_name) {
                 return Err(VectorExpressionError::ColumnNameContainsSpecialCharacters {
@@ -240,25 +240,6 @@ fn check_output_column_validity(output_column: &OutputColumn) -> Result<(), Vect
     };
 
     Ok(())
-}
-
-/// Replaces all non-alphanumeric characters in a string with underscores.
-/// Prepends an underscore if the string is empty or starts with a number.
-fn canonicalize_column_name(name: &str) -> String {
-    let prepend_underscore = name.chars().next().map_or(true, char::is_numeric);
-
-    let mut canonicalized_name =
-        String::with_capacity(name.len() + usize::from(prepend_underscore));
-
-    if prepend_underscore {
-        canonicalized_name.push('_');
-    }
-
-    for c in name.chars() {
-        canonicalized_name.push(if c.is_alphanumeric() { c } else { '_' });
-    }
-
-    canonicalized_name
 }
 
 fn insert_new_column(

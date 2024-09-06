@@ -31,10 +31,12 @@ libloading = "0.8"
 log = "0.4"
 lru = "0.12"
 lz4_flex = { version = "0.11" }
+ndarray = { version = "0.15", features = ["approx"] }
 num-traits = "0.2"
 num = "0.4"
 ouroboros = "0.18"
 ordered-float = { version = "4.2", features = ["serde"] }
+ort = "2.0.0-rc.2"
 paste = "1.0"
 pin-project = "1.1"
 postgres-protocol = "0.6.6"
@@ -61,9 +63,11 @@ tokio-postgres = "0.7"
 tracing = "0.1"
 typetag = "0.2"
 uuid = { version = "1.7", features = ["serde", "v4", "v5"] }
+strum = { version = "0.26", features = ["derive"] }
 
 [dev-dependencies]
 async-stream = "0.3"
+approx = "0.5"
 geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 httptest = "0.16.1"
 ndarray = "0.15"
