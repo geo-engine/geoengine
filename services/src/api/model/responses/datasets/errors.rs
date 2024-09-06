@@ -2,10 +2,12 @@ use crate::api::model::responses::ErrorResponse;
 use crate::error;
 use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, ResponseError};
+use geoengine_datatypes::util::helpers::ge_report;
 use snafu::prelude::*;
+use std::fmt;
 use strum::IntoStaticStr;
 
-#[derive(Debug, Snafu, IntoStaticStr)]
+#[derive(Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum CreateDatasetError {
@@ -48,7 +50,13 @@ impl ResponseError for CreateDatasetError {
     }
 }
 
-#[derive(Debug, Snafu, IntoStaticStr)]
+impl fmt::Debug for CreateDatasetError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", ge_report(self))
+    }
+}
+
+#[derive(Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum GetDatasetError {
@@ -65,7 +73,13 @@ impl ResponseError for GetDatasetError {
     }
 }
 
-#[derive(Debug, Snafu, IntoStaticStr)]
+impl fmt::Debug for GetDatasetError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", ge_report(self))
+    }
+}
+
+#[derive(Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum UpdateDatasetError {
@@ -82,5 +96,11 @@ impl ResponseError for UpdateDatasetError {
 
     fn status_code(&self) -> StatusCode {
         StatusCode::BAD_REQUEST
+    }
+}
+
+impl fmt::Debug for UpdateDatasetError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", ge_report(self))
     }
 }

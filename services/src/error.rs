@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{
-    DataProviderId, DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance,
+    DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance,
 };
 use crate::api::model::responses::ErrorResponse;
 use crate::datasets::external::aruna::error::ArunaProviderError;
@@ -9,27 +9,32 @@ use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
 use geoengine_datatypes::dataset::LayerId;
 use geoengine_datatypes::error::ErrorSource;
+use geoengine_datatypes::util::helpers::ge_report;
 use ordered_float::FloatIsNan;
 use snafu::prelude::*;
+use std::fmt;
 use std::path::PathBuf;
 use strum::IntoStaticStr;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-#[derive(Debug, Snafu, IntoStaticStr)]
+#[derive(Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum Error {
+    #[snafu(transparent)]
     DataType {
         source: geoengine_datatypes::error::Error,
     },
-    #[snafu(display("Operator: {}", source))]
+    #[snafu(transparent)]
     Operator {
         source: geoengine_operators::error::Error,
     },
+    #[snafu(display("Uuid error: {source}"))]
     Uuid {
         source: uuid::Error,
     },
+    #[snafu(display("Serde json error: {source}"))]
     SerdeJson {
         source: serde_json::Error,
     },
@@ -47,11 +52,10 @@ pub enum Error {
     Reqwest {
         source: reqwest::Error,
     },
-
+    #[snafu(display("Unable to parse url: {source}"))]
     Url {
         source: url::ParseError,
     },
-
     Proj {
         source: proj::ProjError,
     },
@@ -153,10 +157,12 @@ pub enum Error {
         source: config::ConfigError,
     },
 
+    #[snafu(display("Unable to parse IP address: {source}"))]
     AddrParse {
         source: std::net::AddrParseError,
     },
 
+    #[snafu(display("Missing working directory"))]
     MissingWorkingDirectory {
         source: std::io::Error,
     },
@@ -212,6 +218,7 @@ pub enum Error {
     UnknownUploadId,
     UnknownModelId,
     PathIsNotAFile,
+    #[snafu(display("Failed loading multipart body: {reason}"))]
     Multipart {
         // TODO: this error is not send, so this does not work
         // source: actix_multipart::MultipartError,
@@ -230,6 +237,7 @@ pub enum Error {
         dataset_name: String,
     },
     InvalidDatasetName,
+    #[snafu(display("Layer name '{layer_name}' is invalid"))]
     DatasetInvalidLayerName {
         layer_name: String,
     },
@@ -242,17 +250,22 @@ pub enum Error {
     NoMainFileCandidateFound,
     NoFeatureDataTypeForColumnDataType,
 
+    #[snafu(display("Spatial reference '{srs_string}' is unknown"))]
     UnknownSpatialReference {
         srs_string: String,
     },
 
     NotYetImplemented,
 
+    #[snafu(display("Band '{band_name}' does not exist"))]
     StacNoSuchBand {
         band_name: String,
     },
     StacInvalidGeoTransform,
     StacInvalidBbox,
+    #[snafu(display(
+        "Failed to parse stac response from '{url}'. Error: {error}\nOriginal Response: {response}"
+    ))]
     StacJsonResponse {
         url: String,
         response: String,
@@ -274,22 +287,22 @@ pub enum Error {
     #[snafu(display("The response from the EDR server does not match the expected format."))]
     EdrInvalidMetadataFormat,
     ExpectedExternalDataId,
-    InvalidExternalDataId {
-        provider: DataProviderId,
-    },
     InvalidDataId,
 
     Nature40UnknownRasterDbname,
     Nature40WcsDatasetMissingLabelInMetadata,
 
+    #[snafu(display("FlexiLogger initialization error"))]
     Logger {
         source: flexi_logger::FlexiLoggerError,
     },
 
+    #[snafu(display("Spatial reference system '{srs_string}' is unknown"))]
     UnknownSrsString {
         srs_string: String,
     },
 
+    #[snafu(display("Axis ordering is unknown for SRS '{srs_string}'"))]
     AxisOrderingNotKnownForSrs {
         srs_string: String,
     },
@@ -358,10 +371,12 @@ pub enum Error {
         source: crate::layers::LayerDbError,
     },
 
+    #[snafu(display("Operator '{operator}' is unknown"))]
     UnknownOperator {
         operator: String,
     },
 
+    #[snafu(display("The id is expected to be an uuid, but it is '{found}'."))]
     IdStringMustBeUuid {
         found: String,
     },
@@ -371,9 +386,11 @@ pub enum Error {
         source: crate::tasks::TaskError,
     },
 
+    #[snafu(display("'{id}' is not a known layer collection id"))]
     UnknownLayerCollectionId {
         id: LayerCollectionId,
     },
+    #[snafu(display("'{id}' is not a known layer id"))]
     UnknownLayerId {
         id: LayerId,
     },
@@ -385,11 +402,13 @@ pub enum Error {
         source: crate::api::handlers::workflows::WorkflowApiError,
     },
 
+    #[snafu(display("The sub path '{}' escapes the base path '{}'", sub_path.display(), base.display()))]
     SubPathMustNotEscapeBasePath {
         base: PathBuf,
         sub_path: PathBuf,
     },
 
+    #[snafu(display("The sub path '{}' contains references to the parent '{}'", sub_path.display(), base.display()))]
     PathMustNotContainParentReferences {
         base: PathBuf,
         sub_path: PathBuf,
@@ -494,7 +513,7 @@ pub enum Error {
 
 impl actix_web::error::ResponseError for Error {
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from_service_error(self))
     }
 
     fn status_code(&self) -> StatusCode {
@@ -506,15 +525,9 @@ impl actix_web::error::ResponseError for Error {
     }
 }
 
-impl From<geoengine_datatypes::error::Error> for Error {
-    fn from(e: geoengine_datatypes::error::Error) -> Self {
-        Self::DataType { source: e }
-    }
-}
-
-impl From<geoengine_operators::error::Error> for Error {
-    fn from(e: geoengine_operators::error::Error) -> Self {
-        Self::Operator { source: e }
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", ge_report(self))
     }
 }
 

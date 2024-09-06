@@ -199,7 +199,7 @@ async fn get_layer_providers<C: ApplicationContext>(
         let provider = match external.load_layer_provider(provider_listing.id).await {
             Ok(provider) => provider,
             Err(err) => {
-                log::error!("Error loading provider: {err}");
+                log::error!("Error loading provider: {err:?}");
                 continue;
             }
         };
@@ -212,7 +212,7 @@ async fn get_layer_providers<C: ApplicationContext>(
             Ok(root) => root,
             Err(err) => {
                 log::error!(
-                    "Error loading provider {}, could not get root collection id: {err}",
+                    "Error loading provider {}, could not get root collection id: {err:?}",
                     provider_listing.id,
                 );
                 continue;

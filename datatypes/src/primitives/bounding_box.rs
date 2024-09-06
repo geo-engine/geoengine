@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::{convert::TryFrom, fmt};
 
 use super::{AxisAlignedRectangle, Coordinate2D, SpatialBounded};
 use crate::error;
@@ -17,6 +17,16 @@ use snafu::ensure;
 pub struct BoundingBox2D {
     lower_left_coordinate: Coordinate2D,
     upper_right_coordinate: Coordinate2D,
+}
+
+impl fmt::Display for BoundingBox2D {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "(ll: {}, ur: {})",
+            self.lower_left_coordinate, self.upper_right_coordinate
+        )
+    }
 }
 
 impl BoundingBox2D {

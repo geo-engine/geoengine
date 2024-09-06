@@ -1,6 +1,7 @@
 use crate::api::model::datatypes::{
     RasterColorizer, SpatialReference, SpatialReferenceOption, TimeInterval,
 };
+use crate::api::model::responses::ErrorResponse;
 use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::api::ogc::wms::request::{
     GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat,
@@ -21,8 +22,7 @@ use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
 use reqwest::Url;
-use serde_json::json;
-use snafu::{ensure, ResultExt};
+use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -143,11 +143,9 @@ where
 
     let operator = workflow
         .operator
-        .get_raster()
-        .context(error::Operator)?
+        .get_raster()?
         .initialize(workflow_operator_path_root, &exe_ctx)
-        .await
-        .context(error::Operator)?;
+        .await?;
 
     let result_descriptor = operator.result_descriptor();
 
@@ -286,7 +284,7 @@ async fn wms_map_handler<C: ApplicationContext>(
             .load_workflow(&WorkflowId::from_str(&request.layers)?)
             .await?;
 
-        let operator = workflow.operator.get_raster().context(error::Operator)?;
+        let operator = workflow.operator.get_raster()?;
 
         let execution_context = ctx.execution_context()?;
 
@@ -295,8 +293,7 @@ async fn wms_map_handler<C: ApplicationContext>(
         let initialized = operator
             .clone()
             .initialize(workflow_operator_path_root, &execution_context)
-            .await
-            .context(error::Operator)?;
+            .await?;
 
         let wrapped =
             geoengine_operators::util::WrapWithProjectionAndResample::new_create_result_descriptor(
@@ -308,7 +305,7 @@ async fn wms_map_handler<C: ApplicationContext>(
 
         let initialized = wrapped.initialized_operator;
 
-        let processor = initialized.query_processor().context(error::Operator)?;
+        let processor = initialized.query_processor()?;
 
         let query_tiling_pixel_grid = wrapped
             .result_descriptor
@@ -370,9 +367,9 @@ fn handle_wms_error(
 
             HttpResponse::Ok().content_type(mime::TEXT_XML).body(body)
         }
-        GetMapExceptionFormat::Json => HttpResponse::Ok().json(
-            json!({"error": Into::<&str>::into(error).to_string(), "message": error.to_string() }),
-        ),
+        GetMapExceptionFormat::Json => {
+            HttpResponse::Ok().json(ErrorResponse::from_service_error(error))
+        }
     }
 }
 
@@ -947,7 +944,7 @@ mod tests {
 <?xml version="1.0" encoding="UTF-8"?>
     <ServiceExceptionReport version="1.3.0" xmlns="http://www.opengis.net/ogc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/ogc https://cdc.dwd.de/geoserver/schemas/wms/1.3.0/exceptions_1_3_0.xsd">
     <ServiceException>
-        Operator: DataTypeError: No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }
+        No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }
     </ServiceException>
 </ServiceExceptionReport>"#
         );
@@ -1009,7 +1006,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(res, 200, "Operator", "Operator: DataTypeError: No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
+        ErrorResponse::assert(res, 200, "NoCoordinateProjector", "No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
     }
 
     #[ge_context::test]

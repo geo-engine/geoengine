@@ -637,7 +637,7 @@ mod tests {
 
         assert_eq!(
             result.to_string(),
-            "PieChart: The number of slices is too high. Maximum is 32."
+            "PieChart error: The number of slices is too high. Maximum is 32."
         );
 
         let pie_chart = PieChart {

@@ -11,6 +11,7 @@ use crate::{
         WorkflowOperatorPath,
     },
     error::InvalidNumberOfExpressionInputBands,
+    processing::expression::canonicalize_name,
     util::Result,
 };
 use async_trait::async_trait;
@@ -20,6 +21,7 @@ use geoengine_expression::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use std::borrow::Cow;
 
 /// Parameters for the `Expression` operator.
 /// * The `expression` must only contain simple arithmetic
@@ -90,7 +92,11 @@ impl RasterOperator for Expression {
                 self.params
                     .output_band
                     .as_ref()
-                    .map_or("expression", |b| &b.name),
+                    .map_or(Cow::Borrowed("expression"), |b| {
+                        // allow only idents
+                        Cow::Owned(canonicalize_name(&b.name))
+                    })
+                    .as_ref(),
                 &self.params.expression,
             )
             .map_err(RasterExpressionError::from)?;
@@ -662,6 +668,84 @@ mod tests {
                 .unwrap()
                 .into()
         );
+    }
+
+    #[tokio::test]
+    async fn it_classifies() {
+        let tile_size_in_pixels = [3, 2].into();
+        let tiling_specification = TilingSpecification {
+            tile_size_in_pixels,
+        };
+
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
+        let operator = Expression {
+            params: ExpressionParams {
+                expression: "if A <= 1 { 0 } else if A <= 3 { 1 } else { 2 }".to_string(),
+                output_type: RasterDataType::U8,
+                output_band: Some(RasterBandDescriptor::new(
+                    "a class".into(),
+                    Measurement::classification(
+                        "classes".into(),
+                        [
+                            (0, "Class A".into()),
+                            (1, "Class B".into()),
+                            (2, "Class C".into()),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    ),
+                )),
+                map_no_data: false,
+            },
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::Default,
+                    },
+                    sources: MultipleRasterSources {
+                        rasters: vec![make_raster(None)],
+                    },
+                }
+                .boxed(),
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+        .await
+        .unwrap();
+
+        let processor = operator.query_processor().unwrap().get_u8().unwrap();
+
+        let ctx = MockQueryContext::new(1.into());
+        let result_stream = processor
+            .query(
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new_min_max(-3, -1, 0, 1).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
+                &ctx,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<Result<RasterTile2D<u8>>> = result_stream.collect().await;
+
+        assert_eq!(result.len(), 1);
+
+        let first_result = result[0].as_ref().unwrap();
+
+        assert!(!first_result.is_empty());
+
+        let grid = match &first_result.grid_array {
+            GridOrEmpty::Grid(g) => g,
+            GridOrEmpty::Empty(_) => panic!(),
+        };
+
+        let res: Vec<Option<u8>> = grid.masked_element_deref_iterator().collect();
+
+        assert_eq!(res, [Some(0), Some(1), Some(1), Some(2), Some(2), Some(2)]);
     }
 
     #[tokio::test]

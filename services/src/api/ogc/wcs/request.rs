@@ -9,7 +9,6 @@ use crate::util::from_str_option;
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution};
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use utoipa::{IntoParams, ToSchema};
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
@@ -130,9 +129,7 @@ impl GetCoverage {
 
         match (self.resx, self.resy) {
             (Some(xres), Some(yres)) => match tuple_from_ogc_params(xres, yres, self.gridbasecrs) {
-                Ok((x, y)) => {
-                    Some(SpatialResolution::new(x.abs(), y.abs()).context(error::DataType))
-                }
+                Ok((x, y)) => Some(SpatialResolution::new(x.abs(), y.abs()).map_err(Into::into)),
                 Err(e) => Some(Err(e)),
             },
             (Some(_), None) | (None, Some(_)) => Some(Err(error::Error::WcsInvalidGridOffsets)),
@@ -176,7 +173,7 @@ pub struct GridOffsets {
 impl GridOffsets {
     fn spatial_resolution(&self, spatial_reference: SpatialReference) -> Result<SpatialResolution> {
         let (x, y) = tuple_from_ogc_params(self.x_step, self.y_step, spatial_reference)?;
-        SpatialResolution::new(x.abs(), y.abs()).context(error::DataType)
+        SpatialResolution::new(x.abs(), y.abs()).map_err(Into::into)
     }
 }
 

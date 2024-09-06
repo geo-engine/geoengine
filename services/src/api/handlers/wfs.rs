@@ -33,7 +33,7 @@ use geoengine_operators::util::input::RasterOrVectorOperator;
 use reqwest::Url;
 use serde::Deserialize;
 use serde_json::json;
-use snafu::{ensure, ResultExt};
+use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 use utoipa::ToSchema;
@@ -187,11 +187,9 @@ where
 
     let operator = workflow
         .operator
-        .get_vector()
-        .context(error::Operator)?
+        .get_vector()?
         .initialize(workflow_operator_path_root, &exe_ctx)
-        .await
-        .context(error::Operator)?;
+        .await?;
 
     let result_descriptor = operator.result_descriptor();
 
@@ -458,7 +456,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
 
     let workflow: Workflow = ctx.db().load_workflow(&type_names).await?;
 
-    let operator = workflow.operator.get_vector().context(error::Operator)?;
+    let operator = workflow.operator.get_vector()?;
 
     let execution_context = ctx.execution_context()?;
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
@@ -466,8 +464,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
     let initialized = operator
         .clone()
         .initialize(workflow_operator_path_root, &execution_context)
-        .await
-        .context(error::Operator)?;
+        .await?;
 
     // handle request and workflow crs matching
     let workflow_spatial_ref: Option<SpatialReference> =
@@ -507,13 +504,12 @@ async fn wfs_feature_handler<C: ApplicationContext>(
             CanonicOperatorName::from(&reprojected_workflow),
             reprojection_params,
             initialized,
-        )
-        .context(error::Operator)?;
+        )?;
 
         Box::new(ivp)
     };
 
-    let processor = initialized.query_processor().context(error::Operator)?;
+    let processor = initialized.query_processor()?;
 
     let query_rect = VectorQueryRectangle::with_bounds(
         request.bbox.bounds_naive()?,

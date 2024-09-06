@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
@@ -6,10 +6,8 @@ use crate::engine::{
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
-use crate::pro::machine_learning::error::{
-    InputBandsMismatch, InputTypeMismatch, InvalidInputDimensions, InvalidOutputDimensions,
-    MultipleInputsNotSupported, Ort,
-};
+use crate::pro::machine_learning::error::{InputBandsMismatch, InputTypeMismatch, Ort};
+use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use ndarray::Array2;
 use ort::{IntoTensorElementType, PrimitiveTensorElementType};
 use snafu::{ensure, ResultExt};
@@ -20,18 +18,14 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
-    Grid, GridIdx2D, GridIndexAccess, GridSize, Pixel, RasterDataType, RasterTile2D,
+    Grid, GridIdx2D, GridIndexAccess, GridSize, Pixel, RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
-
-use super::MachineLearningError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OnnxParams {
-    // TODO: replace with proper model name type (namespace, name, version, etc.)
-    // for now: just the path to the model on disk
-    pub model: String,
+    pub model: MlModelName,
 }
 
 /// This `QueryProcessor` applies a ml model in Onnx format on all bands of its input raster series.
@@ -40,97 +34,6 @@ pub type Onnx = Operator<OnnxParams, SingleRasterSource>;
 
 impl OperatorName for Onnx {
     const TYPE_NAME: &'static str = "Onnx";
-}
-
-// For now we assume all models are pixel-wise, i.e., they take a single pixel with multiple bands as input and produce a single output value.
-// To support different inputs, we would need a more sophisticated logic to produce the inputs for the model.
-struct MlModelMetadata {
-    input_type: RasterDataType,
-    num_input_bands: usize, // number of features per sample (bands per pixel)
-    output_type: RasterDataType, // TODO: support multiple outputs, e.g. one band for the probability of prediction
-                                 // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
-}
-
-// TODO: extract metadata during model import and load it from database here instead of accessing the model file here
-fn load_model_metadata(path: &Path) -> Result<MlModelMetadata, MachineLearningError> {
-    // TODO: proper error if model file cannot be found
-    let session = ort::Session::builder()
-        .context(Ort)?
-        .commit_from_file(path)
-        .context(Ort)?;
-
-    // Onnx model may have multiple inputs, but we only support one input (with multiple features/bands)
-    ensure!(
-        session.inputs.len() == 1,
-        MultipleInputsNotSupported {
-            num_inputs: session.inputs.len()
-        }
-    );
-
-    // Onnx model input type must be a Tensor in order to accept a 2d ndarray as input
-    let ort::ValueType::Tensor {
-        ty: input_tensor_element_type,
-        dimensions: input_dimensions,
-    } = &session.inputs[0].input_type
-    else {
-        return Err(MachineLearningError::InvalidInputType {
-            input_type: session.inputs[0].input_type.clone(),
-        });
-    };
-
-    // Input dimensions must be [-1, b] to accept a table of (arbitrarily many) single pixel features (rows) with `b` bands (columns)
-    ensure!(
-        input_dimensions.len() == 2 && input_dimensions[0] == -1 && input_dimensions[1] > 0,
-        InvalidInputDimensions {
-            dimensions: input_dimensions.clone()
-        }
-    );
-
-    // Onnx model must output one prediction per pixel as
-    // (1) a Tensor with a single dimension of unknown size (dim = [-1]), or
-    // (2) a Tensor with two dimensions, the first of unknown size and the second of size 1 (dim = [-1, 1])
-    let output_tensor_element_type =
-        if let ort::ValueType::Tensor { ty, dimensions } = &session.outputs[0].output_type {
-            ensure!(
-                dimensions == &[-1] || dimensions == &[-1, 1],
-                InvalidOutputDimensions {
-                    dimensions: dimensions.clone()
-                }
-            );
-
-            ty
-        } else {
-            return Err(MachineLearningError::InvalidOutputType {
-                output_type: session.outputs[0].output_type.clone(),
-            });
-        };
-
-    Ok(MlModelMetadata {
-        input_type: try_raster_datatype_from_tensor_element_type(*input_tensor_element_type)?,
-        num_input_bands: input_dimensions[1] as usize,
-        output_type: try_raster_datatype_from_tensor_element_type(*output_tensor_element_type)?,
-    })
-}
-
-// can't implement `TryFrom` here because `RasterDataType` is in operators crate
-fn try_raster_datatype_from_tensor_element_type(
-    value: ort::TensorElementType,
-) -> Result<RasterDataType, MachineLearningError> {
-    match value {
-        ort::TensorElementType::Float32 => Ok(RasterDataType::F32),
-        ort::TensorElementType::Uint8 | ort::TensorElementType::Bool => Ok(RasterDataType::U8),
-        ort::TensorElementType::Int8 => Ok(RasterDataType::I8),
-        ort::TensorElementType::Uint16 => Ok(RasterDataType::U16),
-        ort::TensorElementType::Int16 => Ok(RasterDataType::I16),
-        ort::TensorElementType::Int32 => Ok(RasterDataType::I32),
-        ort::TensorElementType::Int64 => Ok(RasterDataType::I64),
-        ort::TensorElementType::Float64 => Ok(RasterDataType::F64),
-        ort::TensorElementType::Uint32 => Ok(RasterDataType::U32),
-        ort::TensorElementType::Uint64 => Ok(RasterDataType::U64),
-        _ => Err(MachineLearningError::UnsupportedTensorElementType {
-            element_type: value,
-        }),
-    }
 }
 
 #[typetag::serde]
@@ -147,14 +50,14 @@ impl RasterOperator for Onnx {
 
         let in_descriptor = source.result_descriptor();
 
-        let model_metadata = load_model_metadata(self.params.model.as_ref())?;
+        let model_metadata = context.ml_model_metadata(&self.params.model).await?;
 
         // check that number of input bands fits number of model features
         ensure!(
-            model_metadata.num_input_bands == in_descriptor.bands.count() as usize,
+            model_metadata.num_input_bands == in_descriptor.bands.count(),
             InputBandsMismatch {
                 model_input_bands: model_metadata.num_input_bands,
-                source_bands: in_descriptor.bands.count() as usize,
+                source_bands: in_descriptor.bands.count(),
             }
         );
 
@@ -183,7 +86,6 @@ impl RasterOperator for Onnx {
             name,
             result_descriptor: out_descriptor,
             source,
-            model_path: self.params.model.into(),
             model_metadata,
         }))
     }
@@ -195,7 +97,6 @@ pub struct InitializedOnnx {
     name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
-    model_path: PathBuf,
     model_metadata: MlModelMetadata,
 }
 
@@ -213,7 +114,7 @@ impl InitializedRasterOperator for InitializedOnnx {
                     OnnxProcessor::new(
                         input,
                         self.result_descriptor.clone(),
-                        self.model_path.clone(),
+                        self.model_metadata.file_path.clone(),
                     )
                     .boxed()
                 )
@@ -404,9 +305,9 @@ impl_no_data_value_zero!(i8, u8, i16, u16, i32, u32, i64, u64);
 mod tests {
     use approx::assert_abs_diff_eq;
     use geoengine_datatypes::{
-        primitives::{CacheHint, TimeInterval},
+        primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
-            GridBoundingBox2D, GridOrEmpty, GridShape, RenameBands, TilesEqualIgnoringCacheHint,
+            GridOrEmpty, GridShape, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
         test_data,
@@ -420,6 +321,7 @@ mod tests {
             SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
+        pro::machine_learning::metadata_from_file::load_model_metadata,
         processing::{RasterStacker, RasterStackerParams},
     };
 
@@ -626,11 +528,14 @@ mod tests {
         .boxed();
 
         // load a very simple model that checks whether the first band is greater than the second band
+        let model_name = MlModelName {
+            namespace: None,
+            name: "test_classification".into(),
+        };
+
         let onnx = Onnx {
             params: OnnxParams {
-                model: test_data!("pro/ml/onnx/test_classification.onnx")
-                    .to_string_lossy()
-                    .to_string(),
+                model: model_name.clone(),
             },
             sources: SingleRasterSource { raster: stacker },
         }
@@ -640,6 +545,10 @@ mod tests {
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
             shape_array: [2, 2],
         };
+        exe_ctx.ml_models.insert(
+            model_name,
+            load_model_metadata(test_data!("pro/ml/onnx/test_classification.onnx")).unwrap(),
+        );
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
@@ -832,11 +741,14 @@ mod tests {
         .boxed();
 
         // load a very simple model that performs regression to predict the sum of the three bands
+        let model_name = MlModelName {
+            namespace: None,
+            name: "test_regression".into(),
+        };
+
         let onnx = Onnx {
             params: OnnxParams {
-                model: test_data!("pro/ml/onnx/test_regression.onnx")
-                    .to_string_lossy()
-                    .to_string(),
+                model: model_name.clone(),
             },
             sources: SingleRasterSource { raster: stacker },
         }
@@ -846,6 +758,10 @@ mod tests {
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
             shape_array: [2, 2],
         };
+        exe_ctx.ml_models.insert(
+            model_name,
+            load_model_metadata(test_data!("pro/ml/onnx/test_regression.onnx")).unwrap(),
+        );
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),

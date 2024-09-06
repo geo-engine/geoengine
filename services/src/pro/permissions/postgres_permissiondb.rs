@@ -31,6 +31,7 @@ impl ResourceTypeName for ResourceId {
             ResourceId::LayerCollection(_) => "layer_collection_id",
             ResourceId::Project(_) => "project_id",
             ResourceId::DatasetId(_) => "dataset_id",
+            ResourceId::MlModel(_) => "ml_model_id",
         }
     }
 
@@ -48,6 +49,7 @@ impl ResourceTypeName for ResourceId {
             }
             ResourceId::Project(id) => Ok(id.0),
             ResourceId::DatasetId(id) => Ok(id.0),
+            ResourceId::MlModel(id) => Ok(id.0),
         }
     }
 }

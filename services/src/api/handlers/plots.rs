@@ -110,7 +110,7 @@ async fn get_plot_handler<C: ApplicationContext>(
     let ctx = app_ctx.session_context(session);
     let workflow = ctx.db().load_workflow(&WorkflowId(id.into_inner())).await?;
 
-    let operator = workflow.operator.get_plot().context(error::Operator)?;
+    let operator = workflow.operator.get_plot()?;
 
     let execution_context = ctx.execution_context()?;
 
@@ -118,8 +118,7 @@ async fn get_plot_handler<C: ApplicationContext>(
 
     let initialized = operator
         .initialize(workflow_operator_path_root, &execution_context)
-        .await
-        .context(error::Operator)?;
+        .await?;
 
     // handle request and workflow crs matching
     let workflow_spatial_ref: Option<SpatialReference> =
@@ -157,7 +156,7 @@ async fn get_plot_handler<C: ApplicationContext>(
         });
     };
 
-    let processor = initialized.query_processor().context(error::Operator)?;
+    let processor = initialized.query_processor()?;
 
     let mut query_ctx = ctx.query_context()?;
 
@@ -169,13 +168,12 @@ async fn get_plot_handler<C: ApplicationContext>(
     let data = match processor {
         TypedPlotQueryProcessor::JsonPlain(processor) => {
             let json = processor.plot_query(query_rect.into(), &query_ctx);
-            let result = abortable_query_execution(json, conn_closed, query_abort_trigger).await;
-            result.context(error::Operator)?
+            abortable_query_execution(json, conn_closed, query_abort_trigger).await?
         }
         TypedPlotQueryProcessor::JsonVega(processor) => {
             let chart = processor.plot_query(query_rect.into(), &query_ctx);
             let chart = abortable_query_execution(chart, conn_closed, query_abort_trigger).await;
-            let chart = chart.context(error::Operator)?;
+            let chart = chart?;
 
             serde_json::to_value(chart).context(error::SerdeJson)?
         }
@@ -183,7 +181,7 @@ async fn get_plot_handler<C: ApplicationContext>(
             let png_bytes = processor.plot_query(query_rect.into(), &query_ctx);
             let png_bytes =
                 abortable_query_execution(png_bytes, conn_closed, query_abort_trigger).await;
-            let png_bytes = png_bytes.context(error::Operator)?;
+            let png_bytes = png_bytes?;
 
             let data_uri = format!(
                 "data:image/png;base64,{}",

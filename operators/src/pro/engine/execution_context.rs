@@ -8,6 +8,7 @@ use crate::pro::meta::wrapper::InitializedOperatorWrapper;
 use crate::util::Result;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, NamedData};
+use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use rayon::ThreadPool;
@@ -79,6 +80,10 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
 
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId> {
         self.inner.resolve_named_data(data).await
+    }
+
+    async fn ml_model_metadata(&self, name: &MlModelName) -> Result<MlModelMetadata> {
+        self.inner.ml_model_metadata(name).await
     }
 
     fn extensions(&self) -> &ExecutionContextExtensions {
