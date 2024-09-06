@@ -132,15 +132,26 @@ fn open_telemetry_layer<S>(
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
-    use opentelemetry_jaeger::config::agent::AgentPipeline;
+    use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
+    use opentelemetry_otlp::WithExportConfig;
     use tracing_opentelemetry::OpenTelemetryLayer;
-    let tracer = AgentPipeline::default()
-        .with_endpoint(open_telemetry_config.endpoint.to_string())
-        .with_service_name("Geo Engine")
+    let exporter = opentelemetry_otlp::new_exporter()
+        .tonic()
+        .with_endpoint(open_telemetry_config.endpoint.to_string());
+    let tracer = opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(exporter)
+        .with_trace_config(opentelemetry_sdk::trace::Config::default().with_resource(
+            opentelemetry_sdk::Resource::new(vec![opentelemetry::KeyValue::new(
+                "service.name",
+                "Geo Engine",
+            )]),
+        ))
         .install_simple()?;
     let opentelemetry: OpenTelemetryLayer<S, _> =
         tracing_opentelemetry::layer().with_tracer(tracer);
     Ok(opentelemetry)
+    // Ok(OpenTelemetryTracingBridge::new(tracer))
 }
 
 fn console_layer_with_filter<S, F: Filter<S> + 'static>(filter: F) -> impl Layer<S>

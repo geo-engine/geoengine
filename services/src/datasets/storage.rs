@@ -86,10 +86,10 @@ pub struct AutoCreateDataset {
     #[validate(length(min = 1))]
     pub dataset_name: String,
     pub dataset_description: String,
-    #[validate(custom = "validate_main_file")]
+    #[validate(custom(function = "validate_main_file"))]
     pub main_file: String,
     pub layer_name: Option<String>,
-    #[validate(custom = "validate_tags")]
+    #[validate(custom(function = "validate_tags"))]
     pub tags: Option<Vec<String>>,
 }
 

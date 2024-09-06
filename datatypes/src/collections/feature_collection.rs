@@ -1768,6 +1768,8 @@ mod tests {
 
     #[test]
     fn it_does_not_json_serialize() {
+        use arrow::record_batch::RecordBatch;
+
         let collection = FeatureCollection::<MultiPoint>::from_data(
             vec![(0.0, 0.1).into()],
             vec![TimeInterval::new(0, 1).unwrap(); 1],
@@ -1783,9 +1785,12 @@ mod tests {
         .unwrap();
 
         let struct_array = collection.table;
-        let array: Arc<dyn arrow::array::Array> = Arc::new(struct_array);
 
         // TODO: if this stops failing, change the strange custom byte serialization to use JSON
-        arrow::json::writer::array_to_json_array(&array).unwrap_err();
+        let json = Vec::new();
+        let mut json_writer = arrow::json::ArrayWriter::new(json);
+        json_writer
+            .write(&RecordBatch::from(struct_array))
+            .unwrap_err();
     }
 }

@@ -142,7 +142,7 @@ pub struct UpdateDataset {
     #[validate(length(min = 1))]
     pub display_name: String,
     pub description: String,
-    #[validate(custom = "validate_tags")]
+    #[validate(custom(function = "validate_tags"))]
     pub tags: Vec<String>,
 }
 
