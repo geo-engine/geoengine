@@ -144,12 +144,14 @@ CREATE TABLE permissions (
         id
     ) ON DELETE CASCADE,
     project_id uuid REFERENCES projects (id) ON DELETE CASCADE,
+    ml_model_id uuid REFERENCES ml_models (id) ON DELETE CASCADE,
     CHECK (
         (
             (dataset_id IS NOT NULL)::integer
             + (layer_id IS NOT NULL)::integer
             + (layer_collection_id IS NOT NULL)::integer
             + (project_id IS NOT NULL)::integer
+            + (ml_model_id IS NOT NULL)::integer
         ) = 1
     )
 );
@@ -172,6 +174,12 @@ CREATE UNIQUE INDEX ON permissions (
     role_id,
     permission,
     project_id
+);
+
+CREATE UNIQUE INDEX ON permissions (
+    role_id,
+    permission,
+    ml_model_id
 );
 
 CREATE VIEW user_permitted_datasets
@@ -227,4 +235,15 @@ CREATE TABLE oidc_session_tokens (
     access_token_valid_until timestamp with time zone NOT NULL,
     refresh_token bytea,
     refresh_token_encryption_nonce bytea
+);
+
+CREATE VIEW user_permitted_ml_models
+AS
+SELECT
+    r.user_id,
+    p.ml_model_id,
+    p.permission
+FROM user_roles AS r
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id AND p.ml_model_id IS NOT NULL
 );

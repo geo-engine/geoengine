@@ -10,6 +10,8 @@ use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
+use crate::machine_learning::error::MachineLearningError;
+use crate::machine_learning::name::MlModelName;
 use crate::pro::api::cli::add_datasets_from_directory;
 use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
@@ -367,7 +369,7 @@ where
     }
 
     /// Check whether the namepsace of the given dataset is allowed for insertion
-    pub(crate) fn check_namespace(&self, id: &DatasetName) -> Result<()> {
+    pub(crate) fn check_dataset_namespace(&self, id: &DatasetName) -> Result<()> {
         let is_ok = match &id.namespace {
             Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
             None => self.session.is_admin(),
@@ -377,6 +379,23 @@ where
             Ok(())
         } else {
             Err(Error::InvalidDatasetIdNamespace)
+        }
+    }
+
+    /// Check whether the namepsace of the given model is allowed for insertion
+    pub(crate) fn check_ml_model_namespace(
+        &self,
+        name: &MlModelName,
+    ) -> Result<(), MachineLearningError> {
+        let is_ok = match &name.namespace {
+            Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
+            None => self.session.is_admin(),
+        };
+
+        if is_ok {
+            Ok(())
+        } else {
+            Err(MachineLearningError::InvalidModelNamespace { name: name.clone() })
         }
     }
 }
