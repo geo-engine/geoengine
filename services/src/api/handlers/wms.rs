@@ -462,6 +462,7 @@ mod tests {
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
+    use std::io::Read;
     use std::marker::PhantomData;
     use tokio_postgres::NoTls;
     use xml::ParserConfig;
@@ -599,7 +600,7 @@ mod tests {
         let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle::new_with_grid_bounds(
-                GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(),
+                GridBoundingBox2D::new_min_max(-900, 899, -180, 179).unwrap(),
                 geoengine_datatypes::primitives::TimeInterval::new(
                     1_388_534_400_000,
                     1_388_534_400_000 + 1000,
@@ -617,7 +618,7 @@ mod tests {
         .await
         .unwrap();
 
-        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small.png");
+        geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small_22.png");
 
         assert_eq!(
             include_bytes!("../../../../test_data/wms/raster_small.png") as &[u8],
@@ -695,6 +696,8 @@ mod tests {
             "{:?}",
             actix_web::test::read_body(response).await
         );
+
+        dbg!(&response);
 
         let image_bytes = actix_web::test::read_body(response).await;
 
@@ -1042,6 +1045,8 @@ mod tests {
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx).await;
+
+        dbg!(&response);
 
         assert_eq!(
             response.status(),

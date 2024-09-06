@@ -932,7 +932,7 @@ mod tests {
         let json = serde_json::to_string(&workflow).unwrap();
         assert_eq!(
             json,
-            r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}]}}}"#
+            r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}],"spatialBounds":{"type":"none"}}}}"#
         );
     }
 

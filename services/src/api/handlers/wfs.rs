@@ -1187,6 +1187,7 @@ x;y
                         "type": "GdalSource",
                         "params": {
                             "data": "ndvi",
+                            "overviewLevel:": null
                         }
                     }],
                 }

@@ -83,6 +83,8 @@ impl RasterDatasetFromWorkflowParams {
             error::ResolutionMissmatch,
         );
 
+        dbg!(&result_descriptor);
+
         let grid_bounds = result_descriptor
             .spatial_grid_descriptor()
             .tiling_grid_definition(tiling_spec)
@@ -93,7 +95,7 @@ impl RasterDatasetFromWorkflowParams {
             geoengine_datatypes::primitives::RasterQueryRectangle::new_with_grid_bounds(
                 grid_bounds,
                 query.time_interval.into(),
-                BandSelection::first_n(result_descriptor.bands.len() as u32 + 1), // FIXME: what to do here?
+                BandSelection::first_n(result_descriptor.bands.len() as u32 ), 
             );
 
         Ok(Self {
@@ -172,6 +174,8 @@ impl<C: SessionContext, R: InitializedRasterOperator> RasterDatasetFromWorkflowT
             
         ).await)?
             .map_err(crate::error::Error::from)?;
+
+
 
         // create the dataset
         let dataset = create_dataset(
@@ -315,11 +319,20 @@ async fn create_dataset<C: SessionContext>(
         .intersection_with_tiling_grid(&query_tiling_spatial_grid)
         .ok_or(error::Error::EmptyDatasetCannotBeImported)?; // TODO: maybe allow empty datasets?
 
+    // TODO: this is not ow it is intended to work with the spatial grid descriptor. The source should propably not need that defined in its params since it can be derived from the dataset!
+    let dataset_source_descriptor_spatial_grid = match result_descriptor_bounds {
+        geoengine_operators::engine::SpatialGridDescriptor::Derived(d) => d,
+        geoengine_operators::engine::SpatialGridDescriptor::Source(s) => s
+    };
+
+    let dataset_spatial_grid = geoengine_operators::engine::SpatialGridDescriptor::new_source(dataset_source_descriptor_spatial_grid);
+    dbg!(dataset_spatial_grid);
+
     let result_descriptor = RasterResultDescriptor {
         data_type: origin_result_descriptor.data_type,
         spatial_reference: origin_result_descriptor.spatial_reference,
         time: Some(result_time_interval),
-        spatial_grid: result_descriptor_bounds,
+        spatial_grid: dataset_spatial_grid,
         bands: origin_result_descriptor.bands.clone(),
     };
     //TODO: Recognize MetaDataDefinition::GdalMetaDataRegular

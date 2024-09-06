@@ -34,6 +34,7 @@ use geoengine_datatypes::operations::image::RasterColorizer;
 use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::Coordinate2D;
+use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::raster::GeoTransform;
 use geoengine_datatypes::raster::GridBoundingBox2D;
 use geoengine_datatypes::raster::RasterDataType;
@@ -589,4 +590,29 @@ where
         Ok(res) => res,
         Err(err) => std::panic::resume_unwind(err),
     }
+}
+
+pub async fn assert_eq_two_raster_operator_res<S: SessionContext>(
+    ctx: &S,
+    operator_a: Box<dyn RasterOperator>,
+    operator_b: Box<dyn RasterOperator>,
+    query_rectangle: RasterQueryRectangle,
+    compare_cache_hint: bool,
+) {
+    let exe_ctx = ctx
+        .execution_context()
+        .expect("creation of execution context from session context must work.");
+    let query_ctx = ctx
+        .query_context()
+        .expect("creation of query context from session context must work.");
+
+    geoengine_operators::util::test::assert_eq_two_raster_operator_res(
+        &exe_ctx,
+        &query_ctx,
+        operator_a,
+        operator_b,
+        query_rectangle,
+        compare_cache_hint,
+    )
+    .await;
 }

@@ -714,8 +714,9 @@ mod tests {
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
     use crate::util::tests::{
-        add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
-        read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
+        add_ndvi_to_datasets, assert_eq_two_raster_operator_res, check_allowed_http_methods,
+        check_allowed_http_methods2, read_body_string, register_ndvi_workflow_helper,
+        send_test_request, TestDataUploads,
     };
     use crate::workflows::registry::WorkflowRegistry;
     use actix_web::dev::ServiceResponse;
@@ -744,10 +745,6 @@ mod tests {
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
-    use geoengine_operators::util::raster_stream_to_geotiff::{
-        single_timestep_raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata,
-        GdalGeoTiffOptions,
-    };
     use serde_json::json;
     use std::io::Read;
     use std::sync::Arc;
@@ -1043,8 +1040,8 @@ mod tests {
                         time: None,
                         spatial_grid: SpatialGridDescriptor::source_from_parts(
                             GeoTransform::test_default(),
-                            geoengine_datatypes::raster::GridBoundingBox2D::new([0, 0], [1, 1])
-                                .unwrap(), // FIXME: change to somethiing that is tested!
+                            geoengine_datatypes::raster::GridBoundingBox2D::new([0, 0], [199, 199])
+                                .unwrap(),
                         ),
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
@@ -1079,8 +1076,14 @@ mod tests {
                 "dataType": "U8",
                 "spatialReference": "EPSG:4326",
                 "time": null,
-                "bbox": null,
-                "resolution": null,
+                "spatialGrid": {
+                    "type": "source",
+                    "geoTransform": {"originCoordinate":{"x":0.0,"y":0.0}, "xPixelSize": 1., "yPixelSize": -1.},
+                    "gridBounds": {
+                        "min": [0, 0],
+                        "max": [199, 199]
+                    }
+                },
                 "bands": [{
                     "name": "band",
                     "measurement": {
@@ -1327,7 +1330,8 @@ mod tests {
                 "operator": {
                     "type": "GdalSource",
                     "params": {
-                        "data": dataset_name
+                        "data": dataset_name,
+                        "overviewLevel": null
                     }
                 }
             })
@@ -1343,19 +1347,13 @@ mod tests {
                     "start": 1_388_534_400_000_i64,
                     "end": 1_404_172_800_000_i64,
                 },
-                "bbox": {
-                    "upperLeftCoordinate": {
-                        "x": -180.0,
-                        "y": 90.0,
-                    },
-                    "lowerRightCoordinate": {
-                        "x": 180.0,
-                        "y": -90.0
+                "spatialGrid": {
+                    "type": "source",
+                    "geoTransform": {"originCoordinate":{"x":-180.0,"y":90.0}, "xPixelSize": 0.1, "yPixelSize": -0.1},
+                    "gridBounds": {
+                        "min": [0, 0],
+                        "max": [1799, 3599]
                     }
-                },
-                "resolution": {
-                    "x": 0.1,
-                    "y": 0.1
                 },
                 "bands": [{
                         "name": "ndvi",
@@ -1391,7 +1389,7 @@ mod tests {
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn dataset_from_workflow_task_success_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            tile_size_in_pixels: GridShape::new([600, 600]),
+            tile_size_in_pixels: GridShape::new([512, 512]),
         }
     }
 
@@ -1404,13 +1402,13 @@ mod tests {
 
         let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
+        let operator_a = GdalSource {
+            params: GdalSourceParameters::new(dataset),
+        }
+        .boxed();
+
         let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters::new(dataset),
-                }
-                .boxed(),
-            ),
+            operator: TypedOperator::Raster(operator_a.clone()),
         };
 
         let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
@@ -1427,12 +1425,12 @@ mod tests {
                 "query": {
                     "spatialBounds": {
                         "upperLeftCoordinate": {
-                            "x": -10.0,
-                            "y": 80.0
+                            "x": 0.0,
+                            "y": 52.0
                         },
                         "lowerRightCoordinate": {
-                            "x": 50.0,
-                            "y": 20.0
+                            "x": 52.0,
+                            "y": 0.0
                         }
                     },
                     "timeInterval": {
@@ -1447,6 +1445,7 @@ mod tests {
             }"#,
             );
         let res = send_test_request(req, app_ctx.clone()).await;
+        dbg!(&res);
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
@@ -1475,52 +1474,18 @@ mod tests {
         };
 
         // query the newly created dataset
-        let op = GdalSource {
+        let operator_b = GdalSource {
             params: GdalSourceParameters::new(response.dataset.into()),
         }
         .boxed();
 
-        let exe_ctx = ctx.execution_context().unwrap();
-
-        let o = op
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .unwrap();
-
-        let query_ctx = ctx.query_context().unwrap();
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new([-100, 800], [499, 199]).unwrap(),
+        let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(-512, -1, 0, 511).unwrap(),
             TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
             geoengine_datatypes::primitives::BandSelection::first(),
         );
 
-        let processor = o.query_processor().unwrap().get_u8().unwrap();
-
-        let result = single_timestep_raster_stream_to_geotiff_bytes(
-            processor,
-            query_rect,
-            query_ctx,
-            GdalGeoTiffDatasetMetadata {
-                no_data_value: Some(0.),
-                spatial_reference: SpatialReference::epsg_4326(),
-            },
-            GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
-                    .unwrap()
-                    .compression_num_threads,
-                as_cog: false,
-                force_big_tiff: false,
-            },
-            None,
-            Box::pin(futures::future::pending()),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(
-            include_bytes!("../../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                as &[u8],
-            result.as_slice()
-        );
+        assert_eq_two_raster_operator_res(&ctx, operator_a, operator_b, query_rectangle, false)
+            .await;
     }
 }

@@ -11,12 +11,13 @@ use crate::api::model::datatypes::{
     AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
     ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
     DataProviderId, DatasetId, DateTime, DateTimeParseFormat, ExternalDataId, FeatureDataType,
-    GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement, MultiLineString,
-    MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle,
-    RasterColorizer, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
-    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReferenceAuthority,
-    SpatialResolution, StringPair, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
-    VectorDataType, VectorQueryRectangle,
+    GdalConfigOption, GeoTransform, GridBoundingBox2D, GridIdx2D, LayerId, LinearGradient,
+    LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon, NamedData,
+    NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle, RasterColorizer, RasterDataType,
+    RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
+    SpatialGridDefinition, SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution,
+    StringPair, TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType,
+    VectorQueryRectangle,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -25,8 +26,8 @@ use crate::api::model::operators::{
     MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
     OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
     OgrSourceTimeFormat, PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors,
-    RasterResultDescriptor, TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor,
-    UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
+    RasterResultDescriptor, SpatialGridDescriptor, TimeReference, TypedGeometry, TypedOperator,
+    TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
 };
 use crate::api::model::responses::datasets::DatasetNameResponse;
 use crate::api::model::responses::{
@@ -398,6 +399,12 @@ use utoipa::{Modify, OpenApi};
             AddRole,
             RoleDescription,
             Role,
+
+            SpatialGridDescriptor,
+            SpatialGridDefinition,
+            GridBoundingBox2D,
+            GridIdx2D,
+            GeoTransform
 
         ),
     ),

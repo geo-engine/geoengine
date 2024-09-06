@@ -91,6 +91,13 @@ impl SpatialGridDescriptor {
         Self::new_source(SpatialGridDefinition::new(geo_transform, grid_bounds))
     }
 
+    pub fn as_derived(self) -> Self {
+        match self {
+            Self::Source(s) => Self::Derived(s),
+            Self::Derived(d) => Self::Derived(d),
+        }
+    }
+
     pub fn merge(&self, other: &SpatialGridDescriptor) -> Option<Self> {
         // TODO: merge directly to tiling origin?
         match (self, other) {
@@ -173,7 +180,7 @@ impl SpatialGridDescriptor {
         }
     }
 
-    pub fn merged_spatial_grid_definition(&self) -> Option<SpatialGridDefinition> {
+    pub fn derived_spatial_grid_definition(&self) -> Option<SpatialGridDefinition> {
         match self {
             SpatialGridDescriptor::Source(_) => None,
             SpatialGridDescriptor::Derived(m) => Some(*m),
@@ -201,6 +208,13 @@ impl SpatialGridDescriptor {
 
     pub fn with_replaced_origin(&self, new_origin: Coordinate2D) -> Self {
         self.map(|x| x.with_replaced_origin(new_origin))
+    }
+
+    pub fn with_moved_origin_to_nearest_grid_edge(
+        &self,
+        new_origin_referece: Coordinate2D,
+    ) -> Self {
+        self.map(|x| x.with_moved_origin_to_nearest_grid_edge(new_origin_referece))
     }
 
     pub fn reproject_clipped<P: CoordinateProjection>(
@@ -251,7 +265,7 @@ pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
     pub time: Option<TimeInterval>,
-    pub spatial_grid: SpatialGridDescriptor, // FIXME: we should rename this back to geo_transform when we have checked that all instances use the corect tiling geo transform. OR we must add a constructor that normalizes the geo transform
+    pub spatial_grid: SpatialGridDescriptor,
     pub bands: RasterBandDescriptors,
 }
 

@@ -322,6 +322,7 @@ pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
 where
     P: Pixel + GdalType,
 {
+    dbg!(&query_rect);
     // TODO: support multi band geotiffs
     ensure!(
         query_rect.attributes.count() == 1,

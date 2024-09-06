@@ -36,7 +36,6 @@ use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{
     Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, TimeInstance,
 };
-use geoengine_datatypes::raster::GridIntersection;
 use geoengine_datatypes::raster::TileInformation;
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid, GeoTransform, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
@@ -44,6 +43,7 @@ use geoengine_datatypes::raster::{
     RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
     TilingStrategy,
 };
+use geoengine_datatypes::raster::{GridIntersection, SpatialGridDefinition};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{
     primitives::TimeInterval,
@@ -182,6 +182,13 @@ impl GdalDatasetParameters {
         GridBoundingBox2D::new_unchecked(
             [0, 0],
             [self.height as isize - 1, self.width as isize - 1],
+        )
+    }
+
+    pub fn spatial_grid_definition(&self) -> SpatialGridDefinition {
+        SpatialGridDefinition::new(
+            GeoTransform::try_from(self.geo_transform).expect("there is no reason that this conversion does not work except for upsidedown datasets and we need to address that!"),
+            self.dataset_bounds(),
         )
     }
 }
@@ -387,14 +394,22 @@ impl GdalRasterLoader {
 
         match dataset_params {
             // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
-            Some(ds) if reader_mode.is_dataset_intersection_tile(&tile_spatial_grid) => {
+            Some(ds)
+                if reader_mode.is_gdal_dataset_aligned_and_intersects_tile(
+                    &ds.spatial_grid_definition(),
+                    &tile_spatial_grid,
+                ) =>
+            {
                 debug!(
                     "Loading tile {:?}, from {:?}, band: {}",
                     &tile_information, ds.file_path, ds.rasterband_channel
                 );
                 // TODO: maybe move this further up the call stack
                 let gdal_read_advise = reader_mode
-                    .tiling_to_dataset_read_advise(&tile_spatial_grid)
+                    .tiling_to_dataset_read_advise(
+                        &ds.spatial_grid_definition(),
+                        &tile_spatial_grid,
+                    )
                     .expect("intersection was checked before");
 
                 let grid = Self::load_tile_data_async(ds, gdal_read_advise).await?;
@@ -1512,7 +1527,10 @@ mod tests {
             flip_y: false,
         };
 
-        let GridAndProperties { grid, properties } = load_ndvi_apr_2014_cropped(gdal_read_advice)
+        let GridAndProperties {
+            grid,
+            properties: _properties,
+        } = load_ndvi_apr_2014_cropped(gdal_read_advice)
             .unwrap()
             .unwrap();
 

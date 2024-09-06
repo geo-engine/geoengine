@@ -72,8 +72,10 @@ impl Default for SpatialBoundsDerive {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MockPointSourceParams {
     pub points: Vec<Coordinate2D>,
+    #[serde(default = "SpatialBoundsDerive::default")]
     pub spatial_bounds: SpatialBoundsDerive,
 }
 
@@ -181,7 +183,7 @@ mod tests {
         }
         .boxed();
         let serialized = serde_json::to_string(&mps).unwrap();
-        let expect = "{\"type\":\"MockPointSource\",\"params\":{\"points\":[{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0}],\"spatial_bounds\":{\"type\":\"none\"}}}";
+        let expect = "{\"type\":\"MockPointSource\",\"params\":{\"points\":[{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0}],\"spatialBounds\":{\"type\":\"none\"}}}";
         assert_eq!(serialized, expect);
 
         let _operator: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();

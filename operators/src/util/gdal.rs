@@ -98,7 +98,15 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
                 GeoTransform::new((-180., 90.).into(), 0.1, -0.1),
                 GridBoundingBox2D::new([0, 0], [1799, 3599]).unwrap(),
             ),
-            bands: RasterBandDescriptors::new_single_band(),
+            bands: vec![RasterBandDescriptor {
+                name: "ndvi".to_string(),
+                measurement: Measurement::Continuous(ContinuousMeasurement {
+                    measurement: "vegetation".to_string(),
+                    unit: None,
+                }),
+            }]
+            .try_into()
+            .expect("it should only be used in tests"),
         },
         cache_ttl,
     }

@@ -114,9 +114,12 @@ impl WrapWithProjectionAndResample {
             *self.result_descriptor.spatial_grid_descriptor()
         };
 
-        let target_spatial_grid = if let Some(_tor) = target_origin_reference {
-            todo!()
-            // target_spatial_grid.move_origin_different_grid(tor)
+        let target_spatial_grid = if let Some(tor) = target_origin_reference {
+            // if the request is to move the origin of the query to a different point, we generate a new grid aligned to that point.
+            target_spatial_grid
+                .with_moved_origin_to_nearest_grid_edge(tor)
+                .as_derived()
+                .with_replaced_origin(tor)
         } else {
             target_spatial_grid
         };
@@ -126,7 +129,7 @@ impl WrapWithProjectionAndResample {
             .spatial_grid_descriptor()
             .is_compatible_grid(&target_spatial_grid)
         {
-            // TODO: resample if origin is not allgned to query? (maybe not?)
+            // TODO: resample if origin is not allgned to query? (maybe n
             self
         }
         // Query resolution is smaller then workdlow

@@ -1,15 +1,11 @@
-use std::ops::Add;
-
-use postgres_types::{to_sql_checked, FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-
-use crate::{error, util::Result};
-
 use super::{
     BoundedGrid, GridBounds, GridContains, GridIdx, GridIntersection, GridShape, GridShapeAccess,
     GridSize, GridSpaceToLinearSpace,
 };
+use crate::{error, util::Result};
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+use std::ops::Add;
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 /// A bounding box for a grid where the min and max values are inclusive
@@ -478,59 +474,6 @@ impl GridBoundingBoxExt for GridBoundingBox3D {
             self_y_max.max(other_y_max),
             self_x_max.max(other_x_max),
         ];
-    }
-}
-
-// TODO: change type of bounds to i64 and then use macro to generate To/FromSql
-
-impl ToSql for GridBoundingBox2D {
-    fn to_sql(
-        &self,
-        ty: &postgres_types::Type,
-        out: &mut bytes::BytesMut,
-    ) -> std::prelude::v1::Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>>
-    where
-        Self: Sized,
-    {
-        let mut buf: Vec<i64> = Vec::with_capacity(4);
-        buf[0] = self.min[0] as i64;
-        buf[1] = self.min[1] as i64;
-        buf[2] = self.max[0] as i64;
-        buf[3] = self.max[1] as i64;
-
-        <Vec<i64> as ToSql>::to_sql(&buf, ty, out)
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool
-    where
-        Self: Sized,
-    {
-        <Vec<i64> as ToSql>::accepts(ty)
-    }
-
-    to_sql_checked!();
-}
-
-impl FromSql<'_> for GridBoundingBox2D {
-    fn from_sql(
-        ty: &postgres_types::Type,
-        raw: &[u8],
-    ) -> std::prelude::v1::Result<Self, Box<dyn std::error::Error + Sync + Send>>
-    where
-        Self: Sized,
-    {
-        let buf: Vec<i64> = <Vec<i64> as FromSql>::from_sql(ty, raw)?;
-        Ok(GridBoundingBox2D::new_unchecked(
-            [buf[0] as isize, buf[1] as isize],
-            [buf[2] as isize, buf[3] as isize],
-        ))
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool
-    where
-        Self: Sized,
-    {
-        <Vec<i64> as FromSql>::accepts(ty)
     }
 }
 

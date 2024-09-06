@@ -151,8 +151,6 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
 
 impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultDescriptor {
     fn from(value: RasterResultDescriptor) -> Self {
-        // FIXME: this is a hack to get the geo transform from the bbox and resolution
-
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
