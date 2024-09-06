@@ -459,7 +459,6 @@ mod tests {
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
-    use std::io::Read;
     use std::marker::PhantomData;
     use tokio_postgres::NoTls;
     use xml::ParserConfig;

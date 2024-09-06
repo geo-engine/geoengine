@@ -709,7 +709,6 @@ mod tests {
     use crate::ge_context;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
-    use crate::util::config::get_config_element;
     use crate::util::tests::{
         add_ndvi_to_datasets, assert_eq_two_raster_operator_res, check_allowed_http_methods,
         check_allowed_http_methods2, read_body_string, register_ndvi_workflow_helper,

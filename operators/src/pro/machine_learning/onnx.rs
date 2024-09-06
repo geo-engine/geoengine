@@ -305,9 +305,10 @@ impl_no_data_value_zero!(i8, u8, i16, u16, i32, u32, i64, u64);
 mod tests {
     use approx::assert_abs_diff_eq;
     use geoengine_datatypes::{
-        primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
+        primitives::{CacheHint, TimeInterval},
         raster::{
-            GridOrEmpty, GridShape, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint,
+            GridBoundingBox2D, GridOrEmpty, GridShape, RasterDataType, RenameBands,
+            TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
         test_data,

@@ -409,7 +409,7 @@ use utoipa::{Modify, OpenApi};
             SpatialGridDefinition,
             GridBoundingBox2D,
             GridIdx2D,
-            GeoTransform
+            GeoTransform,
 
             MlModel,
             MlModelId,

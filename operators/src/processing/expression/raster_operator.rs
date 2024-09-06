@@ -213,7 +213,7 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::{RasterStacker, RasterStackerParams};
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds, Measurement};
     use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
     use geoengine_datatypes::raster::{
         Grid2D, GridBoundingBox2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D,
@@ -717,7 +717,7 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_u8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
                 RasterQueryRectangle::new_with_grid_bounds(

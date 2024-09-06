@@ -23,7 +23,6 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 use log::debug;
 use postgres_protocol::escape::{escape_identifier, escape_literal};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -56,7 +55,6 @@ use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::ColumnSelection;
 use pin_project::pin_project;
 use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

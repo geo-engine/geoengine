@@ -139,8 +139,7 @@ impl<C: SessionContext, R: InitializedRasterOperator> RasterDatasetFromWorkflowT
 
         let processor = self
             .initialized_operator
-            .query_processor()
-            .context(crate::error::Operator)?;
+            .query_processor()?;
 
         let query_rect: &geoengine_datatypes::primitives::QueryRectangle<
             geoengine_datatypes::primitives::SpatialGridQueryRectangle,
