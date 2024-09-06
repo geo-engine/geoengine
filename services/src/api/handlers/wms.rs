@@ -614,7 +614,7 @@ mod tests {
         .await
         .unwrap();
 
-        geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small_22.png");
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small_22.png");
 
         assert_eq!(
             include_bytes!("../../../../test_data/wms/raster_small.png") as &[u8],
@@ -697,7 +697,7 @@ mod tests {
 
         let image_bytes = actix_web::test::read_body(response).await;
 
-        geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi_2.png");
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi_2.png");
 
         assert_eq!(
             include_bytes!("../../../../test_data/wms/get_map_ndvi.png") as &[u8],
