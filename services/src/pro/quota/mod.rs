@@ -1,20 +1,15 @@
-use std::{collections::HashMap, time::Duration};
-
-use geoengine_operators::pro::meta::quota::{
-    ComputationContext, ComputationUnit, QuotaMessage, QuotaTracking,
-};
-use snafu::Snafu;
-
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-
-use geoengine_datatypes::util::test::TestDefault;
-
-use crate::pro::users::UserId;
-
 use super::{
     users::{UserDb, UserSession},
     util::config::QuotaTrackingMode,
 };
+use crate::pro::users::UserId;
+use geoengine_datatypes::util::test::TestDefault;
+use geoengine_operators::meta::quota::{
+    ComputationContext, ComputationUnit, QuotaMessage, QuotaTracking,
+};
+use snafu::Snafu;
+use std::{collections::HashMap, time::Duration};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]

@@ -1,13 +1,10 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
-
+use crate::adapters::StreamStatisticsAdapter;
 use crate::engine::{
     CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
     QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorResultDescriptor,
     WorkflowOperatorPath,
 };
-use crate::pro::adapters::stream_statistics_adapter::StreamStatisticsAdapter;
-use crate::pro::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -15,6 +12,7 @@ use futures::StreamExt;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, QueryAttributeSelection, QueryRectangle,
 };
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{span, Level};
 
 // A wrapper around an initialized operator that adds statistics and quota tracking
@@ -189,16 +187,14 @@ where
         let _query_span_enter = query_span.as_ref().map(tracing::Span::enter);
 
         let quota_checker = ctx
-            .extensions()
-            .get::<QuotaChecker>()
+            .quota_checker()
             .expect("`QuotaChecker` extension should be set during `ProContext` creation");
 
         // TODO: check the quota only once per query and not for every operator
         quota_checker.ensure_quota_available().await?;
 
         let quota_tracker = ctx
-            .extensions()
-            .get::<QuotaTracking>()
+            .quota_tracking()
             .expect("`QuotaTracking` extension should be set during `ProContext` creation")
             .clone();
 
