@@ -123,8 +123,6 @@ pub struct CollectionResponse {
 #[derive(Debug, Deserialize)]
 pub struct CollectionEntry {
     pub id: String,
-    #[serde(rename = "parentIdentifier")]
-    pub parent_identifier: String,
     pub vat: bool,
     pub datalink: Option<String>,
     pub citation: CollectionEntryCitation,
@@ -133,7 +131,6 @@ pub struct CollectionEntry {
 #[derive(Debug, Deserialize)]
 pub struct CollectionEntryCitation {
     pub title: String,
-    pub source: String,
 }
 
 #[derive(Debug, Clone)]
@@ -370,9 +367,11 @@ impl GfbioCollectionsDataProvider {
         collection: &str,
         entry: CollectionEntry,
     ) -> Result<CollectionItem> {
+        let (dataset, unit) = gfbio_dataset_identifier_to_dataset_unit(&entry.id)?;
+
         let status = if entry.vat {
             let in_database = self
-                .get_surrogate_key_for_gfbio_dataset(&entry.parent_identifier)
+                .get_surrogate_key_for_gfbio_dataset(&dataset)
                 .await
                 .is_ok();
 
@@ -384,8 +383,6 @@ impl GfbioCollectionsDataProvider {
         } else {
             LayerStatus::Unavailable
         };
-
-        let (dataset, unit) = gfbio_dataset_identifier_to_dataset_unit(&entry.id)?;
 
         Ok(CollectionItem::Layer(LayerListing {
             id: ProviderLayerId {
