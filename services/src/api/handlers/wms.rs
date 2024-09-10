@@ -1087,8 +1087,7 @@ mod tests {
             cache_header == "private, max-age=60"
                 || cache_header == "private, max-age=59"
                 || cache_header == "private, max-age=58",
-            "Cache header is {:?} and not one of the exprected 60, 59, 58",
-            cache_header
+            "Cache header is {cache_header:?} and not one of the exprected 60, 59, 58"
         );
     }
 }

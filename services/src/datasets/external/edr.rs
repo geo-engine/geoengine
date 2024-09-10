@@ -1183,7 +1183,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         }
 
         // TODO: we need the GeoTransform and GridShape to produce the result descriptor. Since we already have the dataset open, we could also get it from there.
-        let gdal_geotransform = params[0].params.as_mut().unwrap().geo_transform.clone();
+        let gdal_geotransform = params[0].params.as_mut().unwrap().geo_transform;
         let geo_transform: GeoTransform = gdal_geotransform.try_into().map_err(|e| {
             geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),

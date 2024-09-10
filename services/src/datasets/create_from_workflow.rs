@@ -156,7 +156,7 @@ impl<C: SessionContext, R: InitializedRasterOperator> RasterDatasetFromWorkflowT
             call_on_generic_raster_processor_gdal_types!(processor, p => raster_stream_to_geotiff(
             &self.file_path,
             p,
-            query_rect.clone().into(), // FIXME: unnecessary clone
+            query_rect.clone(),
             query_ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: Default::default(), // TODO: decide how to handle the no data here

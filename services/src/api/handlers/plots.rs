@@ -165,18 +165,18 @@ async fn get_plot_handler<C: ApplicationContext>(
 
     let data = match processor {
         TypedPlotQueryProcessor::JsonPlain(processor) => {
-            let json = processor.plot_query(query_rect.into(), &query_ctx);
+            let json = processor.plot_query(query_rect, &query_ctx);
             abortable_query_execution(json, conn_closed, query_abort_trigger).await?
         }
         TypedPlotQueryProcessor::JsonVega(processor) => {
-            let chart = processor.plot_query(query_rect.into(), &query_ctx);
+            let chart = processor.plot_query(query_rect, &query_ctx);
             let chart = abortable_query_execution(chart, conn_closed, query_abort_trigger).await;
             let chart = chart?;
 
             serde_json::to_value(chart).context(error::SerdeJson)?
         }
         TypedPlotQueryProcessor::ImagePng(processor) => {
-            let png_bytes = processor.plot_query(query_rect.into(), &query_ctx);
+            let png_bytes = processor.plot_query(query_rect, &query_ctx);
             let png_bytes =
                 abortable_query_execution(png_bytes, conn_closed, query_abort_trigger).await;
             let png_bytes = png_bytes?;

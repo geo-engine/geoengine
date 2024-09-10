@@ -902,7 +902,7 @@ mod tests {
                 .await
                 .unwrap();
 
-        let data_bounds =
+        let _data_bounds =
             SpatialPartition2D::new((166_021.44, 9_329_005.18).into(), (534_994.66, 0.00).into())
                 .unwrap();
         let loading_info = meta
@@ -1015,7 +1015,7 @@ mod tests {
         let sp =
             SpatialPartition2D::new((166_021.44, 9_329_005.18).into(), (534_994.66, 0.00).into())
                 .unwrap();
-        let sr = SpatialResolution::new_unchecked(sp.size_x() / 256., sp.size_y() / 256.);
+        let _sr = SpatialResolution::new_unchecked(sp.size_x() / 256., sp.size_y() / 256.);
         let query = RasterQueryRectangle::new_with_grid_bounds(
             GridBoundingBox2D::new([0, 0], [255, 255]).unwrap(), // FIXME: we need to calculate that once..
             TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
@@ -1292,7 +1292,7 @@ mod tests {
                 .await
                 .unwrap();
 
-        let data_bounds = SpatialPartition2D::new_unchecked(
+        let _data_bounds = SpatialPartition2D::new_unchecked(
             (600_000.00, 9_750_100.).into(),
             (600_100.0, 9_750_000.).into(),
         );
@@ -1398,7 +1398,7 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let data_bounds = SpatialPartition2D::new_unchecked(
+        let _data_bounds = SpatialPartition2D::new_unchecked(
             (499_980., 9_804_800.).into(),
             (499_990., 9_804_810.).into(),
         );
