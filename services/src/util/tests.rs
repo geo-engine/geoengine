@@ -605,7 +605,12 @@ where
     }
 }
 
-pub async fn assert_eq_two_raster_operator_res<S: SessionContext>(
+/// A method that compares the results of two raster oprators
+///
+/// # Panics
+///
+/// If there are tiles that are not equal
+pub async fn assert_eq_two_raster_operator_res_u8<S: SessionContext>(
     ctx: &S,
     operator_a: Box<dyn RasterOperator>,
     operator_b: Box<dyn RasterOperator>,
@@ -619,7 +624,7 @@ pub async fn assert_eq_two_raster_operator_res<S: SessionContext>(
         .query_context()
         .expect("creation of query context from session context must work.");
 
-    geoengine_operators::util::test::assert_eq_two_raster_operator_res(
+    geoengine_operators::util::test::assert_eq_two_raster_operator_res_u8(
         &exe_ctx,
         &query_ctx,
         operator_a,

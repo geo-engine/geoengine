@@ -1080,7 +1080,7 @@ mod tests {
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::tests::{
-        assert_eq_two_raster_operator_res, read_body_string, TestDataUploads,
+        assert_eq_two_raster_operator_res_u8, read_body_string, TestDataUploads,
     };
     use crate::{
         contexts::{PostgresContext, Session},
@@ -1718,7 +1718,7 @@ mod tests {
         }
         .boxed();
 
-        assert_eq_two_raster_operator_res(
+        assert_eq_two_raster_operator_res_u8(
             &ctx,
             workflow_operator,
             dataset_operator,

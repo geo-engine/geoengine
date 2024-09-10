@@ -708,7 +708,7 @@ mod tests {
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::tests::{
-        add_ndvi_to_datasets, assert_eq_two_raster_operator_res, check_allowed_http_methods,
+        add_ndvi_to_datasets, assert_eq_two_raster_operator_res_u8, check_allowed_http_methods,
         check_allowed_http_methods2, read_body_string, register_ndvi_workflow_helper,
         send_test_request, TestDataUploads,
     };
@@ -1478,7 +1478,7 @@ mod tests {
             geoengine_datatypes::primitives::BandSelection::first(),
         );
 
-        assert_eq_two_raster_operator_res(&ctx, operator_a, operator_b, query_rectangle, false)
+        assert_eq_two_raster_operator_res_u8(&ctx, operator_a, operator_b, query_rectangle, false)
             .await;
     }
 }

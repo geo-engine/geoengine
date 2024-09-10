@@ -60,7 +60,7 @@ pub async fn assert_eq_raster_operator_res_and_list_of_tiles_u8<
 /// # Panics
 ///
 /// If there are tiles that are not equal
-pub async fn assert_eq_two_raster_operator_res<E: ExecutionContext, Q: QueryContext>(
+pub async fn assert_eq_two_raster_operator_res_u8<E: ExecutionContext, Q: QueryContext>(
     exe_ctx: &E,
     query_ctx: &Q,
     operator_a: Box<dyn RasterOperator>,
