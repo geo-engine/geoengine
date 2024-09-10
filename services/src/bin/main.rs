@@ -132,9 +132,8 @@ fn open_telemetry_layer<S>(
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
-    use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
+    use opentelemetry::trace::TracerProvider;
     use opentelemetry_otlp::WithExportConfig;
-    use tracing_opentelemetry::OpenTelemetryLayer;
     let exporter = opentelemetry_otlp::new_exporter()
         .tonic()
         .with_endpoint(open_telemetry_config.endpoint.to_string());
@@ -147,9 +146,9 @@ where
                 "Geo Engine",
             )]),
         ))
-        .install_simple()?;
-    let opentelemetry: OpenTelemetryLayer<S, _> =
-        tracing_opentelemetry::layer().with_tracer(tracer);
+        .install_simple()?
+        .tracer("Geo Engine");
+    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
     Ok(opentelemetry)
     // Ok(OpenTelemetryTracingBridge::new(tracer))
 }

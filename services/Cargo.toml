@@ -58,7 +58,6 @@ oauth2 = "4.4.2"
 openidconnect = "3.4"
 # `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-*`
 opentelemetry = { version = "0.24", default-features = false, features = ["trace"] }
-opentelemetry-appender-tracing = "0.5"
 opentelemetry-otlp = "0.17"
 opentelemetry_sdk = "0.24"
 ordered-float = { version = "4.2", features = ["serde"] }
