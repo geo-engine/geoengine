@@ -35,8 +35,6 @@ const CACHE_TTL_SECS: u32 = 60 * 60 * 24 * 30; // 30 days
 const FALLBACK_CACHE_TTL_SECS: u32 = 60 * 60 * 24; // 1 day, time to cache tiles that have no known successor
 const FALLBACK_TIME_SLICE_DURATION_MILLIS: i64 = 100; // validity of tiles that have no known successor
 
-const HTTP_CHUNK_SIZE: usize = 2_097_152; // 2MB chunk size for HTTP range requests
-
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
@@ -165,15 +163,11 @@ impl Sentinel2Metadata {
             ("GDAL_NUM_THREADS".to_string(), "1".to_string()),
             // Settings to avoid running into 429 rate limiting errors
             // TODO: we need a global limit for all requests to the same host
-            (
-                "CPL_VSIL_CURL_CHUNK_SIZE".to_string(), // TODO: only use this for downloading the data and not while creating the loading info from the metadata
-                format!("{HTTP_CHUNK_SIZE}"), // specify a larger chunk size to avoid too many requests
-            ),
             ("GDAL_HTTP_MAX_CONNECTIONS".to_string(), "1".to_string()),
             ("GDAL_HTTP_RETRY_CODES".to_string(), "429".to_string()),
-            ("GDAL_HTTP_RETRY_DELAY".to_string(), "30".to_string()), // TODO: make configurable?
+            ("GDAL_HTTP_RETRY_DELAY".to_string(), "5".to_string()), // TODO: make configurable?
             // TODO: use our own retry mechanism in `load_tile_data_async` instead?
-            ("GDAL_HTTP_MAX_RETRY".to_string(), "10".to_string()), //  TODO: make configurable?
+            ("GDAL_HTTP_MAX_RETRY".to_string(), "2".to_string()), //  TODO: make configurable?
             // Prevent opening non-existing aux files
             ("GDAL_PAM_ENABLED".to_string(), "NO".to_string()),
             // Debugging option
@@ -277,6 +271,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use geoengine_datatypes::{
         primitives::{BandSelection, Coordinate2D, DateTime, SpatialPartition2D},
         test_data,
@@ -286,14 +282,47 @@ mod tests {
         all_of,
         matchers::{contains, request, url_decoded},
         responders::status_code,
-        Expectation,
+        Expectation, Server,
     };
 
     use crate::pro::datasets::external::copernicus_dataspace::ids::UtmZoneDirection;
 
     use super::*;
 
-    #[tokio::test]
+    fn add_partial_responses(
+        server: &Server,
+        path: &'static str,
+        chunks: &[(usize, usize)],
+        total_length: usize,
+        mut body: Vec<u8>,
+    ) {
+        for (start, end) in chunks {
+            let length = end - start + 1;
+            server.expect(
+                Expectation::matching(all_of![
+                    request::method("GET"),
+                    request::path(path),
+                    request::headers(contains((
+                        "range".to_string(),
+                        format!("bytes={start}-{end}")
+                    )))
+                ])
+                .respond_with(
+                    status_code(206)
+                        .append_header("content-type", "binary/octet-stream")
+                        .append_header("content-length", format!("{length}"))
+                        .append_header(
+                            "content-range",
+                            format!("bytes {start}-{end}/{total_length}"),
+                        )
+                        .body(body.drain(..length).collect::<Vec<u8>>()),
+                ),
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[serial_test::serial]
     #[allow(clippy::too_many_lines)]
     async fn it_creates_loading_info() {
         let mock_server = httptest::Server::run();
@@ -335,36 +364,12 @@ mod tests {
         .await
         .unwrap();
 
-        // initial get request for content length
-        mock_server.expect(
-            Expectation::matching(all_of![
-                request::method("GET"),
-                request::path("/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/MTD_MSIL2A.xml"),
-                request::headers(contains(("range".to_string(), format!("bytes=0-{}", HTTP_CHUNK_SIZE -1))))  
-            ])
-            .respond_with(
-                status_code(206)
-                    .append_header("content-type", "binary/octet-stream")
-                    .append_header("content-length", "54843")
-                    .append_header("content-range", "bytes 0-54842/54843")
-                    .body(mtd_xml_body.clone()),
-            ),
-        );
-
-        // request for the rest of the actual data
-        mock_server.expect(
-            Expectation::matching(all_of![
-                request::method("GET"),
-                request::path("/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/MTD_MSIL2A.xml"),
-                request::headers(contains(("range".to_string(), "bytes=0-54842")))
-            ])
-            .respond_with(
-                status_code(206)
-                    .append_header("content-type", "binary/octet-stream")
-                    .append_header("content-length", "54843")
-                    .append_header("content-range", "bytes 0-54842/54843")
-                    .body(mtd_xml_body),
-            ),
+        add_partial_responses(
+            &mock_server,
+            "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/MTD_MSIL2A.xml",
+            &[(0, 16383), (16384, 54842)],
+            mtd_xml_body.len(),
+            mtd_xml_body,
         );
 
         // granule request
@@ -374,117 +379,73 @@ mod tests {
         .await
         .unwrap();
 
-        mock_server.expect(
-            Expectation::matching(all_of![
-                request::method("GET"),
-                request::path("/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/MTD_TL.xml"),
-                request::headers(contains(("range".to_string(), format!("bytes=0-{}", HTTP_CHUNK_SIZE -1))))  
-            ])
-            .respond_with(
-                status_code(206)
-                    .append_header("content-type", "binary/octet-stream")
-                    .append_header("content-length", "626449")
-                    .append_header("content-range", "bytes 0-626448/626449")
-                    .body(granule_mtd_xml_body.clone()),
-            ),
+        add_partial_responses(
+            &mock_server,
+            "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/MTD_TL.xml",
+            &[(0, 16383)],
+            granule_mtd_xml_body.len(),
+            granule_mtd_xml_body,
         );
 
         // JPG2
 
         // B04
-        let mut b04_jp2_head_body = vec![0u8; HTTP_CHUNK_SIZE];
-        b04_jp2_head_body.as_mut_slice()[..16384].copy_from_slice(
-            &tokio::fs::read(test_data!(
+        let b04_jp2_head_body = tokio::fs::read(test_data!(
                 "pro/copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B04_10m.jp2.head"
             ))
-            .await
-            .unwrap(),
-        );
-        mock_server.expect(
-            Expectation::matching(all_of![
-                request::method("GET"),
-                request::path("/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B04_10m.jp2"),
-                request::headers(contains(("range".to_string(),format!("bytes=0-{}", HTTP_CHUNK_SIZE -1))))
-            ])
-            .respond_with(
-                status_code(206)
-                    .append_header("content-type", "binary/octet-stream")
-                    .append_header("content-length", format!("{HTTP_CHUNK_SIZE}"))
-                    .append_header("content-range", format!("bytes 0-{}/129257917", HTTP_CHUNK_SIZE -1)) 
-                    .body(b04_jp2_head_body.clone()),
-            ),
+            .await.unwrap();
+
+        add_partial_responses(
+            &mock_server,
+            "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B04_10m.jp2",
+            &[(0, 16383)],
+            129_257_917,
+            b04_jp2_head_body,
         );
 
         // B03
-        let mut b03_jp2_head_body = vec![0u8; HTTP_CHUNK_SIZE];
-        b03_jp2_head_body.as_mut_slice()[..16384].copy_from_slice(
-            &tokio::fs::read(test_data!(
+        let b03_jp2_head_body = tokio::fs::read(test_data!(
                 "pro/copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B03_10m.jp2.head"
             ))
             .await
-            .unwrap(),
-        );
-        mock_server.expect(
-            Expectation::matching(all_of![
-                request::method("GET"),
-                request::path("/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B03_10m.jp2"),
-                request::headers(contains(("range".to_string(),format!("bytes=0-{}", HTTP_CHUNK_SIZE -1))))
-            ])
-            .respond_with(
-                status_code(206)
-                    .append_header("content-type", "binary/octet-stream")
-                    .append_header("content-length", format!("{HTTP_CHUNK_SIZE}"))
-                    .append_header("content-range", format!("bytes 0-{}/130541105", HTTP_CHUNK_SIZE -1)) 
-                    .body(b03_jp2_head_body.clone()),
-            ),
+            .unwrap();
+
+        add_partial_responses(
+            &mock_server,
+            "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B03_10m.jp2",
+            &[(0, 16383)],
+            130_541_105,
+            b03_jp2_head_body,
         );
 
         // B02
-        let mut b02_jp2_head_body = vec![0u8; HTTP_CHUNK_SIZE];
-        b02_jp2_head_body.as_mut_slice()[..16384].copy_from_slice(
-             &tokio::fs::read(test_data!(
+        let b02_jp2_head_body = tokio::fs::read(test_data!(
                  "pro/copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B02_10m.jp2.head"
              ))
              .await
-             .unwrap(),
-         );
-        mock_server.expect(
-             Expectation::matching(all_of![
-                 request::method("GET"),
-                 request::path("/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B02_10m.jp2"),
-                 request::headers(contains(("range".to_string(),format!("bytes=0-{}", HTTP_CHUNK_SIZE -1))))
-             ])
-             .respond_with(
-                 status_code(206)
-                     .append_header("content-type", "binary/octet-stream")
-                     .append_header("content-length", format!("{HTTP_CHUNK_SIZE}"))
-                     .append_header("content-range", format!("bytes 0-{}/132214802", HTTP_CHUNK_SIZE -1)) 
-                     .body(b02_jp2_head_body.clone()),
-             ),
+             .unwrap();
+
+        add_partial_responses(
+             &mock_server,
+             "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B02_10m.jp2",
+             &[(0, 16383)],
+             132_214_802,
+             b02_jp2_head_body,
          );
 
-        // B02
-        let mut b08_jp2_head_body = vec![0u8; HTTP_CHUNK_SIZE];
-        b08_jp2_head_body.as_mut_slice()[..16384].copy_from_slice(
-            &tokio::fs::read(test_data!(
+        // B08
+        let b08_jp2_head_body = tokio::fs::read(test_data!(
                 "pro/copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B08_10m.jp2.head"
             ))
             .await
-            .unwrap(),
-        );
-        mock_server.expect(
-            Expectation::matching(all_of![
-                request::method("GET"),
-                request::path("/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B08_10m.jp2"),
-                request::headers(contains(("range".to_string(),format!("bytes=0-{}", HTTP_CHUNK_SIZE -1))))
-            ])
-            .respond_with(
-                status_code(206)
-                    .append_header("content-type", "binary/octet-stream")
-                    .append_header("content-length", format!("{HTTP_CHUNK_SIZE}"))
-                    .append_header("content-range", format!("bytes 0-{}/134142350", HTTP_CHUNK_SIZE -1)) 
-                    .body(b08_jp2_head_body.clone()),
-            ),
+            .unwrap();
+
+        add_partial_responses(
+            &mock_server,
+            "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B08_10m.jp2",
+            &[(0, 16383)],
+            134_142_350,
+            b08_jp2_head_body,
         );
 
         // TODO: add responses for dataset
@@ -570,10 +531,6 @@ mod tests {
                                 "1".to_string(),
                             ),
                             (
-                                "CPL_VSIL_CURL_CHUNK_SIZE".to_string(),
-                                "2097152".to_string(),
-                            ),
-                            (
                                 "GDAL_HTTP_MAX_CONNECTIONS".to_string(),
                                 "1".to_string(),
                             ),
@@ -583,11 +540,11 @@ mod tests {
                             ),
                             (
                                 "GDAL_HTTP_RETRY_DELAY".to_string(),
-                                "30".to_string(),
+                                "5".to_string(),
                             ),
                             (
                                 "GDAL_HTTP_MAX_RETRY".to_string(),
-                                "10".to_string(),
+                                "2".to_string(),
                             ),
                             (
                                 "GDAL_PAM_ENABLED".to_string(),

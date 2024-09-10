@@ -1121,13 +1121,20 @@ mod tests {
                 "HEAD",
                 "/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif",
             ))
-            .times(4)
+            .times(7)
             .respond_with(responders::cycle![
                 // first fail
                 responders::status_code(500),
+                // then time out
+                responders::delay_and_then(
+                    std::time::Duration::from_secs(2),
+                    responders::status_code(500)
+                ),
                 // then succeed
                 head_success_response(), // -> GET COG header fails
+                head_success_response(), // -> GET COG header times out
                 head_success_response(), // -> GET COG header succeeds, GET tile fails
+                head_success_response(), // -> GET COG header succeeds, GET tile times out
                 head_success_response(), // -> GET COG header succeeds, GET tile IReadBlock failed
             ]),
         );
@@ -1167,12 +1174,18 @@ mod tests {
                 ),
                 request::headers(contains(("range", "bytes=0-16383"))),
             ])
-            .times(3)
+            .times(5)
             .respond_with(responders::cycle![
                 // first fail
                 responders::status_code(500),
+                // then time out
+                responders::delay_and_then(
+                    std::time::Duration::from_secs(2),
+                    responders::status_code(500)
+                ),
                 // then succeed
                 get_success_response(), // -> GET tile fails
+                get_success_response(), // -> GET tile times out
                 get_success_response(), // -> GET tile times IReadBlock failed
             ]),
         );
@@ -1186,10 +1199,15 @@ mod tests {
                 ),
                 request::headers(contains(("range", "bytes=46170112-46186495"))),
             ])
-            .times(3)
+            .times(4)
             .respond_with(responders::cycle![
                 // first fail
                 responders::status_code(500),
+                // then time out
+                responders::delay_and_then(
+                    std::time::Duration::from_secs(2),
+                    responders::status_code(500)
+                ),
                 // then return incomplete tile (to force error "band 1: IReadBlock failed at X offset 0, Y offset 0: TIFFReadEncodedTile() failed.")
                 responders::status_code(206)
                     .append_header("Content-Type", "application/json")
@@ -1350,6 +1368,11 @@ mod tests {
                 &server.url_str(""),
             )
             .into();
+        // add a low `GDAL_HTTP_TIMEOUT` value to test timeouts
+        params.gdal_config_options = params.gdal_config_options.map(|mut options| {
+            options.push(("GDAL_HTTP_TIMEOUT".to_owned(), "1".to_owned()));
+            options
+        });
 
         let mut execution_context = MockExecutionContext::test_default();
         let id: geoengine_datatypes::dataset::DataId = DatasetId::new().into();
