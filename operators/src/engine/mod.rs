@@ -4,8 +4,8 @@ pub use clonable_operator::{
     CloneableVectorOperator,
 };
 pub use execution_context::{
-    ExecutionContext, ExecutionContextExtensions, MetaData, MetaDataProvider, MockExecutionContext,
-    StaticMetaData,
+    ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
+    StatisticsWrappingMockExecutionContext,
 };
 pub use operator::{
     CanonicOperatorName, InitializedPlotOperator, InitializedRasterOperator,
@@ -19,7 +19,6 @@ pub use operator_impl::{
 };
 pub use query::{
     ChunkByteSize, MockQueryContext, QueryAbortRegistration, QueryAbortTrigger, QueryContext,
-    QueryContextExtensions,
 };
 pub use query_processor::{
     BoxRasterQueryProcessor, PlotQueryProcessor, QueryProcessor, QueryProcessorExt,

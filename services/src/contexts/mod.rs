@@ -12,12 +12,14 @@ use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, Layer
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::{
-    ChunkByteSize, CreateSpan, ExecutionContext, ExecutionContextExtensions,
-    InitializedPlotOperator, InitializedVectorOperator, MetaData, MetaDataProvider,
-    QueryAbortRegistration, QueryAbortTrigger, QueryContext, QueryContextExtensions,
-    RasterResultDescriptor, VectorResultDescriptor, WorkflowOperatorPath,
+    ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
+    InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
+    QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
+    WorkflowOperatorPath,
 };
+use geoengine_operators::meta::quota::{QuotaChecker, QuotaTracking};
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use rayon::ThreadPool;
@@ -107,7 +109,9 @@ pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
     tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
-    extensions: QueryContextExtensions,
+    cache: Option<Arc<SharedCache>>,
+    quota_tracking: Option<QuotaTracking>,
+    quota_checker: Option<QuotaChecker>,
     abort_registration: QueryAbortRegistration,
     abort_trigger: Option<QueryAbortTrigger>,
 }
@@ -123,7 +127,9 @@ impl QueryContextImpl {
             chunk_byte_size,
             tiling_specification,
             thread_pool,
-            extensions: Default::default(),
+            cache: None,
+            quota_tracking: None,
+            quota_checker: None,
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
@@ -133,14 +139,18 @@ impl QueryContextImpl {
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
         thread_pool: Arc<ThreadPool>,
-        extensions: QueryContextExtensions,
+        cache: Option<Arc<SharedCache>>,
+        quota_tracking: Option<QuotaTracking>,
+        quota_checker: Option<QuotaChecker>,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
             chunk_byte_size,
             tiling_specification,
             thread_pool,
-            extensions,
+            cache,
+            quota_checker,
+            quota_tracking,
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
@@ -156,10 +166,6 @@ impl QueryContext for QueryContextImpl {
         &self.thread_pool
     }
 
-    fn extensions(&self) -> &QueryContextExtensions {
-        &self.extensions
-    }
-
     fn abort_registration(&self) -> &QueryAbortRegistration {
         &self.abort_registration
     }
@@ -173,6 +179,18 @@ impl QueryContext for QueryContextImpl {
     fn tiling_specification(&self) -> TilingSpecification {
         self.tiling_specification
     }
+
+    fn quota_tracking(&self) -> Option<&geoengine_operators::meta::quota::QuotaTracking> {
+        self.quota_tracking.as_ref()
+    }
+
+    fn quota_checker(&self) -> Option<&geoengine_operators::meta::quota::QuotaChecker> {
+        self.quota_checker.as_ref()
+    }
+
+    fn cache(&self) -> Option<Arc<geoengine_operators::cache::shared_cache::SharedCache>> {
+        self.cache.clone()
+    }
 }
 
 pub struct ExecutionContextImpl<D>
@@ -182,7 +200,6 @@ where
     db: D,
     thread_pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
-    extensions: ExecutionContextExtensions,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -198,21 +215,6 @@ where
             db,
             thread_pool,
             tiling_specification,
-            extensions: Default::default(),
-        }
-    }
-
-    pub fn new_with_extensions(
-        db: D,
-        thread_pool: Arc<ThreadPool>,
-        tiling_specification: TilingSpecification,
-        extensions: ExecutionContextExtensions,
-    ) -> Self {
-        Self {
-            db,
-            thread_pool,
-            tiling_specification,
-            extensions,
         }
     }
 }
@@ -318,10 +320,6 @@ where
                     source: Box::new(source),
                 },
             )
-    }
-
-    fn extensions(&self) -> &ExecutionContextExtensions {
-        &self.extensions
     }
 }
 

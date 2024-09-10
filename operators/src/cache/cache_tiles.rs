@@ -611,7 +611,8 @@ mod tests {
     use super::{
         CompressedGridOrEmpty, CompressedMaskedGrid, CompressedRasterTile2D, LandingZoneQueryTiles,
     };
-    use crate::pro::cache::{
+
+    use crate::cache::{
         cache_tiles::CachedTiles,
         shared_cache::{
             CacheBackendElement, CacheBackendElementExt, CacheQueryMatch, RasterCacheQueryEntry,

@@ -6,6 +6,7 @@ mod raster_time;
 mod raster_time_substream;
 mod simple_raster_stacker;
 mod sparse_tiles_fill_adapter;
+mod stream_statistics_adapter;
 
 use band_extractor::BandExtractor;
 pub use feature_collection_merger::FeatureCollectionChunkMerger;
@@ -22,6 +23,7 @@ pub use sparse_tiles_fill_adapter::{
     FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
     SparseTilesFillAdapterError,
 };
+pub use stream_statistics_adapter::StreamStatisticsAdapter;
 
 use self::raster_time_substream::RasterTimeMultiFold;
 use crate::util::Result;

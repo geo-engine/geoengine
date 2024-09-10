@@ -1,12 +1,13 @@
 use std::{
-    any::{Any, TypeId},
-    collections::HashMap,
     task::{Context, Poll},
     {pin::Pin, sync::Arc},
 };
 
-use crate::util::Result;
-use crate::{error, util::create_rayon_thread_pool};
+use crate::{
+    cache::shared_cache::SharedCache, error, meta::quota::QuotaChecker,
+    util::create_rayon_thread_pool,
+};
+use crate::{meta::quota::QuotaTracking, util::Result};
 use futures::Stream;
 use geoengine_datatypes::{raster::TilingSpecification, util::test::TestDefault};
 use pin_project::pin_project;
@@ -54,36 +55,14 @@ pub trait QueryContext: Send + Sync {
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
 
-    /// get the `QueryContextExtensions` that contain additional information
-    fn extensions(&self) -> &QueryContextExtensions;
+    fn quota_tracking(&self) -> Option<&QuotaTracking>;
+
+    fn quota_checker(&self) -> Option<&QuotaChecker>;
+
+    fn cache(&self) -> Option<Arc<SharedCache>>;
 
     fn abort_registration(&self) -> &QueryAbortRegistration;
     fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
-}
-
-/// This type allows adding additional information to the `QueryContext`.
-/// It acts like a type map, allowing one to store one value per type.
-#[derive(Default)]
-pub struct QueryContextExtensions {
-    map: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
-}
-
-impl QueryContextExtensions {
-    pub fn insert<T: 'static + Send + Sync>(&mut self, val: T) -> Option<T> {
-        self.map
-            .insert(TypeId::of::<T>(), Box::new(val))
-            .and_then(downcast_owned)
-    }
-
-    pub fn get<T: 'static + Send + Sync>(&self) -> Option<&T> {
-        self.map
-            .get(&TypeId::of::<T>())
-            .and_then(|boxed| boxed.downcast_ref())
-    }
-}
-
-fn downcast_owned<T: 'static + Send + Sync>(boxed: Box<dyn Any + Send + Sync>) -> Option<T> {
-    boxed.downcast().ok().map(|boxed| *boxed)
 }
 
 /// This type allow wrapping multiple streams with `QueryAbortWrapper`s that
@@ -142,7 +121,10 @@ pub struct MockQueryContext {
     pub tiling_specification: TilingSpecification,
     pub thread_pool: Arc<ThreadPool>,
 
-    pub extensions: QueryContextExtensions,
+    pub cache: Option<Arc<SharedCache>>,
+    pub quota_tracking: Option<QuotaTracking>,
+    pub quota_checker: Option<QuotaChecker>,
+
     pub abort_registration: QueryAbortRegistration,
     pub abort_trigger: Option<QueryAbortTrigger>,
 }
@@ -154,7 +136,9 @@ impl TestDefault for MockQueryContext {
             chunk_byte_size: ChunkByteSize::test_default(),
             tiling_specification: TilingSpecification::test_default(),
             thread_pool: create_rayon_thread_pool(0),
-            extensions: QueryContextExtensions::default(),
+            cache: None,
+            quota_checker: None,
+            quota_tracking: None,
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
@@ -168,7 +152,9 @@ impl MockQueryContext {
             chunk_byte_size,
             tiling_specification,
             thread_pool: create_rayon_thread_pool(0),
-            extensions: QueryContextExtensions::default(),
+            cache: None,
+            quota_checker: None,
+            quota_tracking: None,
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
@@ -177,14 +163,18 @@ impl MockQueryContext {
     pub fn new_with_query_extensions(
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
-        extensions: QueryContextExtensions,
+        cache: Option<Arc<SharedCache>>,
+        quota_tracking: Option<QuotaTracking>,
+        quota_checker: Option<QuotaChecker>,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
             tiling_specification,
             thread_pool: create_rayon_thread_pool(0),
-            extensions,
+            cache,
+            quota_checker,
+            quota_tracking,
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
@@ -200,7 +190,9 @@ impl MockQueryContext {
             chunk_byte_size,
             tiling_specification,
             thread_pool: create_rayon_thread_pool(num_threads),
-            extensions: QueryContextExtensions::default(),
+            cache: None,
+            quota_checker: None,
+            quota_tracking: None,
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
@@ -216,10 +208,6 @@ impl QueryContext for MockQueryContext {
         &self.thread_pool
     }
 
-    fn extensions(&self) -> &QueryContextExtensions {
-        &self.extensions
-    }
-
     fn abort_registration(&self) -> &QueryAbortRegistration {
         &self.abort_registration
     }
@@ -232,5 +220,17 @@ impl QueryContext for MockQueryContext {
 
     fn tiling_specification(&self) -> TilingSpecification {
         self.tiling_specification
+    }
+
+    fn quota_tracking(&self) -> Option<&QuotaTracking> {
+        self.quota_tracking.as_ref()
+    }
+
+    fn quota_checker(&self) -> Option<&QuotaChecker> {
+        self.quota_checker.as_ref()
+    }
+
+    fn cache(&self) -> Option<Arc<SharedCache>> {
+        self.cache.clone()
     }
 }

@@ -1,13 +1,10 @@
-use std::path::Path;
-
-use geoengine_datatypes::{machine_learning::MlModelMetadata, raster::RasterDataType};
-use snafu::{ensure, ResultExt};
-
-use crate::pro::machine_learning::error::{
+use super::MachineLearningError;
+use crate::machine_learning::error::{
     InvalidInputDimensions, InvalidOutputDimensions, MultipleInputsNotSupported, Ort,
 };
-
-use super::MachineLearningError;
+use geoengine_datatypes::{machine_learning::MlModelMetadata, raster::RasterDataType};
+use snafu::{ensure, ResultExt};
+use std::path::Path;
 
 pub fn load_model_metadata(path: &Path) -> Result<MlModelMetadata, MachineLearningError> {
     // TODO: proper error if model file cannot be found

@@ -158,19 +158,21 @@ where
 mod tests {
     use std::{collections::HashMap, sync::Arc};
 
-    use crate::pro::cache::{
-        cache_chunks::CompressedFeatureCollection,
-        cache_stream::CacheStreamInner,
-        cache_tiles::{CompressedRasterTile2D, CompressedRasterTileExt},
-    };
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         primitives::{
             BandSelection, BoundingBox2D, CacheHint, ColumnSelection, FeatureData, MultiPoint,
             RasterQueryRectangle, TimeInterval, VectorQueryRectangle,
         },
-        raster::{GeoTransform, Grid2D, GridBoundingBox2D, GridIdx2D, RasterTile2D},
+        raster::{GeoTransform, Grid2D, GridIdx2D, RasterTile2D},
     };
+
+    use crate::cache::{
+        cache_chunks::CompressedFeatureCollection,
+        cache_stream::CacheStreamInner,
+        cache_tiles::{CompressedRasterTile2D, CompressedRasterTileExt},
+    };
+    use geoengine_datatypes::raster::GridBoundingBox2D;
 
     fn create_test_raster_data() -> Vec<CompressedRasterTile2D<u8>> {
         let mut data = Vec::new();

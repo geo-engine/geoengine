@@ -30,16 +30,11 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     engine::{
         ChunkByteSize, ExecutionContext, InitializedRasterOperator, MockQueryContext, QueryContext,
-        QueryContextExtensions, QueryProcessor, RasterOperator, RasterQueryProcessor,
-        SingleRasterSource, SingleVectorMultipleRasterSources, TypedRasterQueryProcessor,
-        VectorOperator, VectorQueryProcessor, WorkflowOperatorPath,
+        QueryProcessor, RasterOperator, RasterQueryProcessor, SingleRasterSource,
+        SingleVectorMultipleRasterSources, StatisticsWrappingMockExecutionContext,
+        TypedRasterQueryProcessor, VectorOperator, VectorQueryProcessor, WorkflowOperatorPath,
     },
-    pro::{
-        engine::StatisticsWrappingMockExecutionContext,
-        meta::quota::{
-            ComputationContext, ComputationUnit, QuotaCheck, QuotaChecker, QuotaTracking,
-        },
-    },
+    meta::quota::{ComputationContext, ComputationUnit, QuotaCheck, QuotaChecker, QuotaTracking},
     processing::{
         AggregateFunctionParams, ColumnNames, FeatureAggregationMethod, NeighborhoodAggregate,
         NeighborhoodAggregateParams, NeighborhoodParams, RasterVectorJoin, RasterVectorJoinParams,
@@ -74,9 +69,18 @@ type BenchmarkElementCounts = HashMap<String, u64>;
 
 fn setup_contexts() -> (StatisticsWrappingMockExecutionContext, MockQueryContext) {
     let exe_ctx = StatisticsWrappingMockExecutionContext::test_default();
+    let computation_unit = ComputationUnit {
+        issuer: uuid::Uuid::new_v4(),
+        context: ComputationContext::new(),
+    };
     let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
         ChunkByteSize::test_default(),
-        create_necessary_extensions(),
+        None,
+        Some(QuotaTracking::new(
+            tokio::sync::mpsc::unbounded_channel().0,
+            computation_unit,
+        )),
+        Some(Box::new(MockQuotaChecker) as QuotaChecker),
     );
     (exe_ctx, query_ctx)
 }
@@ -347,23 +351,6 @@ impl QuotaCheck for MockQuotaChecker {
     }
 }
 
-/// we don't need this for this bench, but to prevent panics from the wrapping op
-fn create_necessary_extensions() -> QueryContextExtensions {
-    let mut extensions = QueryContextExtensions::default();
-
-    let computation_unit = ComputationUnit {
-        issuer: uuid::Uuid::new_v4(),
-        context: ComputationContext::new(),
-    };
-    extensions.insert(QuotaTracking::new(
-        tokio::sync::mpsc::unbounded_channel().0,
-        computation_unit,
-    ));
-    extensions.insert(Box::new(MockQuotaChecker) as QuotaChecker);
-
-    extensions
-}
-
 fn gather_poll_nexts(receiver: &mut UnboundedReceiver<Record>) -> BenchmarkElementCounts {
     let mut element_counts = HashMap::new();
 
@@ -394,7 +381,7 @@ impl PollNextForwarder {
         // dbg!(&record);
 
         if record["level"] != "DEBUG"
-            || record["target"] != "geoengine_operators::pro::adapters::stream_statistics_adapter"
+            || record["target"] != "geoengine_operators::adapters::stream_statistics_adapter"
             || record["fields"]["empty"] != false
             || record["span"]["name"].is_null()
         {
