@@ -14,18 +14,16 @@ pub async fn raster_operator_to_list_of_tiles_u8<E: ExecutionContext, Q: QueryCo
 ) -> Result<Vec<RasterTile2D<u8>>> {
     let initialized_operator = operator
         .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
-        .await
-        .unwrap();
-    let query_processor = initialized_operator
-        .query_processor()
-        .unwrap()
-        .get_u8()
-        .unwrap();
+        .await?;
+    let query_processor = initialized_operator.query_processor()?.get_u8().ok_or(
+        crate::error::Error::MustNotHappen {
+            message: "Operator does not produce u8 while this function requires it".to_owned(),
+        },
+    )?;
 
     let res = query_processor
         .raster_query(query_rectangle, query_ctx)
-        .await
-        .unwrap()
+        .await?
         .collect::<Vec<_>>()
         .await;
 
@@ -34,6 +32,11 @@ pub async fn raster_operator_to_list_of_tiles_u8<E: ExecutionContext, Q: QueryCo
     Ok(res)
 }
 
+/// Compares the output of a raster operators and a list of tiles and panics with a message if they are not equal
+///
+/// # Panics
+///
+/// If there are tiles that are not equal
 pub async fn assert_eq_raster_operator_res_and_list_of_tiles_u8<
     E: ExecutionContext,
     Q: QueryContext,
@@ -43,15 +46,20 @@ pub async fn assert_eq_raster_operator_res_and_list_of_tiles_u8<
     operator: Box<dyn RasterOperator>,
     query_rectangle: RasterQueryRectangle,
     compare_cache_hint: bool,
-    list_of_tiles: Vec<RasterTile2D<u8>>,
+    list_of_tiles: &[RasterTile2D<u8>],
 ) {
     let res_a = raster_operator_to_list_of_tiles_u8(exe_ctx, query_ctx, operator, query_rectangle)
         .await
         .expect("raster operator to list failed!");
 
-    assert_eq_two_list_of_tiles_u8(res_a, list_of_tiles, compare_cache_hint);
+    assert_eq_two_list_of_tiles_u8(&res_a, list_of_tiles, compare_cache_hint);
 }
 
+/// Compares the output of two raster operators and panics with a message if they are not equal
+///
+/// # Panics
+///
+/// If there are tiles that are not equal
 pub async fn assert_eq_two_raster_operator_res<E: ExecutionContext, Q: QueryContext>(
     exe_ctx: &E,
     query_ctx: &Q,
@@ -75,7 +83,7 @@ pub async fn assert_eq_two_raster_operator_res<E: ExecutionContext, Q: QueryCont
         operator_b,
         query_rectangle,
         compare_cache_hint,
-        res_a,
+        &res_a,
     )
     .await;
 }

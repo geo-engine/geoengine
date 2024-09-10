@@ -366,7 +366,7 @@ impl GridIdx2D {
         y
     }
 
-    pub fn to_3d(&self) -> GridIdx3D {
+    pub fn to_3d(self) -> GridIdx3D {
         let [a, b] = self.0;
         GridIdx([a, b, 0])
     }

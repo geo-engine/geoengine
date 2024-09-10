@@ -25,7 +25,10 @@ pub struct SpatialGridDefinition {
 
 impl SpatialGridDefinition {
     pub fn new(geo_transform: GeoTransform, grid_bounds: GridBoundingBox2D) -> Self {
-        Self { geo_transform, grid_bounds }
+        Self {
+            geo_transform,
+            grid_bounds,
+        }
     }
 
     pub fn new_generic<G: Into<GridBoundingBox2D>>(
@@ -48,6 +51,7 @@ impl SpatialGridDefinition {
         self.geo_transform.grid_to_spatial_bounds(&self.grid_bounds)
     }
 
+    #[must_use]
     pub fn shift_bounds_relative_by_pixel_offset(&self, offset: GridIdx2D) -> Self {
         let grid_bounds = self.grid_bounds.shift_by_offset(offset);
         let geo_transform = self.geo_transform.shift_by_pixel_offset(-offset);
@@ -68,6 +72,7 @@ impl SpatialGridDefinition {
     }
 
     /// This method moves the origin to the coordinate of the grid edge nearest to the supplied new origin reference
+    #[must_use]
     pub fn with_moved_origin_to_nearest_grid_edge(
         &self,
         new_origin_referece: Coordinate2D,
@@ -89,6 +94,7 @@ impl SpatialGridDefinition {
     }
 
     /// Creates a new spatial grid with the self shape and pixel size but new origin.
+    #[must_use]
     pub fn replace_origin(&self, new_origin: Coordinate2D) -> Self {
         Self {
             geo_transform: GeoTransform::new(
@@ -141,6 +147,7 @@ impl SpatialGridDefinition {
     /// Creates a new spatial grid that has the same origin as self.
     /// The pixel sizes are changed and the grid bounds are adapted to cover the same spatial area.
     /// Note: if the new resolution is not a multiple of the old resolution the new grid might cover a larger spatial area then self.
+    #[must_use]
     pub fn with_changed_resolution(&self, new_res: SpatialResolution) -> Self {
         let geo_transform =
             GeoTransform::new(self.geo_transform.origin_coordinate, new_res.x, -new_res.y);
@@ -166,6 +173,7 @@ impl SpatialGridDefinition {
         Grid::from_index_fn(&self.grid_bounds, map_fn)
     }
 
+    #[must_use]
     pub fn spatial_bounds_to_compatible_spatial_grid(
         &self,
         spatial_partition: SpatialPartition2D,
@@ -248,6 +256,7 @@ impl TilingSpatialGridDefinition {
     }
 
     /// Returns the data tiling strategy for the given tile size in pixels.
+    #[must_use]
     pub fn generate_data_tiling_strategy(&self) -> TilingStrategy {
         TilingStrategy {
             geo_transform: self.tiling_geo_transform(),
@@ -255,6 +264,7 @@ impl TilingSpatialGridDefinition {
         }
     }
 
+    #[must_use]
     pub fn with_other_bounds(&self, new_bounds: GridBoundingBox2D) -> Self {
         let new_grid = SpatialGridDefinition::new(self.tiling_geo_transform(), new_bounds);
         Self::new(new_grid, self.tiling_specification)

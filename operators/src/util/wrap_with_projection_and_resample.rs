@@ -172,7 +172,7 @@ impl WrapWithProjectionAndResample {
             let iip = InitializedInterpolation::new_with_source_and_params(
                 CanonicOperatorName::from(&iop),
                 self.initialized_operator,
-                interpolation_params,
+                &interpolation_params,
                 tiling_spec,
             )?;
             let rd = iip.result_descriptor().clone();
@@ -192,7 +192,7 @@ impl WrapWithProjectionAndResample {
                 output_origin_reference: None,
             };
             let dop = Downsampling {
-                params: downsample_params.clone(),
+                params: downsample_params,
                 sources: self.operator.into(),
             };
 

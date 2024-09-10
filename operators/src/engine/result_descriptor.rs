@@ -91,6 +91,7 @@ impl SpatialGridDescriptor {
         Self::new_source(SpatialGridDefinition::new(geo_transform, grid_bounds))
     }
 
+    #[must_use]
     pub fn as_derived(self) -> Self {
         match self {
             Self::Source(s) => Self::Derived(s),
@@ -121,6 +122,7 @@ impl SpatialGridDescriptor {
         }
     }
 
+    #[must_use]
     pub fn map<F: Fn(&SpatialGridDefinition) -> SpatialGridDefinition>(&self, map_fn: F) -> Self {
         match self {
             SpatialGridDescriptor::Source(s) => SpatialGridDescriptor::Source(map_fn(s)),
@@ -202,14 +204,17 @@ impl SpatialGridDescriptor {
         }
     }
 
+    #[must_use]
     pub fn with_changed_resolution(&self, new_res: SpatialResolution) -> Self {
         self.map(|x| x.with_changed_resolution(new_res))
     }
 
+    #[must_use]
     pub fn replace_origin(&self, new_origin: Coordinate2D) -> Self {
         self.map(|x| x.replace_origin(new_origin))
     }
 
+    #[must_use]
     pub fn with_moved_origin_to_nearest_grid_edge(
         &self,
         new_origin_referece: Coordinate2D,
@@ -238,6 +243,7 @@ impl SpatialGridDescriptor {
         }
     }
 
+    #[must_use]
     pub fn spatial_bounds_to_compatible_spatial_grid(
         &self,
         spatial_partition: SpatialPartition2D,
@@ -369,7 +375,7 @@ impl RasterResultDescriptor {
 
     pub fn with_datatype_and_num_bands(
         data_type: RasterDataType,
-        num_bands: usize,
+        num_bands: u32,
         pixel_bounds: GridBoundingBox2D,
         geo_transform: GeoTransform,
     ) -> Self {
@@ -381,12 +387,7 @@ impl RasterResultDescriptor {
                 geo_transform,
                 pixel_bounds,
             )),
-            bands: RasterBandDescriptors::new(
-                (0..num_bands)
-                    .map(|n| RasterBandDescriptor::new(format!("{n}"), Measurement::Unitless))
-                    .collect::<Vec<_>>(),
-            )
-            .unwrap(),
+            bands: RasterBandDescriptors::new_multiple_bands(num_bands),
         }
     }
 }

@@ -27,7 +27,7 @@ use snafu::{ensure, Snafu};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct DownsamplingParams {
     pub sampling_method: DownsamplingMethod,
@@ -130,11 +130,10 @@ impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
             DownsamplingResolution::Fraction(f) => {
                 ensure!(f >= 1.0, error::FractionMustBeOneOrLarger { f });
 
-                SpatialResolution::new(
+                SpatialResolution::new_unchecked(
                     in_spatial_grid.spatial_resolution().x / f,
                     in_spatial_grid.spatial_resolution().y.abs() / f, // TODO: allow negative size
                 )
-                .expect("the input resolution is valid")
             }
         };
 
@@ -448,14 +447,14 @@ where
     crate::util::spawn_blocking_with_thread_pool(accu.pool.clone(), || fold_impl(accu, tile)).then(
         |x| async move {
             match x {
-                Ok(r) => r,
+                Ok(r) => Ok(r),
                 Err(e) => Err(e.into()),
             }
         },
     )
 }
 
-pub fn fold_impl<T>(mut accu: DownsampleAccu<T>, tile: RasterTile2D<T>) -> Result<DownsampleAccu<T>>
+pub fn fold_impl<T>(mut accu: DownsampleAccu<T>, tile: RasterTile2D<T>) -> DownsampleAccu<T>
 where
     T: Pixel,
 {
@@ -466,7 +465,7 @@ where
     // TODO: add a skip if both tiles are empty?
     if tile.is_empty() {
         // TODO: and ignore no-data.
-        return Ok(accu);
+        return accu;
     }
 
     // copy all input tiles into the accu to have all data for interpolation
@@ -479,20 +478,18 @@ where
         let accu_pixel_coord = accu_geo_transform.grid_idx_to_pixel_center_coordinate_2d(grid_idx); // use center coordinate similar to ArcGIS
         let source_pixel_idx = in_geo_transform.coordinate_to_grid_idx_2d(accu_pixel_coord);
 
-        let new_value = if in_tile_grid.contains(&source_pixel_idx) {
+        if in_tile_grid.contains(&source_pixel_idx) {
             in_tile_grid.get_at_grid_index_unchecked(source_pixel_idx)
         } else {
             current_value
-        };
-
-        new_value
+        }
     };
 
     accu_tile.update_indexed_elements_parallel(map_fn);
 
     accu.output_grid = accu_tile.into();
 
-    Ok(accu)
+    accu
 }
 
 #[cfg(test)]

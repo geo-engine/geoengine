@@ -248,6 +248,7 @@ impl GeoTransform {
         self.origin_coordinate
     }
 
+    #[must_use]
     pub fn shift_by_pixel_offset(&self, offset: GridIdx2D) -> Self {
         GeoTransform {
             origin_coordinate: self.grid_idx_to_pixel_upper_left_coordinate_2d(offset),

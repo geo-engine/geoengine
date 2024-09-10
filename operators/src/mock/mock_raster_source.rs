@@ -132,7 +132,6 @@ where
                 } else if time_interval.start() <= query.time_interval.start() {
                     let t1 = time_interval.start();
                     known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
-                } else {
                 }
 
                 if time_interval.start() >= query.time_interval.end() {
@@ -141,7 +140,6 @@ where
                 } else if time_interval.end() >= query.time_interval.end() {
                     let t2 = time_interval.end();
                     known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
-                } else {
                 }
             })
             .filter(move |t| {

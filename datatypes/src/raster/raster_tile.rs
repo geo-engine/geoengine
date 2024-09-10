@@ -172,53 +172,28 @@ where
     fn tiles_equal_ignoring_cache_hint(&self, other: &dyn IterableBaseTile<G>) -> bool {
         let mut iter_self = self.iter_tiles();
         let mut iter_other = other.iter_tiles();
-        let mut i = 0;
         loop {
             match (iter_self.next(), iter_other.next()) {
                 (Some(a), Some(b)) => {
                     if a.time != b.time {
-                        println!("i: {}, a.time: {:?}, b.time: {:?}", i, a.time, b.time,);
                         return false;
                     }
                     if a.tile_position != b.tile_position {
-                        println!(
-                            "i: {}, a.tile_position: {:?}, b.tile_position: {:?}",
-                            i, a.tile_position, b.tile_position
-                        );
                         return false;
                     }
                     if a.band != b.band {
-                        println!("i: {}, a.band: {:?}, b.band: {:?}", i, a.band, b.band);
                         return false;
                     }
                     if !approx_eq!(GeoTransform, a.global_geo_transform, b.global_geo_transform) {
-                        println!(
-                            "i: {}, approx_eq a.geo_transform: {:?}, b.geo_Transform: {:?}",
-                            i, a.global_geo_transform, b.global_geo_transform
-                        );
                         return false;
                     }
                     if a.global_geo_transform != b.global_geo_transform {
-                        println!(
-                            "i: {}, equals a.geo_transform: {:?}, b.geo_Transform: {:?}",
-                            i, a.global_geo_transform, b.global_geo_transform
-                        );
                         return false;
                     }
                     if a.properties != b.properties {
-                        println!(
-                            "i: {}, a.properties: {:?}, b.properties: {:?}",
-                            i, a.properties, b.properties
-                        );
                         return false;
                     }
                     if a.grid_array != b.grid_array {
-                        println!(
-                            "i: {}, a.grid_array: {:?}, b.grid_array: {:?}",
-                            i,
-                            AsRef::<[usize]>::as_ref(&a.grid_array.axis_size()),
-                            AsRef::<[usize]>::as_ref(&b.grid_array.axis_size()),
-                        );
                         return false;
                     }
                 }
@@ -227,7 +202,6 @@ where
                 // one iterator is exhausted, the other is not, so they are not equal
                 _ => return false,
             }
-            i += 1;
         }
     }
 }
@@ -407,6 +381,11 @@ impl<T> RasterTile2D<T>
 where
     T: Pixel,
 {
+    /// Converts the tile into a grid with the global pixel bounds of the tile.
+    ///
+    /// # Panics
+    /// Only if the tile was invalid before...
+    ///
     pub fn into_inner_positioned_grid(self) -> GridOrEmpty<GridBoundingBox2D, T> {
         let b = self.bounding_box();
         let g = self.grid_array;

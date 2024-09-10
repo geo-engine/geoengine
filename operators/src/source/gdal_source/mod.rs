@@ -109,6 +109,7 @@ pub struct GdalSourceParameters {
 }
 
 impl GdalSourceParameters {
+    #[must_use]
     pub fn new(data: NamedData) -> Self {
         Self {
             data,
@@ -116,6 +117,7 @@ impl GdalSourceParameters {
         }
     }
 
+    #[must_use]
     pub fn new_with_overview_level(data: NamedData, overview_level: u32) -> Self {
         Self {
             data,
@@ -123,6 +125,7 @@ impl GdalSourceParameters {
         }
     }
 
+    #[must_use]
     pub fn with_overview_level(mut self, overview_level: Option<u32>) -> Self {
         self.overview_level = overview_level;
         self
@@ -531,7 +534,7 @@ impl GdalRasterLoader {
         let result_grid =
             read_grid_and_handle_edges(&dataset, &rasterband, dataset_params, read_advise)?;
 
-        let properties = read_raster_properties::<T>(&dataset, dataset_params, &rasterband);
+        let properties = read_raster_properties(&dataset, dataset_params, &rasterband);
 
         let elapsed = start.elapsed();
         debug!("data loaded -> returning data grid, took {:?}", elapsed);
@@ -730,12 +733,6 @@ where
                 FillerTimeBounds::new(query.time_interval.start(), end)
             }
         };
-        dbg!(
-            loading_info.start_time_of_output_stream,
-            loading_info.end_time_of_output_stream,
-            &time_bounds
-        );
-        debug!("Using time bounds: {:?}", time_bounds);
 
         let source_stream = stream::iter(loading_info.info);
 
@@ -782,8 +779,8 @@ fn overview_result_descriptor(
             .expect("this is a source");
         let geo_transform = GeoTransform::new(
             source_spatial_grid.geo_transform.origin_coordinate,
-            source_spatial_grid.geo_transform.x_pixel_size() * overview_level as f64,
-            source_spatial_grid.geo_transform.y_pixel_size() * overview_level as f64,
+            source_spatial_grid.geo_transform.x_pixel_size() * f64::from(overview_level),
+            source_spatial_grid.geo_transform.y_pixel_size() * f64::from(overview_level),
         );
         let grid_bounds = GridBoundingBox2D::new_min_max(
             div_floor(
@@ -1074,7 +1071,7 @@ where
 }
 
 /// This method reads the data for a single tile with a specified size from the GDAL dataset and adds the requested metadata as properties to the tile.
-fn read_raster_properties<T: Pixel + gdal::raster::GdalType + FromPrimitive>(
+fn read_raster_properties(
     dataset: &GdalDataset,
     dataset_params: &GdalDatasetParameters,
     rasterband: &GdalRasterBand,

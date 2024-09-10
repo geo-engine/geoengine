@@ -83,7 +83,7 @@ impl RasterOperator for Interpolation {
         InitializedInterpolation::new_with_source_and_params(
             name,
             raster_source,
-            self.params,
+            &self.params,
             context.tiling_specification(),
         )
         .map(InitializedRasterOperator::boxed)
@@ -104,7 +104,7 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
     pub fn new_with_source_and_params(
         name: CanonicOperatorName,
         raster_source: O,
-        params: InterpolationParams,
+        params: &InterpolationParams,
         tiling_specification: TilingSpecification,
     ) -> Result<Self> {
         let in_descriptor = raster_source.result_descriptor();
@@ -132,11 +132,10 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
             InterpolationResolution::Fraction(f) => {
                 ensure!(f >= 1.0, error::FractionMustBeOneOrLarger { f });
 
-                SpatialResolution::new(
+                SpatialResolution::new_unchecked(
                     in_spatial_grid.spatial_resolution().x / f,
                     in_spatial_grid.spatial_resolution().y.abs() / f,
                 )
-                .expect("the input resolution is valid")
             }
         };
 
@@ -509,7 +508,7 @@ where
 {
     crate::util::spawn_blocking(|| fold_impl(accu, tile)).then(|x| async move {
         match x {
-            Ok(r) => r,
+            Ok(r) => Ok(r),
             Err(e) => Err(e.into()),
         }
     })
@@ -518,7 +517,7 @@ where
 pub fn fold_impl<T, I>(
     mut accu: InterpolationAccu<T, I>,
     tile: RasterTile2D<T>,
-) -> Result<InterpolationAccu<T, I>>
+) -> InterpolationAccu<T, I>
 where
     T: Pixel,
     I: InterpolationAlgorithm<GridBoundingBox2D, T>,
@@ -534,7 +533,7 @@ where
 
     accu.input_tile.grid_blit_from(in_tile);
 
-    Ok(accu)
+    accu
 }
 
 #[cfg(test)]

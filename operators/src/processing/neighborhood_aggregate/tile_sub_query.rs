@@ -307,20 +307,20 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
 }
 
 type FoldFutureFn<P, F> = fn(
-    Result<Result<NeighborhoodAggregateAccu<P, F>>, tokio::task::JoinError>,
+    Result<NeighborhoodAggregateAccu<P, F>, tokio::task::JoinError>,
 ) -> Result<NeighborhoodAggregateAccu<P, F>>;
 type FoldFuture<P, F> =
-    futures::future::Map<JoinHandle<Result<NeighborhoodAggregateAccu<P, F>>>, FoldFutureFn<P, F>>;
+    futures::future::Map<JoinHandle<NeighborhoodAggregateAccu<P, F>>, FoldFutureFn<P, F>>;
 
 /// Turn a result of results into a result
 fn flatten_result<P: Pixel, F: AggregateFunction>(
-    result: Result<Result<NeighborhoodAggregateAccu<P, F>>, tokio::task::JoinError>,
+    result: Result<NeighborhoodAggregateAccu<P, F>, tokio::task::JoinError>,
 ) -> Result<NeighborhoodAggregateAccu<P, F>>
 where
     f64: AsPrimitive<P>,
 {
     match result {
-        Ok(r) => r,
+        Ok(r) => Ok(r),
         Err(e) => Err(e.into()),
     }
 }
@@ -329,7 +329,7 @@ where
 pub fn merge_tile_into_enlarged_tile<P: Pixel, F: AggregateFunction>(
     mut accu: NeighborhoodAggregateAccu<P, F>,
     tile: RasterTile2D<P>,
-) -> Result<NeighborhoodAggregateAccu<P, F>>
+) -> NeighborhoodAggregateAccu<P, F>
 where
     f64: AsPrimitive<P>,
 {
@@ -339,7 +339,7 @@ where
 
     // if the tile is empty, we can skip it
     if tile.is_empty() {
-        return Ok(accu);
+        return accu;
     }
 
     // copy all input tiles into the accu to have all data for raster kernel
@@ -347,7 +347,7 @@ where
 
     accu.accu_grid.grid_blit_from(&x);
 
-    Ok(accu)
+    accu
 }
 
 #[cfg(test)]

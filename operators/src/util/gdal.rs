@@ -96,7 +96,7 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
             )),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new((-180., 90.).into(), 0.1, -0.1),
-                GridBoundingBox2D::new([0, 0], [1799, 3599]).unwrap(),
+                GridBoundingBox2D::new([0, 0], [1799, 3599]).expect("should only be used in tests"),
             ),
             bands: vec![RasterBandDescriptor {
                 name: "ndvi".to_string(),
@@ -119,8 +119,10 @@ pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds_with_cache_ttl(
     let no_data_value = Some(0.); // TODO: is it really 0?
     GdalMetaDataRegular {
         data_time: TimeInterval::new_unchecked(
-            TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
-            TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+            TimeInstance::from_str("2014-01-01T00:00:00.000Z")
+                .expect("should only be used in tests"),
+            TimeInstance::from_str("2014-07-01T00:00:00.000Z")
+                .expect("should only be used in tests"),
         ),
         step: TimeStep {
             granularity: TimeGranularity::Months,
@@ -155,11 +157,14 @@ pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds_with_cache_ttl(
             spatial_reference: SpatialReference::epsg_4326().into(),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new((0., 0.).into(), 0.1, -0.1),
-                GridBoundingBox2D::new([-850, -1800], [-845, -1799]).unwrap(),
+                GridBoundingBox2D::new([-850, -1800], [-845, -1799])
+                    .expect("should only be used in tests"),
             ),
             time: Some(TimeInterval::new_unchecked(
-                TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
-                TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z")
+                    .expect("should only be used in tests"),
+                TimeInstance::from_str("2014-07-01T00:00:00.000Z")
+                    .expect("should only be used in tests"),
             )),
             bands: vec![RasterBandDescriptor {
                 name: "ndvi".to_string(),

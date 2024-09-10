@@ -25,7 +25,7 @@ impl TilingSpecification {
         }
     }
 
-    // TODO: maybe a field?
+    #[allow(clippy::unused_self)]
     pub fn tiling_origin_reference(&self) -> Coordinate2D {
         Coordinate2D::new(0., 0.)
     }
@@ -406,7 +406,6 @@ mod tests {
 
         let _distance =
             geo_transform.distance_to_nearest_pixel_edge(tiling_spec.tiling_origin_reference());
-            
 
         let tile_idx = tiling_spec.pixel_idx_to_tile_idx(nearest_to_tiling_origin);
         let expected_near_tiling_origin_idx = GridIdx::new([72_329_138_149, 72_329_138_149]);
@@ -414,7 +413,8 @@ mod tests {
 
         let (origin_tile, origin_offset) =
             TilingSpecification::origin_pixel_tile_coord(&geo_transform, &tiling_spec);
-        let expected_origin_in_tiling_based_pixels = GridIdx::new([-72_329_138_150, -72_329_138_150]);
+        let expected_origin_in_tiling_based_pixels =
+            GridIdx::new([-72_329_138_150, -72_329_138_150]);
         let expected_tile_offset_from_tiling = GridIdx::new([-85, -85]);
         assert_eq!(origin_tile, expected_origin_in_tiling_based_pixels);
         assert_eq!(origin_offset, expected_tile_offset_from_tiling);

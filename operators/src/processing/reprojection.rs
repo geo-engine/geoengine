@@ -655,7 +655,7 @@ mod tests {
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
         GdalMetaDataStatic, GdalSourceTimePlaceholder, TimeReference,
     };
-    use crate::util::gdal::add_ndvi_dataset_cropped_to_valid_webmercator_bounds;
+    use crate::util::gdal::add_ndvi_dataset;
     use crate::{
         engine::{ChunkByteSize, VectorOperator},
         source::{GdalSource, GdalSourceParameters},
@@ -1078,7 +1078,7 @@ mod tests {
     #[tokio::test]
     async fn raster_ndvi_3857() -> Result<()> {
         let mut exe_ctx = MockExecutionContext::test_default();
-        let id = add_ndvi_dataset_cropped_to_valid_webmercator_bounds(&mut exe_ctx);
+        let id = add_ndvi_dataset(&mut exe_ctx);
 
         let tile_size = GridShape2D::new_2d(512, 512);
         exe_ctx.tiling_specification = TilingSpecification::new(tile_size);

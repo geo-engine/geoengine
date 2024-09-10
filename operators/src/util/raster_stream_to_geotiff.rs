@@ -110,7 +110,7 @@ where
 }
 
 fn create_multiband_dataset_and_writer<T>(
-    tiles: &Vec<RasterTile2D<T>>,
+    tiles: &[RasterTile2D<T>],
     query_rect: &RasterQueryRectangle,
     tiling_strategy: TilingStrategy,
     gdal_tiff_options: GdalGeoTiffOptions,

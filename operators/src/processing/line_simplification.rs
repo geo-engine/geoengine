@@ -47,10 +47,12 @@ impl VectorOperator for LineSimplification {
             EpsilonOrResolution::Epsilon(epsilon) if epsilon <= 0.0 || !epsilon.is_finite() => {
                 return Err(LineSimplificationError::InvalidEpsilon.into());
             }
+            EpsilonOrResolution::Epsilon(_eps) => {
+                //TODO: do something here...
+            }
             EpsilonOrResolution::Resolution(_res) => {
                 // TODO: validate resolution
             }
-            _ => {}
         }
 
         let name = CanonicOperatorName::from(&self);

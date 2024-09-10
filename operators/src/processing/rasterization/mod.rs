@@ -22,6 +22,7 @@ use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, Grid as GridWithFlexibleBoundType, Grid2D, GridIdx,
     GridOrEmpty, GridSize, RasterDataType, RasterTile2D, TilingSpecification, TilingStrategy,
 };
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 
 use typetag::serde;
@@ -69,14 +70,15 @@ impl RasterOperator for Rasterization {
                 in_desc
                     .spatial_reference()
                     .as_option()
-                    .map(|s| s.area_of_use_projected::<BoundingBox2D>())
+                    .map(SpatialReference::area_of_use_projected::<BoundingBox2D>)
             })
             .map_err(|_| error::Error::NoSpatialBoundsAvailable)?;
 
-        let pixel_bounds = geo_transform.spatial_to_grid_bounds(
-            &SpatialPartition2D::new(spatial_bounds.upper_left(), spatial_bounds.lower_right())
-                .unwrap(),
-        );
+        let pixel_bounds =
+            geo_transform.spatial_to_grid_bounds(&SpatialPartition2D::new_unchecked(
+                spatial_bounds.upper_left(),
+                spatial_bounds.lower_right(),
+            ));
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,

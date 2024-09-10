@@ -82,9 +82,13 @@ pub fn save_test_bytes(bytes: &[u8], filename: &str) {
         .expect("it should be possible to write this file for testing");
 }
 
+/// Method that compares two lists of tiles and panics with a message why there is a difference.
+///
+/// # Panics
+/// If there is a difference between two tiles or the length of the lists
 pub fn assert_eq_two_list_of_tiles_u8(
-    list_a: Vec<RasterTile2D<u8>>,
-    list_b: Vec<RasterTile2D<u8>>,
+    list_a: &[RasterTile2D<u8>],
+    list_b: &[RasterTile2D<u8>],
     compare_cache_hint: bool,
 ) {
     assert_eq!(
@@ -96,7 +100,7 @@ pub fn assert_eq_two_list_of_tiles_u8(
     );
 
     list_a
-        .into_iter()
+        .iter()
         .zip(list_b)
         .enumerate()
         .for_each(|(i, (a, b))| {
@@ -146,8 +150,8 @@ pub fn assert_eq_two_list_of_tiles_u8(
                 b.grid_array.is_empty(),
             );
             if !a.grid_array.is_empty() {
-                let mat_a = a.grid_array.into_materialized_masked_grid();
-                let mat_b = b.grid_array.into_materialized_masked_grid();
+                let mat_a = a.grid_array.clone().into_materialized_masked_grid();
+                let mat_b = b.grid_array.clone().into_materialized_masked_grid();
 
                 for (pi, idx) in grid_idx_iter_2d(&mat_a).enumerate() {
                     let a_v = mat_a
