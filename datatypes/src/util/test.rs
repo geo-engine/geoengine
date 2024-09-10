@@ -97,7 +97,7 @@ pub fn assert_eq_two_list_of_tiles_u8(
 
     list_a
         .into_iter()
-        .zip(list_b.into_iter())
+        .zip(list_b)
         .enumerate()
         .for_each(|(i, (a, b))| {
             assert_eq!(
@@ -158,9 +158,8 @@ pub fn assert_eq_two_list_of_tiles_u8(
                         .expect("tile b must contain idx inside tile bounds");
                     assert_eq!(
                         a_v, b_v,
-                        "tile {} pixel {} at {:?} input_a: {:?}, input_b: {:?}",
-                        i, pi, idx, a_v, b_v,
-                    )
+                        "tile {i} pixel {pi} at {idx:?} input_a: {a_v:?}, input_b: {b_v:?}",
+                    );
                 }
             }
             if compare_cache_hint {

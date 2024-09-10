@@ -211,7 +211,7 @@ mod tests {
             .unwrap();
 
         let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
-            GridBoundingBox2D::new_min_max(-900, 899, -1800, 1799).unwrap(),
+            GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(), // This is just a part of the raster but the original test used a resolution of 1.0 instead of the 0.1 the data actually has
             TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
             BandSelection::first(),
         );

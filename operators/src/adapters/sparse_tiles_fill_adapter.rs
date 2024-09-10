@@ -294,6 +294,8 @@ impl<T: Pixel> StateContainer<T> {
     }
 
     fn update_current_time(&mut self, new_time: TimeInterval) {
+        debug_assert!(!new_time.is_instant(), "Tile time which is data validity must not be an instant!");
+
         if let Some(old_time) = self.current_time {
             if old_time == new_time {
                 return;

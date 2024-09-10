@@ -502,8 +502,6 @@ pub struct RasterStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_time")]
     #[param(value_type = String)]
     pub time_interval: TimeInterval,
-    #[serde(deserialize_with = "parse_spatial_resolution")]
-    pub spatial_resolution: SpatialResolution,
     #[serde(deserialize_with = "parse_band_selection")]
     #[param(value_type = String)]
     pub attributes: BandSelection,

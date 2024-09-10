@@ -44,17 +44,21 @@ where
     // the tile stream will allways produce tiles aligned to the tiling origin
     let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
 
-    let output_grid = Ok(GridOrEmpty::<GridBoundingBox2D, T>::new_empty_shape(
+    let output_grid = GridOrEmpty::<GridBoundingBox2D, T>::new_empty_shape(
         query_rect.spatial_query.grid_bounds(),
-    ));
+    );
+    let output_cache_hint = CacheHint::max_duration();
+    let accu = Ok((output_grid, output_cache_hint));
 
-    let output_tile: BoxFuture<Result<GridOrEmpty<GridBoundingBox2D, T>>> =
-        Box::pin(tile_stream.fold(output_grid, |raster2d, tile| {
-            let result: Result<GridOrEmpty<GridBoundingBox2D, T>> = match (raster2d, tile) {
-                (Ok(raster2d), Ok(tile)) if tile.is_empty() => Ok(raster2d),
-                (Ok(mut raster2d), Ok(tile)) => {
-                    raster2d.grid_blit_from(&tile.into_inner_positioned_grid());
-                    Ok(raster2d)
+    let output_tile: BoxFuture<Result<(GridOrEmpty<GridBoundingBox2D, T>, CacheHint)>> =
+        Box::pin(tile_stream.fold(accu, |accu, tile| {
+            let result: Result<(GridOrEmpty<GridBoundingBox2D, T>, CacheHint)> = match (accu, tile)
+            {
+                (Ok((empty_grid, ch)), Ok(tile)) if tile.is_empty() => Ok((empty_grid, ch)),
+                (Ok((mut grid, mut ch)), Ok(tile)) => {
+                    ch.merge_with(&tile.cache_hint);
+                    grid.grid_blit_from(&tile.into_inner_positioned_grid());
+                    Ok((grid, ch))
                 }
                 (Err(error), _) | (_, Err(error)) => Err(error),
             };
@@ -65,12 +69,13 @@ where
             }
         }));
 
-    let result = abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
+    let (result, cache_hint) =
+        abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
 
     let colorizer = colorizer.unwrap_or(default_colorizer_gradient::<T>()?);
     Ok((
         result.unbounded().to_png(width, height, &colorizer)?,
-        CacheHint::default(), // TODO: cache hint needed?
+        cache_hint,
     ))
 }
 

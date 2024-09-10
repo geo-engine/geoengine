@@ -4,8 +4,7 @@ use crate::adapters::{
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, SpatialGridDescriptor, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -19,7 +18,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D, GridIndexAccess,
-    GridOrEmpty, Pixel, RasterTile2D, SpatialGridDefinition, TileInformation, TilingSpecification,
+    GridOrEmpty, Pixel, RasterTile2D, TileInformation, TilingSpecification,
     UpdateIndexedElementsParallel,
 };
 use rayon::ThreadPool;
@@ -140,14 +139,10 @@ impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
         };
 
         let output_gspatial_grid = if let Some(oc) = params.output_origin_reference {
-            let out_geo_transform = GeoTransform::new(oc, output_resolution.x, output_resolution.y);
-            let out_grid_bounds =
-                out_geo_transform.spatial_to_grid_bounds(&in_spatial_grid.spatial_partition());
-            // TODO: maybe "Merged" is not a good name... Derived?
-            SpatialGridDescriptor::Derived(SpatialGridDefinition::new(
-                out_geo_transform,
-                out_grid_bounds,
-            ))
+            in_spatial_grid
+                .with_moved_origin_to_nearest_grid_edge(oc)
+                .replace_origin(oc)
+                .with_changed_resolution(output_resolution)
         } else {
             in_spatial_grid.with_changed_resolution(output_resolution)
         };
@@ -481,7 +476,7 @@ where
     let in_geo_transform = accu.input_global_geo_transform;
 
     let map_fn = |grid_idx: GridIdx2D, current_value: Option<T>| -> Option<T> {
-        let accu_pixel_coord = accu_geo_transform.grid_idx_to_pixel_center_coordinate_2d(grid_idx);
+        let accu_pixel_coord = accu_geo_transform.grid_idx_to_pixel_center_coordinate_2d(grid_idx); // use center coordinate similar to ArcGIS
         let source_pixel_idx = in_geo_transform.coordinate_to_grid_idx_2d(accu_pixel_coord);
 
         let new_value = if in_tile_grid.contains(&source_pixel_idx) {

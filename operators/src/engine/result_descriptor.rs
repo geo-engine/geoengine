@@ -206,8 +206,8 @@ impl SpatialGridDescriptor {
         self.map(|x| x.with_changed_resolution(new_res))
     }
 
-    pub fn with_replaced_origin(&self, new_origin: Coordinate2D) -> Self {
-        self.map(|x| x.with_replaced_origin(new_origin))
+    pub fn replace_origin(&self, new_origin: Coordinate2D) -> Self {
+        self.map(|x| x.replace_origin(new_origin))
     }
 
     pub fn with_moved_origin_to_nearest_grid_edge(

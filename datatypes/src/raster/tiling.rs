@@ -74,8 +74,9 @@ impl TilingSpecification {
         geo_transform: &GeoTransform,
         tiling_spec: &TilingSpecification,
     ) -> (GridIdx2D, GridIdx2D) {
-        let nearest_pixel_to_zero = geo_transform.nearest_pixel_to_zero();
-        let pixel_distance_reverse = nearest_pixel_to_zero * -1;
+        let nearest_pixel_to_tiling_origin =
+            geo_transform.nearest_pixel_edge(tiling_spec.tiling_origin_reference());
+        let pixel_distance_reverse = nearest_pixel_to_tiling_origin * -1;
 
         let origin_pixel_tile = tiling_spec.pixel_idx_to_tile_idx(pixel_distance_reverse);
         let origin_pixel_offset =
@@ -97,9 +98,9 @@ impl GridShapeAccess for TilingSpecification {
     }
 }
 
-impl Into<GridShape2D> for TilingSpecification {
-    fn into(self) -> GridShape2D {
-        self.tile_size_in_pixels
+impl From<TilingSpecification> for GridShape2D {
+    fn from(val: TilingSpecification) -> Self {
+        val.tile_size_in_pixels
     }
 }
 
@@ -326,9 +327,8 @@ impl SpatialPartitioned for TileInformation {
 #[cfg(test)]
 mod tests {
 
-    use crate::raster::GridIntersection;
-
     use super::*;
+    use crate::raster::GridIntersection;
 
     #[test]
     fn it_generates_only_intersected_tiles() {
@@ -395,26 +395,31 @@ mod tests {
             0.000_033_337_4,
             -0.000_033_337_4,
         );
-        let nearest_to_zero = geo_transform.nearest_pixel_to_zero();
-
-        let nearest_to_zero_coord =
-            geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(nearest_to_zero);
 
         let tiling_spec = TilingSpecification::new([512, 512].into());
-        let tile_size = tiling_spec.tile_size_in_pixels;
 
-        let tile_idx = tiling_spec.pixel_idx_to_tile_idx(nearest_to_zero);
-        let expected_near_zero_idx = GridIdx::new([72329138149, 72329138149]);
-        assert_eq!(tile_idx, expected_near_zero_idx);
+        let nearest_to_tiling_origin =
+            geo_transform.nearest_pixel_edge(tiling_spec.tiling_origin_reference());
+
+        let nearest_to_tiling_origin_coord =
+            geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(nearest_to_tiling_origin);
+
+        let _distance =
+            geo_transform.distance_to_nearest_pixel_edge(tiling_spec.tiling_origin_reference());
+            
+
+        let tile_idx = tiling_spec.pixel_idx_to_tile_idx(nearest_to_tiling_origin);
+        let expected_near_tiling_origin_idx = GridIdx::new([72_329_138_149, 72_329_138_149]);
+        assert_eq!(tile_idx, expected_near_tiling_origin_idx);
 
         let (origin_tile, origin_offset) =
             TilingSpecification::origin_pixel_tile_coord(&geo_transform, &tiling_spec);
-        let expected_origin_in_tiling_based_pixels = GridIdx::new([-72329138150, -72329138150]);
-        let expected_tile_offset_from_tiling = GridIdx::new([-86, -86]);
+        let expected_origin_in_tiling_based_pixels = GridIdx::new([-72_329_138_150, -72_329_138_150]);
+        let expected_tile_offset_from_tiling = GridIdx::new([-85, -85]);
         assert_eq!(origin_tile, expected_origin_in_tiling_based_pixels);
         assert_eq!(origin_offset, expected_tile_offset_from_tiling);
 
-        let GridIdx([y, x]) = origin_tile * tile_size;
+        let GridIdx([y, x]) = origin_tile * tiling_spec.tile_size_in_pixels;
         println!("y: {y:?}");
         println!("x: {x:?}");
         let coord_x = x as f64 * geo_transform.x_pixel_size();
@@ -425,8 +430,8 @@ mod tests {
         let coord_y_off = (y - origin_offset.inner()[0]) as f64 * geo_transform.y_pixel_size();
         println!("coord_x_off: {coord_x_off:?}");
         println!("coord_y_off: {coord_y_off:?}");
-        let rgx = coord_x_off + nearest_to_zero_coord.x;
-        let rgy = coord_y_off + nearest_to_zero_coord.y;
+        let rgx = coord_x_off + nearest_to_tiling_origin_coord.x;
+        let rgy = coord_y_off + nearest_to_tiling_origin_coord.y;
         println!("rgx: {rgx:?}");
         println!("rgy: {rgy:?}");
 

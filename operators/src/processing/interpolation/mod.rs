@@ -7,8 +7,7 @@ use crate::adapters::{
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, SpatialGridDescriptor, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -22,8 +21,8 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{
     Bilinear, ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridOrEmpty,
-    InterpolationAlgorithm, NearestNeighbor, Pixel, RasterTile2D, SpatialGridDefinition,
-    TileInformation, TilingSpecification,
+    InterpolationAlgorithm, NearestNeighbor, Pixel, RasterTile2D, TileInformation,
+    TilingSpecification,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -142,14 +141,10 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
         };
 
         let out_spatial_grid = if let Some(oc) = params.output_origin_reference {
-            let out_geo_transform = GeoTransform::new(oc, output_resolution.x, output_resolution.y);
-            let out_grid_bounds =
-                out_geo_transform.spatial_to_grid_bounds(&in_spatial_grid.spatial_partition());
-            // TODO: maybe "Merged" is not a good name... Derived?
-            SpatialGridDescriptor::Derived(SpatialGridDefinition::new(
-                out_geo_transform,
-                out_grid_bounds,
-            ))
+            in_spatial_grid
+                .with_changed_resolution(output_resolution)
+                .with_moved_origin_to_nearest_grid_edge(oc)
+                .replace_origin(oc)
         } else {
             in_spatial_grid.with_changed_resolution(output_resolution)
         };

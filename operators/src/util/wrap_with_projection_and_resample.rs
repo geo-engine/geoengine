@@ -119,7 +119,7 @@ impl WrapWithProjectionAndResample {
             target_spatial_grid
                 .with_moved_origin_to_nearest_grid_edge(tor)
                 .as_derived()
-                .with_replaced_origin(tor)
+                .replace_origin(tor)
         } else {
             target_spatial_grid
         };
@@ -142,6 +142,19 @@ impl WrapWithProjectionAndResample {
                 target_spatial_resolution,
                 rd_resolution
             );
+            /*
+            let interpolation_method = if self
+                .result_descriptor
+                .bands
+                .bands()
+                .iter()
+                .all(|b| b.measurement.is_continuous())
+            {
+                InterpolationMethod::BiLinear
+            } else {
+                InterpolationMethod::NearestNeighbor
+            };
+            */
 
             let interpolation_params = InterpolationParams {
                 interpolation: InterpolationMethod::NearestNeighbor,

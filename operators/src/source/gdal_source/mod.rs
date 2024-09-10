@@ -707,6 +707,11 @@ where
             self.meta_data.loading_info(query.clone()).await?
         };
 
+        debug_assert!(
+            loading_info.start_time_of_output_stream < loading_info.end_time_of_output_stream,
+            "Data bounds must not be TimeInstance"
+        );
+
         let time_bounds = match (
             loading_info.start_time_of_output_stream,
             loading_info.end_time_of_output_stream,
@@ -725,6 +730,12 @@ where
                 FillerTimeBounds::new(query.time_interval.start(), end)
             }
         };
+        dbg!(
+            loading_info.start_time_of_output_stream,
+            loading_info.end_time_of_output_stream,
+            &time_bounds
+        );
+        debug!("Using time bounds: {:?}", time_bounds);
 
         let source_stream = stream::iter(loading_info.info);
 

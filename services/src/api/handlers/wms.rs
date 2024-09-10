@@ -15,7 +15,9 @@ use crate::util::server::{connection_closed, not_implemented_handler, CacheContr
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
-use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, BandSelection, CacheHint, SpatialResolution,
+};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D};
 use geoengine_operators::engine::{ExecutionContext, WorkflowOperatorPath};
 use geoengine_operators::{
@@ -25,6 +27,7 @@ use reqwest::Url;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
+use tracing::debug;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -272,6 +275,9 @@ async fn wms_map_handler<C: ApplicationContext>(
             request.crs.ok_or(error::Error::MissingSpatialReference)?;
 
         let request_bounds: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
+        let x_request_res = request_bounds.size_x() / f64::from(request.width);
+        let y_request_res = request_bounds.size_y() / f64::from(request.height);
+        let request_resolution = SpatialResolution::new(x_request_res.abs(), y_request_res.abs())?;
 
         let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
 
@@ -295,12 +301,29 @@ async fn wms_map_handler<C: ApplicationContext>(
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
+        /*
+        let request_geo_transform = GeoTransform::new(
+            request_bounds.upper_left(),
+            request_resolution.x,
+            -request_resolution.y,
+        );
+
+        let tiling_based_origin = request_geo_transform
+            .nearest_pixel_edge_coordinate(tiling_spec.tiling_origin_reference());
+
+        */
+
         let wrapped =
             geoengine_operators::util::WrapWithProjectionAndResample::new_create_result_descriptor(
                 operator,
                 initialized,
             )
-            .wrap_with_projection(request_spatial_ref.into(), None, tiling_spec)?;
+            .wrap_with_projection_and_resample(
+                None, // Some(tiling_based_origin),
+                Some(request_resolution),
+                request_spatial_ref.into(),
+                tiling_spec,
+            )?;
         // TODO: add a resammple operator for downsampling AND resample push down!
 
         let initialized = wrapped.initialized_operator;
@@ -313,6 +336,8 @@ async fn wms_map_handler<C: ApplicationContext>(
             .tiling_grid_definition(tiling_spec)
             .tiling_spatial_grid_definition()
             .spatial_bounds_to_compatible_spatial_grid(request_bounds);
+
+        debug!("WMS re-scale-project: {:?}", query_tiling_pixel_grid);
 
         let (attributes, colorizer) = match raster_colorizer {
             Some(RasterColorizer::SingleBand {
@@ -327,6 +352,8 @@ async fn wms_map_handler<C: ApplicationContext>(
             request.time.unwrap_or_else(default_time_from_config).into(),
             attributes,
         );
+
+        debug!("WMS query rect: {:?}", query_rect);
 
         let query_ctx = ctx.query_context()?;
 
@@ -596,7 +623,7 @@ mod tests {
         let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle::new_with_grid_bounds(
-                GridBoundingBox2D::new_min_max(-900, 899, -180, 179).unwrap(),
+                GridBoundingBox2D::new_min_max(-900, 899, -1800, 1799).unwrap(),
                 geoengine_datatypes::primitives::TimeInterval::new(
                     1_388_534_400_000,
                     1_388_534_400_000 + 1000,
@@ -692,7 +719,6 @@ mod tests {
             "{:?}",
             actix_web::test::read_body(response).await
         );
-
 
         let image_bytes = actix_web::test::read_body(response).await;
 
@@ -942,7 +968,7 @@ mod tests {
 <?xml version="1.0" encoding="UTF-8"?>
     <ServiceExceptionReport version="1.3.0" xmlns="http://www.opengis.net/ogc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/ogc https://cdc.dwd.de/geoserver/schemas/wms/1.3.0/exceptions_1_3_0.xsd">
     <ServiceException>
-        No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }
+        Spatial reference system 'EPSG:432' is unknown
     </ServiceException>
 </ServiceExceptionReport>"#
         );
@@ -1004,7 +1030,13 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(res, 200, "NoCoordinateProjector", "No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
+        ErrorResponse::assert(
+            res,
+            200,
+            "UnknownSrsString",
+            "Spatial reference system 'EPSG:432' is unknown",
+        )
+        .await;
     }
 
     #[ge_context::test]
@@ -1041,7 +1073,6 @@ mod tests {
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx).await;
 
-
         assert_eq!(
             response.status(),
             200,
@@ -1055,7 +1086,9 @@ mod tests {
         assert!(
             cache_header == "private, max-age=60"
                 || cache_header == "private, max-age=59"
-                || cache_header == "private, max-age=58"
+                || cache_header == "private, max-age=58",
+            "Cache header is {:?} and not one of the exprected 60, 59, 58",
+            cache_header
         );
     }
 }

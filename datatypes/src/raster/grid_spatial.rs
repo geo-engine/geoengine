@@ -25,10 +25,7 @@ pub struct SpatialGridDefinition {
 
 impl SpatialGridDefinition {
     pub fn new(geo_transform: GeoTransform, grid_bounds: GridBoundingBox2D) -> Self {
-        Self {
-            grid_bounds,
-            geo_transform,
-        }
+        Self { geo_transform, grid_bounds }
     }
 
     pub fn new_generic<G: Into<GridBoundingBox2D>>(
@@ -75,9 +72,7 @@ impl SpatialGridDefinition {
         &self,
         new_origin_referece: Coordinate2D,
     ) -> Self {
-        let nearest_to_target = self
-            .geo_transform
-            .coordinate_to_grid_idx_2d(new_origin_referece);
+        let nearest_to_target = self.geo_transform.nearest_pixel_edge(new_origin_referece);
         self.shift_bounds_relative_by_pixel_offset(-nearest_to_target)
     }
 
@@ -94,7 +89,7 @@ impl SpatialGridDefinition {
     }
 
     /// Creates a new spatial grid with the self shape and pixel size but new origin.
-    pub fn with_replaced_origin(&self, new_origin: Coordinate2D) -> Self {
+    pub fn replace_origin(&self, new_origin: Coordinate2D) -> Self {
         Self {
             geo_transform: GeoTransform::new(
                 new_origin,
@@ -107,7 +102,7 @@ impl SpatialGridDefinition {
 
     /// Merges two spatial grids
     /// If the second grid is not compatible with selfit returns None
-    /// If the second grid has a different GeoTransform it is transformed to the GroTransform of self
+    /// If the second grid has a different `GeoTransform` it is transformed to the `GroTransform` of self
     pub fn merge(&self, other: &Self) -> Option<Self> {
         if !self.is_compatible_grid_generic(other) {
             return None;
@@ -127,7 +122,7 @@ impl SpatialGridDefinition {
 
     /// Computes the intersection of self and other
     /// IF other is incompatible with self, None is returned.
-    /// IF other has a different GeoTransform then self it is transformed to to the GeoTransform of self.
+    /// IF other has a different `GeoTransform` then self it is transformed to to the `GeoTransform` of self.
     pub fn intersection(&self, other: &SpatialGridDefinition) -> Option<SpatialGridDefinition> {
         if !self.is_compatible_grid_generic(other) {
             return None;
@@ -277,7 +272,7 @@ impl<P: CoordinateProjection> Reproject<P> for SpatialGridDefinition {
     type Out = Self;
 
     fn reproject(&self, projector: &P) -> Result<Self::Out> {
-        suggest_output_spatial_grid_like_gdal(&self, projector)
+        suggest_output_spatial_grid_like_gdal(self, projector)
     }
 }
 

@@ -1163,8 +1163,9 @@ mod tests {
         // println!("{}", res[0].tile_geo_transform().worldfile_string());
 
         // Write the tile to a file
+
         /*
-        let mut buffer = std::fs::File::create("MOD13A2_M_NDVI_2014-04-01_tile-20_v5.rst")?;
+        let mut buffer = std::fs::File::create("MOD13A2_M_NDVI_2014-04-01_tile-20_v6.rst")?;
 
         std::io::Write::write(
             &mut buffer,
@@ -1184,7 +1185,7 @@ mod tests {
 
         assert_eq!(
             include_bytes!(
-               "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20_v5.rst"
+               "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20_v6.rst"
           ) as &[u8],
           res[0].clone().into_materialized_tile().grid_array.inner_grid.data.as_slice()
          );

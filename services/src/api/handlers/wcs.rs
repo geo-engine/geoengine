@@ -11,7 +11,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialPartition2D, TimeInterval,
+    AxisAlignedRectangle, BandSelection, RasterQueryRectangle, TimeInterval,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
@@ -214,9 +214,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
 
     let spatial_reference: Option<SpatialReference> = result_descriptor.spatial_reference.into();
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
-
-    // TODO: give tighter bounds if possible
-    let area_of_use: SpatialPartition2D = spatial_reference.area_of_use_projected()?;
+    let bounds = result_descriptor.spatial_bounds();
 
     let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) =
         match spatial_reference_specification(&spatial_reference.proj_string()?)?
@@ -225,16 +223,16 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
                 srs_string: spatial_reference.srs_string(),
             })? {
             AxisOrder::EastNorth => (
-                area_of_use.lower_left().x,
-                area_of_use.lower_left().y,
-                area_of_use.upper_right().x,
-                area_of_use.upper_right().y,
+                bounds.lower_left().x,
+                bounds.lower_left().y,
+                bounds.upper_right().x,
+                bounds.upper_right().y,
             ),
             AxisOrder::NorthEast => (
-                area_of_use.lower_left().y,
-                area_of_use.lower_left().x,
-                area_of_use.upper_right().y,
-                area_of_use.upper_right().x,
+                bounds.lower_left().y,
+                bounds.lower_left().x,
+                bounds.upper_right().y,
+                bounds.upper_right().x,
             ),
         };
 
@@ -272,8 +270,8 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
         workflow_id = identifiers,
         srs_authority = spatial_reference.authority(),
         srs_code = spatial_reference.code(),
-        origin_x = area_of_use.upper_left().x,
-        origin_y = area_of_use.upper_left().y,
+        origin_x = bounds.upper_left().x,
+        origin_y = bounds.upper_left().y,
         bbox_ll_0 = bbox_ll_0,
         bbox_ll_1 = bbox_ll_1,
         bbox_ur_0 = bbox_ur_0,

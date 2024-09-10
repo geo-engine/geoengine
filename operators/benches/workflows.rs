@@ -283,8 +283,8 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
     );
     let tiling_spec = TilingSpecification::new([512, 512].into());
 
-    let qrects = vec![("World in 36000x18000 pixels", qrect)];
-    let tiling_specs = vec![tiling_spec];
+    let qrects = [("World in 36000x18000 pixels", qrect)];
+    let tiling_specs = [tiling_spec];
 
     #[allow(clippy::needless_pass_by_value)] // must match signature
     fn operator_builder(
@@ -367,15 +367,13 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
         BandSelection::first(),
     );
 
-    let qrects = vec![("World in 72000x36000 pixels", qrect)];
-    let tiling_specs = vec![
-        TilingSpecification::new([512, 512].into()),
+    let qrects = [("World in 72000x36000 pixels", qrect)];
+    let tiling_specs = [TilingSpecification::new([512, 512].into()),
         TilingSpecification::new([1024, 1024].into()),
         TilingSpecification::new([2048, 2048].into()),
         TilingSpecification::new([4096, 4096].into()),
         TilingSpecification::new([9000, 9000].into()),
-        TilingSpecification::new([18000, 18000].into()),
-    ];
+        TilingSpecification::new([18000, 18000].into())];
 
     #[allow(clippy::needless_pass_by_value)] // must match signature
     fn operator_builder(

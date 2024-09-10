@@ -118,22 +118,30 @@ where
             .inspect(|m| {
                 let time_interval = m.time;
 
-                if time_interval.start() <= query.time_interval.start() {
-                    let t = if time_interval.end() > query.time_interval.start() {
-                        time_interval.start()
-                    } else {
-                        time_interval.end()
-                    };
-                    known_time_start = known_time_start.map(|old| old.max(t)).or(Some(t));
+                if time_interval.contains(&query.time_interval) {
+                    let t1 = time_interval.start();
+                    let t2 = time_interval.end();
+                    known_time_start = Some(t1);
+                    known_time_end = Some(t2);
+                    return;
                 }
 
-                if time_interval.end() >= query.time_interval.end() {
-                    let t = if time_interval.start() < query.time_interval.end() {
-                        time_interval.end()
-                    } else {
-                        time_interval.start()
-                    };
-                    known_time_end = known_time_end.map(|old| old.min(t)).or(Some(t));
+                if time_interval.end() <= query.time_interval.start() {
+                    let t1 = time_interval.end();
+                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
+                } else if time_interval.start() <= query.time_interval.start() {
+                    let t1 = time_interval.start();
+                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
+                } else {
+                }
+
+                if time_interval.start() >= query.time_interval.end() {
+                    let t2 = time_interval.start();
+                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
+                } else if time_interval.end() >= query.time_interval.end() {
+                    let t2 = time_interval.end();
+                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
+                } else {
                 }
             })
             .filter(move |t| {

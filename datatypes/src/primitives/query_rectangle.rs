@@ -311,7 +311,7 @@ impl SpatialGridQueryRectangle {
     /// Creates a new `SpatialGridQueryRectangle` from a geo transform and a grid bounds.
     pub fn new(grid_bounds: GridBoundingBox2D) -> Self {
         Self {
-            grid_bounds: grid_bounds,
+            grid_bounds,
         }
     }
 
@@ -334,7 +334,8 @@ impl SpatialGridQueryRectangle {
         spatial_bounds: BoundingBox2D,
         geo_transform: GeoTransform,
     ) -> Self {
-        let grid_bounds = geo_transform.bounding_box_2d_to_grid_bounds(&spatial_bounds);
+        let grid_bounds =
+            geo_transform.bounding_box_2d_to_intersecting_grid_bounds(&spatial_bounds);
 
         Self::new(grid_bounds)
     }
@@ -343,8 +344,8 @@ impl SpatialGridQueryRectangle {
         vector_spatial_query: VectorSpatialQueryRectangle,
         geo_transform: GeoTransform,
     ) -> Self {
-        let pixel_bounds =
-            geo_transform.bounding_box_2d_to_grid_bounds(&vector_spatial_query.spatial_bounds());
+        let pixel_bounds = geo_transform
+            .bounding_box_2d_to_intersecting_grid_bounds(&vector_spatial_query.spatial_bounds());
 
         Self::new(pixel_bounds)
     }

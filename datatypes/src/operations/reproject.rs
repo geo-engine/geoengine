@@ -457,7 +457,7 @@ pub fn suggest_output_spatial_grid_like_gdal<P: CoordinateProjection>(
     let out_spatial_grid_moved_origin =
         out_spatial_grid.with_moved_origin_to_nearest_grid_edge(proj_origin);
 
-    Ok(out_spatial_grid_moved_origin.with_replaced_origin(proj_origin))
+    Ok(out_spatial_grid_moved_origin.replace_origin(proj_origin))
 }
 
 pub fn suggest_pixel_size_from_diag_cross_helper<B: AxisAlignedRectangle>(

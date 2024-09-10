@@ -161,13 +161,7 @@ impl GeoTransform {
 
     /// compute the index of the upper left pixel that is contained in the `partition`
     pub fn upper_left_pixel_idx(&self, partition: &SpatialPartition2D) -> GridIdx2D {
-        // choose the epsilon relative to the pixel size
-        const EPSILON: f64 = 0.000_001;
-        let epsilon: Coordinate2D =
-            (self.x_pixel_size() * EPSILON, self.y_pixel_size() * EPSILON).into();
-
-        let upper_left_coordinate = partition.upper_left() + epsilon;
-
+        let upper_left_coordinate = partition.upper_left();
         self.coordinate_to_grid_idx_2d(upper_left_coordinate)
     }
 
@@ -197,7 +191,7 @@ impl GeoTransform {
 
     /// Transform a `BoundingBox2D` into a `GridBoundingBox2D`.
     #[inline]
-    pub fn bounding_box_2d_to_grid_bounds(
+    pub fn bounding_box_2d_to_intersecting_grid_bounds(
         &self,
         bounding_box: &BoundingBox2D,
     ) -> GridBoundingBox2D {
@@ -254,10 +248,6 @@ impl GeoTransform {
         self.origin_coordinate
     }
 
-    pub fn nearest_pixel_to_zero(&self) -> GridIdx2D {
-        self.coordinate_to_grid_idx_2d(Coordinate2D { x: 0., y: 0. }) // TODO: currently this is the pixel thats starts top left of 0.0, 0.0. Its coordinate is not the nearest to 0.0, 0.0 if it is more than half a pixel away
-    }
-
     pub fn shift_by_pixel_offset(&self, offset: GridIdx2D) -> Self {
         GeoTransform {
             origin_coordinate: self.grid_idx_to_pixel_upper_left_coordinate_2d(offset),
@@ -266,10 +256,22 @@ impl GeoTransform {
         }
     }
 
+    pub fn nearest_pixel_edge(&self, coordinate: Coordinate2D) -> GridIdx2D {
+        self.coordinate_to_grid_idx_2d(
+            coordinate + Coordinate2D::new(self.x_pixel_size * 0.5, self.y_pixel_size * 0.5), // by adding a half pixel, we can find flips between edges
+        )
+    }
+
+    pub fn nearest_pixel_edge_coordinate(&self, coordinate: Coordinate2D) -> Coordinate2D {
+        self.grid_idx_to_pixel_upper_left_coordinate_2d(self.nearest_pixel_edge(coordinate))
+    }
+
     pub fn distance_to_nearest_pixel_edge(&self, coordinate: Coordinate2D) -> Coordinate2D {
-        let pixel_edge = self
-            .grid_idx_to_pixel_upper_left_coordinate_2d(self.coordinate_to_grid_idx_2d(coordinate));
-        coordinate - pixel_edge
+        let pixel_edge = self.nearest_pixel_edge_coordinate(coordinate);
+        let dist = coordinate - pixel_edge;
+        debug_assert!(dist.x.abs() <= self.x_pixel_size.abs() * 0.5);
+        debug_assert!(dist.y.abs() <= self.y_pixel_size.abs() * 0.5);
+        dist
     }
 
     pub fn is_valid_pixel_edge(&self, coordinate: Coordinate2D) -> bool {
@@ -604,12 +606,6 @@ mod tests {
         let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
         let shifted = geo_transform.shift_by_pixel_offset([1, 1].into());
         assert_eq!(shifted.origin_coordinate, (1.0, -1.0).into());
-    }
-
-    #[test]
-    fn nearest_pixel_to_zero() {
-        let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
-        assert_eq!(geo_transform.nearest_pixel_to_zero(), [0, 0].into());
     }
 
     #[test]

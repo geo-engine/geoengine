@@ -73,9 +73,7 @@ impl TimeInterval {
 
         debug_assert!(
             start_instant <= end_instant,
-            "{:?} <= {:?}",
-            start_instant,
-            end_instant
+            "{start_instant:?} <= {end_instant:?}"
         );
 
         ensure!(
