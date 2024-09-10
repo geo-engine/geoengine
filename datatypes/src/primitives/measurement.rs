@@ -25,17 +25,11 @@ impl Measurement {
     }
 
     pub fn is_classification(&self) -> bool {
-        match self {
-            Self::Classification(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Classification(_))
     }
 
     pub fn is_continuous(&self) -> bool {
-        match self {
-            Self::Continuous(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Continuous(_))
     }
 }
 

@@ -50,7 +50,7 @@ impl GridShape1D {
         Self::new([x_size])
     }
 
-    pub fn x(&self) -> usize {
+    pub fn x(self) -> usize {
         self.shape_array[0]
     }
 }

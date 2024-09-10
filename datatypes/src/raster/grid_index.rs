@@ -335,17 +335,17 @@ where
 }
 
 impl GridIdx1D {
-    pub fn x(&self) -> isize {
+    pub fn x(self) -> isize {
         let [a] = self.0;
         a
     }
 
-    pub fn to_2d(&self) -> GridIdx2D {
+    pub fn to_2d(self) -> GridIdx2D {
         let [a] = self.0;
         GridIdx([a, 0])
     }
 
-    pub fn to_3d(&self) -> GridIdx3D {
+    pub fn to_3d(self) -> GridIdx3D {
         let [a] = self.0;
         GridIdx([a, 0, 0])
     }

@@ -274,7 +274,7 @@ where
 }
 
 fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
-    let tiling_origin = Coordinate2D::new(0., 0.);
+    let _tiling_origin = Coordinate2D::new(0., 0.);
 
     let qrect = RasterQueryRectangle::new_with_grid_bounds(
         GridBoundingBox2D::new([-9000, -18000], [8999, 17999]).unwrap(),
@@ -283,8 +283,8 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
     );
     let tiling_spec = TilingSpecification::new([512, 512].into());
 
-    let qrects = [("World in 36000x18000 pixels", qrect)];
-    let tiling_specs = [tiling_spec];
+    let _qrects = [("World in 36000x18000 pixels", qrect)];
+    let _tiling_specs = [tiling_spec];
 
     #[allow(clippy::needless_pass_by_value)] // must match signature
     fn operator_builder(
@@ -359,7 +359,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
 }
 
 fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCollector) {
-    let tiling_origin = Coordinate2D::new(0., 0.);
+    let _tiling_origin = Coordinate2D::new(0., 0.);
 
     let qrect = RasterQueryRectangle::new_with_grid_bounds(
         GridBoundingBox2D::new([-9000, -18000], [8999, 17999]).unwrap(),
@@ -367,8 +367,8 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
         BandSelection::first(),
     );
 
-    let qrects = [("World in 72000x36000 pixels", qrect)];
-    let tiling_specs = [TilingSpecification::new([512, 512].into()),
+    let _qrects = [("World in 72000x36000 pixels", qrect)];
+    let _tiling_specs = [TilingSpecification::new([512, 512].into()),
         TilingSpecification::new([1024, 1024].into()),
         TilingSpecification::new([2048, 2048].into()),
         TilingSpecification::new([4096, 4096].into()),
