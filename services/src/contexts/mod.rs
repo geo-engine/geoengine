@@ -4,10 +4,12 @@ use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 use crate::layers::listing::LayerCollectionProvider;
 use crate::layers::storage::{LayerDb, LayerProviderDb};
+use crate::machine_learning::MlModelDb;
 use crate::tasks::{TaskContext, TaskManager};
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId, NamedData};
+use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
@@ -30,7 +32,7 @@ pub use migrations::{
     Migration0004DatasetListingProviderPrio, Migration0005GbifColumnSelection,
     Migration0006EbvProvider, Migration0007OwnerRole, Migration0008BandNames,
     Migration0009OidcTokens, Migration0010S2StacTimeBuffers, Migration0011RemoveXgb,
-    MigrationResult,
+    Migration0012MlModelDb, MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
@@ -96,6 +98,7 @@ pub trait GeoEngineDb:
     + ProjectDb
     + WorkflowRegistry
     + NetCdfCfProviderDb
+    + MlModelDb
     + std::fmt::Debug
 {
 }
@@ -162,7 +165,7 @@ impl QueryContext for QueryContextImpl {
 
 pub struct ExecutionContextImpl<D>
 where
-    D: DatasetDb + LayerProviderDb,
+    D: DatasetDb + LayerProviderDb + MlModelDb,
 {
     db: D,
     thread_pool: Arc<ThreadPool>,
@@ -172,7 +175,7 @@ where
 
 impl<D> ExecutionContextImpl<D>
 where
-    D: DatasetDb + LayerProviderDb,
+    D: DatasetDb + LayerProviderDb + MlModelDb,
 {
     pub fn new(
         db: D,
@@ -212,7 +215,8 @@ where
             VectorQueryRectangle,
         > + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + LayerProviderDb,
+        + LayerProviderDb
+        + MlModelDb,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
@@ -283,6 +287,27 @@ where
         Ok(dataset_id.into())
     }
 
+    async fn ml_model_metadata(
+        &self,
+        name: &MlModelName,
+    ) -> Result<MlModelMetadata, geoengine_operators::error::Error> {
+        self.db
+            .load_model(&(name.clone().into()))
+            .await
+            .map_err(
+                |source| geoengine_operators::error::Error::CannotResolveMlModelName {
+                    name: name.clone(),
+                    source: Box::new(source),
+                },
+            )?
+            .metadata_for_operator()
+            .map_err(
+                |source| geoengine_operators::error::Error::LoadingMlMetadataFailed {
+                    source: Box::new(source),
+                },
+            )
+    }
+
     fn extensions(&self) -> &ExecutionContextExtensions {
         &self.extensions
     }
@@ -299,7 +324,8 @@ where
             MockDatasetDataSourceLoadingInfo,
             VectorResultDescriptor,
             VectorQueryRectangle,
-        > + LayerProviderDb,
+        > + LayerProviderDb
+        + MlModelDb,
 {
     async fn meta_data(
         &self,
@@ -343,7 +369,8 @@ impl<D> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRe
 where
     D: DatasetDb
         + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-        + LayerProviderDb,
+        + LayerProviderDb
+        + MlModelDb,
 {
     async fn meta_data(
         &self,
@@ -381,7 +408,8 @@ impl<D> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRec
 where
     D: DatasetDb
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + LayerProviderDb,
+        + LayerProviderDb
+        + MlModelDb,
 {
     async fn meta_data(
         &self,

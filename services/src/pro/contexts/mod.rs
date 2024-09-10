@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
+use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::{
@@ -27,6 +28,7 @@ use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 
 use crate::layers::storage::LayerProviderDb;
+use crate::machine_learning::MlModelDb;
 use crate::pro::users::{OidcManager, UserDb};
 
 use async_trait::async_trait;
@@ -97,7 +99,8 @@ where
             VectorQueryRectangle,
         > + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + LayerProviderDb,
+        + LayerProviderDb
+        + MlModelDb,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
@@ -191,6 +194,27 @@ where
             .ok_or(geoengine_operators::error::Error::UnknownDatasetName { name: data.clone() })?;
 
         Ok(dataset_id.into())
+    }
+
+    async fn ml_model_metadata(
+        &self,
+        name: &MlModelName,
+    ) -> Result<MlModelMetadata, geoengine_operators::error::Error> {
+        self.db
+            .load_model(&(name.clone().into()))
+            .await
+            .map_err(
+                |source| geoengine_operators::error::Error::CannotResolveMlModelName {
+                    name: name.clone(),
+                    source: Box::new(source),
+                },
+            )?
+            .metadata_for_operator()
+            .map_err(
+                |source| geoengine_operators::error::Error::LoadingMlMetadataFailed {
+                    source: Box::new(source),
+                },
+            )
     }
 
     fn extensions(&self) -> &ExecutionContextExtensions {
