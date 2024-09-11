@@ -1,9 +1,16 @@
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::marker::PhantomData;
-use std::path::PathBuf;
-use std::str::FromStr;
-
+pub use self::error::ArunaProviderError;
+use crate::contexts::GeoEngineDb;
+use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
+use crate::datasets::listing::ProvenanceOutput;
+use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerCollectionId, ProviderLayerId,
+};
+use crate::layers::listing::{
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+};
+use crate::workflows::workflow::Workflow;
 use aruna_rust_api::api::storage::models::v2::relation::Relation as ArunaRelationEnum;
 use aruna_rust_api::api::storage::models::v2::{
     Dataset, InternalRelationVariant, KeyValue, KeyValueVariant, Object, ResourceVariant,
@@ -18,22 +25,13 @@ use aruna_rust_api::api::storage::services::v2::{
     GetDatasetRequest, GetDatasetsRequest, GetDownloadUrlRequest, GetObjectsRequest,
     GetProjectRequest,
 };
-use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-use tonic::codegen::InterceptedService;
-use tonic::metadata::{AsciiMetadataKey, AsciiMetadataValue};
-use tonic::service::Interceptor;
-use tonic::transport::{Channel, Endpoint};
-use tonic::{Request, Status};
-
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
     FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D};
+use geoengine_datatypes::raster::{BoundedGrid, GeoTransform, GridShape2D};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
@@ -47,24 +45,22 @@ use geoengine_operators::source::{
     OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
     OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat,
 };
-
-use crate::contexts::GeoEngineDb;
-use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
-use crate::datasets::listing::ProvenanceOutput;
-use crate::layers::external::{DataProvider, DataProviderDefinition};
-use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
-    ProviderLayerCollectionId, ProviderLayerId,
-};
-use crate::layers::listing::{
-    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
-};
-use crate::workflows::workflow::Workflow;
-
-pub use self::error::ArunaProviderError;
-
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::marker::PhantomData;
+use std::path::PathBuf;
+use std::str::FromStr;
+use tonic::codegen::InterceptedService;
+use tonic::metadata::{AsciiMetadataKey, AsciiMetadataValue};
+use tonic::service::Interceptor;
+use tonic::transport::{Channel, Endpoint};
+use tonic::{Request, Status};
 pub mod error;
 pub mod metadata;
+
 #[cfg(test)]
 #[macro_use]
 mod mock_grpc_server;
@@ -513,8 +509,7 @@ impl ArunaDataProvider {
         crs: SpatialReferenceOption,
         info: &RasterInfo,
     ) -> geoengine_operators::util::Result<RasterResultDescriptor> {
-        let shape = GridBoundingBox2D::new_min_max(0, 0, info.width as isize, info.height as isize)
-            .unwrap();
+        let shape = GridShape2D::new_2d(info.width, info.height).bounding_box();
 
         let geo_transform = GeoTransform::try_from(info.geo_transform) // TODO: convert into tiling based bounds?
             .expect("GeoTransform should be valid"); // TODO: check if that can be false

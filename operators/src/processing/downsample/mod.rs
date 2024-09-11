@@ -46,7 +46,7 @@ pub enum DownsamplingResolution {
 #[serde(rename_all = "camelCase")]
 pub enum DownsamplingMethod {
     NearestNeighbor,
-    Mean,
+    // Mean,
 }
 
 #[derive(Debug, Snafu)]
@@ -176,9 +176,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
                         self.tiling_specification,
                     ).boxed()
                     .into(),
-
-                _ => unimplemented!() // TODO!
-
             }
         );
 
@@ -504,6 +501,7 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn nearest_neighbor_4() {
         // In this test, 2x2 tiles with 4x4 pixels are downsampled using nearest neighbor to one tile with 4x4 pixels. The resolution is now 1/2 of the original resolution.
@@ -672,9 +670,10 @@ mod tests {
         assert_eq!(
             grid.inner_grid.data,
             &[6, 8, 26, 28, 14, 16, 34, 36, 46, 48, 66, 68, 54, 56, 74, 76]
-        )
+        );
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn nearest_neighbor_3() {
         // In this test, 3x3 tiles with 3x3 pixels are downsampled using nearest neighbor to one tile with 3x3 pixels. The resolution is now 1/3 of the original resolution.
@@ -901,6 +900,6 @@ mod tests {
         // 34, 44, 54
         // 64, 74, 84
 
-        assert_eq!(grid.inner_grid.data, &[4, 14, 24, 34, 44, 54, 64, 74, 84])
+        assert_eq!(grid.inner_grid.data, &[4, 14, 24, 34, 44, 54, 64, 74, 84]);
     }
 }

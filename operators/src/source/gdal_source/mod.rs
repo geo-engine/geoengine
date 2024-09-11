@@ -188,6 +188,10 @@ impl GdalDatasetParameters {
         )
     }
 
+    /// Returns the `SpatialGridDefinition` of the Gdal dataset.
+    ///
+    /// # Panics
+    /// Panics if the `GdalDatasetParameters` are faulty.
     pub fn spatial_grid_definition(&self) -> SpatialGridDefinition {
         SpatialGridDefinition::new(
             GeoTransform::try_from(self.geo_transform).expect("there is no reason that this conversion does not work except for upsidedown datasets and we need to address that!"),
@@ -668,7 +672,6 @@ where
 
         let tiling_based_pixel_bounds = tiling_grid_definition.tiling_grid_bounds();
 
-        // TODO: Not really sure if we want to support the case where the query is not based on tiling origin...
         let tiling_strategy = tiling_grid_definition.generate_data_tiling_strategy();
 
         let query_pixel_bounds = query.spatial_query().grid_bounds();
@@ -689,13 +692,11 @@ where
             }
         }
         */
-        let reader_mode = if self.overview_level == 0 {
-            GdalReaderMode::OriginalResolution(ReaderState {
-                dataset_spatial_grid: source_grid_definition,
-            })
-        } else {
-            unimplemented!("GdalReaderMode::OverviewResolution");
-        };
+
+        // TODO: add resampling
+        let reader_mode = GdalReaderMode::OriginalResolution(ReaderState {
+            dataset_spatial_grid: source_grid_definition,
+        });
 
         let loading_info = if empty {
             // TODO: using this shortcut will insert one no-data element with max time validity. However, this does not honor time intervals of data in other areas!

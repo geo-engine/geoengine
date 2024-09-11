@@ -923,6 +923,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn raster_identity() -> Result<()> {
         let projection = SpatialReference::epsg_4326();
@@ -1120,7 +1121,7 @@ mod tests {
 
         assert_approx_eq!(
             f64,
-            14255.015508816849, // TODO: GDAL output is 14228.560819126376373
+            14_255.015_508_816_849, // TODO: GDAL output is 14228.560819126376373
             result_descritptor
                 .spatial_grid_descriptor()
                 .spatial_resolution()
@@ -1130,7 +1131,7 @@ mod tests {
 
         assert_approx_eq!(
             f64,
-            14255.015508816849, // TODO: GDAL output is -14233.615370039031404
+            14_255.015_508_816_849, // TODO: GDAL output is -14233.615370039031404
             result_descritptor
                 .spatial_grid_descriptor()
                 .spatial_resolution()
@@ -1222,13 +1223,14 @@ mod tests {
         ));
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn raster_ndvi_3857_to_4326() -> Result<()> {
         let tile_size_in_pixels = [200, 200].into();
         let data_geo_transform = GeoTransform::new(
             Coordinate2D::new(-20_037_508.342_789_244, 19_971_868.880_408_562),
-            14_052.950_258_048_738_760,
-            -14_057.881_117_788_405_390,
+            14_052.950_258_048_738,
+            -14_057.881_117_788_405,
         );
         let data_bounds = GridBoundingBox2D::new([0, 0], [2840, 2850]).unwrap();
         let result_descriptor = RasterResultDescriptor {
@@ -1287,8 +1289,7 @@ mod tests {
         let name = NamedData::with_system_name("ndvi");
         exe_ctx.add_meta_data(id.clone(), name.clone(), Box::new(m));
 
-        let time_interval = TimeInterval::new_unchecked(1_396_310_400_000, 1_396_310_400_000);
-        // 2014-04-01
+        let time_interval = TimeInterval::new_unchecked(1_396_310_400_000, 1_396_310_400_000); // 2014-04-01
 
         let gdal_op = GdalSource {
             params: GdalSourceParameters::new(name),
@@ -1340,7 +1341,6 @@ mod tests {
 
         // none of the tiles should be empty
         assert!(tiles.iter().all(|t| !t.is_empty()));
-
         Ok(())
     }
 

@@ -33,7 +33,7 @@ pub enum GdalReaderMode {
     // read the original resolution
     OriginalResolution(ReaderState),
     // read an overview level of the dataset
-    OverviewLevel(OverviewReaderState),
+    // OverviewLevel(OverviewReaderState),
 }
 
 impl GdalReaderMode {
@@ -42,11 +42,11 @@ impl GdalReaderMode {
         match self {
             GdalReaderMode::OriginalResolution(reader_state) => {
                 reader_state.dataset_itersection_tile(tile).is_some()
-            }
-
-            GdalReaderMode::OverviewLevel(_overview_reader_state) => {
-                unimplemented!()
-            }
+            } /*
+              GdalReaderMode::OverviewLevel(_overview_reader_state) => {
+                   unimplemented!()
+                }
+                */
         }
     }
 
@@ -66,10 +66,6 @@ impl GdalReaderMode {
                         .and_then(|a| a.intersection(tile))
                         .is_some()
             }
-
-            GdalReaderMode::OverviewLevel(_overview_reader_state) => {
-                unimplemented!()
-            }
         }
     }
 
@@ -82,9 +78,6 @@ impl GdalReaderMode {
         match self {
             GdalReaderMode::OriginalResolution(reader_state) => reader_state
                 .tiling_to_dataset_read_advise(actual_gdal_dataset_spatial_grid_definition, tile),
-            GdalReaderMode::OverviewLevel(_overview_reader_state) => {
-                unimplemented!()
-            }
         }
     }
 }
@@ -165,9 +158,10 @@ impl ReaderState {
     }
 }
 
+/*
 #[derive(Copy, Clone, Debug)]
 pub struct OverviewReaderState {
-    /*
+
         dataset_shape: GridShape2D,
         dataset_geo_transform: GdalDatasetGeoTransform,
         target_pixel_bounds: GridBoundingBox2D,
@@ -199,8 +193,9 @@ pub struct OverviewReaderState {
             ));
             self.dataset_shape == self.target_pixel_bounds.grid_shape()
         }
-    */
+
 }
+*/
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct GdalReadWindow {
@@ -285,7 +280,7 @@ mod tests {
         assert_eq!(
             res.grid_bounds(),
             GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap()
-        )
+        );
     }
 
     #[test]
@@ -358,7 +353,7 @@ mod tests {
             GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap()
         );
 
-        assert_eq!(tiling_to_dataset_read_advise.flip_y, false);
+        assert!(tiling_to_dataset_read_advise.flip_y);
     }
 
     #[test]
@@ -404,7 +399,7 @@ mod tests {
             GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([89, 179])).unwrap()
         );
 
-        assert_eq!(tiling_to_dataset_read_advise.flip_y, false);
+        assert!(!tiling_to_dataset_read_advise.flip_y);
     }
 
     #[test]
@@ -451,7 +446,7 @@ mod tests {
             GridBoundingBox2D::new(GridIdx2D::new([10, 10]), GridIdx2D::new([99, 189])).unwrap()
         );
 
-        assert_eq!(tiling_to_dataset_read_advise.flip_y, false);
+        assert!(!tiling_to_dataset_read_advise.flip_y);
     }
 
     #[test]

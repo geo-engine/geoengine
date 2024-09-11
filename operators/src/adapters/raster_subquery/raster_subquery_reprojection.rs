@@ -459,7 +459,7 @@ mod tests {
         let tiling_grid = result_descriptor.tiling_grid_definition(tiling_spec);
         let tiling_strat = tiling_grid.generate_data_tiling_strategy();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_spec.clone());
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_spec);
 
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {

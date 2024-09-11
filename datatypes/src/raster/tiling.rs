@@ -401,12 +401,6 @@ mod tests {
         let nearest_to_tiling_origin =
             geo_transform.nearest_pixel_edge(tiling_spec.tiling_origin_reference());
 
-        let nearest_to_tiling_origin_coord =
-            geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(nearest_to_tiling_origin);
-
-        let _distance =
-            geo_transform.distance_to_nearest_pixel_edge(tiling_spec.tiling_origin_reference());
-
         let tile_idx = tiling_spec.pixel_idx_to_tile_idx(nearest_to_tiling_origin);
         let expected_near_tiling_origin_idx = GridIdx::new([72_329_138_149, 72_329_138_149]);
         assert_eq!(tile_idx, expected_near_tiling_origin_idx);
@@ -418,27 +412,5 @@ mod tests {
         let expected_tile_offset_from_tiling = GridIdx::new([-85, -85]);
         assert_eq!(origin_tile, expected_origin_in_tiling_based_pixels);
         assert_eq!(origin_offset, expected_tile_offset_from_tiling);
-
-        let GridIdx([y, x]) = origin_tile * tiling_spec.tile_size_in_pixels;
-        println!("y: {y:?}");
-        println!("x: {x:?}");
-        let coord_x = x as f64 * geo_transform.x_pixel_size();
-        let coord_y = y as f64 * geo_transform.y_pixel_size();
-        println!("coord_x: {coord_x:?}");
-        println!("coord_y: {coord_y:?}");
-        let coord_x_off = (x - origin_offset.inner()[1]) as f64 * geo_transform.x_pixel_size();
-        let coord_y_off = (y - origin_offset.inner()[0]) as f64 * geo_transform.y_pixel_size();
-        println!("coord_x_off: {coord_x_off:?}");
-        println!("coord_y_off: {coord_y_off:?}");
-        let rgx = coord_x_off + nearest_to_tiling_origin_coord.x;
-        let rgy = coord_y_off + nearest_to_tiling_origin_coord.y;
-        println!("rgx: {rgx:?}");
-        println!("rgy: {rgy:?}");
-
-        let control_x = geo_transform.x_pixel_size() * x as f64;
-        let control_y = geo_transform.y_pixel_size() * y as f64;
-
-        println!("control_x: {control_x:?}");
-        println!("control_y: {control_y:?}");
     }
 }

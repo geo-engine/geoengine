@@ -1,11 +1,11 @@
+use geoengine_operators::processing::initialize_expression_dependencies;
+
 #[cfg(feature = "pro")]
 mod pro_main {
     use flexi_logger::writers::{FileLogWriter, FileLogWriterHandle};
     use flexi_logger::{Age, Cleanup, Criterion, FileSpec, Naming, WriteMode};
-    pub use geoengine_operators::processing::initialize_expression_dependencies;
     use geoengine_services::error::Result;
-    use geoengine_services::util::config;
-    use geoengine_services::util::config::get_config_element;
+    use geoengine_services::util::config::{self, get_config_element};
     use tracing::Subscriber;
     use tracing_subscriber::field::RecordFields;
     use tracing_subscriber::fmt::format::{DefaultFields, Writer};
@@ -204,7 +204,7 @@ async fn main() {
 
     #[cfg(feature = "pro")]
     {
-        pro_main::initialize_expression_dependencies()
+        initialize_expression_dependencies()
             .await
             .expect("successful compilation process is necessary for expression operators to work");
 
