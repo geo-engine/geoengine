@@ -1,3 +1,4 @@
+use crate::{engine::WorkflowOperatorPath, meta::quota::QuotaTracking};
 use futures::{ready, Stream};
 use pin_project::pin_project;
 use std::{
@@ -5,8 +6,6 @@ use std::{
     task::{Context, Poll},
 };
 use tracing::Span;
-
-use crate::{engine::WorkflowOperatorPath, pro::meta::quota::QuotaTracking};
 
 #[pin_project(project = StreamStatisticsAdapterProjection)]
 pub struct StreamStatisticsAdapter<S> {
@@ -99,15 +98,14 @@ where
 #[cfg(test)]
 mod tests {
 
+    use super::*;
+
+    use crate::meta::quota::{ComputationContext, ComputationUnit, QuotaMessage};
     use futures::StreamExt;
     use geoengine_datatypes::util::Identifier;
     use tokio::sync::mpsc::unbounded_channel;
     use tracing::{span, Level};
     use uuid::Uuid;
-
-    use crate::pro::meta::quota::{ComputationContext, ComputationUnit, QuotaMessage};
-
-    use super::*;
 
     #[tokio::test]
     async fn simple() {

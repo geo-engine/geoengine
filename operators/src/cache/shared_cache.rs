@@ -1021,7 +1021,7 @@ mod tests {
     use serde_json::json;
     use std::sync::Arc;
 
-    use crate::pro::cache::cache_tiles::{CompressedGridOrEmpty, CompressedMaskedGrid};
+    use crate::cache::cache_tiles::{CompressedGridOrEmpty, CompressedMaskedGrid};
 
     use super::*;
 

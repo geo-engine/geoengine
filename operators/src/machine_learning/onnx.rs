@@ -1,26 +1,24 @@
-use std::path::PathBuf;
-
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
-use crate::pro::machine_learning::error::{InputBandsMismatch, InputTypeMismatch, Ort};
-use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
-use ndarray::Array2;
-use ort::{IntoTensorElementType, PrimitiveTensorElementType};
-use snafu::{ensure, ResultExt};
-
+use crate::machine_learning::error::{InputBandsMismatch, InputTypeMismatch, Ort};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
+use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
     Grid, GridIdx2D, GridIndexAccess, GridSize, Pixel, RasterTile2D,
 };
+use ndarray::Array2;
+use ort::{IntoTensorElementType, PrimitiveTensorElementType};
 use serde::{Deserialize, Serialize};
+use snafu::{ensure, ResultExt};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -304,6 +302,14 @@ impl_no_data_value_zero!(i8, u8, i16, u16, i32, u32, i64, u64);
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        engine::{
+            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+        },
+        machine_learning::metadata_from_file::load_model_metadata,
+        mock::{MockRasterSource, MockRasterSourceParams},
+        processing::{RasterStacker, RasterStackerParams},
+    };
     use approx::assert_abs_diff_eq;
     use geoengine_datatypes::{
         primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
@@ -315,15 +321,6 @@ mod tests {
         util::test::TestDefault,
     };
     use ndarray::{arr2, array, Array1, Array2};
-
-    use crate::{
-        engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-        },
-        mock::{MockRasterSource, MockRasterSourceParams},
-        pro::machine_learning::metadata_from_file::load_model_metadata,
-        processing::{RasterStacker, RasterStackerParams},
-    };
 
     use super::*;
 

@@ -12,8 +12,6 @@ build = "build.rs"
 [features]
 # This compiles Geo Engine Pro
 pro = [
-  "geoengine-operators/pro",
-  "geoengine-datatypes/pro",
   "geoengine-macros/pro",
 ]
 

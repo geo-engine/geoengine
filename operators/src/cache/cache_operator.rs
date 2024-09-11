@@ -2,13 +2,13 @@ use super::cache_chunks::CacheElementSpatialBounds;
 use super::error::CacheError;
 use super::shared_cache::CacheElement;
 use crate::adapters::FeatureCollectionChunkMerger;
+use crate::cache::shared_cache::{AsyncCache, SharedCache};
 use crate::engine::{
     CanonicOperatorName, ChunkByteSize, InitializedRasterOperator, InitializedVectorOperator,
     QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
     TypedRasterQueryProcessor,
 };
 use crate::error::Error;
-use crate::pro::cache::shared_cache::{AsyncCache, SharedCache};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};
@@ -22,7 +22,6 @@ use geoengine_datatypes::util::arrow::ArrowTyped;
 use geoengine_datatypes::util::helpers::ge_report;
 use pin_project::{pin_project, pinned_drop};
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
@@ -190,8 +189,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let shared_cache = ctx
-            .extensions()
-            .get::<Arc<SharedCache>>()
+            .cache()
             .expect("`SharedCache` extension should be set during `ProContext` creation");
 
         let cache_result = shared_cache.query_cache(&self.cache_key, &query).await;
@@ -419,24 +417,24 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    use crate::{
+        engine::{
+            ChunkByteSize, MockExecutionContext, MockQueryContext, MultipleRasterSources,
+            RasterOperator, SingleRasterSource, WorkflowOperatorPath,
+        },
+        processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
+        source::{GdalSource, GdalSourceParameters},
+        util::gdal::add_ndvi_dataset,
+    };
     use futures::StreamExt;
     use geoengine_datatypes::{
         primitives::{BandSelection, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{RasterDataType, RenameBands, TilesEqualIgnoringCacheHint},
         util::test::TestDefault,
     };
-
-    use crate::{
-        engine::{
-            ChunkByteSize, MockExecutionContext, MockQueryContext, MultipleRasterSources,
-            QueryContextExtensions, RasterOperator, SingleRasterSource, WorkflowOperatorPath,
-        },
-        processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
-        source::{GdalSource, GdalSourceParameters},
-        util::gdal::add_ndvi_dataset,
-    };
-
-    use super::*;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn it_caches() {
@@ -460,12 +458,12 @@ mod tests {
 
         let tile_cache = Arc::new(SharedCache::test_default());
 
-        let mut extensions = QueryContextExtensions::default();
-
-        extensions.insert(tile_cache);
-
-        let query_ctx =
-            MockQueryContext::new_with_query_extensions(ChunkByteSize::test_default(), extensions);
+        let query_ctx = MockQueryContext::new_with_query_extensions(
+            ChunkByteSize::test_default(),
+            Some(tile_cache),
+            None,
+            None,
+        );
 
         let stream = processor
             .query(
@@ -566,12 +564,12 @@ mod tests {
 
         let tile_cache = Arc::new(SharedCache::test_default());
 
-        let mut extensions = QueryContextExtensions::default();
-
-        extensions.insert(tile_cache);
-
-        let query_ctx =
-            MockQueryContext::new_with_query_extensions(ChunkByteSize::test_default(), extensions);
+        let query_ctx = MockQueryContext::new_with_query_extensions(
+            ChunkByteSize::test_default(),
+            Some(tile_cache),
+            None,
+            None,
+        );
 
         // query the first two bands
         let stream = processor
