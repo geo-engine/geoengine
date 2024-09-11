@@ -388,6 +388,23 @@ impl TestDefault for StatisticsWrappingMockExecutionContext {
     }
 }
 
+impl StatisticsWrappingMockExecutionContext {
+    pub fn mock_query_context_with_query_extensions(
+        &self,
+        chunk_byte_size: ChunkByteSize,
+        cache: Option<Arc<SharedCache>>,
+        quota_tracking: Option<QuotaTracking>,
+        quota_checker: Option<QuotaChecker>,
+    ) -> MockQueryContext {
+        self.inner.mock_query_context_with_query_extensions(
+            chunk_byte_size,
+            cache,
+            quota_tracking,
+            quota_checker,
+        )
+    }
+}
+
 #[async_trait::async_trait]
 impl ExecutionContext for StatisticsWrappingMockExecutionContext {
     fn thread_pool(&self) -> &Arc<ThreadPool> {

@@ -9,8 +9,8 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     cache::{cache_operator::InitializedCacheOperator, shared_cache::SharedCache},
     engine::{
-        ChunkByteSize, InitializedRasterOperator, MockExecutionContext, MockQueryContext,
-        QueryProcessor, RasterOperator, SingleRasterSource, WorkflowOperatorPath,
+        ChunkByteSize, InitializedRasterOperator, MockExecutionContext, QueryProcessor,
+        RasterOperator, SingleRasterSource, WorkflowOperatorPath,
     },
     processing::{
         AggregateFunctionParams, NeighborhoodAggregate, NeighborhoodAggregateParams,
