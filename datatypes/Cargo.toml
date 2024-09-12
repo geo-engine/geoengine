@@ -16,6 +16,7 @@ pro = []
 arrow = { version = "53.0", features = ["ipc_compression"] }
 arrow-array = "53.0"
 arrow-ord = "53.0"
+arrow-schema = { version = "53", features = ["serde"] }
 bytes = "1.5" # for postgres-types impls
 chrono = "0.4"
 fallible-iterator = "0.2" # only for postgres-protocol

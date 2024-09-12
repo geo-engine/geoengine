@@ -1515,7 +1515,6 @@ mod struct_serde {
     use serde::de::{SeqAccess, Visitor};
     use serde::ser::Error;
     use serde::{Deserializer, Serializer};
-
     use std::fmt::Formatter;
     use std::io::Cursor;
 
@@ -1598,6 +1597,97 @@ mod struct_serde {
 
             self.visit_byte_buf(bytes)
         }
+    }
+
+    #[cfg(test)]
+    pub fn serialize_json<S>(struct_array: &StructArray, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let batch = RecordBatch::from(struct_array);
+
+        let mut json_writer = arrow::json::ArrayWriter::new(Vec::<u8>::new());
+        json_writer.write(&batch).map_err(S::Error::custom)?;
+        json_writer.finish().map_err(S::Error::custom)?;
+        let json: serde_json::Value =
+            serde_json::from_slice(&json_writer.into_inner()).map_err(S::Error::custom)?;
+
+        let mut struct_serializer = serializer.serialize_struct("FeatureCollection", 2)?;
+        struct_serializer.serialize_field("schema", batch.schema_ref())?;
+        struct_serializer.serialize_field("data", &json)?;
+        struct_serializer.end()
+    }
+
+    #[cfg(test)]
+    pub fn deserialize_json<'de, D>(deserializer: D) -> Result<StructArray, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use std::io::BufReader;
+
+        struct StructArrayJsonDeserializer;
+
+        impl<'de> Visitor<'de> for StructArrayJsonDeserializer {
+            type Value = StructArray;
+
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                formatter.write_str("an Arrow StructArray")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                use serde::de::Error;
+
+                let (mut schema, mut data) = (None, None);
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        "schema" => {
+                            schema = Some(map.next_value::<arrow_schema::Schema>()?);
+                        }
+                        "data" => {
+                            let value = map.next_value::<serde_json::Value>()?;
+                            data = Some(serde_json::to_vec(&value).map_err(A::Error::custom)?);
+                        }
+                        other => return Err(A::Error::custom(format!("Unexpected field {other}"))),
+                    }
+                }
+
+                let (Some(schema), Some(data)) = (schema, data) else {
+                    return Err(A::Error::custom("Missing fields `schema` & `data`"));
+                };
+
+                let mut reader = arrow::json::ReaderBuilder::new(Arc::new(schema))
+                    .build(BufReader::new(Cursor::new(&data)))
+                    .map_err(A::Error::custom)?;
+
+                let batch = reader
+                    .next()
+                    .ok_or_else(|| {
+                        A::Error::custom(
+                            "Must be one batch inside the serialized data. Found none.",
+                        )
+                    })?
+                    .map_err(A::Error::custom)?;
+                if reader.next().is_some() {
+                    return Err(A::Error::custom(
+                        "Must be one batch inside the serialized data. Found more.",
+                    ));
+                }
+
+                Ok(batch.into())
+            }
+        }
+
+        deserializer.deserialize_struct(
+            "FeatureCollection",
+            &["schema", "data"],
+            StructArrayJsonDeserializer,
+        )
     }
 }
 
@@ -1766,10 +1856,9 @@ mod tests {
             .is_err());
     }
 
+    /// If this test fails, change serialization to JSON (cf. methods below) instead of IPC.
     #[test]
     fn it_does_not_json_serialize() {
-        use arrow::record_batch::RecordBatch;
-
         let collection = FeatureCollection::<MultiPoint>::from_data(
             vec![(0.0, 0.1).into()],
             vec![TimeInterval::new(0, 1).unwrap(); 1],
@@ -1786,11 +1875,13 @@ mod tests {
 
         let struct_array = collection.table;
 
-        // TODO: if this stops failing, change the strange custom byte serialization to use JSON
-        let json = Vec::new();
-        let mut json_writer = arrow::json::ArrayWriter::new(json);
-        json_writer
-            .write(&RecordBatch::from(struct_array))
-            .unwrap_err();
+        let serialized_struct_array =
+            struct_serde::serialize_json(&struct_array, serde_json::value::Serializer)
+                .unwrap()
+                .to_string();
+
+        let mut deserializer = serde_json::Deserializer::from_str(&serialized_struct_array);
+
+        assert!(struct_serde::deserialize_json(&mut deserializer).is_err());
     }
 }
