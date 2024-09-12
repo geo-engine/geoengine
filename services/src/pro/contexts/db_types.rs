@@ -5,7 +5,7 @@ use crate::{
         SentinelS2L2ACogsProviderDefinition, StacApiRetries, TypedProDataProviderDefinition,
     },
 };
-use geoengine_datatypes::delegate_from_to_sql;
+use geoengine_datatypes::{dataset::DataProviderId, delegate_from_to_sql, util::StringPair};
 use postgres_types::{FromSql, ToSql};
 
 #[derive(Debug, ToSql, FromSql)]
@@ -118,8 +118,70 @@ impl TryFrom<TypedProDataProviderDefinitionDbType> for TypedProDataProviderDefin
     }
 }
 
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "CopernicusDataspaceDataProviderDefinition")]
+pub struct CopernicusDataspaceDataProviderDefinitionDbType {
+    pub name: String,
+    pub description: String,
+    pub id: DataProviderId,
+    pub stac_url: String,
+    pub s3_url: String,
+    pub s3_access_key: String,
+    pub s3_secret_key: String,
+    pub gdal_config: Vec<StringPair>,
+    pub priority: Option<i16>,
+}
+
+impl From<&CopernicusDataspaceDataProviderDefinition>
+    for CopernicusDataspaceDataProviderDefinitionDbType
+{
+    fn from(value: &CopernicusDataspaceDataProviderDefinition) -> Self {
+        Self {
+            name: value.name.clone(),
+            description: value.description.clone(),
+            id: value.id,
+            stac_url: value.stac_url.clone(),
+            s3_url: value.s3_url.clone(),
+            s3_access_key: value.s3_access_key.clone(),
+            s3_secret_key: value.s3_secret_key.clone(),
+            gdal_config: value.gdal_config.iter().map(|v| v.clone().into()).collect(),
+            priority: value.priority,
+        }
+    }
+}
+
+impl TryFrom<CopernicusDataspaceDataProviderDefinitionDbType>
+    for CopernicusDataspaceDataProviderDefinition
+{
+    type Error = Error;
+
+    fn try_from(
+        value: CopernicusDataspaceDataProviderDefinitionDbType,
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            name: value.name.clone(),
+            description: value.description.clone(),
+            id: value.id,
+            stac_url: value.stac_url.clone(),
+            s3_url: value.s3_url.clone(),
+            s3_access_key: value.s3_access_key.clone(),
+            s3_secret_key: value.s3_secret_key.clone(),
+            gdal_config: value
+                .gdal_config
+                .iter()
+                .map(|v| v.clone().into_inner().into())
+                .collect(),
+            priority: value.priority,
+        })
+    }
+}
+
 delegate_from_to_sql!(GdalRetries, GdalRetriesDbType);
 delegate_from_to_sql!(StacApiRetries, StacApiRetriesDbType);
+delegate_from_to_sql!(
+    CopernicusDataspaceDataProviderDefinition,
+    CopernicusDataspaceDataProviderDefinitionDbType
+);
 delegate_from_to_sql!(
     TypedProDataProviderDefinition,
     TypedProDataProviderDefinitionDbType
@@ -234,6 +296,7 @@ mod tests {
                     s3_url: "dataspace.copernicus.eu".to_string(),
                     s3_access_key: "XYZ".to_string(),
                     s3_secret_key: "XYZ".to_string(),
+                    gdal_config: vec![("key".to_owned(), "value".to_owned()).into()],
                 }],
             )
             .await;
@@ -252,6 +315,7 @@ mod tests {
                             s3_url: "dataspace.copernicus.eu".to_string(),
                             s3_access_key: "XYZ".to_string(),
                             s3_secret_key: "XYZ".to_string(),
+                            gdal_config: vec![("key".to_owned(), "value".to_owned()).into()],
                         },
                     ),
                     TypedProDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(

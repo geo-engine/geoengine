@@ -17,7 +17,8 @@ impl ProMigration for ProMigrationImpl<Migration0013CopernicusProvider> {
                     s3_access_key text,
                     s3_secret_key text,
                     description text,
-                    priority smallint
+                    priority smallint,
+                    gdal_config "StringPair" []
                 );
                 
                 ALTER TYPE "ProDataProviderDefinition"

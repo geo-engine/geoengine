@@ -78,6 +78,7 @@ pub struct Sentinel2Metadata {
     pub product: Sentinel2Product,
     pub zone: UtmZone,
     pub band: Sentinel2Band,
+    pub gdal_config: Vec<(String, String)>,
 }
 
 impl Sentinel2Metadata {
@@ -135,7 +136,7 @@ impl Sentinel2Metadata {
     }
 
     fn config_options(&self) -> Vec<(String, String)> {
-        vec![
+        [
             ("AWS_ACCESS_KEY_ID".to_string(), self.s3_access_key.clone()),
             (
                 "AWS_SECRET_ACCESS_KEY".to_string(),
@@ -175,6 +176,9 @@ impl Sentinel2Metadata {
             // ("CPL_CURL_VERBOSE".to_string(), "YES".to_string()),
             // ("CPL_DEBUG".to_string(), "ON".to_string()),
         ]
+        .into_iter()
+        .chain(self.gdal_config.iter().cloned())
+        .collect()
     }
 
     // TODO: reuse most of the logic for all copernicus products
@@ -462,6 +466,7 @@ mod tests {
                 direction: UtmZoneDirection::North,
             },
             band: Sentinel2Band::B04,
+            gdal_config: vec![],
         };
 
         // time=2020-07-01T12%3A00%3A00.000Z/2020-07-03T12%3A00%3A00.000Z&EXCEPTIONS=application%2Fjson&WIDTH=256&HEIGHT=256&CRS=EPSG%3A32632&BBOX=482500%2C5627500%2C483500%2C5628500

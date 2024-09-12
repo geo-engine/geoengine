@@ -1,6 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use crate::{
+    api::model::datatypes::GdalConfigOption,
     datasets::listing::ProvenanceOutput,
     error::{Error, Result},
     layers::{
@@ -28,7 +29,6 @@ use geoengine_operators::{
     source::{GdalLoadingInfo, GdalSource, GdalSourceParameters, OgrSourceDataset},
 };
 use ordered_float::NotNan;
-use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
@@ -48,7 +48,7 @@ use super::{
     sentinel2::Sentinel2Metadata,
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, FromSql, ToSql)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CopernicusDataspaceDataProviderDefinition {
     pub name: String,
@@ -58,6 +58,7 @@ pub struct CopernicusDataspaceDataProviderDefinition {
     pub s3_url: String,
     pub s3_access_key: String,
     pub s3_secret_key: String,
+    pub gdal_config: Vec<GdalConfigOption>,
     pub priority: Option<i16>,
 }
 
@@ -72,6 +73,10 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for CopernicusDataspaceDataProvid
             self.s3_url,
             self.s3_access_key,
             self.s3_secret_key,
+            self.gdal_config
+                .into_iter()
+                .map(std::convert::Into::into)
+                .collect(),
         )))
     }
 
@@ -101,9 +106,11 @@ pub struct CopernicusDataspaceDataProvider {
     pub s3_url: String,
     pub s3_access_key: String,
     pub s3_secret_key: String,
+    pub gdal_config: Vec<(String, String)>,
 }
 
 impl CopernicusDataspaceDataProvider {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         id: DataProviderId,
         name: String,
@@ -112,6 +119,7 @@ impl CopernicusDataspaceDataProvider {
         s3_url: String,
         s3_access_key: String,
         s3_secret_key: String,
+        gdal_config: Vec<(String, String)>,
     ) -> Self {
         Self {
             id,
@@ -121,6 +129,7 @@ impl CopernicusDataspaceDataProvider {
             s3_url,
             s3_access_key,
             s3_secret_key,
+            gdal_config,
         }
     }
 
@@ -316,6 +325,7 @@ impl CopernicusDataspaceDataProvider {
             product,
             zone,
             band,
+            gdal_config: self.gdal_config.clone(),
         })
     }
 }
