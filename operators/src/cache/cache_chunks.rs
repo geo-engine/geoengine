@@ -485,7 +485,7 @@ impl ChunkCompression for Lz4FlexCompression {
 
 #[cfg(test)]
 mod tests {
-    use crate::pro::cache::{
+    use crate::cache::{
         cache_chunks::{CachedFeatures, LandingZoneQueryFeatures},
         shared_cache::{
             CacheBackendElement, CacheBackendElementExt, CacheQueryMatch, VectorCacheQueryEntry,

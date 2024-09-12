@@ -9,8 +9,6 @@ documentation.workspace = true
 repository.workspace = true
 
 [features]
-# This compiles Geo Engine Pro
-pro = []
 
 [dependencies]
 arrow = { version = "53.0", features = ["ipc_compression"] }

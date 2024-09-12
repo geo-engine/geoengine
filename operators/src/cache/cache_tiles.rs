@@ -608,7 +608,7 @@ mod tests {
         util::test::TestDefault,
     };
 
-    use crate::pro::cache::{
+    use crate::cache::{
         cache_tiles::CachedTiles,
         shared_cache::{
             CacheBackendElement, CacheBackendElementExt, CacheQueryMatch, RasterCacheQueryEntry,

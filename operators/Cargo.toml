@@ -9,8 +9,6 @@ documentation.workspace = true
 repository.workspace = true
 
 [features]
-# This compiles Geo Engine Pro
-pro = ["geoengine-datatypes/pro"]
 
 [dependencies]
 arrow = { version = "53.0" }
@@ -80,12 +78,10 @@ harness = false
 [[bench]]
 name = "cache"
 harness = false
-required-features = ["pro"]
 
 [[bench]]
 name = "cache_concurrent"
 harness = false
-required-features = ["pro"]
 
 [[bench]]
 name = "expression"
@@ -106,7 +102,6 @@ harness = false
 [[bench]]
 name = "query_chunks"
 harness = false
-required-features = ["pro"]
 
 [lints]
 workspace = true
