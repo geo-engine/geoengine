@@ -939,7 +939,8 @@ where
         gdal_out_shape,                  // requested raster size
         None,                            // sampling mode
     )?;
-    let data_grid = Grid::new(out_shape.clone(), buffer.data)?;
+    let (_, buffer_data) = buffer.into_shape_and_vec();
+    let data_grid = Grid::new(out_shape.clone(), buffer_data)?;
 
     let data_grid = if flip_y_axis {
         data_grid.reversed_y_axis_grid()
@@ -981,7 +982,8 @@ where
         gdal_out_shape,                  // requested raster size
         None,                            // sampling mode
     )?;
-    let mask_grid = Grid::new(out_shape, mask_buffer.data)?.map_elements(|p: u8| p > 0);
+    let (_, mask_buffer_data) = mask_buffer.into_shape_and_vec();
+    let mask_grid = Grid::new(out_shape, mask_buffer_data)?.map_elements(|p: u8| p > 0);
 
     let mask_grid = if flip_y_axis {
         mask_grid.reversed_y_axis_grid()
@@ -1107,7 +1109,7 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrim
     tile_time: TimeInterval,
     cache_hint: CacheHint,
 ) -> Result<RasterTile2D<T>> {
-    let rasterband = dataset.rasterband(dataset_params.rasterband_channel as isize)?;
+    let rasterband = dataset.rasterband(dataset_params.rasterband_channel)?;
 
     let result_grid = read_grid_and_handle_edges(tile_info, dataset, &rasterband, dataset_params)?;
 

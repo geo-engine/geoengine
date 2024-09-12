@@ -9,10 +9,11 @@ use crate::{
 };
 use gdal::{
     cpl::CslStringList,
+    errors::GdalError,
     programs::raster::{
         multi_dim_translate, MultiDimTranslateDestination, MultiDimTranslateOptions,
     },
-    raster::{Group, RasterCreationOption},
+    raster::{Group, RasterCreationOptions},
     Dataset,
 };
 use geoengine_datatypes::{
@@ -71,7 +72,7 @@ struct ConversionMetadataEntity {
     pub base: Arc<ConversionMetadata>,
     pub time_coverage: Arc<TimeCoverage>,
     pub entity: usize,
-    pub raster_creation_options: Arc<CogRasterCreationOptions>,
+    pub raster_creation_options: Arc<CogRasterCreationOptionss>,
 }
 
 /// Metadata for converting a `NetCDF` cube slice to a COG
@@ -285,7 +286,7 @@ pub async fn create_overviews<
     let number_of_conversions = conversion_metadata.len();
     let mut stats_for_group = HashMap::<String, DataRange>::new();
     let raster_creation_options =
-        Arc::new(CogRasterCreationOptions::new(options.resampling_method)?);
+        Arc::new(CogRasterCreationOptionss::new(options.resampling_method)?);
     let mut loading_info_metadatas = Vec::with_capacity(number_of_conversions);
 
     for (conversion_index, conversion) in conversion_metadata.into_iter().enumerate() {
@@ -570,13 +571,9 @@ fn _create_subdataset_tiff(
 
     let input_sref = subdataset_sref(subdataset, conversion)?;
 
-    for raster_creation_option in conversion.entity.raster_creation_options.options() {
+    for raster_creation_option in &conversion.entity.raster_creation_options.options()? {
         options.push("-co".to_string());
-        options.push(format!(
-            "{key}={value}",
-            key = raster_creation_option.key,
-            value = raster_creation_option.value
-        ));
+        options.push(raster_creation_option.to_string());
     }
     let overview_dataset = multi_dim_translate(
         &[subdataset],
@@ -619,14 +616,14 @@ fn subdataset_sref(
 }
 
 #[derive(Debug, Clone)]
-struct CogRasterCreationOptions {
+struct CogRasterCreationOptionss {
     compression_format: String,
     compression_level: String,
     num_threads: String,
     resampling_method: String,
 }
 
-impl CogRasterCreationOptions {
+impl CogRasterCreationOptionss {
     fn new(resampling_method: Option<ResamplingMethod>) -> Result<Self> {
         const COMPRESSION_FORMAT: &str = "LZW"; // this is the GDAL default
         const DEFAULT_COMPRESSION_LEVEL: u8 = 6; // this is the GDAL default
@@ -657,36 +654,24 @@ impl CogRasterCreationOptions {
     }
 }
 
-impl CogRasterCreationOptions {
-    fn options(&self) -> Vec<RasterCreationOption<'_>> {
+impl CogRasterCreationOptionss {
+    fn options(&self) -> Result<RasterCreationOptions> {
         const COG_BLOCK_SIZE: &str = "512";
 
-        vec![
-            RasterCreationOption {
-                key: "COMPRESS",
-                value: &self.compression_format,
-            },
-            RasterCreationOption {
-                key: "LEVEL",
-                value: &self.compression_level,
-            },
-            RasterCreationOption {
-                key: "NUM_THREADS",
-                value: &self.num_threads,
-            },
-            RasterCreationOption {
-                key: "BLOCKSIZE",
-                value: COG_BLOCK_SIZE,
-            },
-            RasterCreationOption {
-                key: "BIGTIFF",
-                value: "IF_SAFER", // TODO: test if this suffices
-            },
-            RasterCreationOption {
-                key: "RESAMPLING",
-                value: &self.resampling_method,
-            },
-        ]
+        fn _options(this: &CogRasterCreationOptionss) -> Result<RasterCreationOptions, GdalError> {
+            let mut options = RasterCreationOptions::new();
+            options.add_name_value("COMPRESS", &this.compression_format)?;
+            options.add_name_value("TILED", "YES")?;
+            options.add_name_value("LEVEL", &this.compression_level)?;
+            options.add_name_value("NUM_THREADS", &this.num_threads)?;
+            options.add_name_value("BLOCKSIZE", COG_BLOCK_SIZE)?;
+            options.add_name_value("BIGTIFF", "IF_SAFER")?;
+            options.add_name_value("RESAMPLING", &this.resampling_method)?; // TODO: test if this suffices
+
+            Ok(options)
+        }
+
+        _options(self).context(error::OpeningDatasetForWriting)
     }
 }
 

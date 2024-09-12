@@ -231,7 +231,7 @@ pub fn gdal_open_dataset_ex(path: &Path, dataset_options: DatasetOptions) -> Res
 /// type is a complex floating point type, an error is returned
 pub fn raster_descriptor_from_dataset(
     dataset: &Dataset,
-    band: isize,
+    band: usize,
 ) -> Result<RasterResultDescriptor> {
     let rasterband = &dataset.rasterband(band)?;
 
@@ -258,7 +258,7 @@ pub fn raster_descriptor_from_dataset(
 // a version of `raster_descriptor_from_dataset` that does not read the sref from the dataset but takes it as an argument
 pub fn raster_descriptor_from_dataset_and_sref(
     dataset: &Dataset,
-    band: isize,
+    band: usize,
     spatial_ref: SpatialReference,
 ) -> Result<RasterResultDescriptor> {
     let rasterband = &dataset.rasterband(band)?;
@@ -282,7 +282,7 @@ pub fn raster_descriptor_from_dataset_and_sref(
 }
 
 // TODO: use https://github.com/georust/gdal/pull/271 when merged and released
-fn measurement_from_rasterband(dataset: &Dataset, band: isize) -> Result<Measurement> {
+fn measurement_from_rasterband(dataset: &Dataset, band: usize) -> Result<Measurement> {
     unsafe fn _string(raw_ptr: *const std::os::raw::c_char) -> String {
         let c_str = std::ffi::CStr::from_ptr(raw_ptr);
         c_str.to_string_lossy().into_owned()
@@ -299,7 +299,8 @@ fn measurement_from_rasterband(dataset: &Dataset, band: isize) -> Result<Measure
 
     let unit: String = unsafe {
         // taken from `pub fn rasterband(&self, band_index: isize) -> Result<RasterBand>`
-        let c_band = gdal_sys::GDALGetRasterBand(dataset.c_dataset(), band as std::os::raw::c_int);
+        let c_band =
+            gdal_sys::GDALGetRasterBand(dataset.c_dataset(), band as isize as std::os::raw::c_int);
         if c_band.is_null() {
             Err(_last_null_pointer_err("GDALGetRasterBand"))?;
         }
@@ -327,7 +328,7 @@ pub fn gdal_parameters_from_dataset(
     band_out: Option<usize>,
     open_options: Option<Vec<String>>,
 ) -> Result<GdalDatasetParameters> {
-    let rasterband = &dataset.rasterband(band as isize)?;
+    let rasterband = &dataset.rasterband(band)?;
 
     Ok(GdalDatasetParameters {
         file_path: PathBuf::from(path),
