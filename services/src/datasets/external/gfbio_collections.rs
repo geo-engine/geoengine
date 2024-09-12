@@ -183,14 +183,14 @@ fn gfbio_dataset_identifier_to_dataset_unit(
     dataset_identifier: &str,
 ) -> Result<(String, Option<String>)> {
     // urn:gfbio.org:abcd:{dataset}:{unit} (unit is optional)
-    let id_parts: Vec<_> = dataset_identifier.split(':').collect();
+    let id_parts: Vec<_> = dataset_identifier.splitn(5, ':').collect();
 
     Ok(match id_parts.as_slice() {
-        [_, _, _, dataset, unit] => (
+        ["urn", "gfbio.org", "abcd", dataset, unit] => (
             format!("urn:gfbio.org:abcd:{dataset}"),
             Some((*unit).to_string()),
         ),
-        [_, _, _, dataset] => (format!("urn:gfbio.org:abcd:{dataset}"), None),
+        ["urn", "gfbio.org", "abcd", dataset] => (format!("urn:gfbio.org:abcd:{dataset}"), None),
         _ => return Err(crate::error::Error::InvalidLayerId),
     })
 }
