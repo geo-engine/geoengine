@@ -277,4 +277,9 @@ pub enum NetCdfCf4DProviderError {
     UnexpectedExecution {
         source: Box<dyn ErrorSource>,
     },
+
+    #[snafu(display("Unexpected GDAL error during creation of dataset"))]
+    OpeningDatasetForWriting {
+        source: GdalError,
+    },
 }

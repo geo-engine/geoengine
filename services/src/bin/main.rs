@@ -82,14 +82,23 @@ mod pro_main {
     where
         S: Subscriber + for<'a> LookupSpan<'a>,
     {
-        use opentelemetry_jaeger::config::agent::AgentPipeline;
-        use tracing_opentelemetry::OpenTelemetryLayer;
-        let tracer = AgentPipeline::default()
-            .with_endpoint(open_telemetry_config.endpoint.to_string())
-            .with_service_name("Geo Engine")
-            .install_simple()?;
-        let opentelemetry: OpenTelemetryLayer<S, _> =
-            tracing_opentelemetry::layer().with_tracer(tracer);
+        use opentelemetry::trace::TracerProvider;
+        use opentelemetry_otlp::WithExportConfig;
+        let exporter = opentelemetry_otlp::new_exporter()
+            .tonic()
+            .with_endpoint(open_telemetry_config.endpoint.to_string());
+        let tracer = opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(exporter)
+            .with_trace_config(opentelemetry_sdk::trace::Config::default().with_resource(
+                opentelemetry_sdk::Resource::new(vec![opentelemetry::KeyValue::new(
+                    "service.name",
+                    "Geo Engine",
+                )]),
+            ))
+            .install_simple()?
+            .tracer("Geo Engine");
+        let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
         Ok(opentelemetry)
     }
 

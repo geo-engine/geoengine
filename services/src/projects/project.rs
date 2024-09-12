@@ -452,8 +452,7 @@ impl From<&Project> for ProjectListing {
     }
 }))]
 pub struct CreateProject {
-    #[validate(length(min = 1))]
-    #[validate(length(max = 256))]
+    #[validate(length(min = 1, max = 256))]
     pub name: String,
     #[validate(length(min = 1))]
     pub description: String,
@@ -558,7 +557,7 @@ pub struct ProjectListOptions {
     #[param(example = 0)]
     pub offset: u32,
     #[param(example = 2)]
-    #[validate(custom = "validate_list_limit")]
+    #[validate(custom(function = "validate_list_limit"))]
     pub limit: u32,
 }
 

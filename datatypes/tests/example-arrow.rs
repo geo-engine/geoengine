@@ -445,7 +445,7 @@ fn multipoints() {
             false,
         ))))
         .len(2) // number of multipoints
-        .add_buffer(Buffer::from(&[0_i32, 2, 5].to_byte_slice()))
+        .add_buffer(Buffer::from([0_i32, 2, 5].to_byte_slice()))
         .add_child_data(
             ArrayData::builder(DataType::FixedSizeList(
                 Arc::new(Field::new("", DataType::Float64, false)),
@@ -456,7 +456,7 @@ fn multipoints() {
                 ArrayData::builder(DataType::Float64)
                     .len(10) // number of floats
                     .add_buffer(Buffer::from(
-                        &[
+                        [
                             1_f64, 2., 11., 12., 21., 22., 31., 32., 41., 42., 51., 52., 61., 62.,
                             71., 72., 81., 82., 91., 92.,
                         ]

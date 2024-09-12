@@ -412,7 +412,7 @@ pub struct TaskListOptions {
     pub offset: u32,
     #[serde(default = "task_list_limit_default")]
     #[param(example = 20)]
-    #[validate(custom = "validate_list_limit")]
+    #[validate(custom(function = "validate_list_limit"))]
     pub limit: u32,
 }
 
