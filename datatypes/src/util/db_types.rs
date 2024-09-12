@@ -83,6 +83,16 @@ impl<S: std::hash::BuildHasher + std::default::Default> From<HashMapTextTextDbTy
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct StringPair((String, String));
 
+impl StringPair {
+    pub fn new(a: String, b: String) -> Self {
+        Self((a, b))
+    }
+
+    pub fn into_inner(self) -> (String, String) {
+        self.0
+    }
+}
+
 impl ToSql for StringPair {
     fn to_sql(
         &self,

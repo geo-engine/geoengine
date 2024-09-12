@@ -40,10 +40,24 @@ CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     query_buffer "StacQueryBuffer"
 );
 
+CREATE TYPE "CopernicusDataspaceDataProviderDefinition" AS (
+    "name" text,
+    id uuid,
+    stac_url text,
+    s3_url text,
+    s3_access_key text,
+    s3_secret_key text,
+    description text,
+    priority smallint,
+    gdal_config "StringPair" []
+);
+
 CREATE TYPE "ProDataProviderDefinition" AS (
     -- one of
     sentinel_s2_l2_a_cogs_provider_definition
-    "SentinelS2L2ACogsProviderDefinition"
+    "SentinelS2L2ACogsProviderDefinition",
+    copernicus_dataspace_provider_definition
+    "CopernicusDataspaceDataProviderDefinition"
 );
 
 CREATE TABLE pro_layer_providers (

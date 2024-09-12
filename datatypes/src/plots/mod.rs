@@ -33,11 +33,25 @@ pub trait Plot {
     // fn to_png(&self, width_px: u16, height_px: u16) -> Vec<u8>;
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Deserialize, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlotData {
     pub vega_string: String,
     pub metadata: PlotMetaData,
+}
+
+impl PartialEq for PlotData {
+    fn eq(&self, other: &Self) -> bool {
+        let vega_equals = match (
+            serde_json::from_str::<serde_json::Value>(&self.vega_string),
+            serde_json::from_str::<serde_json::Value>(&other.vega_string),
+        ) {
+            (Ok(v1), Ok(v2)) => v1 == v2, // if the vega_string is valid JSON, compare the JSON values to avoid formatting differences
+            _ => self.vega_string == other.vega_string,
+        };
+
+        vega_equals && self.metadata == other.metadata
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize, Default)]
