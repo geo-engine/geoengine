@@ -12,7 +12,6 @@ repository.workspace = true
 proc-macro = true
 
 [features]
-pro = []
 
 [dependencies]
 proc-macro2 = "1.0"

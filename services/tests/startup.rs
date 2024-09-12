@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in tests
 
-#[cfg(feature = "pro")]
 mod pro_startup {
     use assert_cmd::cargo::CommandCargoExt;
     use geoengine_services::test_data;
@@ -47,7 +46,6 @@ mod pro_startup {
         }
     }
 
-    #[cfg(feature = "pro")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_starts_without_warnings_and_accepts_connections() {
         use geoengine_services::util::config::get_config_element;

@@ -10,10 +10,6 @@ repository.workspace = true
 build = "build.rs"
 
 [features]
-# This compiles Geo Engine Pro
-pro = [
-  "geoengine-macros/pro",
-]
 
 [dependencies]
 actix = { version = "0.13", default-features = false }
@@ -136,7 +132,6 @@ vergen = { version = "8", features = ["build", "cargo", "git", "gitcl"] }
 [[bench]]
 name = "quota_check"
 harness = false
-required-features = ["pro"]
 
 [lints]
 workspace = true
