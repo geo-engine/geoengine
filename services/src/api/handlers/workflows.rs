@@ -26,7 +26,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
-    ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
+    ExecutionContext, OperatorData, TypedOperator, WorkflowOperatorPath,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -218,11 +218,11 @@ async fn get_workflow_metadata_handler<C: ApplicationContext>(
 async fn workflow_metadata<C: SessionContext>(
     workflow: Workflow,
     execution_context: C::ExecutionContext,
-) -> Result<TypedResultDescriptor> {
+) -> Result<crate::api::model::operators::TypedResultDescriptor> {
     // TODO: use cache here
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
-    let result_descriptor: TypedResultDescriptor = call_on_typed_operator!(
+    let result_descriptor: geoengine_operators::engine::TypedResultDescriptor = call_on_typed_operator!(
         workflow.operator,
         operator => {
             let operator = operator
@@ -234,7 +234,7 @@ async fn workflow_metadata<C: SessionContext>(
         }
     );
 
-    Ok(result_descriptor)
+    Ok(result_descriptor.into())
 }
 
 /// Gets the provenance of all datasets used in a workflow.

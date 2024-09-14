@@ -38,30 +38,45 @@ pub struct RasterResultDescriptor {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub enum SpatialGridDescriptor {
-    Source(SpatialGridDefinition),
-    Derived(SpatialGridDefinition),
+pub enum SpatialGridDescriptorState {
+    Source,
+    Derived,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SpatialGridDescriptor {
+    spatial_grid: SpatialGridDefinition,
+    descriptor: SpatialGridDescriptorState,
 }
 
 impl From<geoengine_operators::engine::SpatialGridDescriptor> for SpatialGridDescriptor {
     fn from(value: geoengine_operators::engine::SpatialGridDescriptor) -> Self {
         match value {
-            geoengine_operators::engine::SpatialGridDescriptor::Source(s) => Self::Source(s.into()),
-            geoengine_operators::engine::SpatialGridDescriptor::Derived(d) => {
-                Self::Derived(d.into())
-            }
+            geoengine_operators::engine::SpatialGridDescriptor::Source(s) => Self {
+                spatial_grid: s.into(),
+                descriptor: SpatialGridDescriptorState::Source,
+            },
+            geoengine_operators::engine::SpatialGridDescriptor::Derived(d) => Self {
+                spatial_grid: d.into(),
+                descriptor: SpatialGridDescriptorState::Derived,
+            },
         }
     }
 }
 
 impl From<SpatialGridDescriptor> for geoengine_operators::engine::SpatialGridDescriptor {
     fn from(value: SpatialGridDescriptor) -> Self {
-        match value {
-            SpatialGridDescriptor::Source(s) => {
-                geoengine_operators::engine::SpatialGridDescriptor::Source(s.into())
+        match value.descriptor {
+            SpatialGridDescriptorState::Source => {
+                geoengine_operators::engine::SpatialGridDescriptor::Source(
+                    value.spatial_grid.into(),
+                )
             }
-            SpatialGridDescriptor::Derived(d) => {
-                geoengine_operators::engine::SpatialGridDescriptor::Derived(d.into())
+            SpatialGridDescriptorState::Derived => {
+                geoengine_operators::engine::SpatialGridDescriptor::Derived(
+                    value.spatial_grid.into(),
+                )
             }
         }
     }

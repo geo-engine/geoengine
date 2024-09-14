@@ -26,8 +26,9 @@ use crate::api::model::operators::{
     MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
     OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
     OgrSourceTimeFormat, PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors,
-    RasterResultDescriptor, SpatialGridDescriptor, TimeReference, TypedGeometry, TypedOperator,
-    TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
+    RasterResultDescriptor, SpatialGridDescriptor, SpatialGridDescriptorState, TimeReference,
+    TypedGeometry, TypedOperator, TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo,
+    VectorResultDescriptor,
 };
 use crate::api::model::responses::datasets::DatasetNameResponse;
 use crate::api::model::responses::{
@@ -406,6 +407,7 @@ use utoipa::{Modify, OpenApi};
             Role,
 
             SpatialGridDescriptor,
+            SpatialGridDescriptorState,
             SpatialGridDefinition,
             GridBoundingBox2D,
             GridIdx2D,

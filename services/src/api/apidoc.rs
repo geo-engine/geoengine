@@ -351,7 +351,8 @@ use utoipa::{Modify, OpenApi};
             CacheTtlSeconds,
 
             SpatialGridDefinition,
-            SpatialGridDescriptor
+            SpatialGridDescriptorState,
+            SpatialGridDescriptor,
             GridBoundingBox2D,
             GridIdx2D,
             GeoTransform,
