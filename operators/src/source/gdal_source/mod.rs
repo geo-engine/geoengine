@@ -508,7 +508,7 @@ impl GdalRasterLoader {
 
         let dataset = dataset_result.expect("checked");
 
-        let rasterband = dataset.rasterband(dataset_params.rasterband_channel as isize)?;
+        let rasterband = dataset.rasterband(dataset_params.rasterband_channel)?;
 
         let gdal_dataset_geotransform = GdalDatasetGeoTransform::from(dataset.geo_transform()?);
         // check that the dataset geo transform is the same as the one we get from GDAL
@@ -980,7 +980,8 @@ where
         gdal_out_shape,                  // requested raster size
         None,                            // sampling mode
     )?;
-    let data_grid = Grid::new(out_shape.clone(), buffer.data)?;
+    let (_, buffer_data) = buffer.into_shape_and_vec();
+    let data_grid = Grid::new(out_shape.clone(), buffer_data)?;
 
     let data_grid = if flip_y_axis {
         data_grid.reversed_y_axis_grid()
@@ -1022,7 +1023,8 @@ where
         gdal_out_shape,                  // requested raster size
         None,                            // sampling mode
     )?;
-    let mask_grid = Grid::new(out_shape, mask_buffer.data)?.map_elements(|p: u8| p > 0);
+    let (_, mask_buffer_data) = mask_buffer.into_shape_and_vec();
+    let mask_grid = Grid::new(out_shape, mask_buffer_data)?.map_elements(|p: u8| p > 0);
 
     let mask_grid = if flip_y_axis {
         mask_grid.reversed_y_axis_grid()

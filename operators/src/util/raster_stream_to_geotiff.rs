@@ -11,7 +11,7 @@ use crate::{
 };
 use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
-use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOption};
+use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOptions};
 use gdal::{Dataset, DriverManager, Metadata};
 use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
 use geoengine_datatypes::primitives::{DateTimeParseFormat, RasterQueryRectangle, TimeInterval};
@@ -159,7 +159,7 @@ where
         &gdal_compression_num_threads,
         gdal_tiff_options.as_cog,
         use_big_tiff,
-    );
+    )?;
 
     let driver = DriverManager::get_driver_by_name("GTiff")?;
 
@@ -181,9 +181,9 @@ where
 
     let mut dataset = driver.create_with_band_type_with_options::<T, _>(
         &file_path,
-        query_rect.spatial_query().grid_bounds().axis_size_x() as isize,
-        query_rect.spatial_query().grid_bounds().axis_size_y() as isize,
-        num_timesteps as isize,
+        query_rect.spatial_query().grid_bounds().axis_size_x(),
+        query_rect.spatial_query().grid_bounds().axis_size_y(),
+        num_timesteps,
         &options,
     )?;
     dataset.set_spatial_ref(&gdal_tiff_metadata.spatial_reference.try_into()?)?;
@@ -469,7 +469,7 @@ struct IntermediateDataset {
 
 #[derive(Debug)]
 struct IntermediateDatasetMetadata {
-    raster_band_index: isize,
+    raster_band_index: usize,
     width: u32,
     height: u32,
     use_big_tiff: bool,
@@ -604,14 +604,14 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             &compression_num_threads,
             gdal_tiff_options.as_cog,
             intermediate_dataset_metadata.use_big_tiff,
-        );
+        )?;
 
         let mut dataset = driver.create_with_band_type_with_options::<P, _>(
             &intermediate_dataset_metadata
                 .intermediate_dataset_parameters
                 .file_path,
-            intermediate_dataset_metadata.width as isize,
-            intermediate_dataset_metadata.height as isize,
+            intermediate_dataset_metadata.width as usize,
+            intermediate_dataset_metadata.height as usize,
             1,
             &options,
         )?;
@@ -786,9 +786,9 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         let out_no_data_value_p: P = P::from_(no_data_value);
         let no_data_value_grid = NoDataValueGrid::from_masked_grid(grid_array, out_no_data_value_p);
 
-        let buffer = Buffer::new(window_size, no_data_value_grid.inner_grid.data); // TODO: also write mask!
+        let mut buffer = Buffer::new(window_size, no_data_value_grid.inner_grid.data); // TODO: also write mask!
 
-        raster_band.write(window, window_size, &buffer)?;
+        raster_band.write(window, window_size, &mut buffer)?;
         Ok(())
     }
 
@@ -799,9 +799,9 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         mut raster_band: RasterBand,
     ) -> Result<()> {
         // Write the MaskedGrid data and mask if no no-data value is set.
-        let data_buffer = Buffer::new(window_size, masked_grid.inner_grid.data);
+        let mut data_buffer = Buffer::new(window_size, masked_grid.inner_grid.data);
 
-        raster_band.write(window, window_size, &data_buffer)?;
+        raster_band.write(window, window_size, &mut data_buffer)?;
 
         // No-data masks are described by the rasterio docs as:
         // "One is the the valid data mask from GDAL, an unsigned byte array with the same number of rows and columns as the dataset in which non-zero elements (typically 255) indicate that the corresponding data elements are valid. Other elements are invalid, or nodata elements."
@@ -810,10 +810,10 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
             masked_grid
                 .validity_mask
                 .map_elements(|is_valid| if is_valid { 255_u8 } else { 0 }); // TODO: investigate if we can transmute the vec of bool to u8.
-        let mask_buffer = Buffer::new(window_size, mask_grid_gdal_values.data);
+        let mut mask_buffer = Buffer::new(window_size, mask_grid_gdal_values.data);
 
         let mut mask_band = raster_band.open_mask_band()?;
-        mask_band.write(window, window_size, &mask_buffer)?;
+        mask_band.write(window, window_size, &mut mask_buffer)?;
 
         Ok(())
     }
@@ -847,47 +847,25 @@ fn create_gdal_tiff_options(
     compression_num_threads: &str,
     as_cog: bool,
     as_big_tiff: bool,
-) -> Vec<RasterCreationOption<'_>> {
-    let mut options = vec![
-        RasterCreationOption {
-            key: "COMPRESS",
-            value: COMPRESSION_FORMAT,
-        },
-        RasterCreationOption {
-            key: "TILED",
-            value: "YES",
-        },
-        RasterCreationOption {
-            key: "ZLEVEL",
-            value: COMPRESSION_LEVEL,
-        },
-        RasterCreationOption {
-            key: "NUM_THREADS",
-            value: compression_num_threads,
-        },
-        RasterCreationOption {
-            key: "INTERLEAVE",
-            value: "BAND",
-        },
-    ];
+) -> Result<RasterCreationOptions> {
+    let mut options = RasterCreationOptions::new();
+    options.add_name_value("COMPRESS", COMPRESSION_FORMAT)?;
+    options.add_name_value("TILED", "YES")?;
+    options.add_name_value("ZLEVEL", COMPRESSION_LEVEL)?;
+    options.add_name_value("NUM_THREADS", compression_num_threads)?;
+    options.add_name_value("INTERLEAVE", "BAND")?;
+
     if as_cog {
         // COGs require a block size of 512x512, so we enforce it now so that we do the work only once.
-        options.push(RasterCreationOption {
-            key: "BLOCKXSIZE",
-            value: COG_BLOCK_SIZE,
-        });
-        options.push(RasterCreationOption {
-            key: "BLOCKYSIZE",
-            value: COG_BLOCK_SIZE,
-        });
+        options.add_name_value("BLOCKXSIZE", COG_BLOCK_SIZE)?;
+        options.add_name_value("BLOCKYSIZE", COG_BLOCK_SIZE)?;
     }
+
     if as_big_tiff {
-        options.push(RasterCreationOption {
-            key: "BIGTIFF",
-            value: "YES",
-        });
+        options.add_name_value("BIGTIFF", "YES")?;
     }
-    options
+
+    Ok(options)
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -957,30 +935,14 @@ fn geotiff_to_cog(
     let output_driver = DriverManager::get_driver_by_name("COG")?;
     let num_threads = &compression_num_threads.to_string();
 
-    let mut options = vec![
-        RasterCreationOption {
-            key: "COMPRESS",
-            value: COMPRESSION_FORMAT,
-        },
-        RasterCreationOption {
-            key: "LEVEL",
-            value: COMPRESSION_LEVEL,
-        },
-        RasterCreationOption {
-            key: "NUM_THREADS",
-            value: num_threads,
-        },
-        RasterCreationOption {
-            key: "BLOCKSIZE",
-            value: COG_BLOCK_SIZE,
-        },
-    ];
+    let mut options = RasterCreationOptions::new();
+    options.add_name_value("COMPRESS", COMPRESSION_FORMAT)?;
+    options.add_name_value("TILED", "YES")?;
+    options.add_name_value("NUM_THREADS", num_threads)?;
+    options.add_name_value("BLOCKSIZE", COG_BLOCK_SIZE)?;
 
     if as_big_tiff {
-        options.push(RasterCreationOption {
-            key: "BIGTIFF",
-            value: "YES",
-        });
+        options.add_name_value("BIGTIFF", "YES")?;
     }
 
     input_dataset.create_copy(&output_driver, output_file_path, &options)?;

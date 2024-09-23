@@ -38,13 +38,13 @@ chrono = { version = "0.4", features = ["serde"] }
 config = "0.14"
 derive_builder = "0.20"
 erased-serde = "0.4"
-flexi_logger = { version = "0.28", features = ["trc"] }
+flexi_logger = { version = "0.29", features = ["trc"] }
 float-cmp = "0.9"
 futures = "0.3"
 futures-util = "0.3"
-gdal = "0.16"
-gdal-sys = "0.9"
-geo = "0.27"
+gdal = "0.17"
+gdal-sys = "0.10"
+geo = "0.28"
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-macros = { path = "../macros" }
 geoengine-operators = { path = "../operators" }
@@ -54,11 +54,10 @@ log = "0.4"
 mime = "0.3"
 oauth2 = "4.4.2"
 openidconnect = "3.4"
-# `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-jaeger`
-opentelemetry = { version = "0.21", default-features = false, features = [
-  "trace",
-] }
-opentelemetry-jaeger = "0.20"
+# `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-*`
+opentelemetry = { version = "0.24", default-features = false, features = ["trace"] }
+opentelemetry-otlp = "0.17"
+opentelemetry_sdk = "0.24"
 ordered-float = { version = "4.2", features = ["serde"] }
 num-traits = "0.2"
 pbkdf2 = "0.12.2"
@@ -68,7 +67,7 @@ proj-sys = "0.19" # needs to stay fixed to use fixed proj version
 pwhash = "1.0"
 rand = "0.8"
 rayon = "1.8"
-reqwest = { version = "0.11", features = ["json", "multipart", "stream"] }
+reqwest = { version = "0.11", features = ["json", "multipart", "stream"] } # has to match with `oauth`
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
@@ -91,7 +90,7 @@ tonic = { version = "0.11.0", features = [
 ] } # must be compatible with `aruna-rust-api`
 tracing = "0.1"
 tracing-actix-web = "0.7"
-tracing-opentelemetry = "0.22"
+tracing-opentelemetry = "0.25"
 tracing-subscriber = { version = "0.3", features = [
   "local-time",
   "ansi",
@@ -111,7 +110,7 @@ uuid = { version = "1.7", features = [
   "v4",
   "v5",
 ] } # must be compatible with `bb8-postgres`
-validator = { version = "0.16", features = ["derive"] }
+validator = { version = "0.18", features = ["derive"] }
 walkdir = "2.4"
 zip = "2.1"
 assert-json-diff = "2.0.2"
@@ -123,7 +122,7 @@ nix = { version = "0.29", features = ["socket"] }
 
 [dev-dependencies]
 assert_cmd = "2.0"
-httptest = "0.15"
+httptest = "0.16"
 pretty_assertions = "1.4"
 prost = "0.12.3"          # must be compatbile with aruna-rust-api
 serial_test = "3.0"
@@ -131,7 +130,9 @@ tempfile = "3.10"
 xml-rs = "0.8"
 
 [build-dependencies]
-vergen = { version = "8", features = ["build", "cargo", "git", "gitcl"] }
+anyhow = "1.0"
+vergen = { version = "9.0", features = ["build", "cargo", "emit_and_set"] }
+vergen-gitcl = { version = "1.0", features = ["build"] }
 
 [[bench]]
 name = "quota_check"
