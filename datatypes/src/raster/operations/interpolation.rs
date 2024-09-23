@@ -113,45 +113,35 @@ where
             return Ok(GridOrEmpty::new_empty_shape(out_bounds));
         }
 
-        debug_assert!(in_geo_transform
-            .grid_to_spatial_bounds(&input.grid_shape())
-            .contains(&out_geo_transform.grid_to_spatial_bounds(&out_bounds)));
+        let map_fn = |out_g_idx: GridIdx2D| {
+            let out_coord = out_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(out_g_idx);
 
-        let in_upper_left = in_geo_transform.origin_coordinate();
-        let in_x_size = in_geo_transform.x_pixel_size();
-        let in_y_size = in_geo_transform.y_pixel_size();
+            let in_g_idx = in_geo_transform.coordinate_to_grid_idx_2d(out_coord);
 
-        let out_upper_left = out_geo_transform.origin_coordinate;
-        let out_x_size = out_geo_transform.x_pixel_size();
-        let out_y_size = out_geo_transform.y_pixel_size();
+            let in_a_idx = in_g_idx;
+            let in_b_idx = in_a_idx + [1, 0];
+            let in_c_idx = in_a_idx + [0, 1];
+            let in_d_idx = in_a_idx + [1, 1];
 
-        let map_fn = |g_idx: GridIdx2D| {
-            let GridIdx([y_idx, x_idx]) = g_idx;
+            let in_a_coord = in_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(in_a_idx);
+            let a_y = in_a_coord.y;
+            let b_y = a_y + in_geo_transform.y_pixel_size();
 
-            let out_y = out_upper_left.y + y_idx as f64 * out_y_size;
-            let in_y_idx = ((out_y - in_upper_left.y) / in_y_size).floor() as isize;
+            let a_x = in_a_coord.x;
+            let c_x = a_x + in_geo_transform.x_pixel_size();
 
-            let a_y = in_upper_left.y + in_y_size * in_y_idx as f64;
-            let b_y = a_y + in_y_size;
+            let a_v = input.get_at_grid_index(in_a_idx).unwrap_or(None);
 
-            let out_x = out_upper_left.x + x_idx as f64 * out_x_size;
-            let in_x_idx = ((out_x - in_upper_left.x) / in_x_size).floor() as isize;
+            let b_v = input.get_at_grid_index(in_b_idx).unwrap_or(None);
 
-            let a_x = in_upper_left.x + in_x_size * in_x_idx as f64;
-            let c_x = a_x + in_x_size;
+            let c_v = input.get_at_grid_index(in_c_idx).unwrap_or(None);
 
-            let a_v = input.get_at_grid_index_unchecked([in_y_idx, in_x_idx].into());
-
-            let b_v = input.get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx].into());
-
-            let c_v = input.get_at_grid_index_unchecked([in_y_idx, in_x_idx + 1].into());
-
-            let d_v = input.get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx + 1].into());
+            let d_v = input.get_at_grid_index(in_d_idx).unwrap_or(None);
 
             let value = match (a_v, b_v, c_v, d_v) {
                 (Some(a), Some(b), Some(c), Some(d)) => Some(Self::bilinear_interpolation(
-                    out_x,
-                    out_y,
+                    out_coord.x,
+                    out_coord.y,
                     a_x,
                     a_y,
                     a.as_(),

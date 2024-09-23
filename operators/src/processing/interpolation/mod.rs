@@ -40,7 +40,7 @@ pub struct InterpolationParams {
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum InterpolationResolution {
     Resolution(SpatialResolution),
-    Fraction(f64), // FIXME: Sould be >= 1 must be >=1/2?
+    Fraction { x: f64, y: f64 },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -129,12 +129,13 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
                 res
             }
 
-            InterpolationResolution::Fraction(f) => {
-                ensure!(f >= 1.0, error::FractionMustBeOneOrLarger { f });
+            InterpolationResolution::Fraction { x, y } => {
+                ensure!(x >= 1.0, error::FractionMustBeOneOrLarger { f: x });
+                ensure!(y >= 1.0, error::FractionMustBeOneOrLarger { f: y });
 
                 SpatialResolution::new_unchecked(
-                    in_spatial_grid.spatial_resolution().x / f,
-                    in_spatial_grid.spatial_resolution().y.abs() / f,
+                    in_spatial_grid.spatial_resolution().x / x,
+                    in_spatial_grid.spatial_resolution().y.abs() / y,
                 )
             }
         };
@@ -358,7 +359,10 @@ where
             .input_geo_transform
             .spatial_to_grid_bounds(&tile_spatial_bounds);
         let enlarged_input_pixel_bounds = GridBoundingBox2D::new(
-            [input_pixel_bounds.y_min(), input_pixel_bounds.x_min()],
+            [
+                input_pixel_bounds.y_min() - 1,
+                input_pixel_bounds.x_min() - 1,
+            ],
             [
                 input_pixel_bounds.y_max() + 1,
                 input_pixel_bounds.x_max() + 1,
@@ -475,7 +479,10 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>>(
         let tile_spatial_bounds = output_geo_transform.grid_to_spatial_bounds(&tile_pixel_bounds);
         let input_pixel_bounds = input_geo_transform.spatial_to_grid_bounds(&tile_spatial_bounds);
         let enlarged_input_pixel_bounds = GridBoundingBox2D::new(
-            [input_pixel_bounds.y_min(), input_pixel_bounds.x_min()],
+            [
+                input_pixel_bounds.y_min() - 1,
+                input_pixel_bounds.x_min() - 1,
+            ],
             [
                 input_pixel_bounds.y_max() + 1,
                 input_pixel_bounds.x_max() + 1,
