@@ -278,7 +278,7 @@ mod tests {
             GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap()
         );
 
-        assert!(tiling_to_dataset_read_advise.flip_y);
+        assert!(!tiling_to_dataset_read_advise.flip_y);
     }
 
     #[test]

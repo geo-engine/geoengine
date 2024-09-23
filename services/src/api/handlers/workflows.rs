@@ -1071,11 +1071,19 @@ mod tests {
                 "spatialReference": "EPSG:4326",
                 "time": null,
                 "spatialGrid": {
-                    "type": "source",
-                    "geoTransform": {"originCoordinate":{"x":0.0,"y":0.0}, "xPixelSize": 1., "yPixelSize": -1.},
-                    "gridBounds": {
-                        "min": [0, 0],
-                        "max": [199, 199]
+                    "descriptor": "source",
+                    "spatialGrid": {
+                        "geoTransform": {"originCoordinate":{"x":0.0,"y":0.0}, "xPixelSize": 1., "yPixelSize": -1.},
+                        "gridBounds": {
+                            "bottomRightIdx": {
+                                "xIdx": 199,
+                                "yIdx": 199
+                            },
+                            "topLeftIdx": {
+                                "xIdx": 0,
+                                "yIdx": 0
+                            }
+                        }
                     }
                 },
                 "bands": [{
@@ -1342,12 +1350,21 @@ mod tests {
                     "end": 1_404_172_800_000_i64,
                 },
                 "spatialGrid": {
-                    "type": "source",
-                    "geoTransform": {"originCoordinate":{"x":-180.0,"y":90.0}, "xPixelSize": 0.1, "yPixelSize": -0.1},
-                    "gridBounds": {
-                        "min": [0, 0],
-                        "max": [1799, 3599]
+                    "descriptor": "source",
+                    "spatialGrid" : {
+                        "geoTransform": {"originCoordinate":{"x":-180.0,"y":90.0}, "xPixelSize": 0.1, "yPixelSize": -0.1},
+                        "gridBounds": {
+                            "bottomRightIdx": {
+                                "xIdx": 3599,
+                                "yIdx": 1799
+                            },
+                            "topLeftIdx": {
+                                "xIdx": 0,
+                                "yIdx": 0
+                            }
+                        }
                     }
+
                 },
                 "bands": [{
                         "name": "ndvi",
