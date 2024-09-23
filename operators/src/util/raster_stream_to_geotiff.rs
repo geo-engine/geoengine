@@ -850,7 +850,6 @@ fn create_gdal_tiff_options(
 ) -> Result<RasterCreationOptions> {
     let mut options = RasterCreationOptions::new();
     options.add_name_value("COMPRESS", COMPRESSION_FORMAT)?;
-    options.add_name_value("TILED", "YES")?;
     options.add_name_value("ZLEVEL", COMPRESSION_LEVEL)?;
     options.add_name_value("NUM_THREADS", compression_num_threads)?;
     options.add_name_value("INTERLEAVE", "BAND")?;
@@ -859,6 +858,8 @@ fn create_gdal_tiff_options(
         // COGs require a block size of 512x512, so we enforce it now so that we do the work only once.
         options.add_name_value("BLOCKXSIZE", COG_BLOCK_SIZE)?;
         options.add_name_value("BLOCKYSIZE", COG_BLOCK_SIZE)?;
+    } else {
+        options.add_name_value("TILED", "YES")?;
     }
 
     if as_big_tiff {
@@ -937,7 +938,6 @@ fn geotiff_to_cog(
 
     let mut options = RasterCreationOptions::new();
     options.add_name_value("COMPRESS", COMPRESSION_FORMAT)?;
-    options.add_name_value("TILED", "YES")?;
     options.add_name_value("NUM_THREADS", num_threads)?;
     options.add_name_value("BLOCKSIZE", COG_BLOCK_SIZE)?;
 

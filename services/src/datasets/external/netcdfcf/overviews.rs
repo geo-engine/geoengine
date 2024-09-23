@@ -661,7 +661,6 @@ impl CogRasterCreationOptionss {
         fn _options(this: &CogRasterCreationOptionss) -> Result<RasterCreationOptions, GdalError> {
             let mut options = RasterCreationOptions::new();
             options.add_name_value("COMPRESS", &this.compression_format)?;
-            options.add_name_value("TILED", "YES")?;
             options.add_name_value("LEVEL", &this.compression_level)?;
             options.add_name_value("NUM_THREADS", &this.num_threads)?;
             options.add_name_value("BLOCKSIZE", COG_BLOCK_SIZE)?;
