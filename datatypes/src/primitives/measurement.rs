@@ -23,6 +23,14 @@ impl Measurement {
             classes,
         })
     }
+
+    pub fn is_classification(&self) -> bool {
+        matches!(self, Self::Classification(_))
+    }
+
+    pub fn is_continuous(&self) -> bool {
+        matches!(self, Self::Continuous(_))
+    }
 }
 
 impl Default for Measurement {

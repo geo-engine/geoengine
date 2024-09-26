@@ -1,7 +1,9 @@
-use std::ops::{Add, Div, Mul, Rem, Sub};
+use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
+
+use super::GridShape2D;
 
 ///
 /// The grid index struct. This is a wrapper for arrays with added methods and traits, e.g. Add, Sub...
@@ -228,6 +230,19 @@ where
     }
 }
 
+impl Mul<GridShape2D> for GridIdx2D {
+    type Output = Self;
+
+    fn mul(self, rhs: GridShape2D) -> Self::Output {
+        let GridIdx([a, b]) = self;
+        let GridShape2D {
+            shape_array: [shape_a, shape_b],
+        } = rhs;
+
+        GridIdx([a * shape_a as isize, b * shape_b as isize])
+    }
+}
+
 impl<I> Mul<I> for GridIdx3D
 where
     I: Into<GridIdx3D>,
@@ -316,5 +331,76 @@ where
         let GridIdx([a, b, c]) = self;
         let GridIdx([a_other, b_other, c_other]) = rhs.into();
         GridIdx([a % a_other, b % b_other, c % c_other])
+    }
+}
+
+impl GridIdx1D {
+    pub fn x(self) -> isize {
+        let [a] = self.0;
+        a
+    }
+
+    pub fn to_2d(self) -> GridIdx2D {
+        let [a] = self.0;
+        GridIdx([a, 0])
+    }
+
+    pub fn to_3d(self) -> GridIdx3D {
+        let [a] = self.0;
+        GridIdx([a, 0, 0])
+    }
+
+    pub fn new_x(x: isize) -> Self {
+        GridIdx([x])
+    }
+}
+
+impl GridIdx2D {
+    pub fn x(&self) -> isize {
+        let [_, x] = self.0;
+        x
+    }
+
+    pub fn y(&self) -> isize {
+        let [y, _] = self.0;
+        y
+    }
+
+    pub fn to_3d(self) -> GridIdx3D {
+        let [a, b] = self.0;
+        GridIdx([a, b, 0])
+    }
+
+    pub fn new_y_x(y: isize, x: isize) -> Self {
+        GridIdx([y, x])
+    }
+}
+
+impl GridIdx3D {
+    pub fn x(&self) -> isize {
+        let [_, _, x] = self.0;
+        x
+    }
+
+    pub fn y(&self) -> isize {
+        let [_, y, _] = self.0;
+        y
+    }
+
+    pub fn z(&self) -> isize {
+        let [z, _, _] = self.0;
+        z
+    }
+
+    pub fn new_z_y_x(z: isize, y: isize, x: isize) -> Self {
+        GridIdx([z, y, x])
+    }
+}
+
+impl Neg for GridIdx2D {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        GridIdx::new_y_x(-self.y(), -self.x())
     }
 }

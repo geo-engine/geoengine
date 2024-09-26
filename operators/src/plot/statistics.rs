@@ -17,7 +17,7 @@ use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, AxisAlignedRectangle, BandSelection, BoundingBox2D,
-    PlotQueryRectangle, RasterQueryRectangle,
+    ColumnSelection, PlotQueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::ConvertDataTypeParallel;
 use geoengine_datatypes::raster::{GridOrEmpty, GridSize};
@@ -115,7 +115,9 @@ impl PlotOperator for Statistics {
                 }
 
                 let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
-                let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
+                let bbox = partitions_extent(
+                    in_descriptors.iter().map(|d| Some(d.spatial_bounds())), // Fixme: remove Some() when ...
+                );
 
                 let initialized_operator = InitializedStatistics::new(
                     name,
@@ -303,8 +305,14 @@ impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
             })
             .collect();
 
+        let query = VectorQueryRectangle::new(
+            query.spatial_query,
+            query.time_interval,
+            ColumnSelection::all(),
+        );
+
         call_on_generic_vector_processor!(&self.vector, processor => {
-            let mut query = processor.query(query.into(), ctx).await?;
+            let mut query = processor.query(query, ctx).await?;
 
             while let Some(collection) = query.next().await {
                 let collection = collection?;
@@ -355,12 +363,19 @@ impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
         ctx: &'a dyn QueryContext,
     ) -> Result<Self::OutputFormat> {
         let mut queries = Vec::with_capacity(self.rasters.len());
-        let q: RasterQueryRectangle =
-            RasterQueryRectangle::from_qrect_and_bands(&query, BandSelection::first());
         for (i, raster_processor) in self.rasters.iter().enumerate() {
+            let rd = raster_processor.result_descriptor();
+
+            let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_geo_transform(
+                &query,
+                rd.tiling_grid_definition(ctx.tiling_specification())
+                    .tiling_geo_transform(),
+                BandSelection::first(),
+            );
+
             queries.push(
                 call_on_generic_raster_processor!(raster_processor, processor => {
-                    processor.query(q.clone(), ctx).await?
+                    processor.query(raster_query_rect.clone(), ctx).await? // TODO: avoid cloning query?
                              .and_then(move |tile| crate::util::spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || (i, tile.convert_data_type_parallel()) ).map_err(Into::into))
                              .boxed()
                 }),
@@ -542,23 +557,22 @@ impl From<&StatisticsAggregator<f64>> for StatisticsOutput {
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::collections::DataCollection;
-    use geoengine_datatypes::primitives::{CacheHint, PlotSeriesSelection};
+    use geoengine_datatypes::primitives::{CacheHint, Coordinate2D, PlotSeriesSelection};
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
     use super::*;
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-        RasterResultDescriptor,
+        ChunkByteSize, MockExecutionContext, RasterOperator, RasterResultDescriptor,
+        SpatialGridDescriptor,
     };
     use crate::engine::{RasterBandDescriptors, VectorOperator};
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::util::input::MultiRasterOrVectorOperator::Raster;
-    use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, NoGeometry, SpatialResolution, TimeInterval,
-    };
+    use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, NoGeometry, TimeInterval};
     use geoengine_datatypes::raster::{
-        Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
+        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridShape2D, RasterDataType,
+        RasterTile2D, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -590,9 +604,8 @@ mod tests {
 
     #[tokio::test]
     async fn empty_raster_input() {
-        let tile_size_in_pixels = [3, 2].into();
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -616,14 +629,12 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -633,11 +644,18 @@ mod tests {
 
     #[tokio::test]
     async fn single_raster_implicit_name() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: None,
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                tile_size_in_pixels.bounding_box(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
         };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
 
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
@@ -654,14 +672,7 @@ mod tests {
                         .into(),
                     CacheHint::default(),
                 )],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -686,14 +697,12 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -718,11 +727,18 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn two_rasters_implicit_names() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: None,
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                tile_size_in_pixels.bounding_box(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
         };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
 
         let raster_source = vec![
             MockRasterSource {
@@ -740,14 +756,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                        bands: RasterBandDescriptors::new_single_band(),
-                    },
+                    result_descriptor: result_descriptor.clone(),
                 },
             }
             .boxed(),
@@ -766,14 +775,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                        bands: RasterBandDescriptors::new_single_band(),
-                    },
+                    result_descriptor,
                 },
             }
             .boxed(),
@@ -799,14 +801,12 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -840,11 +840,18 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn two_rasters_explicit_names() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: None,
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                tile_size_in_pixels.bounding_box(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
         };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
 
         let raster_source = vec![
             MockRasterSource {
@@ -862,14 +869,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                        bands: RasterBandDescriptors::new_single_band(),
-                    },
+                    result_descriptor: result_descriptor.clone(),
                 },
             }
             .boxed(),
@@ -888,14 +888,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                        bands: RasterBandDescriptors::new_single_band(),
-                    },
+                    result_descriptor,
                 },
             }
             .boxed(),
@@ -921,14 +914,12 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -961,11 +952,18 @@ mod tests {
 
     #[tokio::test]
     async fn two_rasters_explicit_names_incomplete() {
-        let tile_size_in_pixels = [3, 2].into();
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels,
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: None,
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                tile_size_in_pixels.bounding_box(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
         };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
 
         let raster_source = vec![
             MockRasterSource {
@@ -983,14 +981,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                        bands: RasterBandDescriptors::new_single_band(),
-                    },
+                    result_descriptor: result_descriptor.clone(),
                 },
             }
             .boxed(),
@@ -1009,14 +1000,7 @@ mod tests {
                             .into(),
                         CacheHint::default(),
                     )],
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        time: None,
-                        bbox: None,
-                        resolution: None,
-                        bands: RasterBandDescriptors::new_single_band(),
-                    },
+                    result_descriptor,
                 },
             }
             .boxed(),
@@ -1046,7 +1030,6 @@ mod tests {
     async fn vector_no_column() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -1104,14 +1087,12 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1146,7 +1127,6 @@ mod tests {
     async fn vector_single_column() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -1204,14 +1184,12 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1237,7 +1215,6 @@ mod tests {
     async fn vector_two_columns() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -1295,14 +1272,12 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1337,8 +1312,18 @@ mod tests {
     async fn raster_percentile() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
+        };
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: None,
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                TestDefault::test_default(),
+                GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
         let raster_source = MockRasterSource {
@@ -1356,14 +1341,7 @@ mod tests {
                         .into(),
                     CacheHint::default(),
                 )],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -1388,14 +1366,12 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -1424,7 +1400,6 @@ mod tests {
     async fn vector_percentiles() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -1482,14 +1457,12 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();

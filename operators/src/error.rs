@@ -1,3 +1,4 @@
+use crate::engine::SpatialGridDescriptor;
 use crate::processing::BandNeighborhoodAggregateError;
 use crate::util::statistics::StatisticsError;
 use bb8_postgres::bb8;
@@ -359,6 +360,10 @@ pub enum Error {
     InterpolationOperator {
         source: crate::processing::InterpolationError,
     },
+    #[snafu(context(false))]
+    DownsampleOperator {
+        source: crate::processing::DownsamplingError,
+    },
     #[snafu(display("TimeShift error: {source}"), context(false))]
     TimeShift {
         source: crate::processing::TimeShiftError,
@@ -430,6 +435,12 @@ pub enum Error {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    #[snafu(display("RasterResults are incompatible error: {a:?} vs {b:?}"))]
+    CantMergeSpatialGridDescriptor {
+        a: SpatialGridDescriptor,
+        b: SpatialGridDescriptor,
+    },
+
     #[snafu(display("Input stream {stream_index} is not temporally aligned. Expected {expected:?}, found {found:?}."))]
     InputStreamsMustBeTemporallyAligned {
         stream_index: usize,
@@ -492,6 +503,8 @@ pub enum Error {
     MustNotHappen {
         message: String,
     },
+
+    ReprojectionFailed,
 
     #[snafu(display("PostgresError: {}", source))]
     Postgres {

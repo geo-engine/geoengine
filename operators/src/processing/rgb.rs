@@ -13,8 +13,7 @@ use futures::{stream::BoxStream, try_join, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
-        partitions_extent, time_interval_extent, BandSelection, RasterQueryRectangle,
-        SpatialPartition2D, SpatialResolution,
+        time_interval_extent, BandSelection, RasterQueryRectangle, RasterSpatialQueryRectangle,
     },
     raster::{
         FromIndexFn, GridIndexAccess, GridOrEmpty, GridShapeAccess, RasterDataType, RasterTile2D,
@@ -171,42 +170,27 @@ impl RasterOperator for Rgb {
             }
         );
 
-        let spatial_reference = sources.red.result_descriptor().spatial_reference;
+        let first_result_descriptor = sources.red.result_descriptor();
+        let spatial_reference = first_result_descriptor.spatial_reference;
 
-        ensure!(
-            sources
-                .iter()
-                .skip(1)
-                .all(|rd| rd.result_descriptor().spatial_reference == spatial_reference),
-            error::DifferentSpatialReferences {
-                red: sources.red.result_descriptor().spatial_reference,
-                green: sources.green.result_descriptor().spatial_reference,
-                blue: sources.blue.result_descriptor().spatial_reference,
-            }
-        );
+        let first_spatial_grid = *sources.red.result_descriptor().spatial_grid_descriptor();
+        let result_spatial_grid = sources
+            .iter()
+            .skip(1)
+            .map(|x| x.result_descriptor().spatial_grid_descriptor())
+            .try_fold(first_spatial_grid, |a, &b| {
+                a.merge(&b)
+                    .ok_or(crate::error::Error::CantMergeSpatialGridDescriptor { a, b })
+            })?;
 
         let time =
             time_interval_extent(sources.iter().map(|source| source.result_descriptor().time));
-        let bbox = partitions_extent(sources.iter().map(|source| source.result_descriptor().bbox));
-
-        let resolution = sources
-            .iter()
-            .map(|source| source.result_descriptor().resolution)
-            .reduce(|a, b| match (a, b) {
-                (Some(a), Some(b)) => {
-                    Some(SpatialResolution::new_unchecked(a.x.min(b.x), a.y.min(b.y)))
-                }
-                // we can only compute the minimum resolution if all sources have a resolution
-                _ => None,
-            })
-            .flatten();
 
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U32,
             spatial_reference,
             time,
-            bbox,
-            resolution,
+            spatial_grid: result_spatial_grid,
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -297,7 +281,7 @@ impl RgbQueryProcessor {
 #[async_trait]
 impl QueryProcessor for RgbQueryProcessor {
     type Output = RasterTile2D<u32>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -417,16 +401,16 @@ pub enum RgbOperatorError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext, QueryProcessor};
+    use crate::engine::{MockExecutionContext, QueryProcessor, SpatialGridDescriptor};
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::{
-        CacheHint, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+        CacheHint, Coordinate2D, RasterQueryRectangle, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, TileInformation,
-        TilingSpecification,
+        GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, MapElements, MaskedGrid2D,
+        RasterTile2D, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -494,11 +478,10 @@ mod tests {
     async fn computation() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
-        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let o = Rgb {
             params: RgbParams {
@@ -519,24 +502,20 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
         .await
         .unwrap();
 
         let processor = o.query_processor().unwrap().get_u32().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
                 &ctx,
             )
             .await
@@ -631,8 +610,10 @@ mod tests {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },

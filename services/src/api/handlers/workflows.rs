@@ -4,7 +4,10 @@ use crate::api::model::responses::IdResponse;
 use crate::api::ogc::util::{parse_bbox, parse_time};
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
-use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
+use crate::datasets::{
+    schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow,
+    RasterDatasetFromWorkflowParams,
+};
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::util::config::get_config_element;
@@ -23,7 +26,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
-    ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
+    ExecutionContext, OperatorData, TypedOperator, WorkflowOperatorPath,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -215,11 +218,11 @@ async fn get_workflow_metadata_handler<C: ApplicationContext>(
 async fn workflow_metadata<C: SessionContext>(
     workflow: Workflow,
     execution_context: C::ExecutionContext,
-) -> Result<TypedResultDescriptor> {
+) -> Result<crate::api::model::operators::TypedResultDescriptor> {
     // TODO: use cache here
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
-    let result_descriptor: TypedResultDescriptor = call_on_typed_operator!(
+    let result_descriptor: geoengine_operators::engine::TypedResultDescriptor = call_on_typed_operator!(
         workflow.operator,
         operator => {
             let operator = operator
@@ -231,7 +234,7 @@ async fn workflow_metadata<C: SessionContext>(
         }
     );
 
-    Ok(result_descriptor)
+    Ok(result_descriptor.into())
 }
 
 /// Gets the provenance of all datasets used in a workflow.
@@ -458,11 +461,31 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
     let compression_num_threads =
         get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
 
+    // FIXME: dont initialize the workflow here, but in the task
+    let operator = workflow
+        .clone()
+        .operator
+        .get_raster()
+        .expect("must be raster here")
+        .initialize(
+            WorkflowOperatorPath::initialize_root(),
+            &ctx.execution_context()?,
+        )
+        .await?;
+
+    let result_descriptor = operator.result_descriptor();
+
+    let info = RasterDatasetFromWorkflowParams::from_request_and_result_descriptor(
+        info.into_inner(),
+        result_descriptor,
+        ctx.execution_context()?.tiling_specification(),
+    )?;
+
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("workflow {id}"),
-        workflow,
+        operator,
         ctx,
-        info.into_inner(),
+        info,
         compression_num_threads,
     )
     .await?;
@@ -479,8 +502,6 @@ pub struct RasterStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_time")]
     #[param(value_type = String)]
     pub time_interval: TimeInterval,
-    #[serde(deserialize_with = "parse_spatial_resolution")]
-    pub spatial_resolution: SpatialResolution,
     #[serde(deserialize_with = "parse_band_selection")]
     #[param(value_type = String)]
     pub attributes: BandSelection,
@@ -536,12 +557,26 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         .get_raster()
         .boxed_context(error::WorkflowMustBeOfTypeRaster)?;
 
-    let query_rectangle = RasterQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
-        time_interval: query.time_interval.into(),
-        spatial_resolution: query.spatial_resolution,
-        attributes: query.attributes.clone().try_into()?,
-    };
+    let execution_context = ctx.execution_context()?;
+
+    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+    let initialized_operator = operator
+        .initialize(workflow_operator_path_root, &execution_context)
+        .await?;
+
+    let query = query.into_inner();
+
+    let query_bounds = initialized_operator
+        .result_descriptor()
+        .tiling_grid_definition(execution_context.tiling_specification())
+        .tiling_geo_transform()
+        .spatial_to_grid_bounds(&query.spatial_bounds);
+    let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+        query_bounds,
+        query.time_interval.into(),
+        query.attributes.clone().try_into()?,
+    );
 
     // this is the only result type for now
     debug_assert!(matches!(
@@ -550,9 +585,8 @@ async fn raster_stream_websocket<C: ApplicationContext>(
     ));
 
     let stream_handler = RasterWebsocketStreamHandler::new::<C::SessionContext>(
-        operator,
+        initialized_operator,
         query_rectangle,
-        ctx.execution_context()?,
         ctx.query_context()?,
     )
     .await?;
@@ -619,12 +653,11 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         .get_vector()
         .boxed_context(error::WorkflowMustBeOfTypeVector)?;
 
-    let query_rectangle = VectorQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
-        time_interval: query.time_interval.into(),
-        spatial_resolution: query.spatial_resolution,
-        attributes: ColumnSelection::all(),
-    };
+    let query_rectangle = VectorQueryRectangle::with_bounds(
+        query.spatial_bounds,
+        query.time_interval.into(),
+        ColumnSelection::all(),
+    );
 
     // this is the only result type for now
     debug_assert!(matches!(
@@ -674,10 +707,10 @@ mod tests {
     use crate::ge_context;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
-    use crate::util::config::get_config_element;
     use crate::util::tests::{
-        add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
-        read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
+        add_ndvi_to_datasets, assert_eq_two_raster_operator_res_u8, check_allowed_http_methods,
+        check_allowed_http_methods2, read_body_string, register_ndvi_workflow_helper,
+        send_test_request, TestDataUploads,
     };
     use crate::workflows::registry::WorkflowRegistry;
     use actix_web::dev::ServiceResponse;
@@ -687,13 +720,16 @@ mod tests {
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, FeatureData, Measurement, MultiPoint, RasterQueryRectangle,
-        SpatialPartition2D, SpatialResolution, TimeInterval,
+        TimeInterval,
     };
-    use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
+    use geoengine_datatypes::raster::{
+        GeoTransform, GridBoundingBox2D, GridShape, RasterDataType, TilingSpecification,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        ExecutionContext, MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
-        RasterBandDescriptors, TypedOperator,
+        MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
+        RasterBandDescriptors, SpatialGridDescriptor, TypedOperator,
     };
     use geoengine_operators::engine::{RasterOperator, RasterResultDescriptor, VectorOperator};
     use geoengine_operators::mock::{
@@ -703,10 +739,6 @@ mod tests {
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
-    use geoengine_operators::util::raster_stream_to_geotiff::{
-        single_timestep_raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata,
-        GdalGeoTiffOptions,
-    };
     use serde_json::json;
     use std::io::Read;
     use std::sync::Arc;
@@ -724,9 +756,7 @@ mod tests {
 
         let workflow = Workflow {
             operator: MockPointSource {
-                params: MockPointSourceParams {
-                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                },
+                params: MockPointSourceParams::new(vec![(0.0, 0.1).into(), (1.0, 1.1).into()]),
             }
             .boxed()
             .into(),
@@ -764,9 +794,7 @@ mod tests {
     async fn register_missing_header(app_ctx: PostgresContext<NoTls>) {
         let workflow = Workflow {
             operator: MockPointSource {
-                params: MockPointSourceParams {
-                    points: vec![(0.0, 0.1).into(), (1.0, 1.1).into()],
-                },
+                params: MockPointSourceParams::new(vec![(0.0, 0.1).into(), (1.0, 1.1).into()]),
             }
             .boxed()
             .into(),
@@ -1004,8 +1032,11 @@ mod tests {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
                         time: None,
-                        bbox: None,
-                        resolution: None,
+                        spatial_grid: SpatialGridDescriptor::source_from_parts(
+                            GeoTransform::test_default(),
+                            geoengine_datatypes::raster::GridBoundingBox2D::new([0, 0], [199, 199])
+                                .unwrap(),
+                        ),
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
                             Measurement::Continuous(ContinuousMeasurement {
@@ -1039,8 +1070,22 @@ mod tests {
                 "dataType": "U8",
                 "spatialReference": "EPSG:4326",
                 "time": null,
-                "bbox": null,
-                "resolution": null,
+                "spatialGrid": {
+                    "descriptor": "source",
+                    "spatialGrid": {
+                        "geoTransform": {"originCoordinate":{"x":0.0,"y":0.0}, "xPixelSize": 1., "yPixelSize": -1.},
+                        "gridBounds": {
+                            "bottomRightIdx": {
+                                "xIdx": 199,
+                                "yIdx": 199
+                            },
+                            "topLeftIdx": {
+                                "xIdx": 0,
+                                "yIdx": 0
+                            }
+                        }
+                    }
+                },
                 "bands": [{
                     "name": "band",
                     "measurement": {
@@ -1152,7 +1197,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters { data: dataset },
+                    params: GdalSourceParameters::new(dataset),
                 }
                 .boxed(),
             ),
@@ -1230,7 +1275,6 @@ mod tests {
 
     fn test_download_all_metadata_zip_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape::new([600, 600]),
         }
     }
@@ -1252,9 +1296,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters {
-                        data: dataset_name.clone(),
-                    },
+                    params: GdalSourceParameters::new(dataset_name.clone()),
                 }
                 .boxed(),
             ),
@@ -1290,7 +1332,8 @@ mod tests {
                 "operator": {
                     "type": "GdalSource",
                     "params": {
-                        "data": dataset_name
+                        "data": dataset_name,
+                        "overviewLevel": null
                     }
                 }
             })
@@ -1306,19 +1349,22 @@ mod tests {
                     "start": 1_388_534_400_000_i64,
                     "end": 1_404_172_800_000_i64,
                 },
-                "bbox": {
-                    "upperLeftCoordinate": {
-                        "x": -180.0,
-                        "y": 90.0,
-                    },
-                    "lowerRightCoordinate": {
-                        "x": 180.0,
-                        "y": -90.0
+                "spatialGrid": {
+                    "descriptor": "source",
+                    "spatialGrid" : {
+                        "geoTransform": {"originCoordinate":{"x":-180.0,"y":90.0}, "xPixelSize": 0.1, "yPixelSize": -0.1},
+                        "gridBounds": {
+                            "bottomRightIdx": {
+                                "xIdx": 3599,
+                                "yIdx": 1799
+                            },
+                            "topLeftIdx": {
+                                "xIdx": 0,
+                                "yIdx": 0
+                            }
+                        }
                     }
-                },
-                "resolution": {
-                    "x": 0.1,
-                    "y": 0.1
+
                 },
                 "bands": [{
                         "name": "ndvi",
@@ -1354,8 +1400,7 @@ mod tests {
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn dataset_from_workflow_task_success_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
-            tile_size_in_pixels: GridShape::new([600, 600]),
+            tile_size_in_pixels: GridShape::new([512, 512]),
         }
     }
 
@@ -1368,13 +1413,13 @@ mod tests {
 
         let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
+        let operator_a = GdalSource {
+            params: GdalSourceParameters::new(dataset),
+        }
+        .boxed();
+
         let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters { data: dataset },
-                }
-                .boxed(),
-            ),
+            operator: TypedOperator::Raster(operator_a.clone()),
         };
 
         let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
@@ -1391,12 +1436,12 @@ mod tests {
                 "query": {
                     "spatialBounds": {
                         "upperLeftCoordinate": {
-                            "x": -10.0,
-                            "y": 80.0
+                            "x": 0.0,
+                            "y": 52.0
                         },
                         "lowerRightCoordinate": {
-                            "x": 50.0,
-                            "y": 20.0
+                            "x": 52.0,
+                            "y": 0.0
                         }
                     },
                     "timeInterval": {
@@ -1439,56 +1484,18 @@ mod tests {
         };
 
         // query the newly created dataset
-        let op = GdalSource {
-            params: GdalSourceParameters {
-                data: response.dataset.into(),
-            },
+        let operator_b = GdalSource {
+            params: GdalSourceParameters::new(response.dataset.into()),
         }
         .boxed();
 
-        let exe_ctx = ctx.execution_context().unwrap();
-
-        let o = op
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .unwrap();
-
-        let query_ctx = ctx.query_context().unwrap();
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: geoengine_datatypes::primitives::BandSelection::first(),
-        };
-
-        let processor = o.query_processor().unwrap().get_u8().unwrap();
-
-        let result = single_timestep_raster_stream_to_geotiff_bytes(
-            processor,
-            query_rect,
-            query_ctx,
-            GdalGeoTiffDatasetMetadata {
-                no_data_value: Some(0.),
-                spatial_reference: SpatialReference::epsg_4326(),
-            },
-            GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
-                    .unwrap()
-                    .compression_num_threads,
-                as_cog: false,
-                force_big_tiff: false,
-            },
-            None,
-            Box::pin(futures::future::pending()),
-            exe_ctx.tiling_specification(),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(
-            include_bytes!("../../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                as &[u8],
-            result.as_slice()
+        let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(-512, -1, 0, 511).unwrap(),
+            TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
+            geoengine_datatypes::primitives::BandSelection::first(),
         );
+
+        assert_eq_two_raster_operator_res_u8(&ctx, operator_a, operator_b, query_rectangle, false)
+            .await;
     }
 }

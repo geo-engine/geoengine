@@ -734,16 +734,16 @@ impl Accu for MovingAverageAccu {
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
-        raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
+        primitives::{BandSelection, CacheHint, TimeInterval},
+        raster::{Grid, GridBoundingBox2D, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
 
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, RasterBandDescriptors},
+        engine::{
+            MockExecutionContext, MockQueryContext, RasterBandDescriptors, SpatialGridDescriptor,
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -1161,8 +1161,10 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_multiple_bands(3),
                 },
             },
@@ -1184,12 +1186,11 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 5),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::new_unchecked(vec![0, 1, 2]),
-        };
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            BandSelection::new_unchecked(vec![0, 1, 2]),
+        );
 
         let query_ctx = MockQueryContext::test_default();
 
@@ -1303,8 +1304,10 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_multiple_bands(3),
                 },
             },
@@ -1326,12 +1329,11 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 5),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::new_unchecked(vec![0]), // only get first band
-        };
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            BandSelection::new_unchecked(vec![0]), // only get first band
+        );
 
         let query_ctx = MockQueryContext::test_default();
 
