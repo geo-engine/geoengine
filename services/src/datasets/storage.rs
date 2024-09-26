@@ -47,7 +47,8 @@ impl Dataset {
             description: self.description.clone(),
             tags: self.tags.clone().unwrap_or_default(), // TODO: figure out if we want to use Option<Vec<String>> everywhere or if Vec<String> is fine
             source_operator: self.source_operator.clone(),
-            result_descriptor: self.result_descriptor.clone(),
+            // convert the TypedResultDescriptor to the API one
+            result_descriptor: self.result_descriptor.clone().into(),
             symbology: self.symbology.clone(),
         }
     }

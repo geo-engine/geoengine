@@ -875,6 +875,7 @@ mod tests {
                 source_operator: "OgrSource".to_owned(),
                 symbology: None,
                 tags: vec!["upload".to_owned(), "test".to_owned()],
+                // create a TypedResultDescriptor object then concert it to the API model
                 result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -890,6 +891,7 @@ mod tests {
                     time: None,
                     bbox: None,
                 })
+                .into()
             },
         );
 

@@ -1069,6 +1069,7 @@ mod tests {
                     time: None,
                     bbox: None,
                 })
+                .into()
             },
         );
 
