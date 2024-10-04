@@ -12,6 +12,7 @@ use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{InitializedRasterOperator, QueryAbortTrigger, QueryContext, QueryProcessorExt},
 };
+use tracing::debug;
 
 pub struct RasterWebsocketStreamHandler {
     state: RasterWebsocketStreamHandlerState,
@@ -25,6 +26,16 @@ enum RasterWebsocketStreamHandlerState {
     Closed,
     Idle { stream: ByteStream },
     Processing { _fut: SpawnHandle },
+}
+
+impl std::fmt::Debug for RasterWebsocketStreamHandlerState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Closed => write!(f, "Closed"),
+            Self::Idle { stream: _ } => write!(f, "Idle"),
+            Self::Processing { _fut: _ } => write!(f, "Processing"),
+        }
+    }
 }
 
 impl Default for RasterWebsocketStreamHandlerState {
@@ -42,7 +53,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RasterWebsocketSt
 
     fn finished(&mut self, ctx: &mut Self::Context) {
         ctx.stop();
-
+        debug!("Stream finished.");
         self.abort_processing();
     }
 
@@ -51,6 +62,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RasterWebsocketSt
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
             Ok(ws::Message::Text(text)) if &text == "NEXT" => self.next_tile(ctx),
             Ok(ws::Message::Close(reason)) => {
+                debug!("Stream was closed. Reason: {:?}", reason);
                 ctx.close(reason);
 
                 self.finished(ctx);
@@ -140,6 +152,7 @@ fn send_result(
         }
         Some(Err(e)) => {
             // on error, send the error and close the connection
+            debug!("Tile error in stream: {e}");
             actor.state = RasterWebsocketStreamHandlerState::Closed;
             ctx.close(Some(CloseReason {
                 code: CloseCode::Error,
@@ -150,6 +163,7 @@ fn send_result(
         None => {
             // stream ended
             actor.state = RasterWebsocketStreamHandlerState::Closed;
+            debug!("Sttream is empty --> ended.");
             ctx.close(Some(CloseReason {
                 code: CloseCode::Normal,
                 description: None,
