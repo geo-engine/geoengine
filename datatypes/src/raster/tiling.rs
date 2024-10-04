@@ -179,13 +179,10 @@ impl TilingStrategy {
         &self,
         grid_bounds: GridBoundingBox2D,
     ) -> impl Iterator<Item = GridIdx2D> {
-        let GridIdx([upper_left_tile_y, upper_left_tile_x]) =
-            self.pixel_idx_to_tile_idx(grid_bounds.min_index());
-        let GridIdx([lower_right_tile_y, lower_right_tile_x]) =
-            self.pixel_idx_to_tile_idx(grid_bounds.max_index());
+        let tile_bounds = self.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
 
-        let y_range = upper_left_tile_y..=lower_right_tile_y;
-        let x_range = upper_left_tile_x..=lower_right_tile_x;
+        let y_range = tile_bounds.y_min()..=tile_bounds.y_max();
+        let x_range = tile_bounds.x_min()..=tile_bounds.y_max();
 
         y_range.flat_map(move |y| x_range.clone().map(move |x| [y, x].into()))
     }
