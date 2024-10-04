@@ -2,6 +2,7 @@ use crate::api::model::datatypes::{DatasetId, LayerId};
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::layers::listing::LayerCollectionId;
+use crate::machine_learning::MlModelId;
 use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use crate::pro::permissions::{Permission, PermissionListing};
 use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
@@ -52,6 +53,8 @@ pub enum Resource {
     Project(ProjectId),
     #[schema(title = "DatasetResource")]
     Dataset(DatasetId),
+    #[schema(title = "MlModelResource")]
+    MlModel(MlModelId),
 }
 
 impl From<Resource> for ResourceId {
@@ -63,6 +66,7 @@ impl From<Resource> for ResourceId {
             }
             Resource::Project(project_id) => ResourceId::Project(project_id),
             Resource::Dataset(dataset_id) => ResourceId::DatasetId(dataset_id.into()),
+            Resource::MlModel(ml_model_id) => ResourceId::MlModel(ml_model_id.into()),
         }
     }
 }
