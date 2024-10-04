@@ -11,9 +11,7 @@ use crate::datasets::{
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::util::config::get_config_element;
-use crate::util::parsing::{
-    parse_band_selection, parse_spatial_partition, parse_spatial_resolution,
-};
+use crate::util::parsing::{parse_band_selection, parse_spatial_partition};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::workflows::{RasterWebsocketStreamHandler, VectorWebsocketStreamHandler};
@@ -21,8 +19,7 @@ use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-    VectorQueryRectangle,
+    BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D, VectorQueryRectangle,
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
@@ -606,8 +603,6 @@ pub struct VectorStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_time")]
     #[param(value_type = String)]
     pub time_interval: TimeInterval,
-    #[serde(deserialize_with = "parse_spatial_resolution")]
-    pub spatial_resolution: SpatialResolution,
     pub result_type: RasterStreamWebsocketResultType,
 }
 
