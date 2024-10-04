@@ -217,7 +217,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
     let bounds = result_descriptor.spatial_bounds();
 
     let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) =
-        match spatial_reference_specification(&spatial_reference.proj_string()?)?
+        match spatial_reference_specification(&spatial_reference.into())?
             .axis_order
             .ok_or(Error::AxisOrderingNotKnownForSrs {
                 srs_string: spatial_reference.srs_string(),
@@ -335,7 +335,8 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
     let request_resolution = request.spatial_resolution().transpose()?;
     let request_partition = request.spatial_partition()?;
     let request_time: TimeInterval = request
-        .time.map_or_else(default_time_from_config, Into::into);
+        .time
+        .map_or_else(default_time_from_config, Into::into);
     let request_no_data_value = request.nodatavalue;
 
     let ctx = app_ctx.session_context(session);
