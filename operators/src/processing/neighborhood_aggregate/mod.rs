@@ -260,10 +260,8 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         stack_individual_aligned_raster_bands(&query, ctx, |query, ctx| async move {
-            let sub_query = NeighborhoodAggregateTileNeighborhood::<P, A>::new(
-                self.neighborhood.clone(),
-                self.tiling_specification,
-            );
+            let sub_query =
+                NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone());
 
             let tiling_strat = self
                 .source

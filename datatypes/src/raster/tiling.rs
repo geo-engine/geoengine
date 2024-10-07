@@ -29,61 +29,6 @@ impl TilingSpecification {
     pub fn tiling_origin_reference(&self) -> Coordinate2D {
         Coordinate2D::new(0., 0.)
     }
-
-    /// create a `TilingStrategy` if the input and the reference are on the same grid.
-    pub fn strategy_exact(self, geo_transform: GeoTransform) -> Option<TilingStrategy> {
-        debug_assert!(geo_transform.x_pixel_size() > 0.0);
-        debug_assert!(geo_transform.y_pixel_size() < 0.0);
-
-        let tiling_geo_transform = GeoTransform::new(
-            self.tiling_origin_reference(),
-            geo_transform.x_pixel_size(),
-            geo_transform.y_pixel_size(),
-        );
-        if tiling_geo_transform.is_valid_pixel_edge(geo_transform.origin_coordinate()) {
-            Some(TilingStrategy::new(
-                self.tile_size_in_pixels,
-                tiling_geo_transform,
-            ))
-        } else {
-            None
-        }
-    }
-
-    pub fn pixel_idx_to_tile_idx(&self, pixel_idx: GridIdx2D) -> GridIdx2D {
-        let GridIdx([y_pixel_idx, x_pixel_idx]) = pixel_idx;
-        let [y_tile_size, x_tile_size] = self.tile_size_in_pixels.into_inner();
-        //let y_tile_idx = (y_pixel_idx as f64 / y_tile_size as f64).floor() as isize;
-        //let x_tile_idx = (x_pixel_idx as f64 / x_tile_size as f64).floor() as isize;
-        let y_tile_idx = num::integer::div_floor(y_pixel_idx, y_tile_size as isize);
-        let x_tile_idx = num::integer::div_floor(x_pixel_idx, x_tile_size as isize);
-        [y_tile_idx, x_tile_idx].into()
-    }
-
-    pub fn tile_idx_to_global_pixel_idx(&self, tile_idx: GridIdx2D) -> GridIdx2D {
-        let GridIdx([y_tile_idx, x_tile_idx]) = tile_idx;
-        let [y_tile_size, x_tile_size] = self.tile_size_in_pixels.into_inner();
-        [
-            y_tile_idx * y_tile_size as isize,
-            x_tile_idx * x_tile_size as isize,
-        ]
-        .into()
-    }
-
-    pub fn origin_pixel_tile_coord(
-        geo_transform: &GeoTransform,
-        tiling_spec: &TilingSpecification,
-    ) -> (GridIdx2D, GridIdx2D) {
-        let nearest_pixel_to_tiling_origin =
-            geo_transform.nearest_pixel_edge(tiling_spec.tiling_origin_reference());
-        let pixel_distance_reverse = nearest_pixel_to_tiling_origin * -1;
-
-        let origin_pixel_tile = tiling_spec.pixel_idx_to_tile_idx(pixel_distance_reverse);
-        let origin_pixel_offset =
-            tiling_spec.tile_idx_to_global_pixel_idx(origin_pixel_tile) - pixel_distance_reverse;
-
-        (origin_pixel_tile, origin_pixel_offset)
-    }
 }
 
 impl GridShapeAccess for TilingSpecification {
@@ -182,7 +127,7 @@ impl TilingStrategy {
         let tile_bounds = self.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
 
         let y_range = tile_bounds.y_min()..=tile_bounds.y_max();
-        let x_range = tile_bounds.x_min()..=tile_bounds.y_max();
+        let x_range = tile_bounds.x_min()..=tile_bounds.x_max();
 
         y_range.flat_map(move |y| x_range.clone().map(move |x| [y, x].into()))
     }
@@ -307,6 +252,10 @@ impl TileInformation {
     pub fn spatial_grid_definition(&self) -> SpatialGridDefinition {
         SpatialGridDefinition::new(self.global_geo_transform, self.global_pixel_bounds())
     }
+
+    pub fn tiling_strategy(&self) -> TilingStrategy {
+        TilingStrategy::new(self.tile_size_in_pixels, self.global_geo_transform)
+    }
 }
 
 impl SpatialPartitioned for TileInformation {
@@ -351,6 +300,7 @@ mod tests {
             .coordinate_to_grid_idx_2d((12.477_743_625_640_87, 43.881_288_170_814_514).into());
 
         let grid_bounds = GridBoundingBox2D::new_unchecked(ul_idx, lr_idx);
+        dbg!(grid_bounds);
 
         let tiles = strat
             .tile_information_iterator_from_grid_bounds(grid_bounds)
@@ -393,21 +343,70 @@ mod tests {
             -0.000_033_337_4,
         );
 
-        let tiling_spec = TilingSpecification::new([512, 512].into());
+        let tile_pixel_size = GridShape2D::new_2d(512, 512);
+        let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
 
-        let nearest_to_tiling_origin =
-            geo_transform.nearest_pixel_edge(tiling_spec.tiling_origin_reference());
+        let tiling_origin_reference = Coordinate2D::new(0., 0.); // This is the _currently_ fixed tiling origin reference.
+        let nearest_to_tiling_origin = geo_transform.nearest_pixel_edge(tiling_origin_reference);
 
-        let tile_idx = tiling_spec.pixel_idx_to_tile_idx(nearest_to_tiling_origin);
+        let tile_idx = tiling_strat.pixel_idx_to_tile_idx(nearest_to_tiling_origin);
         let expected_near_tiling_origin_idx = GridIdx::new([72_329_138_149, 72_329_138_149]);
         assert_eq!(tile_idx, expected_near_tiling_origin_idx);
 
-        let (origin_tile, origin_offset) =
-            TilingSpecification::origin_pixel_tile_coord(&geo_transform, &tiling_spec);
+        let pixel_distance_reverse = nearest_to_tiling_origin * -1;
+
+        let origin_pixel_tile = tiling_strat.pixel_idx_to_tile_idx(pixel_distance_reverse);
+        let origin_pixel_offset =
+            tiling_strat.tile_idx_to_global_pixel_idx(origin_pixel_tile) - pixel_distance_reverse;
+
         let expected_origin_in_tiling_based_pixels =
             GridIdx::new([-72_329_138_150, -72_329_138_150]);
         let expected_tile_offset_from_tiling = GridIdx::new([-85, -85]);
-        assert_eq!(origin_tile, expected_origin_in_tiling_based_pixels);
-        assert_eq!(origin_offset, expected_tile_offset_from_tiling);
+        assert_eq!(origin_pixel_tile, expected_origin_in_tiling_based_pixels);
+        assert_eq!(origin_pixel_offset, expected_tile_offset_from_tiling);
+    }
+
+    #[test]
+    fn pixel_idx_to_tile_idx() {
+        let geo_transform = GeoTransform::new((123., 321.).into(), 1.0, -1.0);
+        let tile_pixel_size = GridShape2D::new_2d(100, 100);
+
+        let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
+        let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(0, 0));
+        assert_eq!(GridIdx2D::new_y_x(0, 0), pixels);
+        let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(1, 1));
+        assert_eq!(GridIdx2D::new_y_x(0, 0), pixels);
+        let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(57, 57));
+        assert_eq!(GridIdx2D::new_y_x(0, 0), pixels);
+        let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(100, 100));
+        assert_eq!(GridIdx2D::new_y_x(1, 1), pixels);
+        let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(200, 200));
+        assert_eq!(GridIdx2D::new_y_x(2, 2), pixels);
+        let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(1000, 1000));
+        assert_eq!(GridIdx2D::new_y_x(10, 10), pixels);
+        let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(-57, -57));
+        assert_eq!(GridIdx2D::new_y_x(-1, -1), pixels);
+        let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(-300, -300));
+        assert_eq!(GridIdx2D::new_y_x(-3, -3), pixels);
+    }
+
+    #[test]
+    fn tile_idx_to_pixel_idx() {
+        let geo_transform = GeoTransform::new((123., 321.).into(), 1.0, -1.0);
+        let tile_pixel_size = GridShape2D::new_2d(100, 100);
+
+        let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
+        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(GridIdx2D::new_y_x(0, 0));
+        assert_eq!(GridIdx2D::new_y_x(0, 0), pixels);
+        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(GridIdx2D::new_y_x(1, 1));
+        assert_eq!(GridIdx2D::new_y_x(100, 100), pixels);
+        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(GridIdx2D::new_y_x(2, 2));
+        assert_eq!(GridIdx2D::new_y_x(200, 200), pixels);
+        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(GridIdx2D::new_y_x(3, 3));
+        assert_eq!(GridIdx2D::new_y_x(300, 300), pixels);
+        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(GridIdx2D::new_y_x(10, 10));
+        assert_eq!(GridIdx2D::new_y_x(1000, 1000), pixels);
+        let pixels = tiling_strat.tile_idx_to_global_pixel_idx(GridIdx2D::new_y_x(-3, -3));
+        assert_eq!(GridIdx2D::new_y_x(-300, -300), pixels);
     }
 }

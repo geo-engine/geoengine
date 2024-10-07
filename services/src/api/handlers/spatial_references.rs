@@ -248,7 +248,7 @@ pub fn spatial_reference_specification(
     })?;
 
     let extent: geoengine_datatypes::primitives::BoundingBox2D =
-        spatial_reference.area_of_use_native()?;
+        spatial_reference.area_of_use_projected()?;
 
     let axis_labels = json.coordinate_system.axis.as_ref().map(|axes| {
         let [a0, a1] = [0, 1].map(|i| axes.get(i).map_or(String::new(), |a| a.name.clone()));

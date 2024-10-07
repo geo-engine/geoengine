@@ -7,11 +7,11 @@ use futures::{FutureExt, TryFutureExt};
 use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::raster::{
     ChangeGridBounds, FromIndexFnParallel, GridBlit, GridBoundingBox2D, GridContains, GridIdx,
-    GridIdx2D, GridIndexAccess, GridOrEmpty, GridSize, TilingStrategy,
+    GridIdx2D, GridIndexAccess, GridOrEmpty, GridSize,
 };
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, TimeInstance, TimeInterval},
-    raster::{Pixel, RasterTile2D, TileInformation, TilingSpecification},
+    raster::{Pixel, RasterTile2D, TileInformation},
 };
 use num_traits::AsPrimitive;
 use rayon::ThreadPool;
@@ -39,15 +39,13 @@ use tokio::task::JoinHandle;
 #[derive(Debug, Clone)]
 pub struct NeighborhoodAggregateTileNeighborhood<P, A> {
     neighborhood: Neighborhood,
-    tiling_specification: TilingSpecification,
     _phantom_types: PhantomData<(P, A)>,
 }
 
 impl<P, A> NeighborhoodAggregateTileNeighborhood<P, A> {
-    pub fn new(neighborhood: Neighborhood, tiling_specification: TilingSpecification) -> Self {
+    pub fn new(neighborhood: Neighborhood) -> Self {
         Self {
             neighborhood,
-            tiling_specification,
             _phantom_types: PhantomData,
         }
     }
@@ -74,16 +72,9 @@ where
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
         let pool = pool.clone();
-        let tiling_specification = self.tiling_specification;
         let neighborhood = self.neighborhood.clone();
         crate::util::spawn_blocking(move || {
-            create_enlarged_tile(
-                tile_info,
-                &query_rect,
-                pool,
-                tiling_specification,
-                neighborhood,
-            )
+            create_enlarged_tile(tile_info, &query_rect, pool, neighborhood)
         })
         .map_err(From::from)
         .boxed()
@@ -266,18 +257,14 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
     tile_info: TileInformation,
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
-    tiling_specification: TilingSpecification,
     neighborhood: Neighborhood,
 ) -> NeighborhoodAggregateAccu<P, A> {
     // create an accumulator as a single tile that fits all the input tiles + some margin for the kernel size
 
-    let tiling = TilingStrategy::new(
-        tiling_specification.tile_size_in_pixels,
-        tile_info.global_geo_transform,
-    );
+    let tiling_strategy = tile_info.tiling_strategy();
 
     let target_tile_start =
-        tiling_specification.tile_idx_to_global_pixel_idx(tile_info.global_tile_position);
+        tiling_strategy.tile_idx_to_global_pixel_idx(tile_info.global_tile_position);
     let accu_start = target_tile_start
         - GridIdx([
             neighborhood.y_radius() as isize,
@@ -285,8 +272,10 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
         ]);
     let accu_end = accu_start
         + GridIdx2D::new_y_x(
-            tiling.tile_size_in_pixels.y() as isize + 2 * neighborhood.y_radius() as isize - 1, // -1 because the end is inclusive
-            tiling.tile_size_in_pixels.x() as isize + 2 * neighborhood.x_radius() as isize - 1,
+            tiling_strategy.tile_size_in_pixels.y() as isize + 2 * neighborhood.y_radius() as isize
+                - 1, // -1 because the end is inclusive
+            tiling_strategy.tile_size_in_pixels.x() as isize + 2 * neighborhood.x_radius() as isize
+                - 1,
         );
 
     let accu_bounds = GridBoundingBox2D::new(accu_start, accu_end)
@@ -363,7 +352,10 @@ mod tests {
     };
     use geoengine_datatypes::{
         primitives::BandSelection,
-        raster::{GeoTransform, GridBoundingBox2D, SpatialGridDefinition, TilingStrategy},
+        raster::{
+            GeoTransform, GridBoundingBox2D, SpatialGridDefinition, TilingSpecification,
+            TilingStrategy,
+        },
         util::test::TestDefault,
     };
 
@@ -398,7 +390,6 @@ mod tests {
             NeighborhoodParams::Rectangle { dimensions: [5, 5] }
                 .try_into()
                 .unwrap(),
-            execution_context.tiling_specification,
         );
 
         let tile_query_rectangle = aggregator
@@ -420,7 +411,6 @@ mod tests {
             tile_info,
             &tile_query_rectangle,
             execution_context.thread_pool.clone(),
-            execution_context.tiling_specification,
             aggregator.neighborhood,
         );
 
