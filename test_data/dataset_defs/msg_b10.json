@@ -1,0 +1,105 @@
+{
+  "properties": {
+    "name": "msg_seviri_b10_scaled",
+    "displayName": "MSG SEVIRI Band 10",
+    "description": "Scaled to °K",
+    "sourceOperator": "GdalSource",
+    "symbology": {
+      "type": "raster",
+      "rasterColorizer": {
+        "type": "singleBand",
+        "band": 0,
+        "bandColorizer": {
+          "type": "linearGradient",
+          "noDataColor": [0, 0, 0, 0],
+          "overColor": [255, 0, 0, 255],
+          "underColor": [0, 0, 255, 255],
+          "breakpoints": [{
+            "value": 204.719,
+            "color": [0, 0, 0, 255]
+        }, {
+            "value": 335.558,
+            "color": [255, 255, 255, 255]
+        }
+
+          ]
+        }
+      },
+      "opacity": 1.0
+    },
+    "provenance": [
+      {
+        "citation": "EUMETSAT Meteosat Second Generation",
+        "license": "not specified",
+        "uri": "www.eumetat.int"
+      }
+    ]
+  },
+  "metaData": {
+    "type": "GdalMetaDataRegular",
+    "resultDescriptor": {
+      "dataType": "F32",
+      "spatialReference": "SR-ORG:81",
+      "time": {
+        "start": "2014-01-01T00:00:00.000Z",
+        "end": "2016-01-01T00:00:00.000Z"
+      },
+      "spatialGrid": {
+        "type": "source",
+        "geoTransform": {
+          "originCoordinate": {
+            "x": -5570248.477339744567871,
+            "y":  5570248.477339744567871
+          },
+          "xPixelSize":3000.403165817260742,
+          "yPixelSize":-3000.403165817260742
+        },
+        "gridBounds": {
+          "min": [0, 0],
+          "max": [3711, 3711]
+        }
+      },
+      "bands": [
+        {
+          "name": "Band 10: IR 12.0",
+          "measurement": {
+        "type": "continuous",
+        "measurement": "Temperature",
+        "unit": "°K"
+      }
+        }
+      ]
+    },
+    "params": {
+      "filePath": "/home/droenner/msg_fulldisc_temp/%_START_TIME_%_all.tif",
+      "rasterbandChannel": 10,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -5570248.477339744567871,
+          "y":  5570248.477339744567871
+        },
+        "xPixelSize":3000.403165817260742,
+        "yPixelSize":-3000.403165817260742
+      },
+      "width": 3712,
+      "height": 3712,
+      "fileNotFoundHandling": "NoData",
+      "noDataValue": 0.0
+    },
+    "timePlaceholders": {
+      "%_START_TIME_%": {
+        "format": "%Y%m%d%H%M",
+        "reference": "start"
+      }
+    },
+    "dataTime": {
+        "start": "2014-01-01T00:00:00.000Z",
+        "end": "2016-01-01T00:00:00.000Z"
+    },
+    "step": {
+      "granularity": "minutes",
+      "step": 15
+    },
+    "cacheTtl": 5000000
+  }
+}

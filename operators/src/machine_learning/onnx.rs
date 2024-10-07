@@ -14,7 +14,7 @@ use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
     Grid, GridIdx2D, GridIndexAccess, GridSize, Pixel, RasterTile2D,
 };
-use ndarray::Array2;
+use ndarray::{Array2, Array4};
 use ort::{IntoTensorElementType, PrimitiveTensorElementType};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
@@ -153,11 +153,11 @@ where
     TIn: Pixel + NoDataValue,
     TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
     ort::Value: std::convert::TryFrom<
-        ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
+        ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>,
     >,
     ort::Error: std::convert::From<
         <ort::Value as std::convert::TryFrom<
-            ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
+            ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>,
         >>::Error,
     >,
 {
@@ -231,10 +231,10 @@ where
                 }
 
                 let pixels = pixels.into_iter().flatten().collect::<Vec<TIn>>();
-                let rows = width * height;
-                let cols = num_bands;
+                let rows = width;
+                let cols = height;
 
-                let samples = Array2::from_shape_vec((rows, cols), pixels).expect(
+                let samples = Array4::from_shape_vec((1, rows, cols, num_bands), pixels).expect(
                     "Array2 should be valid because it is created from a Vec with the correct size",
                 );
 
@@ -242,7 +242,7 @@ where
 
                 let outputs = session
                     .run(ort::inputs![input_name => samples].context(Ort)?)
-                    .context(Ort)?;
+                    .context(Ort)?; // TODO: run async
 
                 // assume the first output is the prediction and ignore the other outputs (e.g. probabilities for classification)
                 // we don't access the output by name because it can vary, e.g. "output_label" vs "variable"

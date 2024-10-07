@@ -32,9 +32,21 @@ pub fn load_model_metadata(path: &Path) -> Result<MlModelMetadata, MachineLearni
         });
     };
 
+    fn input_is_single_pixel(dimensions: &[i64]) -> bool {
+        dimensions.len() == 2 && dimensions[0] == -1 && dimensions[1] > 0
+    }
+
+    fn input_is_tile_shape(dimensions: &[i64]) -> bool {
+        dimensions.len() == 4
+            && dimensions[0] == -1
+            && dimensions[1] == 512 // TODO: need to get tile shape from somewhere?
+            && dimensions[2] == 512
+            && dimensions[3] > 0
+    }
+
     // Input dimensions must be [-1, b] to accept a table of (arbitrarily many) single pixel features (rows) with `b` bands (columns)
     ensure!(
-        input_dimensions.len() == 2 && input_dimensions[0] == -1 && input_dimensions[1] > 0,
+        input_is_single_pixel(input_dimensions) || input_is_tile_shape(input_dimensions),
         InvalidInputDimensions {
             dimensions: input_dimensions.clone()
         }
@@ -42,11 +54,21 @@ pub fn load_model_metadata(path: &Path) -> Result<MlModelMetadata, MachineLearni
 
     // Onnx model must output one prediction per pixel as
     // (1) a Tensor with a single dimension of unknown size (dim = [-1]), or
-    // (2) a Tensor with two dimensions, the first of unknown size and the second of size 1 (dim = [-1, 1])
+    // (2) a Tensor with two dimensions, the first of unknown size and the second of size 1 (dim = [-1, 1]) or
+    // (3) a Tensor with the shape of a tile
+
+    fn output_is_single_pixel(dimensions: &[i64]) -> bool {
+        dimensions == &[-1] || dimensions == &[-1, 1]
+    }
+
+    fn output_is_tile_shape(dimensions: &[i64]) -> bool {
+        dimensions == &[-1, 512, 512, 1] || dimensions == &[512, 512, 1]
+    }
+
     let output_tensor_element_type =
         if let ort::ValueType::Tensor { ty, dimensions } = &session.outputs[0].output_type {
             ensure!(
-                dimensions == &[-1] || dimensions == &[-1, 1],
+                output_is_single_pixel(dimensions) || output_is_tile_shape(dimensions),
                 InvalidOutputDimensions {
                     dimensions: dimensions.clone()
                 }
