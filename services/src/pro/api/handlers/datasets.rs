@@ -3,8 +3,8 @@ use crate::{
         handlers::datasets::{
             adjust_meta_data_path, auto_create_dataset_handler, create_upload_dataset,
             delete_dataset_handler, get_dataset_handler, get_loading_info_handler,
-            list_datasets_handler, list_volumes_handler, suggest_meta_data_handler,
-            update_dataset_handler, update_dataset_provenance_handler,
+            list_datasets_handler, list_volume_file_layers_handler, list_volumes_handler,
+            suggest_meta_data_handler, update_dataset_handler, update_dataset_provenance_handler,
             update_dataset_symbology_handler, update_loading_info_handler,
         },
         model::{
@@ -40,6 +40,10 @@ where
                 web::resource("/suggest").route(web::post().to(suggest_meta_data_handler::<C>)),
             )
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
+            .service(
+                web::resource("/volumes/{volume_name}/files/{file_name}/layers")
+                    .route(web::get().to(list_volume_file_layers_handler::<C>)),
+            )
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
                 web::resource("/{dataset}/loadingInfo")
