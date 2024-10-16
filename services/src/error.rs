@@ -508,7 +508,7 @@ pub enum Error {
         volume_name: String,
     },
 
-    #[snafu(display("Cannot access path for volume with name {}", volume_name))]
+    #[snafu(display("Cannot access path of volume with name {}", volume_name))]
     CannotAccessVolumePath {
         volume_name: String,
     },

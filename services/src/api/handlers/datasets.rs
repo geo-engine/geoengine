@@ -1418,7 +1418,7 @@ pub struct VolumeFileLayersResponse {
     layers: Vec<String>,
 }
 
-/// List the layers of on uploaded file.
+/// List the layers of a file in a volume.
 #[utoipa::path(
     tag = "Datasets",
     get,

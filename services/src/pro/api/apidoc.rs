@@ -327,6 +327,8 @@ use utoipa::{Modify, OpenApi};
 
             UploadFilesResponse,
             UploadFileLayersResponse,
+            
+            VolumeFileLayersResponse,
 
             CreateDataset,
             UpdateDataset,
@@ -409,9 +411,7 @@ use utoipa::{Modify, OpenApi};
             MlModel,
             MlModelId,
             MlModelName,
-            MlModelMetadata,
-
-            VolumeFileLayersResponse
+            MlModelMetadata
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
