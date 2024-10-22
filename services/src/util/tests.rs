@@ -37,7 +37,9 @@ use geoengine_datatypes::operations::image::RasterColorizer;
 use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::Coordinate2D;
-use geoengine_datatypes::primitives::SpatialResolution;
+use geoengine_datatypes::primitives::RasterQueryRectangle;
+use geoengine_datatypes::raster::GeoTransform;
+use geoengine_datatypes::raster::GridBoundingBox2D;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -48,6 +50,7 @@ use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::engine::RasterBandDescriptor;
 use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::engine::RasterResultDescriptor;
+use geoengine_operators::engine::SpatialGridDescriptor;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::source::FileNotFoundHandling;
 use geoengine_operators::source::GdalDatasetGeoTransform;
@@ -128,7 +131,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl<A: SimpleApplicationCo
     let workflow = Workflow {
         operator: TypedOperator::Raster(
             GdalSource {
-                params: GdalSourceParameters { data: dataset },
+                params: GdalSourceParameters::new(dataset),
             }
             .boxed(),
         ),
@@ -270,11 +273,10 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
                 time: Some(geoengine_datatypes::primitives::TimeInterval::default()),
-                bbox: Some(geoengine_datatypes::primitives::SpatialPartition2D::new((-180., 90.).into(),
-                     (180., -90.).into()).unwrap()),
-                resolution: Some(SpatialResolution {
-                    x: 0.1, y: 0.1,
-                }),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                 GeoTransform::new(Coordinate2D::new(-180.,  90.), 0.1, -0.1),
+                 GridBoundingBox2D::new_min_max(0,0, 3600, 1800).unwrap(),
+                ),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
                 [
                     (0_u8, "Water Bodies".to_string()),
@@ -601,4 +603,34 @@ where
         Ok(res) => res,
         Err(err) => std::panic::resume_unwind(err),
     }
+}
+
+/// A method that compares the results of two raster oprators
+///
+/// # Panics
+///
+/// If there are tiles that are not equal
+pub async fn assert_eq_two_raster_operator_res_u8<S: SessionContext>(
+    ctx: &S,
+    operator_a: Box<dyn RasterOperator>,
+    operator_b: Box<dyn RasterOperator>,
+    query_rectangle: RasterQueryRectangle,
+    compare_cache_hint: bool,
+) {
+    let exe_ctx = ctx
+        .execution_context()
+        .expect("creation of execution context from session context must work.");
+    let query_ctx = ctx
+        .query_context()
+        .expect("creation of query context from session context must work.");
+
+    geoengine_operators::util::test::assert_eq_two_raster_operator_res_u8(
+        &exe_ctx,
+        &query_ctx,
+        operator_a,
+        operator_b,
+        query_rectangle,
+        compare_cache_hint,
+    )
+    .await;
 }

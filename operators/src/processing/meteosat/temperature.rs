@@ -1,28 +1,25 @@
-use std::sync::Arc;
-
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
     RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
     TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
+use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
-use rayon::ThreadPool;
-
-use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
-
-use crate::error::Error;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, Measurement,
-    RasterQueryRectangle, SpatialPartition2D,
+    RasterQueryRectangle, RasterSpatialQueryRectangle,
 };
 use geoengine_datatypes::raster::{
     MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
 };
+use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 // Output type is always f32
 type PixelOut = f32;
@@ -108,8 +105,7 @@ impl RasterOperator for Temperature {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
             time: in_desc.time,
-            bbox: in_desc.bbox,
-            resolution: in_desc.resolution,
+            spatial_grid: in_desc.spatial_grid,
             bands: RasterBandDescriptors::new(
                 in_desc
                     .bands
@@ -284,14 +280,14 @@ impl<Q, P> QueryProcessor for TemperatureProcessor<Q, P>
 where
     Q: QueryProcessor<
         Output = RasterTile2D<P>,
-        SpatialBounds = SpatialPartition2D,
+        SpatialQuery = RasterSpatialQueryRectangle,
         Selection = BandSelection,
         ResultDescription = RasterResultDescriptor,
     >,
     P: Pixel,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -344,7 +340,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_ok() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -377,7 +373,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -417,7 +413,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_force_satellite() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -457,7 +453,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_illegal_input_to_masked() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -507,7 +503,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_force_satellite() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -533,7 +529,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_satellite() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -557,7 +553,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_satellite() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -581,7 +577,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_channel() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -605,7 +601,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_channel() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -629,7 +625,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_slope() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -653,7 +649,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_offset() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -677,7 +673,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_unitless() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -702,7 +698,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_continuous() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -734,7 +730,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_classification() {
-        let tiling_specification = TilingSpecification::new([0.0, 0.0].into(), [3, 2].into());
+        let tiling_specification = TilingSpecification::new([3, 2].into());
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 

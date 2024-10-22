@@ -13,9 +13,9 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
-    QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, SpatialPartition2D,
-    VectorQueryRectangle,
+    AxisAlignedRectangle, BandSelection, ColumnSelection, PlotQueryRectangle,
+    QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, RasterSpatialQueryRectangle,
+    VectorQueryRectangle, VectorSpatialQueryRectangle,
 };
 use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel};
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
@@ -25,23 +25,22 @@ use ouroboros::self_referencing;
 #[async_trait]
 pub trait QueryProcessor: Send + Sync {
     type Output;
-    type SpatialBounds: AxisAlignedRectangle + Send + Sync;
+    type SpatialQuery: Send + Sync;
     type Selection: QueryAttributeSelection;
     type ResultDescription: ResultDescriptor<
-        QueryRectangleSpatialBounds = Self::SpatialBounds,
+        QueryRectangleSpatialBounds = Self::SpatialQuery,
         QueryRectangleAttributeSelection = Self::Selection,
     >;
-
     /// inner logic of the processor
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialBounds, Self::Selection>, // TODO: query by reference
+        query: QueryRectangle<Self::SpatialQuery, Self::Selection>, // TODO: query by reference
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>>;
 
     async fn query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialBounds, Self::Selection>, // TODO: query by reference
+        query: QueryRectangle<Self::SpatialQuery, Self::Selection>, // TODO: query by reference
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         self.result_descriptor().validate_query(&query)?;
@@ -64,7 +63,7 @@ pub trait QueryProcessorExt: QueryProcessor {
     /// Thus, it can be stored in a struct.
     async fn query_into_owned_stream(
         self,
-        query: QueryRectangle<Self::SpatialBounds, Self::Selection>, // TODO: query by reference
+        query: QueryRectangle<Self::SpatialQuery, Self::Selection>, // TODO: query by reference
         ctx: Box<dyn QueryContext>,
     ) -> Result<OwnedQueryResultStream<Self>>
     where
@@ -109,7 +108,7 @@ impl<S, T> RasterQueryProcessor for S
 where
     S: QueryProcessor<
             Output = RasterTile2D<T>,
-            SpatialBounds = SpatialPartition2D,
+            SpatialQuery = RasterSpatialQueryRectangle,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         > + Sync
@@ -155,7 +154,7 @@ impl<S, VD> VectorQueryProcessor for S
 where
     S: QueryProcessor<
             Output = VD,
-            SpatialBounds = BoundingBox2D,
+            SpatialQuery = VectorSpatialQueryRectangle,
             Selection = ColumnSelection,
             ResultDescription = VectorResultDescriptor,
         > + Sync
@@ -199,14 +198,14 @@ pub trait PlotQueryProcessor: Sync + Send {
 
 #[async_trait]
 impl<T, S, U, R> QueryProcessor
-    for Box<dyn QueryProcessor<Output = T, SpatialBounds = S, Selection = U, ResultDescription = R>>
+    for Box<dyn QueryProcessor<Output = T, SpatialQuery = S, Selection = U, ResultDescription = R>>
 where
     S: AxisAlignedRectangle + Send + Sync,
     U: QueryAttributeSelection,
     R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = U>,
 {
     type Output = T;
-    type SpatialBounds = S;
+    type SpatialQuery = S;
     type Selection = U;
     type ResultDescription = R;
 
@@ -229,7 +228,7 @@ where
     T: Pixel,
 {
     type Output = RasterTile2D<T>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -252,7 +251,7 @@ where
     V: 'static,
 {
     type Output = V;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -527,6 +526,21 @@ impl TypedRasterQueryProcessor {
             Self::I64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
             Self::F32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
             Self::F64(r) => r,
+        }
+    }
+
+    pub fn result_descriptor(&self) -> &RasterResultDescriptor {
+        match self {
+            Self::U8(r) => r.raster_result_descriptor(),
+            Self::U16(r) => r.raster_result_descriptor(),
+            Self::U32(r) => r.raster_result_descriptor(),
+            Self::U64(r) => r.raster_result_descriptor(),
+            Self::I8(r) => r.raster_result_descriptor(),
+            Self::I16(r) => r.raster_result_descriptor(),
+            Self::I32(r) => r.raster_result_descriptor(),
+            Self::I64(r) => r.raster_result_descriptor(),
+            Self::F32(r) => r.raster_result_descriptor(),
+            Self::F64(r) => r.raster_result_descriptor(),
         }
     }
 }

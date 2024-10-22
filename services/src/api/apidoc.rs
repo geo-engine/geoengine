@@ -349,6 +349,14 @@ use utoipa::{Modify, OpenApi};
             ProjectVersion,
             RasterStreamWebsocketResultType,
             CacheTtlSeconds,
+
+            SpatialGridDefinition,
+            SpatialGridDescriptorState,
+            SpatialGridDescriptor,
+            GridBoundingBox2D,
+            GridIdx2D,
+            GeoTransform,
+
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),

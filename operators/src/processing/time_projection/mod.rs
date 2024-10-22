@@ -241,12 +241,11 @@ fn expand_query_rectangle(
     step_reference: TimeInstance,
     query: &VectorQueryRectangle,
 ) -> Result<VectorQueryRectangle, TimeProjectionError> {
-    Ok(VectorQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
-        time_interval: expand_time_interval(step, step_reference, query.time_interval)?,
-        spatial_resolution: query.spatial_resolution,
-        attributes: ColumnSelection::all(),
-    })
+    Ok(VectorQueryRectangle::new(
+        query.spatial_query,
+        expand_time_interval(step, step_reference, query.time_interval)?,
+        ColumnSelection::all(),
+    ))
 }
 
 fn expand_time_interval(
@@ -280,8 +279,7 @@ mod tests {
     use geoengine_datatypes::{
         collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection, VectorDataType},
         primitives::{
-            BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialResolution, TimeGranularity,
-            TimeInterval,
+            BoundingBox2D, CacheHint, DateTime, MultiPoint, TimeGranularity, TimeInterval,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -465,16 +463,15 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
-                    time_interval: TimeInterval::new(
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
+                    TimeInterval::new(
                         DateTime::new_utc(2010, 4, 3, 0, 0, 0),
                         DateTime::new_utc(2010, 5, 14, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: ColumnSelection::all(),
-                },
+                    ColumnSelection::all(),
+                ),
                 &query_context,
             )
             .await
@@ -570,16 +567,15 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
-                    time_interval: TimeInterval::new(
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
+                    TimeInterval::new(
                         DateTime::new_utc(2010, 4, 3, 0, 0, 0),
                         DateTime::new_utc(2010, 5, 14, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: ColumnSelection::all(),
-                },
+                    ColumnSelection::all(),
+                ),
                 &query_context,
             )
             .await

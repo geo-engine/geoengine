@@ -170,6 +170,10 @@ where
         Ok(rows
             .iter()
             .map(|row| {
+                // get the real TypedResultDescriptor and convert it to the API one
+                let result_desc: TypedResultDescriptor = row.get(6);
+                let result_desc = result_desc.into();
+
                 Result::<DatasetListing>::Ok(DatasetListing {
                     id: row.get(0),
                     name: row.get(1),
@@ -177,7 +181,7 @@ where
                     description: row.get(3),
                     tags: row.get::<_, Option<_>>(4).unwrap_or_default(),
                     source_operator: row.get(5),
-                    result_descriptor: row.get(6),
+                    result_descriptor: result_desc,
                     symbology: row.get(7),
                 })
             })

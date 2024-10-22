@@ -21,10 +21,10 @@ use csv::WriterBuilder;
 use futures::StreamExt;
 use geoengine_datatypes::{
     primitives::{
-        BandSelection, BoundingBox2D, ColumnSelection, QueryRectangle, RasterQueryRectangle,
-        SpatialPartition2D, SpatialResolution, TimeInterval, VectorQueryRectangle,
+        BandSelection, BoundingBox2D, ColumnSelection, RasterQueryRectangle, TimeInterval,
+        VectorQueryRectangle,
     },
-    raster::Pixel,
+    raster::{GridBoundingBox2D, Pixel},
     util::{test::TestDefault, Identifier},
 };
 use geoengine_operators::{
@@ -69,13 +69,11 @@ type BenchmarkElementCounts = HashMap<String, u64>;
 
 fn setup_contexts() -> (StatisticsWrappingMockExecutionContext, MockQueryContext) {
     let exe_ctx = StatisticsWrappingMockExecutionContext::test_default();
-
     let computation_unit = ComputationUnit {
         issuer: uuid::Uuid::new_v4(),
         context: ComputationContext::new(),
     };
-
-    let query_ctx = MockQueryContext::new_with_query_extensions(
+    let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
         ChunkByteSize::test_default(),
         None,
         Some(QuotaTracking::new(
@@ -104,23 +102,17 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                 },
                 sources: SingleRasterSource {
                     raster: GdalSource {
-                        params: GdalSourceParameters {
-                            data: ndvi_id.clone(),
-                        },
+                        params: GdalSourceParameters::new(ndvi_id.clone()),
                     }
                     .boxed(),
                 },
             }
             .boxed(),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
-                    [-180., -90.].into(),
-                    [180., 90.].into(),
-                ),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: BandSelection::first(),
-            },
+            query_rectangle: RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new([-1800, -900], [1799, 899]).unwrap(),
+                TimeInterval::default(),
+                BandSelection::first(),
+            ),
         },
         Benchmark::Vector {
             name: "raster_vector_join".to_string(),
@@ -142,21 +134,17 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                     }
                     .boxed(),
                     rasters: vec![GdalSource {
-                        params: GdalSourceParameters { data: ndvi_id },
+                        params: GdalSourceParameters::new(ndvi_id),
                     }
                     .boxed()],
                 },
             }
             .boxed(),
-            query_rectangle: QueryRectangle {
-                spatial_bounds: BoundingBox2D::new_unchecked(
-                    [-180., -90.].into(),
-                    [180., 90.].into(),
-                ),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            },
+            query_rectangle: VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            ),
         },
     ]
 }

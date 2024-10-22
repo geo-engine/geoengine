@@ -1,9 +1,16 @@
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::marker::PhantomData;
-use std::path::PathBuf;
-use std::str::FromStr;
-
+pub use self::error::ArunaProviderError;
+use crate::contexts::GeoEngineDb;
+use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
+use crate::datasets::listing::ProvenanceOutput;
+use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerCollectionId, ProviderLayerId,
+};
+use crate::layers::listing::{
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+};
+use crate::workflows::workflow::Workflow;
 use aruna_rust_api::api::storage::models::v2::relation::Relation as ArunaRelationEnum;
 use aruna_rust_api::api::storage::models::v2::{
     Dataset, InternalRelationVariant, KeyValue, KeyValueVariant, Object, ResourceVariant,
@@ -18,26 +25,18 @@ use aruna_rust_api::api::storage::services::v2::{
     GetDatasetRequest, GetDatasetsRequest, GetDownloadUrlRequest, GetObjectsRequest,
     GetProjectRequest,
 };
-use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-use tonic::codegen::InterceptedService;
-use tonic::metadata::{AsciiMetadataKey, AsciiMetadataValue};
-use tonic::service::Interceptor;
-use tonic::transport::{Channel, Endpoint};
-use tonic::{Request, Status};
-
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
-    FeatureDataType, Measurement, RasterQueryRectangle, SpatialResolution, VectorQueryRectangle,
+    FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
+use geoengine_datatypes::raster::{BoundedGrid, GeoTransform, GridShape2D};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-    RasterResultDescriptor, ResultDescriptor, TypedOperator, VectorColumnInfo, VectorOperator,
-    VectorResultDescriptor,
+    RasterResultDescriptor, ResultDescriptor, SpatialGridDescriptor, TypedOperator,
+    VectorColumnInfo, VectorOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -46,24 +45,22 @@ use geoengine_operators::source::{
     OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
     OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat,
 };
-
-use crate::contexts::GeoEngineDb;
-use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
-use crate::datasets::listing::ProvenanceOutput;
-use crate::layers::external::{DataProvider, DataProviderDefinition};
-use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
-    ProviderLayerCollectionId, ProviderLayerId,
-};
-use crate::layers::listing::{
-    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
-};
-use crate::workflows::workflow::Workflow;
-
-pub use self::error::ArunaProviderError;
-
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::marker::PhantomData;
+use std::path::PathBuf;
+use std::str::FromStr;
+use tonic::codegen::InterceptedService;
+use tonic::metadata::{AsciiMetadataKey, AsciiMetadataValue};
+use tonic::service::Interceptor;
+use tonic::transport::{Channel, Endpoint};
+use tonic::{Request, Status};
 pub mod error;
 pub mod metadata;
+
 #[cfg(test)]
 #[macro_use]
 mod mock_grpc_server;
@@ -512,19 +509,16 @@ impl ArunaDataProvider {
         crs: SpatialReferenceOption,
         info: &RasterInfo,
     ) -> geoengine_operators::util::Result<RasterResultDescriptor> {
+        let shape = GridShape2D::new_2d(info.width, info.height).bounding_box();
+
+        let geo_transform = GeoTransform::try_from(info.geo_transform) // TODO: convert into tiling based bounds?
+            .expect("GeoTransform should be valid"); // TODO: check if that can be false
+
         Ok(RasterResultDescriptor {
             data_type: info.data_type,
             spatial_reference: crs,
-
             time: Some(info.time_interval),
-            bbox: Some(
-                info.geo_transform
-                    .spatial_partition(info.width, info.height),
-            ),
-            resolution: Some(SpatialResolution::try_from((
-                info.geo_transform.x_pixel_size,
-                info.geo_transform.y_pixel_size,
-            ))?),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(geo_transform, shape),
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "band".into(),
                 info.measurement
@@ -888,12 +882,12 @@ impl LayerCollectionProvider for ArunaDataProvider {
             ),
             DataType::SingleRasterFile(_) => TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters {
-                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                    params: GdalSourceParameters::new(
+                        geoengine_datatypes::dataset::NamedData::with_system_provider(
                             self.id.to_string(),
                             id.to_string(),
                         ),
-                    },
+                    ),
                 }
                 .boxed(),
             ),
@@ -1087,8 +1081,7 @@ mod tests {
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, CacheTtlSeconds, ColumnSelection, SpatialResolution, TimeInterval,
-        VectorQueryRectangle,
+        BoundingBox2D, CacheTtlSeconds, ColumnSelection, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
@@ -2437,12 +2430,11 @@ mod tests {
 
         let ctx = MockQueryContext::test_default();
 
-        let qr = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let qr = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
 
         let result: Vec<MultiPointCollection> = proc
             .query(qr, &ctx)

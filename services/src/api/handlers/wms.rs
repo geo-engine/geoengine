@@ -15,19 +15,11 @@ use crate::util::server::{connection_closed, not_implemented_handler, CacheContr
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
-use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
+    AxisAlignedRectangle, BandSelection, CacheHint, SpatialResolution,
 };
-use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-use geoengine_operators::engine::{
-    CanonicOperatorName, ExecutionContext, ResultDescriptor, SingleRasterOrVectorSource,
-    WorkflowOperatorPath,
-};
-use geoengine_operators::processing::{
-    InitializedRasterReprojection, Reprojection, ReprojectionParams,
-};
-use geoengine_operators::util::input::RasterOrVectorOperator;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D};
+use geoengine_operators::engine::{ExecutionContext, WorkflowOperatorPath};
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
@@ -35,6 +27,7 @@ use reqwest::Url;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
+use tracing::debug;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -277,7 +270,20 @@ async fn wms_map_handler<C: ApplicationContext>(
                 .map(Duration::from_secs),
         );
 
+        // TODO: use a default spatial reference if it is not set?
+        let request_spatial_ref: SpatialReference =
+            request.crs.ok_or(error::Error::MissingSpatialReference)?;
+
+        let request_bounds: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
+        let x_request_res = request_bounds.size_x() / f64::from(request.width);
+        let y_request_res = request_bounds.size_y() / f64::from(request.height);
+        let request_resolution = SpatialResolution::new(x_request_res.abs(), y_request_res.abs())?;
+
+        let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
+
         let ctx = app_ctx.session_context(session);
+
+        let tiling_spec = ctx.execution_context()?.tiling_specification();
 
         let workflow = ctx
             .db()
@@ -295,56 +301,43 @@ async fn wms_map_handler<C: ApplicationContext>(
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
-        // handle request and workflow crs matching
-        let workflow_spatial_ref: SpatialReferenceOption =
-            initialized.result_descriptor().spatial_reference().into();
-        let workflow_spatial_ref: Option<SpatialReference> = workflow_spatial_ref.into();
-        let workflow_spatial_ref =
-            workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
+        /*
+        let request_geo_transform = GeoTransform::new(
+            request_bounds.upper_left(),
+            request_resolution.x,
+            -request_resolution.y,
+        );
 
-        // TODO: use a default spatial reference if it is not set?
-        let request_spatial_ref: SpatialReference =
-            request.crs.ok_or(error::Error::MissingSpatialReference)?;
+        let tiling_based_origin = request_geo_transform
+            .nearest_pixel_edge_coordinate(tiling_spec.tiling_origin_reference());
 
-        // perform reprojection if necessary
-        let initialized = if request_spatial_ref == workflow_spatial_ref {
-            initialized
-        } else {
-            log::debug!(
-                "WMS query srs: {}, workflow srs: {} --> injecting reprojection",
-                request_spatial_ref,
-                workflow_spatial_ref
-            );
+        */
 
-            let reprojection_params = ReprojectionParams {
-                target_spatial_reference: request_spatial_ref.into(),
-            };
-
-            // create the reprojection operator in order to get the canonic operator name
-            let reprojected_workflow = Reprojection {
-                params: reprojection_params,
-                sources: SingleRasterOrVectorSource {
-                    source: RasterOrVectorOperator::Raster(operator),
-                },
-            };
-
-            let irp = InitializedRasterReprojection::try_new_with_input(
-                CanonicOperatorName::from(&reprojected_workflow),
-                reprojection_params,
+        let wrapped =
+            geoengine_operators::util::WrapWithProjectionAndResample::new_create_result_descriptor(
+                operator,
                 initialized,
-                execution_context.tiling_specification(),
+            )
+            .wrap_with_projection_and_resample(
+                None, // Some(tiling_based_origin),
+                Some(request_resolution),
+                request_spatial_ref.into(),
+                tiling_spec,
             )?;
+        // TODO: add a resammple operator for downsampling AND resample push down!
 
-            Box::new(irp)
-        };
+        let initialized = wrapped.initialized_operator;
 
         let processor = initialized.query_processor()?;
 
-        let query_bbox: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
-        let x_query_resolution = query_bbox.size_x() / f64::from(request.width);
-        let y_query_resolution = query_bbox.size_y() / f64::from(request.height);
+        let query_tiling_pixel_grid = wrapped
+            .result_descriptor
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(tiling_spec)
+            .tiling_spatial_grid_definition()
+            .spatial_bounds_to_compatible_spatial_grid(request_bounds);
 
-        let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
+        debug!("WMS re-scale-project: {:?}", query_tiling_pixel_grid);
 
         let (attributes, colorizer) = match raster_colorizer {
             Some(RasterColorizer::SingleBand {
@@ -354,18 +347,17 @@ async fn wms_map_handler<C: ApplicationContext>(
             _ => (BandSelection::new_single(0), None),
         };
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: query_bbox,
-            time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
-            spatial_resolution: SpatialResolution::new_unchecked(
-                x_query_resolution,
-                y_query_resolution,
-            ),
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            query_tiling_pixel_grid.grid_bounds(),
+            request.time.unwrap_or_else(default_time_from_config).into(),
             attributes,
-        };
+        );
+
+        debug!("WMS query rect: {:?}", query_rect);
 
         let query_ctx = ctx.query_context()?;
 
+        // The raster to png code already resamples when the tiles are filled. We should add resample for lower resolutions
         call_on_generic_raster_processor!(
             processor,
             p =>
@@ -489,10 +481,8 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::CacheTtlSeconds;
-    use geoengine_datatypes::raster::{GridShape2D, RasterDataType, TilingSpecification};
-    use geoengine_operators::engine::{
-        ExecutionContext, RasterQueryProcessor, RasterResultDescriptor,
-    };
+    use geoengine_datatypes::raster::{GridBoundingBox2D, GridShape2D, TilingSpecification};
+    use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
@@ -620,31 +610,27 @@ mod tests {
         let ctx = app_ctx.default_session_context().await.unwrap();
         let exe_ctx = ctx.execution_context().unwrap();
 
+        let meta_data = create_ndvi_meta_data();
+
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
+            result_descriptor: meta_data.result_descriptor.clone(),
             tiling_specification: exe_ctx.tiling_specification(),
-            meta_data: Box::new(create_ndvi_meta_data()),
+            overview_level: 0,
+            meta_data: Box::new(meta_data),
             _phantom_data: PhantomData,
         };
 
-        let query_partition =
-            SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
-
         let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_partition,
-                time_interval: geoengine_datatypes::primitives::TimeInterval::new(
+            RasterQueryRectangle::new_with_grid_bounds(
+                GridBoundingBox2D::new_min_max(-900, 899, -1800, 1799).unwrap(),
+                geoengine_datatypes::primitives::TimeInterval::new(
                     1_388_534_400_000,
                     1_388_534_400_000 + 1000,
                 )
                 .unwrap(),
-                spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
-                attributes: BandSelection::first(),
-            },
+                BandSelection::first(),
+            ),
             ctx.query_context().unwrap(),
             360,
             180,
@@ -655,7 +641,7 @@ mod tests {
         .await
         .unwrap();
 
-        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small.png");
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small_22.png");
 
         assert_eq!(
             include_bytes!("../../../../test_data/wms/raster_small.png") as &[u8],
@@ -666,7 +652,6 @@ mod tests {
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn get_map_test_helper_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
         }
     }
@@ -737,7 +722,7 @@ mod tests {
 
         let image_bytes = actix_web::test::read_body(response).await;
 
-        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi.png");
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi_2.png");
 
         assert_eq!(
             include_bytes!("../../../../test_data/wms/get_map_ndvi.png") as &[u8],
@@ -983,7 +968,7 @@ mod tests {
 <?xml version="1.0" encoding="UTF-8"?>
     <ServiceExceptionReport version="1.3.0" xmlns="http://www.opengis.net/ogc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/ogc https://cdc.dwd.de/geoserver/schemas/wms/1.3.0/exceptions_1_3_0.xsd">
     <ServiceException>
-        No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }
+        Spatial reference system 'EPSG:432' is unknown
     </ServiceException>
 </ServiceExceptionReport>"#
         );
@@ -1045,7 +1030,13 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
 
-        ErrorResponse::assert(res, 200, "NoCoordinateProjector", "No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
+        ErrorResponse::assert(
+            res,
+            200,
+            "UnknownSrsString",
+            "Spatial reference system 'EPSG:432' is unknown",
+        )
+        .await;
     }
 
     #[ge_context::test]
@@ -1095,7 +1086,8 @@ mod tests {
         assert!(
             cache_header == "private, max-age=60"
                 || cache_header == "private, max-age=59"
-                || cache_header == "private, max-age=58"
+                || cache_header == "private, max-age=58",
+            "Cache header is {cache_header:?} and not one of the exprected 60, 59, 58"
         );
     }
 }

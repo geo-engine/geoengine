@@ -107,6 +107,7 @@ pub trait GeoEngineDb:
 
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
+    tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
     cache: Option<Arc<SharedCache>>,
     quota_tracking: Option<QuotaTracking>,
@@ -116,10 +117,15 @@ pub struct QueryContextImpl {
 }
 
 impl QueryContextImpl {
-    pub fn new(chunk_byte_size: ChunkByteSize, thread_pool: Arc<ThreadPool>) -> Self {
+    pub fn new(
+        chunk_byte_size: ChunkByteSize,
+        tiling_specification: TilingSpecification,
+        thread_pool: Arc<ThreadPool>,
+    ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
             chunk_byte_size,
+            tiling_specification,
             thread_pool,
             cache: None,
             quota_tracking: None,
@@ -131,6 +137,7 @@ impl QueryContextImpl {
 
     pub fn new_with_extensions(
         chunk_byte_size: ChunkByteSize,
+        tiling_specification: TilingSpecification,
         thread_pool: Arc<ThreadPool>,
         cache: Option<Arc<SharedCache>>,
         quota_tracking: Option<QuotaTracking>,
@@ -139,6 +146,7 @@ impl QueryContextImpl {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
             chunk_byte_size,
+            tiling_specification,
             thread_pool,
             cache,
             quota_checker,
@@ -166,6 +174,10 @@ impl QueryContext for QueryContextImpl {
         self.abort_trigger
             .take()
             .ok_or(geoengine_operators::error::Error::AbortTriggerAlreadyUsed)
+    }
+
+    fn tiling_specification(&self) -> TilingSpecification {
+        self.tiling_specification
     }
 
     fn quota_tracking(&self) -> Option<&geoengine_operators::meta::quota::QuotaTracking> {
