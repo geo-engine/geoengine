@@ -3031,4 +3031,34 @@ mod tests {
 
         Ok(())
     }
+
+    #[ge_context::test]
+    async fn it_lists_layers(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = ctx.session().id();
+
+        let volume_name = "test_data";
+        let file_name = "vector%2Fdata%2Ftwo_layers.gpkg";
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/dataset/volumes/{volume_name}/files/{file_name}/layers"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+
+        let layers: VolumeFileLayersResponse = actix_web::test::read_body_json(res).await;
+
+        assert_eq!(
+            layers.layers,
+            vec![
+                "points_with_time".to_string(),
+                "points_with_time_and_more".to_string(),
+                "layer_styles".to_string() // TOOO: remove once internal/system layers are hidden
+            ]
+        );
+    }
 }
