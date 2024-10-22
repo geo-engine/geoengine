@@ -16,7 +16,7 @@ use crate::{
         },
         DatasetName,
     },
-    error::{self, Result},
+    error::{self, Error, Result},
     projects::Symbology,
     util::{
         config::{get_config_element, Data},
@@ -47,12 +47,14 @@ use geoengine_operators::{
         raster_descriptor_from_dataset,
     },
 };
+use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
     path::Path,
 };
+use utoipa::{ToResponse, ToSchema};
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -65,6 +67,10 @@ where
                 web::resource("/suggest").route(web::post().to(suggest_meta_data_handler::<C>)),
             )
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
+            .service(
+                web::resource("/volumes/{volume_name}/files/{file_name}/layers")
+                    .route(web::get().to(list_volume_file_layers_handler::<C>)),
+            )
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
                 web::resource("/{dataset}/loadingInfo")
@@ -1405,6 +1411,63 @@ pub async fn delete_dataset_handler<C: ApplicationContext>(
     session_ctx.delete_dataset(dataset_id).await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
+}
+
+#[derive(Deserialize, Serialize, ToSchema, ToResponse)]
+pub struct VolumeFileLayersResponse {
+    layers: Vec<String>,
+}
+
+/// List the layers of a file in a volume.
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/dataset/volumes/{volume_name}/files/{file_name}/layers",
+    responses(
+        (status = 200, body = VolumeFileLayersResponse,
+             example = json!({"layers": ["layer1", "layer2"]}))
+    ),
+    params(
+        ("volume_name" = VolumeName, description = "Volume name"),
+        ("file_name" = String, description = "File name")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn list_volume_file_layers_handler<C: ApplicationContext>(
+    path: web::Path<(VolumeName, String)>,
+    session: C::Session,
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let (volume_name, file_name) = path.into_inner();
+
+    let session_ctx = app_ctx.session_context(session);
+    let volumes = session_ctx.volumes()?;
+
+    let volume = volumes.iter().find(|v| v.name == volume_name.0).ok_or(
+        crate::error::Error::UnknownVolumeName {
+            volume_name: volume_name.0.clone(),
+        },
+    )?;
+
+    let Some(volume_path) = volume.path.as_ref() else {
+        return Err(crate::error::Error::CannotAccessVolumePath {
+            volume_name: volume_name.0.clone(),
+        });
+    };
+
+    let file_path = path_with_base_path(Path::new(volume_path), Path::new(&file_name))?;
+
+    let layers = crate::util::spawn_blocking(move || {
+        let dataset = gdal_open_dataset(&file_path)?;
+
+        // TODO: hide system/internal layer like "layer_styles"
+        Result::<_, Error>::Ok(dataset.layers().map(|l| l.name()).collect::<Vec<_>>())
+    })
+    .await??;
+
+    Ok(web::Json(VolumeFileLayersResponse { layers }))
 }
 
 #[cfg(test)]
@@ -2967,5 +3030,35 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_lists_layers(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = ctx.session().id();
+
+        let volume_name = "test_data";
+        let file_name = "vector%2Fdata%2Ftwo_layers.gpkg";
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/dataset/volumes/{volume_name}/files/{file_name}/layers"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+
+        let layers: VolumeFileLayersResponse = actix_web::test::read_body_json(res).await;
+
+        assert_eq!(
+            layers.layers,
+            vec![
+                "points_with_time".to_string(),
+                "points_with_time_and_more".to_string(),
+                "layer_styles".to_string() // TOOO: remove once internal/system layers are hidden
+            ]
+        );
     }
 }

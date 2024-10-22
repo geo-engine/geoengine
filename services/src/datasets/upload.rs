@@ -9,6 +9,8 @@ use crate::{
     util::config::{self, get_config_element},
 };
 use async_trait::async_trait;
+use geoengine_datatypes::test_data;
+use geoengine_datatypes::util::test::TestDefault;
 use serde::{Deserialize, Deserializer, Serialize};
 use utoipa::ToSchema;
 
@@ -75,6 +77,17 @@ impl Default for Volumes {
                 .into_iter()
                 .map(|(name, path)| Volume { name, path })
                 .collect::<Vec<_>>(),
+        }
+    }
+}
+
+impl TestDefault for Volumes {
+    fn test_default() -> Self {
+        Self {
+            volumes: vec![Volume {
+                name: VolumeName("test_data".to_string()),
+                path: test_data!("").to_path_buf(),
+            }],
         }
     }
 }
