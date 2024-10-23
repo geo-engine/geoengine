@@ -1,5 +1,6 @@
 use geoengine_datatypes::{
     dataset::{DataId, DataProviderId, ExternalDataId, LayerId, NamedData},
+    primitives::SpatialPartition2D,
     raster::RasterDataType,
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
 };
@@ -304,6 +305,11 @@ impl UtmZone {
 
     pub fn spatial_reference(self) -> SpatialReference {
         SpatialReference::new(SpatialReferenceAuthority::Epsg, self.epsg_code())
+    }
+
+    pub fn extent(self) -> Option<SpatialPartition2D> {
+        // TODO: as Sentinel uses enlarged grids, we could return a larger extent
+        self.spatial_reference().area_of_use().ok()
     }
 }
 

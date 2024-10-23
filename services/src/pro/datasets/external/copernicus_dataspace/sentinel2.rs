@@ -6,7 +6,8 @@ use crate::pro::datasets::external::copernicus_dataspace::stac::{
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::{
     primitives::{
-        CacheTtlSeconds, RasterQueryRectangle, SpatialResolution, TimeInstance, TimeInterval,
+        CacheTtlSeconds, DateTime, RasterQueryRectangle, SpatialResolution, TimeInstance,
+        TimeInterval,
     },
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
 };
@@ -255,8 +256,15 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
                 self.zone.epsg_code(),
             )
             .into(),
-            time: None, // TODO: specify time (2015, open end/current date)?
-            bbox: None, // TODO: exclude parts that are never visited by the satellite?
+            // Data is available from the time of the first image until now
+            // first image:
+            // $ s3cmd -c .s3cfg ls s3://eodata/Sentinel-2/MSI/L1C/2015/07/04/
+            // DIR  s3://eodata/Sentinel-2/MSI/L1C/2015/07/04/S2A_MSIL1C_20150704T101006_N0204_R022_T32SKB_20150704T101337.SAFE/
+            time: Some(TimeInterval::new_unchecked(
+                DateTime::new_utc(2015, 7, 4, 10, 10, 6),
+                DateTime::now(),
+            )),
+            bbox: self.zone.extent(),
             resolution: Some(SpatialResolution::new(
                 self.product_band.resolution_meters() as f64,
                 self.product_band.resolution_meters() as f64,
