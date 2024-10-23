@@ -27,7 +27,7 @@ use snafu::{ResultExt, Snafu};
 use url::Url;
 
 use super::{
-    ids::{Sentinel2Band, Sentinel2Product, UtmZone},
+    ids::{Sentinel2Band, Sentinel2ProductBand, UtmZone},
     stac::{CopernicusStacError, StacItemExt},
 };
 
@@ -75,9 +75,8 @@ pub struct Sentinel2Metadata {
     pub s3_use_https: bool,
     pub s3_access_key: String,
     pub s3_secret_key: String,
-    pub product: Sentinel2Product,
+    pub product_band: Sentinel2ProductBand,
     pub zone: UtmZone,
-    pub band: Sentinel2Band,
     pub gdal_config: Vec<(String, String)>,
 }
 
@@ -91,7 +90,7 @@ impl Sentinel2Metadata {
             "SENTINEL-2",
             query,
             self.zone.spatial_reference(),
-            self.product.product_type(),
+            self.product_band.product_type(),
         )
         .await
         .context(CannotRetrieveStacItems)?;
@@ -192,10 +191,10 @@ impl Sentinel2Metadata {
 
         let file_path = PathBuf::from(&format!(
             "{}:/vsis3{}/{}:{}m:EPSG_{}",
-            self.product.driver_name(),
+            self.product_band.driver_name(),
             asset_url,
-            self.product.main_file_name(),
-            self.band.resolution_meters(),
+            self.product_band.main_file_name(),
+            self.product_band.resolution_meters(),
             self.zone.epsg_code()
         ));
 
@@ -203,7 +202,7 @@ impl Sentinel2Metadata {
 
         let config_options_clone = config_options.clone();
         let file_path_clone = file_path.clone();
-        let channel = self.band.channel_in_subdataset();
+        let channel = self.product_band.channel_in_subdataset();
 
         let mut gdal_params = crate::util::spawn_blocking(move || {
             // set config options for the current thread and revert them on drop
@@ -250,7 +249,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
         Ok(RasterResultDescriptor {
-            data_type: self.band.data_type(),
+            data_type: self.product_band.data_type(),
             spatial_reference: SpatialReference::new(
                 SpatialReferenceAuthority::Epsg,
                 self.zone.epsg_code(),
@@ -259,10 +258,13 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
             time: None, // TODO: specify time (2015, open end/current date)?
             bbox: None, // TODO: exclude parts that are never visited by the satellite?
             resolution: Some(SpatialResolution::new(
-                self.band.resolution_meters() as f64,
-                self.band.resolution_meters() as f64,
+                self.product_band.resolution_meters() as f64,
+                self.product_band.resolution_meters() as f64,
             )?),
-            bands: vec![RasterBandDescriptor::new_unitless(format!("{}", self.band))].try_into()?, // TODO: add measurement unit
+            bands: vec![RasterBandDescriptor::new_unitless(
+                self.product_band.band_name(),
+            )]
+            .try_into()?, // TODO: add measurement unit
         })
     }
 
@@ -289,7 +291,7 @@ mod tests {
         Expectation, Server,
     };
 
-    use crate::pro::datasets::external::copernicus_dataspace::ids::UtmZoneDirection;
+    use crate::pro::datasets::external::copernicus_dataspace::ids::{L2ABand, UtmZoneDirection};
 
     use super::*;
 
@@ -460,12 +462,11 @@ mod tests {
             s3_use_https: false,
             s3_access_key: "ACCESS_KEY".to_string(),
             s3_secret_key: "SECRET_KEY".to_string(),
-            product: Sentinel2Product::L2A,
+            product_band: Sentinel2ProductBand::L2A(L2ABand::B04),
             zone: UtmZone {
                 zone: 32,
                 direction: UtmZoneDirection::North,
             },
-            band: Sentinel2Band::B04,
             gdal_config: vec![],
         };
 

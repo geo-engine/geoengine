@@ -43,7 +43,8 @@ use crate::{
 use super::{
     ids::{
         CopernicusDataId, CopernicusDataspaceLayerCollectionId, CopernicusDataspaceLayerId,
-        Sentinel2Band, Sentinel2LayerCollectionId, Sentinel2LayerId, Sentinel2Product, UtmZone,
+        Sentinel2LayerCollectionId, Sentinel2LayerId, Sentinel2Product, Sentinel2ProductBand,
+        UtmZone,
     },
     sentinel2::Sentinel2Metadata,
 };
@@ -242,20 +243,20 @@ impl CopernicusDataspaceDataProvider {
             },
             name: "Bands".to_string(),
             description: "Bands".to_string(),
-            items: Sentinel2Band::iter()
-                .map(|band| {
+            items: product
+                .product_bands()
+                .map(|product_band| {
                     CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
                             provider_id: self.id,
                             layer_id: CopernicusDataspaceLayerId::Sentinel2(Sentinel2LayerId {
-                                product,
+                                product_band,
                                 zone,
-                                band,
                             })
                             .into(),
                         },
-                        name: format!("{band}"),
-                        description: format!("{band}"),
+                        name: product_band.band_name(),
+                        description: product_band.band_name(),
                         properties: vec![],
                     })
                 })
@@ -271,7 +272,12 @@ impl CopernicusDataspaceDataProvider {
                 provider_id: self.id,
                 layer_id: id.clone().into(),
             },
-            name: format!("Sentinel-2 {} {} {}", id.product, id.zone, id.band),
+            name: format!(
+                "Sentinel-2 {} {} {}",
+                id.product_band.product_name(),
+                id.zone,
+                id.product_band.band_name()
+            ),
             description: String::new(),
             workflow: Workflow {
                 operator: TypedOperator::Raster(
@@ -312,9 +318,8 @@ impl CopernicusDataspaceDataProvider {
 
     fn sentinel2_meta_data(
         &self,
-        product: Sentinel2Product,
+        product_band: Sentinel2ProductBand,
         zone: UtmZone,
-        band: Sentinel2Band,
     ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
         Box::new(Sentinel2Metadata {
             stac_url: self.stac_url.clone(),
@@ -322,9 +327,8 @@ impl CopernicusDataspaceDataProvider {
             s3_use_https: true,
             s3_access_key: self.s3_access_key.clone(),
             s3_secret_key: self.s3_secret_key.clone(),
-            product,
+            product_band,
             zone,
-            band,
             gdal_config: self.gdal_config.clone(),
         })
     }
@@ -420,11 +424,9 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 })?;
 
         match id.0 {
-            CopernicusDataspaceLayerId::Sentinel2(Sentinel2LayerId {
-                product,
-                zone,
-                band,
-            }) => Ok(self.sentinel2_meta_data(product, zone, band)),
+            CopernicusDataspaceLayerId::Sentinel2(Sentinel2LayerId { product_band, zone }) => {
+                Ok(self.sentinel2_meta_data(product_band, zone))
+            }
         }
     }
 }
