@@ -466,6 +466,35 @@ impl SentinelS2L2aCogsMetaData {
                 query.time_interval.end() + query_end_buffer
             };
 
+            // clip end to the same day to avoid filling wrong days
+            let end = {
+                let start_date = start
+                    .as_date_time()
+                    .expect("must be a valid date since Sentinel-2 is a very recent thing.");
+
+                let end_date = end
+                    .as_date_time()
+                    .expect("must be a valid date since Sentinel-2 is a very recent thing.");
+
+                if start_date.year() < end_date.year()
+                    || start_date.day_of_year() < end_date.day_of_year()
+                {
+                    TimeInstance::from(
+                        DateTime::new_utc_checked(
+                            start_date.year(),
+                            start_date.month(),
+                            start_date.day(),
+                            0,
+                            0,
+                            0,
+                        )
+                        .expect("Must be a valid date since it is already valid."),
+                    ) + Duration::days(1)
+                } else {
+                    end
+                }
+            };
+
             let time_interval = TimeInterval::new(start, end)?;
 
             if time_interval.start() <= query.time_interval.start() {
@@ -509,12 +538,12 @@ impl SentinelS2L2aCogsMetaData {
         }
         debug!("number of generated loading infos: {}", parts.len());
 
-        // if there is no information of time outside the query, we fallback to the only information we know: query -/+ buffer.
-        let known_time_before =
-            known_time_start.unwrap_or(query.time_interval.start() - query_start_buffer);
+        // if there is no information of time outside the query, we fallback to the only information we know: query -/+ buffer. We also use that information if we did not find a better time
+        let query_start = query.time_interval.start() - query_start_buffer;
+        let known_time_before = known_time_start.unwrap_or(query_start).min(query_start);
 
-        let known_time_after =
-            known_time_end.unwrap_or(query.time_interval.end() + query_end_buffer);
+        let query_end = query.time_interval.end() + query_end_buffer;
+        let known_time_after = known_time_end.unwrap_or(query_end).max(query_end);
 
         Ok(GdalLoadingInfo::new(
             GdalLoadingInfoTemporalSliceIterator::Static {
