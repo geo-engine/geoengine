@@ -1,0 +1,11 @@
+{
+  "type": "CopernicusDataspaceDataProviderDefinition",
+  "id": "2e44e5ab-0f93-467b-8599-9b5b6339d5cd",
+  "name": "Copernicus Dataspace",
+  "description": "",
+  "stacUrl": "https://catalogue.dataspace.copernicus.eu/stac",
+  "s3Url": "eodata.dataspace.copernicus.eu",
+  "s3AccessKey": "XYZ",
+  "s3SecretKey": "XYZ",
+  "gdalConfig": [["CPL_VSIL_CURL_CHUNK_SIZE", "2097152"]]
+}

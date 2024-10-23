@@ -232,9 +232,9 @@ pub async fn add_pro_providers_from_directory<D: ProLayerProviderDb>(
                     Ok(()) => info!("Added pro provider from file `{:?}`", entry.path()),
                     Err(e) => {
                         warn!(
-                            "Skipped adding pro provider from file `{:?}` error: `{}`",
+                            "Skipped adding pro provider from file `{:?}` error: `{:?}`",
                             entry.path(),
-                            e.to_string()
+                            e
                         );
                     }
                 }

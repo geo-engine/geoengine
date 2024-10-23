@@ -1127,7 +1127,7 @@ mod tests {
                 responders::status_code(500),
                 // then time out
                 responders::delay_and_then(
-                    std::time::Duration::from_secs(10),
+                    std::time::Duration::from_secs(2),
                     responders::status_code(500)
                 ),
                 // then succeed
@@ -1180,7 +1180,7 @@ mod tests {
                 responders::status_code(500),
                 // then time out
                 responders::delay_and_then(
-                    std::time::Duration::from_secs(10),
+                    std::time::Duration::from_secs(2),
                     responders::status_code(500)
                 ),
                 // then succeed
@@ -1205,7 +1205,7 @@ mod tests {
                 responders::status_code(500),
                 // then time out
                 responders::delay_and_then(
-                    std::time::Duration::from_secs(10),
+                    std::time::Duration::from_secs(2),
                     responders::status_code(500)
                 ),
                 // then return incomplete tile (to force error "band 1: IReadBlock failed at X offset 0, Y offset 0: TIFFReadEncodedTile() failed.")
