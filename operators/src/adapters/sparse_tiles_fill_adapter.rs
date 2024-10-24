@@ -267,9 +267,14 @@ impl<T: Pixel> StateContainer<T> {
 
     fn set_current_time_from_initial_tile(&mut self, first_tile_time: TimeInterval) {
         // if we know a bound we must use it to set the current time
-
         let start_data_bound = self.data_time_bounds.start();
         let requested_start = self.requested_time_bounds.start();
+
+        debug_assert!(
+            start_data_bound <= requested_start,
+            "The data bound hint start should be <= the requested start. "
+        );
+
         if requested_start < first_tile_time.start() {
             log::debug!(
                     "The initial tile starts ({}) after the requested start bound ({}), setting the current time to the data start bound ({}) --> filling", first_tile_time.start(), requested_start, start_data_bound
@@ -377,6 +382,15 @@ where
         requested_time_bounds: TimeInterval,
         data_time_bounds: FillerTimeBounds,
     ) -> Self {
+        debug_assert!(
+            data_time_bounds.start <= requested_time_bounds.start(),
+            "Data time bounds hint start should be <= requested time start."
+        );
+        debug_assert!(
+            requested_time_bounds.end() <= data_time_bounds.end,
+            "Data time bounds hint end should be >= requested time end."
+        );
+
         SparseTilesFillAdapter {
             stream,
             sc: StateContainer {
