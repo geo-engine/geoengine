@@ -46,6 +46,7 @@ use geoengine_datatypes::{
     primitives::TimeInterval,
     raster::{Grid, GridBlit, GridBoundingBox2D, GridIdx, GridSize, TilingSpecification},
 };
+use itertools::Itertools;
 pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
@@ -758,7 +759,12 @@ where
             }
         };
 
-        let source_stream = stream::iter(loading_info.info);
+        let query_time = query.time_interval;
+        let skipping_loading_info = loading_info
+            .info
+            .filter_ok(move |s: &GdalLoadingInfoTemporalSlice| s.time.intersects(&query_time));
+
+        let source_stream = stream::iter(skipping_loading_info);
 
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
             source_stream,
@@ -774,6 +780,7 @@ where
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+            query.time_interval,
             time_bounds,
         );
         Ok(filled_stream.boxed())
