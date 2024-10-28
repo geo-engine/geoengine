@@ -466,7 +466,20 @@ impl SentinelS2L2aCogsMetaData {
                 query.time_interval.end() + query_end_buffer
             };
 
-            // clip end to the same day to avoid filling wrong days
+            /*
+            Sentinel-2 data are typically acquired around local noon in all UTM zones.
+            Therefore, a Sentinel-2 image is typically viewed as a time series with daily time steps.
+            However, the Geo Engine source doesn't yet handle datasets with multiple files per time step.
+            This requires us to "fake" smaller time steps, so we use the actual capture time of each tile as the start.
+            To determine the end, we simply assume that the start of the next tile is the end of the previous one.
+            The first step in using the Sentinel-2 data is usually to aggregate it to a 1-day time series in order to use it in a meaningful way.
+            An efficient way to aggregate the data to days is to simply use the first valid/last pixel, as there should only be one per day (and overlaps should be the same value).
+            This start/end time derivation strategy can cause a problem if there is no following tile on the same day: a single tile of day "1" will be valid until a new tile is created on day "1+x".
+            Firstly, a tile valid for more than one day will appear on days where it is not actually valid.
+            Secondly, if "first" is used as the aggregation method, an old tile will overlap a new tile starting at noon and therefore the old values will be included in the daily data.
+            To solve both problems, we limit the validity of each tile to the end of the day on which it was recorded.
+            This way there is no overlap and the aggregation of the daily data produces valid (expected) results.
+             */
             let end = {
                 let start_date = start
                     .as_date_time()
