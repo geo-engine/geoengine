@@ -507,6 +507,11 @@ pub enum Error {
     UnknownVolumeName {
         volume_name: String,
     },
+
+    #[snafu(display("Cannot access path of volume with name {}", volume_name))]
+    CannotAccessVolumePath {
+        volume_name: String,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

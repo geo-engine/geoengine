@@ -585,6 +585,7 @@ where
                         tokio_postgres::NoTls,
                         tiling_spec,
                         query_ctx_chunk_size,
+                        TestDefault::test_default(),
                     )
                     .await
                     .unwrap();
