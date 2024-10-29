@@ -110,6 +110,7 @@ pub enum L1CBand {
     B12,
 }
 #[derive(Debug, Clone, Copy, EnumString, strum::Display, EnumIter)]
+#[allow(non_camel_case_types)]
 pub enum L2ABand {
     B01,
     B02,
@@ -125,6 +126,16 @@ pub enum L2ABand {
     B11,
     B12,
     // TODO: AOT, CLD, etc. but they have multiple resolutions
+    AOT_20M,
+    CLD_20M,
+    SCL_20M,
+    SNW_20M,
+    WVP_20M,
+    AOT_60M,
+    CLD_60M,
+    SCL_60M,
+    SNW_60M,
+    WVP_60M,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -243,8 +254,19 @@ impl Sentinel2Band for L2ABand {
             | L2ABand::B07
             | L2ABand::B08A
             | L2ABand::B11
-            | L2ABand::B12 => 20,
-            L2ABand::B01 | L2ABand::B09 => 60,
+            | L2ABand::B12
+            | L2ABand::AOT_20M
+            | L2ABand::CLD_20M
+            | L2ABand::SNW_20M
+            | L2ABand::SCL_20M
+            | L2ABand::WVP_20M => 20,
+            L2ABand::B01
+            | L2ABand::B09
+            | L2ABand::AOT_60M
+            | L2ABand::CLD_60M
+            | L2ABand::SCL_60M
+            | L2ABand::SNW_60M
+            | L2ABand::WVP_60M => 60,
         }
     }
 
@@ -263,6 +285,16 @@ impl Sentinel2Band for L2ABand {
             L2ABand::B09 => 2,
             L2ABand::B11 => 5,
             L2ABand::B12 => 6,
+            L2ABand::AOT_20M => 7,
+            L2ABand::CLD_20M => 8,
+            L2ABand::SCL_20M => 9,
+            L2ABand::SNW_20M => 10,
+            L2ABand::WVP_20M => 11,
+            L2ABand::AOT_60M => 3,
+            L2ABand::CLD_60M => 4,
+            L2ABand::SCL_60M => 5,
+            L2ABand::SNW_60M => 6,
+            L2ABand::WVP_60M => 7,
         }
     }
 
