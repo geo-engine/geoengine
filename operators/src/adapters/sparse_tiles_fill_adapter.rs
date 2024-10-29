@@ -98,7 +98,8 @@ struct StateContainer<T> {
     global_geo_transform: GeoTransform,
     state: State,
     cache_hint: FillerTileCacheHintProvider,
-    time_bounds: FillerTimeBounds,
+    requested_time_bounds: TimeInterval,
+    data_time_bounds: FillerTimeBounds,
 }
 
 struct GridIdxAndBand {
@@ -266,33 +267,39 @@ impl<T: Pixel> StateContainer<T> {
 
     fn set_current_time_from_initial_tile(&mut self, first_tile_time: TimeInterval) {
         // if we know a bound we must use it to set the current time
+        let start_data_bound = self.data_time_bounds.start();
+        let requested_start = self.requested_time_bounds.start();
 
-        let start_bound = self.time_bounds.start();
-        if start_bound < first_tile_time.start() {
+        debug_assert!(
+            start_data_bound <= requested_start,
+            "The data bound hint start should be <= the requested start. "
+        );
+
+        if requested_start < first_tile_time.start() {
             log::debug!(
-                    "The initial tile starts ({}) after the start bound ({}), setting the current time to the start bound --> filling", first_tile_time.start(), start_bound
+                    "The initial tile starts ({}) after the requested start bound ({}), setting the current time to the data start bound ({}) --> filling", first_tile_time.start(), requested_start, start_data_bound
                 );
             self.current_time = Some(TimeInterval::new_unchecked(
-                start_bound,
+                start_data_bound,
                 first_tile_time.start(),
             ));
             return;
         }
-        if start_bound > first_tile_time.start() {
+        if start_data_bound > first_tile_time.start() {
             log::debug!(
                     "The initial tile time start ({}) is before the exprected time bounds ({}). This means the data overflows the filler start bound.",
                     first_tile_time.start(),
-                    start_bound
+                    start_data_bound
                 );
         }
         self.current_time = Some(first_tile_time);
     }
 
-    fn set_current_time_from_bounds(&mut self) {
+    fn set_current_time_from_data_time_bounds(&mut self) {
         assert!(self.state == State::FillToEnd);
         self.current_time = Some(TimeInterval::new_unchecked(
-            self.time_bounds.start(),
-            self.time_bounds.end(),
+            self.data_time_bounds.start(),
+            self.data_time_bounds.end(),
         ));
     }
 
@@ -319,21 +326,24 @@ impl<T: Pixel> StateContainer<T> {
         let current_time: TimeInterval = self
             .current_time
             .expect("current time must exist for fill to end state.");
-        debug_assert!(current_time.end() < self.time_bounds.end());
+        debug_assert!(current_time.end() <= self.requested_time_bounds.end());
+
+        debug_assert!(current_time.end() < self.data_time_bounds.end());
 
         let new_time = if current_time.is_instant() {
-            TimeInterval::new_unchecked(current_time.end() + 1, self.time_bounds.end())
+            TimeInterval::new_unchecked(current_time.end() + 1, self.data_time_bounds.end())
         } else {
-            TimeInterval::new_unchecked(current_time.end(), self.time_bounds.end())
+            TimeInterval::new_unchecked(current_time.end(), self.data_time_bounds.end())
         };
         self.update_current_time(new_time);
     }
 
     fn current_time_is_valid_end_bound(&self) -> bool {
-        let time_bounds_end = self.time_bounds.end();
+        let time_requested_end = self.requested_time_bounds.end();
+        let time_bounds_end = self.data_time_bounds.end();
         let current_time = self.current_time.expect("state time is set on initialize");
 
-        if current_time.end() < time_bounds_end {
+        if current_time.end() < time_requested_end {
             return false;
         }
         if current_time.end() > time_bounds_end {
@@ -361,6 +371,7 @@ where
     T: Pixel,
     S: Stream<Item = Result<RasterTile2D<T>>>,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         stream: S,
         tile_grid_bounds: GridBoundingBox2D,
@@ -368,8 +379,18 @@ where
         global_geo_transform: GeoTransform,
         tile_shape: GridShape2D,
         cache_expiration: FillerTileCacheExpirationStrategy, // Specifies the cache expiration for the produced filler tiles. Set this to unlimited if the filler tiles will always be empty
-        time_bounds: FillerTimeBounds,
+        requested_time_bounds: TimeInterval,
+        data_time_bounds: FillerTimeBounds,
     ) -> Self {
+        debug_assert!(
+            data_time_bounds.start <= requested_time_bounds.start(),
+            "Data time bounds hint start should be <= requested time start."
+        );
+        debug_assert!(
+            requested_time_bounds.end() <= data_time_bounds.end,
+            "Data time bounds hint end should be >= requested time end."
+        );
+
         SparseTilesFillAdapter {
             stream,
             sc: StateContainer {
@@ -383,7 +404,8 @@ where
                 no_data_grid: EmptyGrid2D::new(tile_shape),
                 state: State::Initial,
                 cache_hint: cache_expiration.into(),
-                time_bounds,
+                requested_time_bounds,
+                data_time_bounds,
             },
         }
     }
@@ -410,6 +432,7 @@ where
             tiling_strat.geo_transform,
             tiling_spec.tile_size_in_pixels,
             cache_expiration,
+            query_rect_to_answer.time_interval,
             time_bounds,
         )
     }
@@ -437,7 +460,6 @@ where
                 // poll for a first (input) tile
                 let result_tile = match ready!(this.stream.as_mut().poll_next(cx)) {
                     Some(Ok(tile)) => {
-                        // this is the first tile ever
                         // now we have to inspect the time we got and the bound we need to fill. If there are bounds known, then we need to check if the tile starts with the bounds.
                         this.sc.set_current_time_from_initial_tile(tile.time);
 
@@ -468,7 +490,7 @@ where
                     None => {
                         debug_assert!(this.sc.current_idx == min_idx);
                         this.sc.state = State::FillToEnd;
-                        this.sc.set_current_time_from_bounds();
+                        this.sc.set_current_time_from_data_time_bounds();
                         this.sc.current_no_data_tile()
                     }
                 };
@@ -503,11 +525,11 @@ where
                             .into(),
                         )));
                         }
-                        if tile.time.start() >= this.sc.time_bounds.end() {
+                        if tile.time.start() >= this.sc.requested_time_bounds.end() {
                             log::warn!(
-                                    "The tile time start ({}) is outside of the expected time bounds ({})!",
-                                    tile.time.end(),
-                                    this.sc.time_bounds.start()
+                                    "The tile time start ({}) is outside of the requested time bounds ({})!",
+                                    tile.time.start(),
+                                    this.sc.requested_time_bounds.end()
                                 );
                         }
 
@@ -911,6 +933,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(5, 10),
             FillerTimeBounds::from(TimeInterval::new_unchecked(5, 10)),
         );
 
@@ -960,6 +983,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::default(),
             FillerTimeBounds::from(TimeInterval::default()),
         );
 
@@ -1046,6 +1070,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 10),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 10)),
         );
 
@@ -1165,6 +1190,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 10),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 10)),
         );
 
@@ -1255,6 +1281,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 10),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 10)),
         );
 
@@ -1321,6 +1348,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 10),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 10)),
         );
 
@@ -1442,6 +1470,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 10),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 10)),
         );
 
@@ -1508,6 +1537,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::default(),
             FillerTimeBounds::from(TimeInterval::default()),
         );
 
@@ -1560,6 +1590,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 5),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 5)),
         );
 
@@ -1670,6 +1701,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 15),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 15)),
         );
 
@@ -1741,6 +1773,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 15),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 15)),
         );
 
@@ -1838,6 +1871,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 10),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 10)),
         );
 
@@ -1931,6 +1965,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+            TimeInterval::new_unchecked(0, 10),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 10)),
         );
 
@@ -1978,6 +2013,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+            TimeInterval::new_unchecked(0, 10),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 10)),
         );
 
@@ -2033,6 +2069,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 10),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 10)),
         );
 
@@ -2104,6 +2141,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 10),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 10)),
         );
 
@@ -2252,6 +2290,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 5),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 5)),
         );
 
@@ -2360,6 +2399,7 @@ mod tests {
             global_geo_transform,
             tile_shape,
             FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 1),
             FillerTimeBounds::from(TimeInterval::new_unchecked(0, 1)),
         );
 
@@ -2367,5 +2407,113 @@ mod tests {
 
         assert_eq!(tiles.len(), 5);
         assert!(tiles[4].is_err());
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn test_timeinterval_fill_data_bounds() {
+        let data = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(10, 15),
+                tile_position: [0, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        let result_data = data.into_iter().map(Ok);
+
+        let in_stream = stream::iter(result_data);
+        let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
+        let global_geo_transform = GeoTransform::test_default();
+        let tile_shape = [2, 2].into();
+
+        let adapter = SparseTilesFillAdapter::new(
+            in_stream,
+            grid_bounding_box,
+            1,
+            global_geo_transform,
+            tile_shape,
+            FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 20),
+            FillerTimeBounds::from(TimeInterval::default()),
+        );
+
+        let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
+
+        let tile_time_positions: Vec<(GridIdx2D, TimeInterval, bool)> = tiles
+            .into_iter()
+            .map(|t| {
+                let g = t.unwrap();
+                (g.tile_position, g.time, g.is_empty())
+            })
+            .collect();
+
+        let expected_positions = vec![
+            (
+                [-1, 0].into(),
+                TimeInterval::new_unchecked(TimeInstance::MIN, 5),
+                true,
+            ),
+            (
+                [-1, 1].into(),
+                TimeInterval::new_unchecked(TimeInstance::MIN, 5),
+                true,
+            ),
+            (
+                [0, 0].into(),
+                TimeInterval::new_unchecked(TimeInstance::MIN, 5),
+                true,
+            ),
+            (
+                [0, 1].into(),
+                TimeInterval::new_unchecked(TimeInstance::MIN, 5),
+                true,
+            ),
+            ([-1, 0].into(), TimeInterval::new_unchecked(5, 10), true),
+            ([-1, 1].into(), TimeInterval::new_unchecked(5, 10), false),
+            ([0, 0].into(), TimeInterval::new_unchecked(5, 10), true),
+            ([0, 1].into(), TimeInterval::new_unchecked(5, 10), true),
+            ([-1, 0].into(), TimeInterval::new_unchecked(10, 15), true),
+            ([-1, 1].into(), TimeInterval::new_unchecked(10, 15), true),
+            ([0, 0].into(), TimeInterval::new_unchecked(10, 15), false),
+            ([0, 1].into(), TimeInterval::new_unchecked(10, 15), true),
+            (
+                [-1, 0].into(),
+                TimeInterval::new_unchecked(15, TimeInstance::MAX),
+                true,
+            ),
+            (
+                [-1, 1].into(),
+                TimeInterval::new_unchecked(15, TimeInstance::MAX),
+                true,
+            ),
+            (
+                [0, 0].into(),
+                TimeInterval::new_unchecked(15, TimeInstance::MAX),
+                true,
+            ),
+            (
+                [0, 1].into(),
+                TimeInterval::new_unchecked(15, TimeInstance::MAX),
+                true,
+            ),
+        ];
+
+        assert_eq!(tile_time_positions, expected_positions);
     }
 }

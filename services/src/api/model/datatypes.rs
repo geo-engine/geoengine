@@ -1719,11 +1719,40 @@ impl From<RasterPropertiesEntryType> for geoengine_datatypes::raster::RasterProp
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct DateTimeParseFormat {
     fmt: String,
     has_tz: bool,
     has_time: bool,
+}
+
+impl<'a> ToSchema<'a> for DateTimeParseFormat {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        use utoipa::openapi::*;
+        (
+            "DateTimeParseFormat",
+            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+        )
+    }
+}
+
+impl<'de> Deserialize<'de> for DateTimeParseFormat {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(geoengine_datatypes::primitives::DateTimeParseFormat::custom(s).into())
+    }
+}
+
+impl Serialize for DateTimeParseFormat {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.fmt)
+    }
 }
 
 impl From<geoengine_datatypes::primitives::DateTimeParseFormat> for DateTimeParseFormat {
