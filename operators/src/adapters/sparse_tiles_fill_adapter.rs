@@ -2408,4 +2408,112 @@ mod tests {
         assert_eq!(tiles.len(), 5);
         assert!(tiles[4].is_err());
     }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn test_timeinterval_fill_data_bounds() {
+        let data = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(5, 10),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(10, 15),
+                tile_position: [0, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![13, 14, 15, 16])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        let result_data = data.into_iter().map(Ok);
+
+        let in_stream = stream::iter(result_data);
+        let grid_bounding_box = GridBoundingBox2D::new([-1, 0], [0, 1]).unwrap();
+        let global_geo_transform = GeoTransform::test_default();
+        let tile_shape = [2, 2].into();
+
+        let adapter = SparseTilesFillAdapter::new(
+            in_stream,
+            grid_bounding_box,
+            1,
+            global_geo_transform,
+            tile_shape,
+            FillerTileCacheExpirationStrategy::NoCache,
+            TimeInterval::new_unchecked(0, 20),
+            FillerTimeBounds::from(TimeInterval::default()),
+        );
+
+        let tiles: Vec<Result<RasterTile2D<i32>>> = adapter.collect().await;
+
+        let tile_time_positions: Vec<(GridIdx2D, TimeInterval, bool)> = tiles
+            .into_iter()
+            .map(|t| {
+                let g = t.unwrap();
+                (g.tile_position, g.time, g.is_empty())
+            })
+            .collect();
+
+        let expected_positions = vec![
+            (
+                [-1, 0].into(),
+                TimeInterval::new_unchecked(TimeInstance::MIN, 5),
+                true,
+            ),
+            (
+                [-1, 1].into(),
+                TimeInterval::new_unchecked(TimeInstance::MIN, 5),
+                true,
+            ),
+            (
+                [0, 0].into(),
+                TimeInterval::new_unchecked(TimeInstance::MIN, 5),
+                true,
+            ),
+            (
+                [0, 1].into(),
+                TimeInterval::new_unchecked(TimeInstance::MIN, 5),
+                true,
+            ),
+            ([-1, 0].into(), TimeInterval::new_unchecked(5, 10), true),
+            ([-1, 1].into(), TimeInterval::new_unchecked(5, 10), false),
+            ([0, 0].into(), TimeInterval::new_unchecked(5, 10), true),
+            ([0, 1].into(), TimeInterval::new_unchecked(5, 10), true),
+            ([-1, 0].into(), TimeInterval::new_unchecked(10, 15), true),
+            ([-1, 1].into(), TimeInterval::new_unchecked(10, 15), true),
+            ([0, 0].into(), TimeInterval::new_unchecked(10, 15), false),
+            ([0, 1].into(), TimeInterval::new_unchecked(10, 15), true),
+            (
+                [-1, 0].into(),
+                TimeInterval::new_unchecked(15, TimeInstance::MAX),
+                true,
+            ),
+            (
+                [-1, 1].into(),
+                TimeInterval::new_unchecked(15, TimeInstance::MAX),
+                true,
+            ),
+            (
+                [0, 0].into(),
+                TimeInterval::new_unchecked(15, TimeInstance::MAX),
+                true,
+            ),
+            (
+                [0, 1].into(),
+                TimeInterval::new_unchecked(15, TimeInstance::MAX),
+                true,
+            ),
+        ];
+
+        assert_eq!(tile_time_positions, expected_positions);
+    }
 }
