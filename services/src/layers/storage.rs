@@ -1,5 +1,5 @@
 use super::external::{DataProvider, TypedDataProviderDefinition};
-use super::layer::{AddLayer, AddLayerCollection};
+use super::layer::{AddLayer, AddLayerCollection, UpdateLayer, UpdateLayerCollection};
 use super::listing::LayerCollectionId;
 use crate::error::Result;
 
@@ -28,6 +28,12 @@ pub trait LayerDb: Send + Sync {
         layer: AddLayer,
         collection: &LayerCollectionId,
     ) -> Result<()>;
+
+    /// update layer
+    async fn update_layer(&self, id: &LayerId, layer: UpdateLayer) -> Result<()>;
+
+    /// remove layer
+    async fn remove_layer(&self, id: &LayerId) -> Result<()>;
 
     /// add existing `layer` to the given `collection`
     async fn add_layer_to_collection(
@@ -58,6 +64,13 @@ pub trait LayerDb: Send + Sync {
         &self,
         collection: &LayerCollectionId,
         parent: &LayerCollectionId,
+    ) -> Result<()>;
+
+    /// Update collection
+    async fn update_layer_collection(
+        &self,
+        collection: &LayerCollectionId,
+        update: UpdateLayerCollection,
     ) -> Result<()>;
 
     /// Removes a collection from the database.

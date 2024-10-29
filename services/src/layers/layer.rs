@@ -65,6 +65,24 @@ pub struct AddLayer {
     pub metadata: HashMap<String, String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+// TODO: validate user input
+pub struct UpdateLayer {
+    #[schema(example = "Example Layer")]
+    pub name: String,
+    #[schema(example = "Example layer description")]
+    pub description: String,
+    pub workflow: Workflow,
+    #[serde(default)]
+    pub symbology: Option<Symbology>,
+    /// properties, for instance, to be rendered in the UI
+    #[serde(default)]
+    pub properties: Vec<Property>,
+    /// metadata used for loading the data
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LayerDefinition {
     pub id: LayerId,
@@ -246,6 +264,18 @@ impl CollectionItem {
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 // TODO: validate user input
 pub struct AddLayerCollection {
+    #[schema(example = "Example Collection")]
+    pub name: String,
+    #[schema(example = "A description for an example collection")]
+    pub description: String,
+    #[serde(default)]
+    pub properties: Vec<Property>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+// TODO: validate user input
+pub struct UpdateLayerCollection {
     #[schema(example = "Example Collection")]
     pub name: String,
     #[schema(example = "A description for an example collection")]

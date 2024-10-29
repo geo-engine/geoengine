@@ -1,4 +1,5 @@
 use super::external::TypedDataProviderDefinition;
+use super::layer::{UpdateLayer, UpdateLayerCollection};
 use super::listing::{ProviderCapabilities, SearchType};
 use crate::contexts::PostgresDb;
 use crate::error;
@@ -414,6 +415,52 @@ where
         Ok(layer_id)
     }
 
+    async fn update_layer(&self, id: &LayerId, layer: UpdateLayer) -> Result<()> {
+        let layer_id =
+            Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: id.0.clone(),
+            })?;
+
+        let conn = self.conn_pool.get().await?;
+
+        conn.execute(
+            "
+            UPDATE layers
+            SET name = $1, description = $2, symbology = $3, properties = $4, metadata = $5
+            WHERE id = $6;",
+            &[
+                &layer.name,
+                &layer.description,
+                &layer.symbology,
+                &layer.properties,
+                &HashMapTextTextDbType::from(&layer.metadata),
+                &layer_id,
+            ],
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    async fn remove_layer(&self, id: &LayerId) -> Result<()> {
+        let layer_id =
+            Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: id.0.clone(),
+            })?;
+
+        let conn = self.conn_pool.get().await?;
+
+        conn.execute(
+            "
+            DELETE FROM layers
+            WHERE id = $1;",
+            &[&layer_id],
+        )
+        .await?;
+
+        Ok(())
+    }
+
     async fn add_layer_with_id(
         &self,
         id: &LayerId,
@@ -534,6 +581,34 @@ where
         delete_layer_collection_from_parent(&transaction, collection, parent).await?;
 
         transaction.commit().await.map_err(Into::into)
+    }
+
+    async fn update_layer_collection(
+        &self,
+        collection: &LayerCollectionId,
+        update: UpdateLayerCollection,
+    ) -> Result<()> {
+        let collection_id =
+            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: collection.0.clone(),
+            })?;
+
+        let conn = self.conn_pool.get().await?;
+
+        conn.execute(
+            "UPDATE layer_collections 
+                SET name = $1, description = $2, properties = $3
+                WHERE id = $4;",
+            &[
+                &update.name,
+                &update.description,
+                &update.properties,
+                &collection_id,
+            ],
+        )
+        .await?;
+
+        Ok(())
     }
 }
 

@@ -47,7 +47,8 @@ use crate::datasets::upload::{UploadId, VolumeName};
 use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
-    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
+    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId, UpdateLayer,
+    UpdateLayerCollection,
 };
 use crate::layers::listing::{
     LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
@@ -98,6 +99,9 @@ use utoipa::{Modify, OpenApi};
         handlers::layers::add_existing_collection_to_collection,
         handlers::layers::remove_collection_from_collection,
         handlers::layers::layer_to_dataset,
+        handlers::layers::update_layer,
+        handlers::layers::update_collection,
+        handlers::layers::remove_layer,
         handlers::tasks::abort_handler,
         handlers::tasks::list_handler,
         handlers::tasks::status_handler,
@@ -272,6 +276,8 @@ use utoipa::{Modify, OpenApi};
             CollectionItem,
             AddLayer,
             AddLayerCollection,
+            UpdateLayer,
+            UpdateLayerCollection,
             SearchCapabilities,
             ProviderCapabilities,
             SearchTypes,

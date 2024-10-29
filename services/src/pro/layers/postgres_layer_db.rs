@@ -1,6 +1,6 @@
 use crate::error;
 use crate::layers::external::TypedDataProviderDefinition;
-use crate::layers::layer::Property;
+use crate::layers::layer::{Property, UpdateLayer, UpdateLayerCollection};
 use crate::layers::listing::{
     ProviderCapabilities, SearchCapabilities, SearchParameters, SearchType, SearchTypes,
 };
@@ -56,6 +56,64 @@ where
         self.add_layer_with_id(&layer_id, layer, collection).await?;
 
         Ok(layer_id)
+    }
+
+    async fn update_layer(&self, id: &LayerId, layer: UpdateLayer) -> Result<()> {
+        let layer_id =
+            Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: id.0.clone(),
+            })?;
+
+        let mut conn = self.conn_pool.get().await?;
+        let transaction = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(id.clone().into(), Permission::Owner, &transaction)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        transaction
+            .execute(
+                "
+                UPDATE layers
+                SET name = $1, description = $2, symbology = $3, properties = $4, metadata = $5
+                WHERE id = $6;",
+                &[
+                    &layer.name,
+                    &layer.description,
+                    &layer.symbology,
+                    &layer.properties,
+                    &HashMapTextTextDbType::from(&layer.metadata),
+                    &layer_id,
+                ],
+            )
+            .await?;
+
+        transaction.commit().await.map_err(Into::into)
+    }
+
+    async fn remove_layer(&self, id: &LayerId) -> Result<()> {
+        let layer_id =
+            Uuid::from_str(&id.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: id.0.clone(),
+            })?;
+
+        let mut conn = self.conn_pool.get().await?;
+        let transaction = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(id.clone().into(), Permission::Owner, &transaction)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        transaction
+            .execute(
+                "
+            DELETE FROM layers
+            WHERE id = $1;",
+                &[&layer_id],
+            )
+            .await?;
+
+        transaction.commit().await.map_err(Into::into)
     }
 
     async fn add_layer_with_id(
@@ -242,6 +300,40 @@ where
             .boxed_context(crate::error::PermissionDb)?;
 
         delete_layer_collection_from_parent(&transaction, collection, parent).await?;
+
+        transaction.commit().await.map_err(Into::into)
+    }
+
+    async fn update_layer_collection(
+        &self,
+        collection: &LayerCollectionId,
+        update: UpdateLayerCollection,
+    ) -> Result<()> {
+        let collection_id =
+            Uuid::from_str(&collection.0).map_err(|_| crate::error::Error::IdStringMustBeUuid {
+                found: collection.0.clone(),
+            })?;
+
+        let mut conn = self.conn_pool.get().await?;
+        let transaction = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(collection.clone().into(), Permission::Owner, &transaction)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        transaction
+            .execute(
+                "UPDATE layer_collections 
+                SET name = $1, description = $2, properties = $3
+                WHERE id = $4;",
+                &[
+                    &update.name,
+                    &update.description,
+                    &update.properties,
+                    &collection_id,
+                ],
+            )
+            .await?;
 
         transaction.commit().await.map_err(Into::into)
     }
