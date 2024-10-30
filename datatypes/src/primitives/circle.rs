@@ -1,4 +1,4 @@
-use geo::intersects::Intersects;
+use geo::Intersects;
 use num_traits::abs;
 
 use crate::operations::Contains;

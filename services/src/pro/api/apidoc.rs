@@ -1,6 +1,7 @@
 use super::handlers::permissions::{PermissionListOptions, PermissionRequest, Resource};
 use super::handlers::users::AddRole;
 use crate::api::handlers;
+use crate::api::handlers::datasets::VolumeFileLayersResponse;
 use crate::api::handlers::plots::WrappedPlotOutput;
 use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use crate::api::handlers::tasks::{TaskAbortOptions, TaskResponse};
@@ -51,6 +52,8 @@ use crate::layers::layer::{
 use crate::layers::listing::{
     LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
 };
+use crate::machine_learning::name::MlModelName;
+use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
 use crate::pro;
 use crate::pro::api::handlers::users::{Quota, UpdateQuota};
 use crate::pro::permissions::{
@@ -143,6 +146,10 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::update_loading_info_handler,
         handlers::datasets::update_dataset_symbology_handler,
         handlers::datasets::update_dataset_provenance_handler,
+        handlers::datasets::list_volume_file_layers_handler,
+        pro::api::handlers::machine_learning::add_ml_model,
+        pro::api::handlers::machine_learning::get_ml_model,
+        pro::api::handlers::machine_learning::list_ml_models,
         handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::plots::get_plot_handler,
         handlers::projects::list_projects_handler,
@@ -320,6 +327,7 @@ use utoipa::{Modify, OpenApi};
 
             UploadFilesResponse,
             UploadFileLayersResponse,
+            VolumeFileLayersResponse,
 
             CreateDataset,
             UpdateDataset,
@@ -399,6 +407,10 @@ use utoipa::{Modify, OpenApi};
             RoleDescription,
             Role,
 
+            MlModel,
+            MlModelId,
+            MlModelName,
+            MlModelMetadata
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),

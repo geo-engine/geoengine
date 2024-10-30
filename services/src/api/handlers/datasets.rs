@@ -16,7 +16,7 @@ use crate::{
         },
         DatasetName,
     },
-    error::{self, Result},
+    error::{self, Error, Result},
     projects::Symbology,
     util::{
         config::{get_config_element, Data},
@@ -47,12 +47,14 @@ use geoengine_operators::{
         raster_descriptor_from_dataset,
     },
 };
+use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
     path::Path,
 };
+use utoipa::{ToResponse, ToSchema};
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -65,6 +67,10 @@ where
                 web::resource("/suggest").route(web::post().to(suggest_meta_data_handler::<C>)),
             )
             .service(web::resource("/auto").route(web::post().to(auto_create_dataset_handler::<C>)))
+            .service(
+                web::resource("/volumes/{volume_name}/files/{file_name}/layers")
+                    .route(web::get().to(list_volume_file_layers_handler::<C>)),
+            )
             .service(web::resource("/volumes").route(web::get().to(list_volumes_handler::<C>)))
             .service(
                 web::resource("/{dataset}/loadingInfo")
@@ -575,11 +581,11 @@ pub async fn update_dataset_provenance_handler<C: ApplicationContext>(
             }))),
             ("Normal user tried to create dataset from a volume" = (value = json!({
                 "error": "OnlyAdminsCanCreateDatasetFromVolume",
-                "message": "OnlyAdminsCanCreateDatasetFromVolume"
+                "message": "Only admins can create dataset from volume"
             }))),
             ("Admin tried to create dataset from an upload" = (value = json!({
                 "error": "AdminsCannotCreateDatasetFromUpload",
-                "message": "AdminsCannotCreateDatasetFromUpload"
+                "message": "Admins cannot create dataset from upload"
             }))),
             ("Filepath in metadata is invalid" = (value = json!({
                 "error": "CannotResolveUploadFilePath",
@@ -587,7 +593,7 @@ pub async fn update_dataset_provenance_handler<C: ApplicationContext>(
             }))),
             ("Referenced an unknown volume" = (value = json!({
                 "error": "UnknownVolume",
-                "message": "UnknownVolume"
+                "message": "Unknown volume"
             })))
         )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse),
@@ -739,23 +745,23 @@ pub fn add_tag(properties: &mut AddDataset, tag: String) {
             }))),
             ("Referenced an unknown upload" = (value = json!({
                 "error": "UnknownUploadId",
-                "message": "UnknownUploadId"
+                "message": "Unknown upload id"
             }))),
             ("Dataset name is empty" = (value = json!({
                 "error": "InvalidDatasetName",
-                "message": "InvalidDatasetName"
+                "message": "Invalid dataset name"
             }))),
             ("Upload filename is invalid" = (value = json!({
                 "error": "InvalidUploadFileName",
-                "message": "InvalidUploadFileName"
+                "message": "Invalid upload file name"
             }))),
             ("File does not exist" = (value = json!({
-                "error": "Operator",
-                "message": "Operator: GdalError: GDAL method 'GDALOpenEx' returned a NULL pointer. Error msg: 'upload/0bdd1062-7796-4d44-a655-e548144281a6/asdf: No such file or directory'"
+                "error": "GdalError",
+                "message": "GdalError: GDAL method 'GDALOpenEx' returned a NULL pointer. Error msg: 'upload/0bdd1062-7796-4d44-a655-e548144281a6/asdf: No such file or directory'"
             }))),
             ("Dataset has no auto-importable layer" = (value = json!({
                 "error": "DatasetHasNoAutoImportableLayer",
-                "message": "DatasetHasNoAutoImportableLayer"
+                "message": "Dataset has no auto importable layer"
             })))
         )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse),
@@ -854,19 +860,19 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
             }))),
             ("Referenced an unknown upload" = (value = json!({
                 "error": "UnknownUploadId",
-                "message": "UnknownUploadId"
+                "message": "Unknown upload id"
             }))),
             ("No suitable mainfile found" = (value = json!({
                 "error": "NoMainFileCandidateFound",
-                "message": "NoMainFileCandidateFound"
+                "message": "No main file candidate found"
             }))),
             ("File does not exist" = (value = json!({
-                "error": "Operator",
-                "message": "Operator: GdalError: GDAL method 'GDALOpenEx' returned a NULL pointer. Error msg: 'upload/0bdd1062-7796-4d44-a655-e548144281a6/asdf: No such file or directory'"
+                "error": "GdalError",
+                "message": "GdalError: GDAL method 'GDALOpenEx' returned a NULL pointer. Error msg: 'upload/0bdd1062-7796-4d44-a655-e548144281a6/asdf: No such file or directory'"
             }))),
             ("Dataset has no auto-importable layer" = (value = json!({
                 "error": "DatasetHasNoAutoImportableLayer",
-                "message": "DatasetHasNoAutoImportableLayer"
+                "message": "Dataset has no auto importable layer"
             })))
         )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
@@ -920,7 +926,7 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
 
     let main_file_path = path_with_base_path(&root_path, Path::new(&main_file))?;
 
-    let dataset = gdal_open_dataset(&main_file_path).context(error::Operator)?;
+    let dataset = gdal_open_dataset(&main_file_path)?;
 
     if dataset.layer_count() > 0 {
         let meta_data = auto_detect_vector_meta_data_definition(&main_file_path, &layer_name)?;
@@ -996,7 +1002,7 @@ fn auto_detect_vector_meta_data_definition(
     main_file_path: &Path,
     layer_name: &Option<String>,
 ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>> {
-    let dataset = gdal_open_dataset(main_file_path).context(error::Operator)?;
+    let dataset = gdal_open_dataset(main_file_path)?;
 
     auto_detect_vector_meta_data_definition_from_dataset(&dataset, main_file_path, layer_name)
 }
@@ -1242,7 +1248,7 @@ fn detect_vector_geometry(layer: &Layer) -> DetectedGeometry {
                     .spatial_ref()
                     .context(error::Gdal)
                     .and_then(|s| {
-                        let s: Result<SpatialReference> = s.try_into().context(error::DataType);
+                        let s: Result<SpatialReference> = s.try_into().map_err(Into::into);
                         s
                     })
                     .map(Into::into)
@@ -1368,11 +1374,11 @@ fn column_map_to_column_vecs(columns: &HashMap<String, ColumnDataType>) -> Colum
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Referenced an unknown dataset" = (value = json!({
                 "error": "UnknownDatasetName",
-                "message": "UnknownDatasetName"
+                "message": "Unknown dataset name"
             }))),
             ("Given dataset can only be deleted by owner" = (value = json!({
                 "error": "OperationRequiresOwnerPermission",
-                "message": "OperationRequiresOwnerPermission"
+                "message": "Operation requires owner permission"
             })))
         )),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
@@ -1405,6 +1411,63 @@ pub async fn delete_dataset_handler<C: ApplicationContext>(
     session_ctx.delete_dataset(dataset_id).await?;
 
     Ok(actix_web::HttpResponse::Ok().finish())
+}
+
+#[derive(Deserialize, Serialize, ToSchema, ToResponse)]
+pub struct VolumeFileLayersResponse {
+    layers: Vec<String>,
+}
+
+/// List the layers of a file in a volume.
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/dataset/volumes/{volume_name}/files/{file_name}/layers",
+    responses(
+        (status = 200, body = VolumeFileLayersResponse,
+             example = json!({"layers": ["layer1", "layer2"]}))
+    ),
+    params(
+        ("volume_name" = VolumeName, description = "Volume name"),
+        ("file_name" = String, description = "File name")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn list_volume_file_layers_handler<C: ApplicationContext>(
+    path: web::Path<(VolumeName, String)>,
+    session: C::Session,
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let (volume_name, file_name) = path.into_inner();
+
+    let session_ctx = app_ctx.session_context(session);
+    let volumes = session_ctx.volumes()?;
+
+    let volume = volumes.iter().find(|v| v.name == volume_name.0).ok_or(
+        crate::error::Error::UnknownVolumeName {
+            volume_name: volume_name.0.clone(),
+        },
+    )?;
+
+    let Some(volume_path) = volume.path.as_ref() else {
+        return Err(crate::error::Error::CannotAccessVolumePath {
+            volume_name: volume_name.0.clone(),
+        });
+    };
+
+    let file_path = path_with_base_path(Path::new(volume_path), Path::new(&file_name))?;
+
+    let layers = crate::util::spawn_blocking(move || {
+        let dataset = gdal_open_dataset(&file_path)?;
+
+        // TODO: hide system/internal layer like "layer_styles"
+        Result::<_, Error>::Ok(dataset.layers().map(|l| l.name()).collect::<Vec<_>>())
+    })
+    .await??;
+
+    Ok(web::Json(VolumeFileLayersResponse { layers }))
 }
 
 #[cfg(test)]
@@ -2967,5 +3030,35 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_lists_layers(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session_id = ctx.session().id();
+
+        let volume_name = "test_data";
+        let file_name = "vector%2Fdata%2Ftwo_layers.gpkg";
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/dataset/volumes/{volume_name}/files/{file_name}/layers"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+
+        let layers: VolumeFileLayersResponse = actix_web::test::read_body_json(res).await;
+
+        assert_eq!(
+            layers.layers,
+            vec![
+                "points_with_time".to_string(),
+                "points_with_time_and_more".to_string(),
+                "layer_styles".to_string() // TOOO: remove once internal/system layers are hidden
+            ]
+        );
     }
 }

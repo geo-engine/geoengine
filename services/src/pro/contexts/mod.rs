@@ -2,40 +2,35 @@ mod db_types;
 pub(crate) mod migrations;
 mod postgres;
 
-use std::str::FromStr;
-use std::sync::Arc;
-
-use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
-use geoengine_datatypes::raster::TilingSpecification;
-use geoengine_operators::engine::{
-    CreateSpan, ExecutionContext, ExecutionContextExtensions, InitializedPlotOperator,
-    InitializedVectorOperator, MetaData, MetaDataProvider, RasterResultDescriptor,
-    VectorResultDescriptor, WorkflowOperatorPath,
-};
-use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::pro::cache::cache_operator::InitializedCacheOperator;
-use geoengine_operators::pro::meta::quota::QuotaCheck;
-use geoengine_operators::pro::meta::wrapper::InitializedOperatorWrapper;
-use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
-
-pub use postgres::ProPostgresContext;
-use rayon::ThreadPool;
-
-use crate::contexts::{ApplicationContext, GeoEngineDb};
-use crate::datasets::storage::DatasetDb;
-use crate::error::Result;
-
-use crate::layers::storage::LayerProviderDb;
-use crate::pro::users::{OidcManager, UserDb};
-
-use async_trait::async_trait;
-
 use super::permissions::PermissionDb;
 use super::users::{RoleDb, UserAuth, UserSession};
 use super::util::config::{Cache, QuotaTrackingMode};
+use crate::contexts::{ApplicationContext, GeoEngineDb};
+use crate::datasets::storage::DatasetDb;
+use crate::error::Result;
+use crate::layers::storage::LayerProviderDb;
+use crate::machine_learning::MlModelDb;
+use crate::pro::users::{OidcManager, UserDb};
 use crate::util::config::get_config_element;
+use async_trait::async_trait;
+use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
+use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
+use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_operators::cache::cache_operator::InitializedCacheOperator;
+use geoengine_operators::engine::{
+    CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, MetaData,
+    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor, WorkflowOperatorPath,
+};
+use geoengine_operators::meta::quota::QuotaCheck;
+use geoengine_operators::meta::wrapper::InitializedOperatorWrapper;
+use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
+use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
+use rayon::ThreadPool;
+use std::str::FromStr;
+use std::sync::Arc;
 
+pub use postgres::ProPostgresContext;
 pub use postgres::ProPostgresDb;
 
 /// A pro application contexts that extends the default context.
@@ -52,7 +47,6 @@ where
     db: D,
     thread_pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
-    extensions: ExecutionContextExtensions,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -68,21 +62,6 @@ where
             db,
             thread_pool,
             tiling_specification,
-            extensions: ExecutionContextExtensions::default(),
-        }
-    }
-
-    pub fn new_with_extensions(
-        db: D,
-        thread_pool: Arc<ThreadPool>,
-        tiling_specification: TilingSpecification,
-        extensions: ExecutionContextExtensions,
-    ) -> Self {
-        Self {
-            db,
-            thread_pool,
-            tiling_specification,
-            extensions,
         }
     }
 }
@@ -97,7 +76,8 @@ where
             VectorQueryRectangle,
         > + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + LayerProviderDb,
+        + LayerProviderDb
+        + MlModelDb,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
         &self.thread_pool
@@ -193,8 +173,25 @@ where
         Ok(dataset_id.into())
     }
 
-    fn extensions(&self) -> &ExecutionContextExtensions {
-        &self.extensions
+    async fn ml_model_metadata(
+        &self,
+        name: &MlModelName,
+    ) -> Result<MlModelMetadata, geoengine_operators::error::Error> {
+        self.db
+            .load_model(&(name.clone().into()))
+            .await
+            .map_err(
+                |source| geoengine_operators::error::Error::CannotResolveMlModelName {
+                    name: name.clone(),
+                    source: Box::new(source),
+                },
+            )?
+            .metadata_for_operator()
+            .map_err(
+                |source| geoengine_operators::error::Error::LoadingMlMetadataFailed {
+                    source: Box::new(source),
+                },
+            )
     }
 }
 

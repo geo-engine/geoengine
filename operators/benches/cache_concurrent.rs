@@ -10,8 +10,8 @@ use geoengine_datatypes::{
     util::test::TestDefault,
 };
 use geoengine_operators::{
+    cache::shared_cache::{AsyncCache, SharedCache},
     engine::CanonicOperatorName,
-    pro::cache::shared_cache::{AsyncCache, SharedCache},
 };
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};

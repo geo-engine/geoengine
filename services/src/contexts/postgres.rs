@@ -68,6 +68,7 @@ where
         tls: Tls,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
+        volumes: Volumes,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -89,7 +90,7 @@ where
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             pool,
-            volumes: Default::default(),
+            volumes,
         })
     }
 

@@ -1,9 +1,9 @@
 use crate::error::Result;
 use crate::identifier;
 use crate::projects::error::ProjectDbError;
+use crate::util::config::get_config_element;
 use crate::util::config::ProjectService;
 use crate::workflows::workflow::WorkflowId;
-use crate::{error, util::config::get_config_element};
 use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer, RgbaColor};
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::primitives::TimeInstance;
@@ -18,7 +18,6 @@ use geoengine_datatypes::{
 use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use std::borrow::Cow;
 use std::{convert::TryInto, fmt::Debug};
 use utoipa::{IntoParams, ToSchema};
@@ -174,9 +173,8 @@ impl STRectangle {
             bounding_box: BoundingBox2D::new(
                 Coordinate2D::new(lower_left_x, lower_left_y),
                 Coordinate2D::new(upper_left_x, upper_left_y),
-            )
-            .context(error::DataType)?,
-            time_interval: TimeInterval::new(time_start, time_stop).context(error::DataType {})?,
+            )?,
+            time_interval: TimeInterval::new(time_start, time_stop)?,
         })
     }
 
@@ -454,8 +452,7 @@ impl From<&Project> for ProjectListing {
     }
 }))]
 pub struct CreateProject {
-    #[validate(length(min = 1))]
-    #[validate(length(max = 256))]
+    #[validate(length(min = 1, max = 256))]
     pub name: String,
     #[validate(length(min = 1))]
     pub description: String,
@@ -560,7 +557,7 @@ pub struct ProjectListOptions {
     #[param(example = 0)]
     pub offset: u32,
     #[param(example = 2)]
-    #[validate(custom = "validate_list_limit")]
+    #[validate(custom(function = "validate_list_limit"))]
     pub limit: u32,
 }
 

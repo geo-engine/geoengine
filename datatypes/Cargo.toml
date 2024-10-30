@@ -9,19 +9,18 @@ documentation.workspace = true
 repository.workspace = true
 
 [features]
-# This compiles Geo Engine Pro
-pro = []
 
 [dependencies]
-arrow = { version = "50.0", features = ["ipc_compression"] }
-arrow-array = "50.0"
-arrow-ord = "50.0"
+arrow = { version = "53.0", features = ["ipc_compression"] }
+arrow-array = "53.0"
+arrow-ord = "53.0"
+arrow-schema = { version = "53", features = ["serde"] }
 bytes = "1.5" # for postgres-types impls
 chrono = "0.4"
 fallible-iterator = "0.2" # only for postgres-protocol
 float-cmp = "0.9"
-gdal = "0.16"
-geo = "0.27"
+gdal = "0.17"
+geo = "0.28"
 geojson = "0.24"
 image = "0.25"
 num = "0.4"
@@ -43,6 +42,7 @@ serde_with = "3.6"
 snafu = "0.8"
 uuid = { version = "1.7", features = ["serde", "v4", "v5"] }
 wkt = "0.11"
+strum = { version = "0.26", features = ["derive"] }
 
 [dev-dependencies]
 criterion = "0.5"

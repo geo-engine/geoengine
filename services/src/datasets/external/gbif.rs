@@ -1637,6 +1637,7 @@ mod tests {
                             tokio_postgres::NoTls,
                             TestDefault::test_default(),
                             TestDefault::test_default(),
+                            TestDefault::test_default(),
                         )
                         .await
                         .unwrap();

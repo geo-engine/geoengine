@@ -1014,7 +1014,7 @@ impl TryFrom<BandSelection> for geoengine_datatypes::primitives::BandSelection {
         geoengine_datatypes::primitives::BandSelection::new(
             value.0.into_iter().map(|b| b as u32).collect(),
         )
-        .context(error::DataType)
+        .map_err(Into::into)
     }
 }
 
@@ -1826,11 +1826,40 @@ impl From<RasterPropertiesEntryType> for geoengine_datatypes::raster::RasterProp
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct DateTimeParseFormat {
     fmt: String,
     has_tz: bool,
     has_time: bool,
+}
+
+impl<'a> ToSchema<'a> for DateTimeParseFormat {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        use utoipa::openapi::*;
+        (
+            "DateTimeParseFormat",
+            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+        )
+    }
+}
+
+impl<'de> Deserialize<'de> for DateTimeParseFormat {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(geoengine_datatypes::primitives::DateTimeParseFormat::custom(s).into())
+    }
+}
+
+impl Serialize for DateTimeParseFormat {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.fmt)
+    }
 }
 
 impl From<geoengine_datatypes::primitives::DateTimeParseFormat> for DateTimeParseFormat {
@@ -1998,6 +2027,12 @@ impl From<(String, String)> for StringPair {
 impl From<StringPair> for (String, String) {
     fn from(value: StringPair) -> Self {
         value.0
+    }
+}
+
+impl From<StringPair> for geoengine_datatypes::util::StringPair {
+    fn from(value: StringPair) -> Self {
+        Self::new(value.0 .0, value.0 .1)
     }
 }
 

@@ -40,10 +40,24 @@ CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     query_buffer "StacQueryBuffer"
 );
 
+CREATE TYPE "CopernicusDataspaceDataProviderDefinition" AS (
+    "name" text,
+    id uuid,
+    stac_url text,
+    s3_url text,
+    s3_access_key text,
+    s3_secret_key text,
+    description text,
+    priority smallint,
+    gdal_config "StringPair" []
+);
+
 CREATE TYPE "ProDataProviderDefinition" AS (
     -- one of
     sentinel_s2_l2_a_cogs_provider_definition
-    "SentinelS2L2ACogsProviderDefinition"
+    "SentinelS2L2ACogsProviderDefinition",
+    copernicus_dataspace_provider_definition
+    "CopernicusDataspaceDataProviderDefinition"
 );
 
 CREATE TABLE pro_layer_providers (
@@ -144,12 +158,14 @@ CREATE TABLE permissions (
         id
     ) ON DELETE CASCADE,
     project_id uuid REFERENCES projects (id) ON DELETE CASCADE,
+    ml_model_id uuid REFERENCES ml_models (id) ON DELETE CASCADE,
     CHECK (
         (
             (dataset_id IS NOT NULL)::integer
             + (layer_id IS NOT NULL)::integer
             + (layer_collection_id IS NOT NULL)::integer
             + (project_id IS NOT NULL)::integer
+            + (ml_model_id IS NOT NULL)::integer
         ) = 1
     )
 );
@@ -172,6 +188,12 @@ CREATE UNIQUE INDEX ON permissions (
     role_id,
     permission,
     project_id
+);
+
+CREATE UNIQUE INDEX ON permissions (
+    role_id,
+    permission,
+    ml_model_id
 );
 
 CREATE VIEW user_permitted_datasets
@@ -227,4 +249,15 @@ CREATE TABLE oidc_session_tokens (
     access_token_valid_until timestamp with time zone NOT NULL,
     refresh_token bytea,
     refresh_token_encryption_nonce bytea
+);
+
+CREATE VIEW user_permitted_ml_models
+AS
+SELECT
+    r.user_id,
+    p.ml_model_id,
+    p.permission
+FROM user_roles AS r
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id AND p.ml_model_id IS NOT NULL
 );

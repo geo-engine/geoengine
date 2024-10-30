@@ -6,6 +6,7 @@ use crate::pro::api::ApiDoc;
 
 use crate::pro::contexts::ProPostgresContext;
 use crate::util::config::{self, get_config_element};
+use crate::util::middleware::OutputRequestId;
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
     log_server_info, render_404, render_405, serve_openapi_json, CustomRootSpanBuilder,
@@ -58,6 +59,7 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>)
+            .configure(pro::api::handlers::machine_learning::init_ml_routes::<C>)
             .route(
                 "/available",
                 web::get().to(crate::util::server::available_handler),
@@ -103,6 +105,7 @@ where
 
         App::new()
             .app_data(wrapped_ctx.clone())
+            .wrap(OutputRequestId)
             .wrap(
                 middleware::ErrorHandlers::default()
                     .handler(http::StatusCode::NOT_FOUND, render_404)

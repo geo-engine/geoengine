@@ -1,0 +1,120 @@
+# Run server with "--features pro".
+
+@baseUrl = http://localhost:3030/api
+
+###
+
+# Should throw body parsing error.
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+"
+
+###
+
+# Should throw header error.
+POST {{baseUrl}}/login
+Content-Type: text/html
+
+###
+
+# Should throw auth header missing.
+GET {{baseUrl}}/tasks/list
+
+###
+
+# Should succeed.
+# @name login
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+	"email": "admin@localhost",
+	"password": "adminadmin"
+}
+
+###
+
+@token = {{login.response.body.$.id}}
+
+# Should throw dataset not found.
+GET {{baseUrl}}/dataset/asdf
+Authorization: Bearer {{token}}
+
+###
+
+# Should throw upload not found with TokioPostgres.
+POST {{baseUrl}}/dataset
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+	"dataPath": {
+		"upload": "1b71b45b-0a7e-4381-8336-f806ed7c4fee"
+	},
+  "definition": {
+    "properties": {
+        "name": "GermanyBorder2",
+	    "displayName": "Germany Border 2",
+        "description": "The Outline of Germany",
+        "sourceOperator": "OgrSource"
+    },
+    "metaData": {
+      "type": "OgrMetaData",
+      "loadingInfo": {
+        "fileName": "germany_polygon.gpkg",
+        "layerName": "test_germany",
+        "dataType": "MultiPolygon",
+        "time": {
+			"type": "none"
+		},
+        "columns": {
+          "x": "",
+          "y": null,
+          "text": [],
+            "float": [],
+		    "int": []
+        },
+        "forceOgrTimeFilter": false,
+        "onError": "abort"
+      },
+      "resultDescriptor": {
+        "dataType": "MultiPolygon",
+        "spatialReference": "EPSG:4326",
+        "columns": {}
+      }
+    }
+  }
+}
+
+###
+
+# Should succeed.
+# @name registerWorkflow
+POST {{baseUrl}}/workflow
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "type": "Raster",
+  "operator": {
+    "type": "GdalSource",
+    "params": {
+      "data": "land_cover"
+    }
+  }
+}
+
+###
+
+@workflowId = {{registerWorkflow.response.body.$.id}}
+
+# Should throw invalid operator type.
+GET {{baseUrl}}/workflow/{{workflowId}}/vectorStream?spatialBounds=0,0,0,0&timeInterval=2012-12-12T12%3A12%3A12Z&spatialResolution=1,1&resultType=arrow
+Authorization: Bearer {{token}}
+
+###
+
+# Should throw not implemented.
+GET {{baseUrl}}/layers/1c3b8042-300b-485c-95b5-0147d9dc068d/capabilities
+Authorization: Bearer {{token}}

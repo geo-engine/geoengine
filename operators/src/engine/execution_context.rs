@@ -7,12 +7,13 @@ use crate::engine::{
     ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
 };
 use crate::error::Error;
+use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::{create_rayon_thread_pool, Result};
 use async_trait::async_trait;
-use core::any::TypeId;
 use geoengine_datatypes::dataset::{DataId, NamedData};
+use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
@@ -58,33 +59,7 @@ pub trait ExecutionContext: Send
 
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId>;
 
-    /// get the `ExecutionContextExtensions` that contain additional information
-    fn extensions(&self) -> &ExecutionContextExtensions;
-}
-
-/// This type allows adding additional information to the `ExecutionContext`.
-/// It acts like a type map, allowing one to store one value per type.
-#[derive(Default)]
-pub struct ExecutionContextExtensions {
-    map: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
-}
-
-impl ExecutionContextExtensions {
-    pub fn insert<T: 'static + Send + Sync>(&mut self, val: T) -> Option<T> {
-        self.map
-            .insert(TypeId::of::<T>(), Box::new(val))
-            .and_then(downcast_owned)
-    }
-
-    pub fn get<T: 'static + Send + Sync>(&self) -> Option<&T> {
-        self.map
-            .get(&TypeId::of::<T>())
-            .and_then(|boxed: &Box<dyn Any + Send + Sync>| boxed.downcast_ref())
-    }
-}
-
-fn downcast_owned<T: 'static + Send + Sync>(boxed: Box<dyn Any + Send + Sync>) -> Option<T> {
-    boxed.downcast().ok().map(|boxed| *boxed)
+    async fn ml_model_metadata(&self, name: &MlModelName) -> Result<MlModelMetadata>;
 }
 
 #[async_trait]
@@ -119,8 +94,8 @@ pub struct MockExecutionContext {
     pub thread_pool: Arc<ThreadPool>,
     pub meta_data: HashMap<DataId, Box<dyn Any + Send + Sync>>,
     pub named_data: HashMap<NamedData, DataId>,
+    pub ml_models: HashMap<MlModelName, MlModelMetadata>,
     pub tiling_specification: TilingSpecification,
-    pub extensions: ExecutionContextExtensions,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -129,8 +104,8 @@ impl TestDefault for MockExecutionContext {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
+            ml_models: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
-            extensions: Default::default(),
         }
     }
 }
@@ -141,8 +116,8 @@ impl MockExecutionContext {
             thread_pool: create_rayon_thread_pool(0),
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
+            ml_models: HashMap::default(),
             tiling_specification,
-            extensions: Default::default(),
         }
     }
 
@@ -154,8 +129,8 @@ impl MockExecutionContext {
             thread_pool: create_rayon_thread_pool(num_threads),
             meta_data: HashMap::default(),
             named_data: HashMap::default(),
+            ml_models: HashMap::default(),
             tiling_specification,
-            extensions: Default::default(),
         }
     }
 
@@ -189,7 +164,9 @@ impl MockExecutionContext {
         MockQueryContext {
             chunk_byte_size,
             thread_pool: self.thread_pool.clone(),
-            extensions: Default::default(),
+            cache: None,
+            quota_checker: None,
+            quota_tracking: None,
             abort_registration,
             abort_trigger: Some(abort_trigger),
         }
@@ -240,8 +217,11 @@ impl ExecutionContext for MockExecutionContext {
             .ok_or_else(|| Error::UnknownDatasetName { name: data.clone() })
     }
 
-    fn extensions(&self) -> &ExecutionContextExtensions {
-        &self.extensions
+    async fn ml_model_metadata(&self, name: &MlModelName) -> Result<MlModelMetadata> {
+        self.ml_models
+            .get(name)
+            .cloned()
+            .ok_or_else(|| Error::UnknownMlModelName { name: name.clone() })
     }
 }
 
@@ -373,6 +353,77 @@ mod db_types {
 
     delegate_from_to_sql!(MockMetaData, MockMetaDataDbType);
     delegate_from_to_sql!(OgrMetaData, OgrMetaDataDbType);
+}
+
+/// A mock execution context that wraps all operators with a statistics operator.
+pub struct StatisticsWrappingMockExecutionContext {
+    pub inner: MockExecutionContext,
+}
+
+impl TestDefault for StatisticsWrappingMockExecutionContext {
+    fn test_default() -> Self {
+        Self {
+            inner: MockExecutionContext::test_default(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl ExecutionContext for StatisticsWrappingMockExecutionContext {
+    fn thread_pool(&self) -> &Arc<ThreadPool> {
+        &self.inner.thread_pool
+    }
+
+    fn tiling_specification(&self) -> TilingSpecification {
+        self.inner.tiling_specification
+    }
+
+    fn wrap_initialized_raster_operator(
+        &self,
+        op: Box<dyn InitializedRasterOperator>,
+        span: CreateSpan,
+        path: WorkflowOperatorPath,
+    ) -> Box<dyn InitializedRasterOperator> {
+        InitializedOperatorWrapper::new(op, span, path).boxed()
+    }
+
+    fn wrap_initialized_vector_operator(
+        &self,
+        op: Box<dyn InitializedVectorOperator>,
+        span: CreateSpan,
+        path: WorkflowOperatorPath,
+    ) -> Box<dyn InitializedVectorOperator> {
+        InitializedOperatorWrapper::new(op, span, path).boxed()
+    }
+
+    fn wrap_initialized_plot_operator(
+        &self,
+        op: Box<dyn InitializedPlotOperator>,
+        _span: CreateSpan,
+        _path: WorkflowOperatorPath,
+    ) -> Box<dyn InitializedPlotOperator> {
+        op
+    }
+
+    async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId> {
+        self.inner.resolve_named_data(data).await
+    }
+
+    async fn ml_model_metadata(&self, name: &MlModelName) -> Result<MlModelMetadata> {
+        self.inner.ml_model_metadata(name).await
+    }
+}
+
+#[async_trait]
+impl<L, R, Q> MetaDataProvider<L, R, Q> for StatisticsWrappingMockExecutionContext
+where
+    L: 'static,
+    R: 'static + ResultDescriptor,
+    Q: 'static,
+{
+    async fn meta_data(&self, id: &DataId) -> Result<Box<dyn MetaData<L, R, Q>>> {
+        self.inner.meta_data(id).await
+    }
 }
 
 #[cfg(test)]

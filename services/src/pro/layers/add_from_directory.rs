@@ -224,14 +224,17 @@ pub async fn add_pro_providers_from_directory<D: ProLayerProviderDb>(
 
     for entry in dir {
         match entry {
-            Ok(entry) if entry.path().is_file() => {
+            Ok(entry)
+                if entry.path().is_file()
+                    && entry.path().extension().map_or(false, |ext| ext == "json") =>
+            {
                 match add_provider_definition_from_dir_entry(db, &entry).await {
                     Ok(()) => info!("Added pro provider from file `{:?}`", entry.path()),
                     Err(e) => {
                         warn!(
-                            "Skipped adding pro provider from file `{:?}` error: `{}`",
+                            "Skipped adding pro provider from file `{:?}` error: `{:?}`",
                             entry.path(),
-                            e.to_string()
+                            e
                         );
                     }
                 }

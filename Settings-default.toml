@@ -65,6 +65,12 @@ filename_prefix = "geo_engine"
 # Use this option if another folder should be used.
 #log_directory = "/var/log/"
 
+# Whether unshortened error messages should be logged.
+# If true, messages will contain redundant information at the end of the line
+# when the source is part of #[snafu(display())]. But in some cases this could
+# improve debugging.
+raw_error_messages = false
+
 [ogc.default_time]
 # type "Value" with start/end as ISO strings or "Now" for using the current time, use wcs.default_time etc. for override
 type = "Value"
@@ -109,6 +115,7 @@ allowed_drivers = [
     "HDF4",
     "HDF5Image",
     "HTTP",
+    "JP2OpenJPEG",
     "KML",
     "MEM",
     "Memory",
@@ -120,6 +127,7 @@ allowed_drivers = [
     "PostGISRaster",
     "PostgreSQL",
     "SAFE",
+    "SENTINEL2",
     "SQLite",
     "STACIT",
     "TopoJSON",

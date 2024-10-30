@@ -2,6 +2,7 @@ use super::users::UserId;
 use crate::error::{self, Error, Result};
 use crate::identifier;
 use crate::layers::listing::LayerCollectionId;
+use crate::machine_learning::MlModelId;
 use crate::projects::ProjectId;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, LayerId};
@@ -98,6 +99,7 @@ pub enum ResourceId {
     LayerCollection(LayerCollectionId), // TODO: UUID?
     Project(ProjectId),
     DatasetId(DatasetId),
+    MlModel(MlModelId),
 }
 
 impl std::fmt::Display for ResourceId {
@@ -109,6 +111,7 @@ impl std::fmt::Display for ResourceId {
             }
             ResourceId::Project(project_id) => write!(f, "project:{}", project_id.0),
             ResourceId::DatasetId(dataset_id) => write!(f, "dataset:{}", dataset_id.0),
+            ResourceId::MlModel(ml_model_id) => write!(f, "ml_model:{}", ml_model_id.0),
         }
     }
 }

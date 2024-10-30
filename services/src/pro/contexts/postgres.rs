@@ -10,6 +10,8 @@ use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
+use crate::machine_learning::error::MachineLearningError;
+use crate::machine_learning::name::MlModelName;
 use crate::pro::api::cli::add_datasets_from_directory;
 use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
@@ -31,11 +33,9 @@ use bb8_postgres::{
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::engine::{
-    ChunkByteSize, ExecutionContextExtensions, QueryContextExtensions,
-};
-use geoengine_operators::pro::cache::shared_cache::SharedCache;
-use geoengine_operators::pro::meta::quota::{ComputationContext, QuotaChecker};
+use geoengine_operators::cache::shared_cache::SharedCache;
+use geoengine_operators::engine::ChunkByteSize;
+use geoengine_operators::meta::quota::{ComputationContext, QuotaChecker};
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::info;
 use rayon::ThreadPool;
@@ -302,33 +302,25 @@ where
     fn query_context(&self) -> Result<Self::QueryContext> {
         // TODO: load config only once
 
-        let mut extensions = QueryContextExtensions::default();
-        extensions.insert(
-            self.context
-                .quota
-                .create_quota_tracking(&self.session, ComputationContext::new()),
-        );
-        extensions.insert(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker);
-        extensions.insert(self.context.tile_cache.clone());
-
         Ok(QueryContextImpl::new_with_extensions(
             self.context.query_ctx_chunk_size,
             self.context.thread_pool.clone(),
-            extensions,
+            Some(self.context.tile_cache.clone()),
+            Some(
+                self.context
+                    .quota
+                    .create_quota_tracking(&self.session, ComputationContext::new()),
+            ),
+            Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
         ))
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {
-        let extensions = ExecutionContextExtensions::default();
-
-        Ok(
-            ExecutionContextImpl::<ProPostgresDb<Tls>>::new_with_extensions(
-                self.db(),
-                self.context.thread_pool.clone(),
-                self.context.exe_ctx_tiling_spec,
-                extensions,
-            ),
-        )
+        Ok(ExecutionContextImpl::<ProPostgresDb<Tls>>::new(
+            self.db(),
+            self.context.thread_pool.clone(),
+            self.context.exe_ctx_tiling_spec,
+        ))
     }
 
     fn volumes(&self) -> Result<Vec<Volume>> {
@@ -377,7 +369,7 @@ where
     }
 
     /// Check whether the namepsace of the given dataset is allowed for insertion
-    pub(crate) fn check_namespace(&self, id: &DatasetName) -> Result<()> {
+    pub(crate) fn check_dataset_namespace(&self, id: &DatasetName) -> Result<()> {
         let is_ok = match &id.namespace {
             Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
             None => self.session.is_admin(),
@@ -387,6 +379,23 @@ where
             Ok(())
         } else {
             Err(Error::InvalidDatasetIdNamespace)
+        }
+    }
+
+    /// Check whether the namepsace of the given model is allowed for insertion
+    pub(crate) fn check_ml_model_namespace(
+        &self,
+        name: &MlModelName,
+    ) -> Result<(), MachineLearningError> {
+        let is_ok = match &name.namespace {
+            Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
+            None => self.session.is_admin(),
+        };
+
+        if is_ok {
+            Ok(())
+        } else {
+            Err(MachineLearningError::InvalidModelNamespace { name: name.clone() })
         }
     }
 }

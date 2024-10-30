@@ -43,10 +43,10 @@ pub struct DatasetListOptions {
     #[param(example = 0)]
     pub offset: u32,
     #[param(example = 2)]
-    #[validate(custom = "validate_list_limit")]
+    #[validate(custom(function = "validate_list_limit"))]
     pub limit: u32,
     #[param(example = "['tag1', 'tag2']")]
-    #[validate(custom = "validate_tags")]
+    #[validate(custom(function = "validate_tags"))]
     pub tags: Option<Vec<String>>,
 }
 

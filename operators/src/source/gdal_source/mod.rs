@@ -46,6 +46,7 @@ use geoengine_datatypes::{
     primitives::TimeInterval,
     raster::{Grid, GridBlit, GridBoundingBox2D, GridIdx, GridSize, TilingSpecification},
 };
+use itertools::Itertools;
 pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
@@ -758,7 +759,12 @@ where
             }
         };
 
-        let source_stream = stream::iter(loading_info.info);
+        let query_time = query.time_interval;
+        let skipping_loading_info = loading_info
+            .info
+            .filter_ok(move |s: &GdalLoadingInfoTemporalSlice| s.time.intersects(&query_time));
+
+        let source_stream = stream::iter(skipping_loading_info);
 
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
             source_stream,
@@ -774,6 +780,7 @@ where
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
+            query.time_interval,
             time_bounds,
         );
         Ok(filled_stream.boxed())
@@ -939,7 +946,8 @@ where
         gdal_out_shape,                  // requested raster size
         None,                            // sampling mode
     )?;
-    let data_grid = Grid::new(out_shape.clone(), buffer.data)?;
+    let (_, buffer_data) = buffer.into_shape_and_vec();
+    let data_grid = Grid::new(out_shape.clone(), buffer_data)?;
 
     let data_grid = if flip_y_axis {
         data_grid.reversed_y_axis_grid()
@@ -981,7 +989,8 @@ where
         gdal_out_shape,                  // requested raster size
         None,                            // sampling mode
     )?;
-    let mask_grid = Grid::new(out_shape, mask_buffer.data)?.map_elements(|p: u8| p > 0);
+    let (_, mask_buffer_data) = mask_buffer.into_shape_and_vec();
+    let mask_grid = Grid::new(out_shape, mask_buffer_data)?.map_elements(|p: u8| p > 0);
 
     let mask_grid = if flip_y_axis {
         mask_grid.reversed_y_axis_grid()
@@ -1107,7 +1116,7 @@ fn read_raster_tile_with_properties<T: Pixel + gdal::raster::GdalType + FromPrim
     tile_time: TimeInterval,
     cache_hint: CacheHint,
 ) -> Result<RasterTile2D<T>> {
-    let rasterband = dataset.rasterband(dataset_params.rasterband_channel as isize)?;
+    let rasterband = dataset.rasterband(dataset_params.rasterband_channel)?;
 
     let result_grid = read_grid_and_handle_edges(tile_info, dataset, &rasterband, dataset_params)?;
 

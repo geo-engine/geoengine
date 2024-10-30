@@ -21,8 +21,6 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use itertools::Itertools;
-use log::Level::Debug;
-use log::{debug, log_enabled};
 use snafu::ResultExt;
 
 use crate::{
@@ -233,12 +231,11 @@ pub fn gdal_open_dataset_ex(path: &Path, dataset_options: DatasetOptions) -> Res
 /// type is a complex floating point type, an error is returned
 pub fn raster_descriptor_from_dataset(
     dataset: &Dataset,
-    band: isize,
+    band: usize,
 ) -> Result<RasterResultDescriptor> {
     let rasterband = &dataset.rasterband(band)?;
 
-    let spatial_ref: SpatialReference =
-        dataset.spatial_ref()?.try_into().context(error::DataType)?;
+    let spatial_ref: SpatialReference = dataset.spatial_ref()?.try_into()?;
 
     let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
@@ -261,7 +258,7 @@ pub fn raster_descriptor_from_dataset(
 // a version of `raster_descriptor_from_dataset` that does not read the sref from the dataset but takes it as an argument
 pub fn raster_descriptor_from_dataset_and_sref(
     dataset: &Dataset,
-    band: isize,
+    band: usize,
     spatial_ref: SpatialReference,
 ) -> Result<RasterResultDescriptor> {
     let rasterband = &dataset.rasterband(band)?;
@@ -285,7 +282,7 @@ pub fn raster_descriptor_from_dataset_and_sref(
 }
 
 // TODO: use https://github.com/georust/gdal/pull/271 when merged and released
-fn measurement_from_rasterband(dataset: &Dataset, band: isize) -> Result<Measurement> {
+fn measurement_from_rasterband(dataset: &Dataset, band: usize) -> Result<Measurement> {
     unsafe fn _string(raw_ptr: *const std::os::raw::c_char) -> String {
         let c_str = std::ffi::CStr::from_ptr(raw_ptr);
         c_str.to_string_lossy().into_owned()
@@ -302,7 +299,8 @@ fn measurement_from_rasterband(dataset: &Dataset, band: isize) -> Result<Measure
 
     let unit: String = unsafe {
         // taken from `pub fn rasterband(&self, band_index: isize) -> Result<RasterBand>`
-        let c_band = gdal_sys::GDALGetRasterBand(dataset.c_dataset(), band as std::os::raw::c_int);
+        let c_band =
+            gdal_sys::GDALGetRasterBand(dataset.c_dataset(), band as isize as std::os::raw::c_int);
         if c_band.is_null() {
             Err(_last_null_pointer_err("GDALGetRasterBand"))?;
         }
@@ -330,7 +328,7 @@ pub fn gdal_parameters_from_dataset(
     band_out: Option<usize>,
     open_options: Option<Vec<String>>,
 ) -> Result<GdalDatasetParameters> {
-    let rasterband = &dataset.rasterband(band as isize)?;
+    let rasterband = &dataset.rasterband(band)?;
 
     Ok(GdalDatasetParameters {
         file_path: PathBuf::from(path),
@@ -375,10 +373,10 @@ pub fn register_gdal_drivers_from_list<S: BuildHasher>(mut drivers: HashSet<Stri
         }
     }
 
-    if !drivers.is_empty() && log_enabled!(Debug) {
+    if !drivers.is_empty() {
         let mut drivers: Vec<String> = drivers.into_iter().collect();
         drivers.sort();
         let remaining_drivers = drivers.into_iter().join(", ");
-        debug!("Could not register drivers: {remaining_drivers}");
+        log::warn!("Could not register drivers: {remaining_drivers}");
     }
 }
