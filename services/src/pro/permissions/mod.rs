@@ -107,11 +107,11 @@ impl std::fmt::Display for ResourceId {
         match self {
             ResourceId::Layer(layer_id) => write!(f, "layer:{}", layer_id.0),
             ResourceId::LayerCollection(layer_collection_id) => {
-                write!(f, "layer_collection:{}", layer_collection_id.0)
+                write!(f, "layerCollection:{}", layer_collection_id.0)
             }
             ResourceId::Project(project_id) => write!(f, "project:{}", project_id.0),
             ResourceId::DatasetId(dataset_id) => write!(f, "dataset:{}", dataset_id.0),
-            ResourceId::MlModel(ml_model_id) => write!(f, "ml_model:{}", ml_model_id.0),
+            ResourceId::MlModel(ml_model_id) => write!(f, "mlModel:{}", ml_model_id.0),
         }
     }
 }
@@ -146,7 +146,7 @@ impl TryFrom<(String, String)> for ResourceId {
     fn try_from(value: (String, String)) -> Result<Self> {
         Ok(match value.0.as_str() {
             "layer" => ResourceId::Layer(LayerId(value.1)),
-            "layer_collection" => ResourceId::LayerCollection(LayerCollectionId(value.1)),
+            "layerCollection" => ResourceId::LayerCollection(LayerCollectionId(value.1)),
             "project" => {
                 ResourceId::Project(ProjectId(Uuid::from_str(&value.1).context(error::Uuid)?))
             }
