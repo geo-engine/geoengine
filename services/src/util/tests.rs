@@ -603,3 +603,23 @@ where
         Err(err) => std::panic::resume_unwind(err),
     }
 }
+
+#[cfg(test)]
+/// A matcher that inspects the request and prints it to the console.
+pub struct HttpTestInspectMatcher {}
+
+#[cfg(test)]
+#[allow(clippy::dbg_macro)]
+impl<IN> httptest::matchers::Matcher<IN> for HttpTestInspectMatcher
+where
+    IN: std::fmt::Debug,
+{
+    fn matches(&mut self, req: &IN, _ctx: &mut httptest::matchers::ExecutionContext) -> bool {
+        dbg!(req);
+        true
+    }
+
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "InspectMatcher")
+    }
+}

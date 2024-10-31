@@ -9,7 +9,6 @@ documentation.workspace = true
 repository.workspace = true
 
 [dependencies]
-cargo = "0.76"                                          # upgrade includes `libsqlite3-sys` which leads to SIGSEGV with GDAL
 geoengine-expression-deps = { path = "deps-workspace" }
 libloading = "0.8"
 log = "0.4"

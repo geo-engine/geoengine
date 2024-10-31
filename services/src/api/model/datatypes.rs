@@ -1923,6 +1923,12 @@ impl From<StringPair> for (String, String) {
     }
 }
 
+impl From<StringPair> for geoengine_datatypes::util::StringPair {
+    fn from(value: StringPair) -> Self {
+        Self::new(value.0 .0, value.0 .1)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
 pub enum PlotOutputFormat {
     JsonPlain,
