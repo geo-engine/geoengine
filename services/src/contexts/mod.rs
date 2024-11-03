@@ -34,7 +34,7 @@ pub use migrations::{
     Migration0004DatasetListingProviderPrio, Migration0005GbifColumnSelection,
     Migration0006EbvProvider, Migration0007OwnerRole, Migration0008BandNames,
     Migration0009OidcTokens, Migration0010S2StacTimeBuffers, Migration0011RemoveXgb,
-    Migration0012MlModelDb, Migration0014MultibandColorizer, Migration0013CopernicusProvider,
+    Migration0012MlModelDb, Migration0013CopernicusProvider, Migration0014MultibandColorizer,
     MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
