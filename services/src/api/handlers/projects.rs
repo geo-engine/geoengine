@@ -757,7 +757,7 @@ mod tests {
                     opacity: 1.0,
                     raster_colorizer: RasterColorizer::SingleBand {
                         band: 0,
-                        band_colorizer: Colorizer::Rgba,
+                        band_colorizer: Colorizer::test_default(),
                     }
                 })
             })],
@@ -775,7 +775,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "Error in user input: missing field `id` at line 1 column 313",
+            "Error in user input: missing field `id` at line 1 column 492",
         )
         .await;
     }

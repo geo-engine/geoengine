@@ -1,25 +1,26 @@
+use super::{
+    database_migration::{DatabaseVersion, Migration},
+    Migration0013CopernicusProvider,
+};
+use crate::error::Result;
 use async_trait::async_trait;
 use tokio_postgres::Transaction;
 
-use crate::error::Result;
-
-use super::database_migration::{DatabaseVersion, Migration};
-
 /// This migration adds the multiband raster colorizer
-pub struct Migration0012MultibandColorizer;
+pub struct Migration0014MultibandColorizer;
 
 #[async_trait]
-impl Migration for Migration0012MultibandColorizer {
+impl Migration for Migration0014MultibandColorizer {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some("0011_remove_xgb".into())
+        Some(Migration0013CopernicusProvider.version())
     }
 
     fn version(&self) -> DatabaseVersion {
-        "0012_multiband_colorizer".into()
+        "0014_multiband_colorizer".into()
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
-        tx.batch_execute(include_str!("migration_0012_multiband_colorizer.sql"))
+        tx.batch_execute(include_str!("migration_0014_multiband_colorizer.sql"))
             .await?;
 
         Ok(())
@@ -68,7 +69,7 @@ mod tests {
         );
 
         // perform this migration
-        migrate_database(&mut conn, &all_migrations()[1..13]).await?;
+        migrate_database(&mut conn, &all_migrations()[1..=14]).await?;
 
         // verify that Rgba was replaced with LinearGradient
         assert_eq!(

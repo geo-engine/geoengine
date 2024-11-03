@@ -1,18 +1,12 @@
 use crate::contexts::{
-    Migration, Migration0000Initial, Migration0000Initial, Migration0001RasterStacks,
-    Migration0001RasterStacks, Migration0002DatasetListingProvider,
-    Migration0002DatasetListingProvider, Migration0003GbifConfig, Migration0003GbifConfig,
-    Migration0004DatasetListingProviderPrio, Migration0004DatasetListingProviderPrio,
-    Migration0005GbifColumnSelection, Migration0005GbifColumnSelection, Migration0006EbvProvider,
-    Migration0006EbvProvider, Migration0007OwnerRole, Migration0007OwnerRole,
-    Migration0008BandNames, Migration0008BandNames, Migration0009OidcTokens,
-    Migration0009OidcTokens, Migration0010S2StacTimeBuffers, Migration0010S2StacTimeBuffers,
-    Migration0011RemoveXgb, Migration0011RemoveXgb, Migration0012MlModelDb,
-    Migration0012MultibandColorizer, Migration0012MultibandColorizer,
-    Migration0013CopernicusProvider,
+    Migration, Migration0000Initial, Migration0001RasterStacks,
+    Migration0002DatasetListingProvider, Migration0003GbifConfig,
+    Migration0004DatasetListingProviderPrio, Migration0005GbifColumnSelection,
+    Migration0006EbvProvider, Migration0007OwnerRole, Migration0008BandNames,
+    Migration0009OidcTokens, Migration0010S2StacTimeBuffers, Migration0011RemoveXgb,
+    Migration0012MlModelDb, Migration0013CopernicusProvider, Migration0014MultibandColorizer,
 };
 use crate::pro::contexts::migrations::database_migration::NoProMigrationImpl;
-
 pub use crate::pro::contexts::migrations::database_migration::ProMigrationImpl;
 
 mod current_pro_schema;
@@ -49,7 +43,7 @@ where
         Box::new(ProMigrationImpl::from(Migration0011RemoveXgb)),
         Box::new(ProMigrationImpl::from(Migration0012MlModelDb)),
         Box::new(ProMigrationImpl::from(Migration0013CopernicusProvider)),
-        Box::new(NoProMigrationImpl::from(Migration0012MultibandColorizer)),
+        Box::new(NoProMigrationImpl::from(Migration0014MultibandColorizer)),
     ]
 }
 

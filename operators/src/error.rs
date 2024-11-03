@@ -418,10 +418,9 @@ pub enum Error {
         source: crate::processing::LineSimplificationError,
     },
 
-    #[snafu(context(false))]
-    #[snafu(display("RgbOperator error: {source}"))]
-    RgbOperator {
-        source: crate::processing::RgbOperatorError,
+    #[snafu(context(false), display("PngCreation error: {source}"))]
+    PngCreation {
+        source: crate::util::raster_stream_to_png::PngCreationError,
     },
 
     #[snafu(context(false))]

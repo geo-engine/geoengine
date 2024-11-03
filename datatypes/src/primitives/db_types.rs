@@ -5,7 +5,7 @@ use super::{
 use crate::{
     delegate_from_to_sql,
     error::Error,
-    operations::image::{Breakpoint, Colorizer, RasterColorizer, RgbaColor},
+    operations::image::{Breakpoint, Colorizer, RasterColorizer, RgbParams, RgbaColor},
     util::NotNanF64,
 };
 use postgres_types::{FromSql, ToSql};
@@ -216,6 +216,7 @@ pub struct RasterColorizerDbType {
     blue_min: Option<f64>,
     blue_max: Option<f64>,
     blue_scale: Option<f64>,
+    no_data_color: Option<RgbaColor>,
 }
 
 #[derive(Debug, PartialEq, ToSql, FromSql)]
@@ -248,36 +249,30 @@ impl From<&RasterColorizer> for RasterColorizerDbType {
                 blue_min: None,
                 blue_max: None,
                 blue_scale: None,
+                no_data_color: None,
             },
             RasterColorizer::MultiBand {
                 red_band,
-                red_min,
-                red_max,
-                red_scale,
                 green_band,
-                green_min,
-                green_max,
-                green_scale,
                 blue_band,
-                blue_min,
-                blue_max,
-                blue_scale,
+                rgb_params: rgba_params,
             } => Self {
                 r#type: RasterColorizerDbTypeType::SingleBand,
                 band: None,
                 band_colorizer: None,
                 red_band: Some(i64::from(*red_band)),
-                red_min: Some(*red_min),
-                red_max: Some(*red_max),
-                red_scale: Some(*red_scale),
+                red_min: Some(rgba_params.red_min),
+                red_max: Some(rgba_params.red_max),
+                red_scale: Some(rgba_params.red_scale),
                 green_band: Some(i64::from(*green_band)),
-                green_min: Some(*green_min),
-                green_max: Some(*green_max),
-                green_scale: Some(*green_scale),
+                green_min: Some(rgba_params.green_min),
+                green_max: Some(rgba_params.green_max),
+                green_scale: Some(rgba_params.green_scale),
                 blue_band: Some(i64::from(*blue_band)),
-                blue_min: Some(*blue_min),
-                blue_max: Some(*blue_max),
-                blue_scale: Some(*blue_scale),
+                blue_min: Some(rgba_params.blue_min),
+                blue_max: Some(rgba_params.blue_max),
+                blue_scale: Some(rgba_params.blue_scale),
+                no_data_color: Some(rgba_params.no_data_color),
             },
         }
     }
@@ -311,23 +306,29 @@ impl TryFrom<RasterColorizerDbType> for RasterColorizer {
                 blue_min: Some(blue_min),
                 blue_max: Some(blue_max),
                 blue_scale: Some(blue_scale),
+                no_data_color: Some(no_data_color),
                 ..
             } => Ok(Self::MultiBand {
                 red_band: u32::try_from(red_band)
                     .map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,
-                red_min,
-                red_max,
-                red_scale,
                 green_band: u32::try_from(green_band)
                     .map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,
-                green_min,
-                green_max,
-                green_scale,
                 blue_band: u32::try_from(blue_band)
                     .map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,
-                blue_min,
-                blue_max,
-                blue_scale,
+                rgb_params: RgbParams {
+                    red_min,
+                    red_max,
+                    red_scale,
+
+                    green_min,
+                    green_max,
+                    green_scale,
+
+                    blue_min,
+                    blue_max,
+                    blue_scale,
+                    no_data_color,
+                },
             }),
             _ => Err(Error::UnexpectedInvalidDbTypeConversion),
         }
@@ -406,9 +407,6 @@ impl From<&Colorizer> for ColorizerDbType {
                 under_color: None,
                 default_color: Some(*default_color),
             },
-            Colorizer::Rgba => unreachable!(
-                "only used temporally for multiband colorizer, not part of api and not stored"
-            ),
         }
     }
 }

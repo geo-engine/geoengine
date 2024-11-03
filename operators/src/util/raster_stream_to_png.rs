@@ -1,52 +1,73 @@
+use super::abortable_query_execution;
+use crate::engine::{QueryAbortTrigger, QueryContext, QueryProcessor, RasterQueryProcessor};
+use crate::util::Result;
+use futures::TryStreamExt;
 use futures::{future::BoxFuture, StreamExt};
+use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
+use geoengine_datatypes::operations::image::{ColorMapper, RgbParams};
+use geoengine_datatypes::raster::{FromIndexFn, GridIndexAccess, GridShapeAccess};
 use geoengine_datatypes::{
     operations::image::{Colorizer, RasterColorizer, RgbaColor, ToPng},
-    primitives::{AxisAlignedRectangle, CacheHint, RasterQueryRectangle, TimeInterval},
+    primitives::{
+        AxisAlignedRectangle, BandSelection, CacheHint, RasterQueryRectangle, TimeInterval,
+    },
     raster::{Blit, ConvertDataType, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
-use snafu::ensure;
+use snafu::Snafu;
 use std::convert::TryInto;
 use tracing::{span, Level};
-
-use crate::{
-    engine::{QueryContext, QueryProcessor, RasterQueryProcessor},
-    processing::{compute_rgb_tile, RgbParams},
-};
-use crate::{error, util::Result};
-
-use super::abortable_query_execution;
 
 /// # Panics
 /// Panics if not three bands were queried.
 #[allow(clippy::too_many_arguments)]
-pub async fn raster_stream_to_png_bytes<T, C: QueryContext + 'static>(
+pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    query_rect: RasterQueryRectangle,
+    mut query_rect: RasterQueryRectangle,
     mut query_ctx: C,
     width: u32,
     height: u32,
     time: Option<TimeInterval>,
     raster_colorizer: Option<RasterColorizer>,
     conn_closed: BoxFuture<'_, ()>,
-) -> Result<(Vec<u8>, CacheHint)>
-where
-    T: Pixel,
-{
-    // TODO: support multi band colorizers
-    ensure!(
-        query_rect.attributes.count() == 1,
-        crate::error::OperationDoesNotSupportMultiBandQueriesYet {
-            operation: "raster_stream_to_png_bytes"
-        }
-    );
-
+) -> Result<(Vec<u8>, CacheHint)> {
     let span = span!(Level::TRACE, "raster_stream_to_png_bytes");
     let _enter = span.enter();
 
-    let query_abort_trigger = query_ctx.abort_trigger()?;
+    let raster_colorizer = match raster_colorizer {
+        Some(colorizer) => colorizer,
+        None => RasterColorizer::SingleBand {
+            band: 0,
+            band_colorizer: default_colorizer_gradient::<T>(),
+        },
+    };
 
-    let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
+    let required_bands = match raster_colorizer {
+        RasterColorizer::MultiBand {
+            red_band,
+            green_band,
+            blue_band,
+            ..
+        } => vec![red_band, green_band, blue_band],
+        RasterColorizer::SingleBand { band, .. } => vec![band],
+    };
+
+    if query_rect
+        .attributes
+        .as_slice()
+        .iter()
+        .any(|band| !required_bands.contains(band))
+    {
+        return Err(PngCreationError::ColorizerBandsMustBePresentInQuery {
+            bands_present: query_rect.attributes.as_vec(),
+            required_bands,
+        })?;
+    }
+
+    // modify query to only query the required bands
+    query_rect.attributes = BandSelection::new_unchecked(required_bands);
+
+    let query_abort_trigger = query_ctx.abort_trigger()?;
 
     let x_query_resolution = query_rect.spatial_bounds.size_x() / f64::from(width);
     let y_query_resolution = query_rect.spatial_bounds.size_y() / f64::from(height);
@@ -66,96 +87,122 @@ where
         CacheHint::max_duration(),
     );
 
-    let colorizer = match raster_colorizer {
-        Some(RasterColorizer::MultiBand { .. }) => Colorizer::rgba(),
-        Some(RasterColorizer::SingleBand {
-            ref band_colorizer, ..
-        }) => band_colorizer.clone(),
-        None => default_colorizer_gradient::<T>()?,
-    };
-
     match raster_colorizer {
-        Some(RasterColorizer::MultiBand {
-            red_min,
-            red_max,
-            red_scale,
-            green_min,
-            green_max,
-            green_scale,
-            blue_min,
-            blue_max,
-            blue_scale,
-            ..
-        }) => {
-            const RGB_CHANNEL_COUNT: usize = 3;
-            let rgb_params = RgbParams {
-                red_min,
-                red_max,
-                red_scale,
-                green_min,
-                green_max,
-                green_scale,
-                blue_min,
-                blue_max,
-                blue_scale,
-            };
-            let tile_template: RasterTile2D<u32> = tile_template.convert_data_type();
-            let output_tile = Box::pin(tile_stream.chunks(RGB_CHANNEL_COUNT).fold(
-                Ok(tile_template),
-                |raster2d, chunk| {
-                    if chunk.len() != RGB_CHANNEL_COUNT {
-                        // if there are not exactly N tiles, it should mean the last tile was an error and the chunker ended prematurely
-                        if let Some(Err(e)) = chunk.into_iter().last() {
-                            return futures::future::err(e);
-                        }
-                        // if there is no error, the source did not produce all bands, which likely means a bug in an operator
-                        unreachable!("the source did not produce all bands");
-                    }
-
-                    let mut ok_tiles: Vec<RasterTile2D<f64>> =
-                        Vec::with_capacity(RGB_CHANNEL_COUNT);
-
-                    for tile in chunk {
-                        match tile {
-                            Ok(tile) => ok_tiles.push(tile.convert_data_type()),
-                            Err(e) => return futures::future::err(e),
-                        }
-                    }
-
-                    let tuple: [RasterTile2D<f64>; RGB_CHANNEL_COUNT] = ok_tiles.try_into().expect(
-                        "all chunks should be of the expected length because it was checked above",
-                    );
-
-                    let rgb_tile = compute_rgb_tile(tuple, &rgb_params);
-
-                    blit_tile(raster2d, Ok(rgb_tile))
-                },
-            ));
-
-            let result =
-                abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
-            Ok((
-                result.grid_array.to_png(width, height, &colorizer)?,
-                result.cache_hint,
-            ))
+        RasterColorizer::SingleBand { band_colorizer, .. } => {
+            single_band_colorizer_to_png_bytes(
+                processor,
+                query_rect,
+                query_ctx,
+                tile_template,
+                width,
+                height,
+                band_colorizer,
+                conn_closed,
+                query_abort_trigger,
+            )
+            .await
         }
-        _ => {
-            let output_tile = Box::pin(tile_stream.fold(Ok(tile_template), blit_tile));
-
-            let result =
-                abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
-            Ok((
-                result.grid_array.to_png(width, height, &colorizer)?,
-                result.cache_hint,
-            ))
+        RasterColorizer::MultiBand {
+            rgb_params: rgba_params,
+            ..
+        } => {
+            multi_band_colorizer_to_png_bytes(
+                processor,
+                query_rect,
+                query_ctx,
+                tile_template,
+                width,
+                height,
+                rgba_params,
+                conn_closed,
+                query_abort_trigger,
+            )
+            .await
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
+    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    query_rect: RasterQueryRectangle,
+    query_ctx: C,
+    tile_template: RasterTile2D<T>,
+    width: u32,
+    height: u32,
+    colorizer: Colorizer,
+    conn_closed: BoxFuture<'_, ()>,
+    query_abort_trigger: QueryAbortTrigger,
+) -> Result<(Vec<u8>, CacheHint)> {
+    debug_assert_eq!(query_rect.attributes.count(), 1);
+
+    let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
+
+    let output_tile = Box::pin(
+        tile_stream.fold(Ok(tile_template), |raster, tile| async move {
+            blit_tile(raster, tile)
+        }),
+    );
+
+    let result = abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
+    Ok((
+        result.grid_array.to_png(width, height, &colorizer)?,
+        result.cache_hint,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
+    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    query_rect: RasterQueryRectangle,
+    query_ctx: C,
+    tile_template: RasterTile2D<T>,
+    width: u32,
+    height: u32,
+    rgb_params: RgbParams,
+    conn_closed: BoxFuture<'_, ()>,
+    query_abort_trigger: QueryAbortTrigger,
+) -> Result<(Vec<u8>, CacheHint)> {
+    const RGB_CHANNEL_COUNT: usize = 3;
+
+    debug_assert_eq!(query_rect.attributes.count(), RGB_CHANNEL_COUNT as u32);
+
+    let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
+
+    let no_data_color = rgb_params.no_data_color;
+
+    let tile_template: RasterTile2D<u32> = tile_template.convert_data_type();
+    let output_tile = Box::pin(
+        tile_stream
+            // .map_ok(|tile| tile.convert_data_type())
+            .try_chunks(RGB_CHANNEL_COUNT)
+            .fold(Ok(tile_template), |raster2d, chunk| async move {
+                let chunk = chunk.boxed_context(error::QueryDidNotProduceNextChunk)?;
+
+                let tuple: [RasterTile2D<T>; RGB_CHANNEL_COUNT] = chunk
+                    .try_into()
+                    .map_err(|_| PngCreationError::RgbChunkIsNotThreeBands)?;
+
+                // TODO: spawn blocking task
+                let rgb_tile = compute_rgb_tile(tuple, &rgb_params);
+
+                blit_tile(raster2d, Ok(rgb_tile))
+            }),
+    );
+
+    let result = abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
+    Ok((
+        result
+            .grid_array
+            .to_png_with_mapper(width, height, ColorMapper::Rgba, no_data_color)?,
+        result.cache_hint,
+    ))
 }
 
 fn blit_tile<T>(
     raster2d: Result<RasterTile2D<T>>,
     tile: Result<RasterTile2D<T>>,
-) -> futures::future::Ready<Result<RasterTile2D<T>>>
+) -> Result<RasterTile2D<T>>
 where
     T: Pixel,
 {
@@ -171,17 +218,14 @@ where
         (Err(error), _) | (_, Err(error)) => Err(error),
     };
 
-    match result {
-        Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
-        Err(error) => futures::future::err(error),
-    }
+    result
 }
 
 /// Method to generate a default `Colorizer`.
 ///
 /// # Panics
 /// If T has no min max value
-pub fn default_colorizer_gradient<T: Pixel>() -> Result<Colorizer> {
+pub fn default_colorizer_gradient<T: Pixel>() -> Colorizer {
     Colorizer::linear_gradient(
         vec![
             (AsPrimitive::<f64>::as_(T::min_value()), RgbaColor::black())
@@ -195,7 +239,88 @@ pub fn default_colorizer_gradient<T: Pixel>() -> Result<Colorizer> {
         RgbaColor::white(),
         RgbaColor::black(),
     )
-    .map_err(error::Error::from)
+    .expect("we know the min and max value are valid")
+}
+
+pub fn compute_rgb_tile<P: Pixel>(
+    [red, green, blue]: [RasterTile2D<P>; 3],
+    params: &RgbParams,
+) -> RasterTile2D<u32> {
+    fn fit_to_interval_0_255(value: f64, min: f64, max: f64, scale: f64) -> u32 {
+        let mut result = value - min; // shift towards zero
+        result /= max - min; // normalize to [0, 1]
+        result *= scale; // after scaling with scale ∈ [0, 1], value stays in [0, 1]
+        result = (255. * result).round().clamp(0., 255.); // bring value to integer range [0, 255]
+        result.as_()
+    }
+
+    let map_fn = |lin_idx: usize| -> Option<u32> {
+        let (Some(red_value), Some(green_value), Some(blue_value)) = (
+            red.get_at_grid_index_unchecked(lin_idx),
+            green.get_at_grid_index_unchecked(lin_idx),
+            blue.get_at_grid_index_unchecked(lin_idx),
+        ) else {
+            return None;
+        };
+
+        let red = fit_to_interval_0_255(
+            red_value.as_(),
+            params.red_min,
+            params.red_max,
+            params.red_scale,
+        );
+        let green = fit_to_interval_0_255(
+            green_value.as_(),
+            params.green_min,
+            params.green_max,
+            params.green_scale,
+        );
+        let blue = fit_to_interval_0_255(
+            blue_value.as_(),
+            params.blue_min,
+            params.blue_max,
+            params.blue_scale,
+        );
+        let alpha: u32 = 255;
+
+        let rgba = (red << 24) | (green << 16) | (blue << 8) | (alpha);
+
+        Some(rgba)
+    };
+
+    // all tiles have the same shape, time, position, etc.
+    // so we use red for reference
+
+    let grid_shape = red.grid_shape();
+    // TODO: check if parallelism brings any speed-up – might no be faster since we only do simple arithmetic
+    let out_grid = GridOrEmpty::from_index_fn(&grid_shape, map_fn);
+
+    RasterTile2D::new(
+        red.time,
+        red.tile_position,
+        0, // always single band
+        red.global_geo_transform,
+        out_grid,
+        red.cache_hint
+            .merged(&green.cache_hint)
+            .merged(&blue.cache_hint),
+    )
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(context(suffix(false)), visibility(pub(crate)), module(error))]
+pub enum PngCreationError {
+    #[snafu(display(
+        "Colorizer bands must be present in query: {required_bands:?} not in {bands_present:?}"
+    ))]
+    ColorizerBandsMustBePresentInQuery {
+        bands_present: Vec<u32>,
+        required_bands: Vec<u32>,
+    },
+    #[snafu(display("Query did not produce next chunk: {source}"))]
+    QueryDidNotProduceNextChunk { source: Box<dyn ErrorSource> },
+    #[snafu(display("RGB chunk is not three bands"))]
+    RgbChunkIsNotThreeBands,
 }
 
 #[cfg(test)]
@@ -215,6 +340,21 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn fallback_colorizer_works() {
+        // check that this does not panic
+        default_colorizer_gradient::<u8>();
+        default_colorizer_gradient::<u16>();
+        default_colorizer_gradient::<u32>();
+        default_colorizer_gradient::<u64>();
+        default_colorizer_gradient::<i8>();
+        default_colorizer_gradient::<i16>();
+        default_colorizer_gradient::<i32>();
+        default_colorizer_gradient::<i64>();
+        default_colorizer_gradient::<f32>();
+        default_colorizer_gradient::<f64>();
+    }
 
     #[tokio::test]
     async fn png_from_stream() {

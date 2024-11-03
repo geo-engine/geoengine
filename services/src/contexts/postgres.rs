@@ -3153,6 +3153,30 @@ mod tests {
 
         assert_sql_type(
             &pool,
+            "RasterColorizer",
+            [RasterColorizer::SingleBand {
+                band: 0,
+                band_colorizer: Colorizer::LinearGradient {
+                    breakpoints: vec![
+                        Breakpoint {
+                            value: NotNan::<f64>::new(-10.0).unwrap(),
+                            color: RgbaColor::new(0, 0, 0, 0),
+                        },
+                        Breakpoint {
+                            value: NotNan::<f64>::new(2.0).unwrap(),
+                            color: RgbaColor::new(255, 0, 0, 255),
+                        },
+                    ],
+                    no_data_color: RgbaColor::new(0, 10, 20, 30),
+                    over_color: RgbaColor::new(1, 2, 3, 4),
+                    under_color: RgbaColor::new(5, 6, 7, 8),
+                },
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
             "Symbology",
             [
                 Symbology::Point(PointSymbology {

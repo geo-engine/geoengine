@@ -147,17 +147,18 @@ CREATE TYPE "RasterColorizer" AS (
     band_colorizer "Colorizer",
     -- multi band colorizer
     red_band bigint,
+    green_band bigint,
+    blue_band bigint,
     red_min double precision,
     red_max double precision,
     red_scale double precision,
-    green_band bigint,
     green_min double precision,
     green_max double precision,
     green_scale double precision,
-    blue_band bigint,
     blue_min double precision,
     blue_max double precision,
-    blue_scale double precision
+    blue_scale double precision,
+    no_data_color "RgbaColor"
 );
 
 CREATE TYPE "RasterSymbology" AS (

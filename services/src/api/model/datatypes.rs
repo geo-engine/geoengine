@@ -1,5 +1,6 @@
 use crate::error::{self, Error, Result};
 use crate::identifier;
+use geoengine_datatypes::operations::image::RgbParams;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
@@ -1528,9 +1529,6 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 no_data_color: no_data_color.into(),
                 default_color: default_color.into(),
             },
-            geoengine_datatypes::operations::image::Colorizer::Rgba => unreachable!(
-                "only used temporally for multiband colorizer, not part of api and not stored"
-            ),
         }
     }
 }
@@ -1613,7 +1611,16 @@ pub enum RasterColorizer {
         /// A scaling factor for the blue channel between 0 and 1.
         #[serde(default = "num_traits::One::one")]
         blue_scale: f64,
+
+        /// The color to use for no data values.
+        /// If not specified, the no data values will be transparent.
+        #[serde(default = "rgba_transparent")]
+        no_data_color: RgbaColor,
     },
+}
+
+fn rgba_transparent() -> RgbaColor {
+    RgbaColor([0, 0, 0, 0])
 }
 
 impl Eq for RasterColorizer {}
@@ -1648,30 +1655,23 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
             },
             geoengine_datatypes::operations::image::RasterColorizer::MultiBand {
                 red_band,
-                red_min,
-                red_max,
-                red_scale,
                 green_band,
-                green_min,
-                green_max,
-                green_scale,
                 blue_band,
-                blue_min,
-                blue_max,
-                blue_scale,
+                rgb_params,
             } => Self::MultiBand {
                 red_band,
-                red_min,
-                red_max,
-                red_scale,
                 green_band,
-                green_min,
-                green_max,
-                green_scale,
                 blue_band,
-                blue_min,
-                blue_max,
-                blue_scale,
+                red_min: rgb_params.red_min,
+                red_max: rgb_params.red_max,
+                red_scale: rgb_params.red_scale,
+                green_min: rgb_params.green_min,
+                green_max: rgb_params.green_max,
+                green_scale: rgb_params.green_scale,
+                blue_min: rgb_params.blue_min,
+                blue_max: rgb_params.blue_max,
+                blue_scale: rgb_params.blue_scale,
+                no_data_color: rgb_params.no_data_color.into(),
             },
         }
     }
@@ -1700,19 +1700,23 @@ impl From<RasterColorizer> for geoengine_datatypes::operations::image::RasterCol
                 blue_min,
                 blue_max,
                 blue_scale,
+                no_data_color,
             } => Self::MultiBand {
                 red_band,
-                red_min,
-                red_max,
-                red_scale,
                 green_band,
-                green_min,
-                green_max,
-                green_scale,
                 blue_band,
-                blue_min,
-                blue_max,
-                blue_scale,
+                rgb_params: RgbParams {
+                    red_min,
+                    red_max,
+                    red_scale,
+                    green_min,
+                    green_max,
+                    green_scale,
+                    blue_min,
+                    blue_max,
+                    blue_scale,
+                    no_data_color: no_data_color.into(),
+                },
             },
         }
     }
