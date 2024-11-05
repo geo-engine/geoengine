@@ -365,6 +365,11 @@ pub enum Error {
         expected: usize,
         found: usize,
     },
+    NoIntersectionWithTargetProjection {
+        srs_in: SpatialReference,
+        srs_out: SpatialReference,
+        bounds: BoundingBox2D,
+    },
 }
 
 impl From<arrow::error::ArrowError> for Error {

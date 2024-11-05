@@ -1,9 +1,9 @@
 use crate::{
     error,
     primitives::{
-        AxisAlignedRectangle, Coordinate2D, Line, MultiLineString, MultiLineStringAccess,
-        MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef, MultiPolygon,
-        MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialQueryRectangle,
+        AxisAlignedRectangle, BoundingBox2D, Coordinate2D, Line, MultiLineString,
+        MultiLineStringAccess, MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef,
+        MultiPolygon, MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialQueryRectangle,
         SpatialResolution,
     },
     raster::{
@@ -399,6 +399,44 @@ pub fn suggest_output_spatial_grid_like_gdal_helper(
     suggest_output_spatial_grid_like_gdal(spatial_grid, &projector)
 }
 
+pub fn reproject_spatial_grid_bounds<P: CoordinateProjection, A: AxisAlignedRectangle>(
+    spatial_grid: &SpatialGridDefinition,
+    projector: &P,
+) -> Result<Option<A>> {
+    // First, try to reproject the bounds:
+    let full_bounds: std::result::Result<BoundingBox2D, error::Error> = spatial_grid
+        .spatial_partition()
+        .as_bbox()
+        .reproject(projector);
+
+    if let Ok(projected_bounds) = full_bounds {
+        let res = A::from_min_max(
+            projected_bounds.lower_left(),
+            projected_bounds.upper_right(),
+        );
+        return Some(res).transpose();
+    }
+
+    // Second, create a grid of coordinates project that and use the valid bounds.
+    
+    // TODO: test if we can also use a "Haus vom Nikolaus" and get the same results.
+    let coord_grid = spatial_grid.generate_coord_grid_upper_left_edge(); // TODO: need to add one pixel at lower right.
+
+    let proj_outline_coordinates: Vec<Coordinate2D> =
+        project_coordinates_fail_tolerant(&coord_grid.data, projector)
+            .into_iter()
+            .flatten()
+            .collect();
+
+    if proj_outline_coordinates.is_empty() {
+        return Ok(None);
+    }
+
+    let out = MultiPoint::new(proj_outline_coordinates)?.spatial_bounds();
+
+    Some(A::from_min_max(out.lower_left(), out.upper_right())).transpose()
+}
+
 pub fn suggest_output_spatial_grid_like_gdal<P: CoordinateProjection>(
     spatial_grid: &SpatialGridDefinition,
     projector: &P,
@@ -408,7 +446,19 @@ pub fn suggest_output_spatial_grid_like_gdal<P: CoordinateProjection>(
     let in_x_pixels = spatial_grid.grid_bounds().axis_size_x();
     let in_y_pixels = spatial_grid.grid_bounds().axis_size_y();
 
-    let proj_bbox = spatial_grid.spatial_partition().reproject(projector)?;
+    let proj_bbox_option: Option<BoundingBox2D> =
+        reproject_spatial_grid_bounds(spatial_grid, projector)?;
+
+    let proj_bbox = if let Some(p) = proj_bbox_option {
+        p
+    } else {
+        return Err(error::Error::NoIntersectionWithTargetProjection {
+            srs_in: projector.source_srs(),
+            srs_out: projector.target_srs(),
+            bounds: spatial_grid.spatial_partition().as_bbox(),
+        });
+    };
+
     let out_x_distance = proj_bbox.size_x();
     let out_y_distance = proj_bbox.size_y();
 

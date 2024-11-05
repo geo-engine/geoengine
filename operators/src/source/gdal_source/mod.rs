@@ -188,15 +188,24 @@ impl GdalDatasetParameters {
         )
     }
 
+    pub fn gdal_geo_transform(&self) -> GdalDatasetGeoTransform {
+        self.geo_transform
+    }
+
     /// Returns the `SpatialGridDefinition` of the Gdal dataset.
+    ///
+    /// Note: This allows upside down datasets (where GeoTransform y_pixel_size is positive)!
     ///
     /// # Panics
     /// Panics if the `GdalDatasetParameters` are faulty.
     pub fn spatial_grid_definition(&self) -> SpatialGridDefinition {
-        SpatialGridDefinition::new(
-            GeoTransform::try_from(self.geo_transform).expect("there is no reason that this conversion does not work except for upsidedown datasets and we need to address that!"),
-            self.dataset_bounds(),
-        )
+        let gdal_geo_transform = GeoTransform::new(
+            self.gdal_geo_transform().origin_coordinate,
+            self.gdal_geo_transform().x_pixel_size,
+            self.gdal_geo_transform().y_pixel_size,
+        );
+
+        SpatialGridDefinition::new(gdal_geo_transform, self.dataset_bounds())
     }
 }
 
@@ -412,7 +421,7 @@ impl GdalRasterLoader {
                     &tile_information, ds.file_path, ds.rasterband_channel
                 );
                 // TODO: maybe move this further up the call stack
-                let gdal_read_advise = reader_mode
+                let gdal_read_advise: GdalReadAdvise = reader_mode
                     .tiling_to_dataset_read_advise(
                         &ds.spatial_grid_definition(),
                         &tile_spatial_grid,

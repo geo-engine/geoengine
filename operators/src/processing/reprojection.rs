@@ -667,11 +667,13 @@ mod tests {
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{
-        CacheHint, CacheTtlSeconds, DateTimeParseFormat, TimeGranularity, TimeInstance,
+        CacheHint, CacheTtlSeconds, DateTimeParseFormat, SpatialResolution, TimeGranularity,
+        TimeInstance,
     };
     use geoengine_datatypes::primitives::{Coordinate2D, TimeStep};
     use geoengine_datatypes::raster::{
-        GeoTransform, GridBoundingBox2D, GridShape2D, GridSize, TilesEqualIgnoringCacheHint,
+        GeoTransform, GridBoundingBox2D, GridShape2D, GridSize, SpatialGridDefinition,
+        TilesEqualIgnoringCacheHint,
     };
     use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::{
@@ -1671,41 +1673,40 @@ mod tests {
         assert!(points.coordinates().is_empty());
     }
 
-    /* FIXME resolve the problem with empty intersections
+    /* TODO resolve the problem with empty intersections
+     */
     #[test]
     fn it_derives_raster_result_descriptor() {
         let in_proj = SpatialReference::epsg_4326();
         let out_proj = SpatialReference::from_str("EPSG:3857").unwrap();
-        let bbox = Some(SpatialPartition2D::new_unchecked(
-            (-180., 90.).into(),
-            (180., -90.).into(),
-        ));
 
-        let resolution = Some(SpatialResolution::new_unchecked(0.1, 0.1));
+        let geo_transform = GeoTransform::new(Coordinate2D::new(0., 0.), 0.1, -0.1);
+        let grid_bounds = GridBoundingBox2D::new_min_max(-850, 849, -1800, 1799).unwrap();
+        let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
 
-        let (in_bounds, out_bounds, out_res) =
-            InitializedRasterReprojection::derive_raster_in_bounds_out_bounds_out_res(
-                in_proj, out_proj, resolution, bbox,
-            )
-            .unwrap();
+        let projector = CoordinateProjector::from_known_srs(in_proj, out_proj).unwrap();
+
+        let out_spatial_grid = spatial_grid.reproject(&projector).unwrap();
 
         assert_eq!(
-            in_bounds.unwrap(),
-            SpatialPartition2D::new_unchecked((-180., 85.06).into(), (180., -85.06).into(),)
+            out_spatial_grid.geo_transform.origin_coordinate(),
+            Coordinate2D::new(0., 0.)
         );
 
         assert_eq!(
-            out_bounds.unwrap(),
-            out_proj
-                .area_of_use_projected::<SpatialPartition2D>()
-                .unwrap()
+            out_spatial_grid.geo_transform.spatial_resolution(),
+            SpatialResolution::new_unchecked(14212.246793017477, 14212.246793017477)
         );
 
-        // TODO: y resolution should be double the x resolution, but currently we only compute a uniform resolution
+        /*
+        Projected bounds:
+        -20037508.34 -20048966.1
+        20037508.34 20048966.1
+        */
+
         assert_eq!(
-            out_res.unwrap(),
-            SpatialResolution::new_unchecked(14_237.781_884_528_267, 14_237.781_884_528_267),
+            out_spatial_grid.grid_bounds,
+            GridBoundingBox2D::new_min_max(-1405, 1405, -1410, 1409).unwrap()
         );
     }
-    */
 }
