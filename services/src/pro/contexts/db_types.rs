@@ -111,7 +111,9 @@ delegate_from_to_sql!(
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        dataset::DataProviderId, primitives::CacheTtlSeconds, util::Identifier,
+        dataset::DataProviderId,
+        primitives::{CacheTtlSeconds, Coordinate2D, SpatialPartition2D},
+        util::Identifier,
     };
 
     use super::*;
@@ -156,6 +158,7 @@ mod tests {
                     name: "band".to_owned(),
                     no_data_value: Some(133.7),
                     data_type: geoengine_datatypes::raster::RasterDataType::F32,
+                    pixel_size: 10.0,
                 }],
             )
             .await;
@@ -164,8 +167,12 @@ mod tests {
                 &pool,
                 "StacZone",
                 [StacZone {
-                    name: "zone".to_owned(),
-                    epsg: 4326,
+                    name: "UTM3N".into(),
+                    epsg: 32736,
+                    global_native_bounds: SpatialPartition2D::new_unchecked(
+                        Coordinate2D::new(199980.0, 7100040.0),
+                        Coordinate2D::new(909780.0, -9780.0),
+                    ),
                 }],
             )
             .await;
@@ -183,10 +190,15 @@ mod tests {
                         name: "band".to_owned(),
                         no_data_value: Some(133.7),
                         data_type: geoengine_datatypes::raster::RasterDataType::F32,
+                        pixel_size: 10.0,
                     }],
                     zones: vec![StacZone {
-                        name: "zone".to_owned(),
-                        epsg: 4326,
+                        name: "UTM32N".into(),
+                        epsg: 32736,
+                        global_native_bounds: SpatialPartition2D::new_unchecked(
+                            Coordinate2D::new(199980.0, 7100040.0),
+                            Coordinate2D::new(909780.0, -9780.0),
+                        ),
                     }],
                     stac_api_retries: StacApiRetries {
                         number_of_retries: 3,
@@ -220,10 +232,15 @@ mod tests {
                                 name: "band".to_owned(),
                                 no_data_value: Some(133.7),
                                 data_type: geoengine_datatypes::raster::RasterDataType::F32,
+                                pixel_size: 10.0,
                             }],
                             zones: vec![StacZone {
-                                name: "zone".to_owned(),
-                                epsg: 4326,
+                                name: "UTM32N".into(),
+                                epsg: 32736,
+                                global_native_bounds: SpatialPartition2D::new_unchecked(
+                                    Coordinate2D::new(199980.0, 7100040.0),
+                                    Coordinate2D::new(909780.0, -9780.0),
+                                ),
                             }],
                             stac_api_retries: StacApiRetries {
                                 number_of_retries: 3,

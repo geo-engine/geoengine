@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn grid_bounds_2d_empty_grid() {
         let dim: GridShape2D = [3, 2].into();
-        let raster2d: GridOrEmpty2D<u8> = EmptyGrid::new(dim).into(); // FIXME: find out why type is needed
+        let raster2d: GridOrEmpty2D<u8> = EmptyGrid::new(dim).into();
 
         assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
         assert_eq!(raster2d.max_index(), GridIdx([2, 1]));

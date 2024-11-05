@@ -3,13 +3,15 @@
 CREATE TYPE "StacBand" AS (
     "name" text,
     no_data_value double precision,
-    data_type "RasterDataType"
+    data_type "RasterDataType",
+    pixel_size double precision
 );
 
 CREATE TYPE "StacZone" AS (
     "name" text,
-    epsg oid
-);
+    epsg oid,
+    global_native_bounds "SpatialPartition2D"
+    );
 
 CREATE TYPE "StacApiRetries" AS (
     number_of_retries bigint,

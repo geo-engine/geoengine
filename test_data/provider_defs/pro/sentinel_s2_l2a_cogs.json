@@ -10,54 +10,1720 @@
     {
       "name": "B01",
       "noDataValue": 0,
-      "dataType": "U16"
+      "dataType": "U16",
+      "pixelSize": 60.0
     },
     {
       "name": "B02",
       "noDataValue": 0,
-      "dataType": "U16"
+      "dataType": "U16",
+      "pixelSize": 10.0
     },
     {
       "name": "B03",
       "noDataValue": 0,
-      "dataType": "U16"
+      "dataType": "U16",
+      "pixelSize": 10.0
     },
     {
       "name": "B04",
       "noDataValue": 0,
-      "dataType": "U16"
+      "dataType": "U16",
+      "pixelSize": 10.0
     },
     {
       "name": "B08",
       "noDataValue": 0,
-      "dataType": "U16"
+      "dataType": "U16",
+      "pixelSize": 10.0
     },
     {
       "name": "SCL",
       "noDataValue": 0,
-      "dataType": "U8"
+      "dataType": "U8",
+      "pixelSize": 20.0
     }
   ],
   "zones": [
     {
+      "name": "UTM01N",
+      "epsg": 32601,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 99960.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM02N",
+      "epsg": 32602,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM03N",
+      "epsg": 32603,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM04N",
+      "epsg": 32604,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM05N",
+      "epsg": 32605,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM06N",
+      "epsg": 32606,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM07N",
+      "epsg": 32607,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM08N",
+      "epsg": 32608,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM09N",
+      "epsg": 32609,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM10N",
+      "epsg": 32610,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM11N",
+      "epsg": 32611,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM12N",
+      "epsg": 32612,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM13N",
+      "epsg": 32613,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM14N",
+      "epsg": 32614,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM15N",
+      "epsg": 32615,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM16N",
+      "epsg": 32616,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM17N",
+      "epsg": 32617,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM18N",
+      "epsg": 32618,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM19N",
+      "epsg": 32619,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM20N",
+      "epsg": 32620,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM21N",
+      "epsg": 32621,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM22N",
+      "epsg": 32622,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM23N",
+      "epsg": 32623,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM24N",
+      "epsg": 32624,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM25N",
+      "epsg": 32625,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM26N",
+      "epsg": 32626,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM27N",
+      "epsg": 32627,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM28N",
+      "epsg": 32628,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM29N",
+      "epsg": 32629,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM30N",
+      "epsg": 32630,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM31N",
+      "epsg": 32631,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
       "name": "UTM32N",
-      "epsg": 32632
+      "epsg": 32632,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 8000040.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM33N",
+      "epsg": 32633,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM34N",
+      "epsg": 32634,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 8000040.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM35N",
+      "epsg": 32635,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
     },
     {
       "name": "UTM36N",
-      "epsg": 32636
-    },
-    {
-      "name": "UTM36S",
-      "epsg": 32736
+      "epsg": 32636,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 8000040.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
     },
     {
       "name": "UTM37N",
-      "epsg": 32637
+      "epsg": 32637,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM38N",
+      "epsg": 32638,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM39N",
+      "epsg": 32639,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM40N",
+      "epsg": 32640,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM41N",
+      "epsg": 32641,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM42N",
+      "epsg": 32642,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM43N",
+      "epsg": 32643,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM44N",
+      "epsg": 32644,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM45N",
+      "epsg": 32645,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM46N",
+      "epsg": 32646,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM47N",
+      "epsg": 32647,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM48N",
+      "epsg": 32648,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM49N",
+      "epsg": 32649,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM50N",
+      "epsg": 32650,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM51N",
+      "epsg": 32651,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM52N",
+      "epsg": 32652,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM53N",
+      "epsg": 32653,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM54N",
+      "epsg": 32654,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM55N",
+      "epsg": 32655,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM56N",
+      "epsg": 32656,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM57N",
+      "epsg": 32657,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM58N",
+      "epsg": 32658,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM59N",
+      "epsg": 32659,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9400020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM60N",
+      "epsg": 32660,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 9100020.0
+        },
+        "lowerRightCoordinate": {
+          "x": 809760.0,
+          "y": -9780.0
+        }
+      }
+    },
+    {
+      "name": "UTM01S",
+      "epsg": 32701,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 99960.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM02S",
+      "epsg": 32702,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM03S",
+      "epsg": 32703,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM04S",
+      "epsg": 32704,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM05S",
+      "epsg": 32705,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM06S",
+      "epsg": 32706,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM07S",
+      "epsg": 32707,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM08S",
+      "epsg": 32708,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM09S",
+      "epsg": 32709,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM10S",
+      "epsg": 32710,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM11S",
+      "epsg": 32711,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM12S",
+      "epsg": 32712,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM13S",
+      "epsg": 32713,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM14S",
+      "epsg": 32714,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM15S",
+      "epsg": 32715,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM16S",
+      "epsg": 32716,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM17S",
+      "epsg": 32717,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM18S",
+      "epsg": 32718,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM19S",
+      "epsg": 32719,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM20S",
+      "epsg": 32720,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM21S",
+      "epsg": 32721,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM22S",
+      "epsg": 32722,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM23S",
+      "epsg": 32723,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM24S",
+      "epsg": 32724,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM25S",
+      "epsg": 32725,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM26S",
+      "epsg": 32726,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM27S",
+      "epsg": 32727,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM28S",
+      "epsg": 32728,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM29S",
+      "epsg": 32729,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM30S",
+      "epsg": 32730,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM31S",
+      "epsg": 32731,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM32S",
+      "epsg": 32732,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM33S",
+      "epsg": 32733,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM34S",
+      "epsg": 32734,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM35S",
+      "epsg": 32735,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM36S",
+      "epsg": 32736,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
     },
     {
       "name": "UTM37S",
-      "epsg": 32737
+      "epsg": 32737,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM38S",
+      "epsg": 32738,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM39S",
+      "epsg": 32739,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM40S",
+      "epsg": 32740,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM41S",
+      "epsg": 32741,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM42S",
+      "epsg": 32742,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM43S",
+      "epsg": 32743,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM44S",
+      "epsg": 32744,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM45S",
+      "epsg": 32745,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM46S",
+      "epsg": 32746,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM47S",
+      "epsg": 32747,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM48S",
+      "epsg": 32748,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM49S",
+      "epsg": 32749,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM50S",
+      "epsg": 32750,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM51S",
+      "epsg": 32751,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM52S",
+      "epsg": 32752,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM53S",
+      "epsg": 32753,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM54S",
+      "epsg": 32754,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM55S",
+      "epsg": 32755,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM56S",
+      "epsg": 32756,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM57S",
+      "epsg": 32757,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM58S",
+      "epsg": 32758,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM59S",
+      "epsg": 32759,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 909780.0,
+          "y": 690220.0
+        }
+      }
+    },
+    {
+      "name": "UTM60S",
+      "epsg": 32760,
+      "globalNativeBounds": {
+        "upperLeftCoordinate": {
+          "x": 199980.0,
+          "y": 10000000.0
+        },
+        "lowerRightCoordinate": {
+          "x": 809760.0,
+          "y": 890200.0
+        }
+      }
     }
   ],
   "queryBuffer": {

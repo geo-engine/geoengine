@@ -4,8 +4,7 @@ use super::{
 };
 use crate::{
     primitives::{
-        AxisAlignedRectangle, Coordinate2D, RasterSpatialQueryRectangle, SpatialPartition2D,
-        SpatialPartitioned,
+        Coordinate2D, RasterSpatialQueryRectangle, SpatialPartition2D, SpatialPartitioned,
     },
     raster::GridBounds,
     util::test::TestDefault,
@@ -163,22 +162,6 @@ impl TileInformation {
             tile_size_in_pixels,
             global_tile_position,
             global_geo_transform,
-        }
-    }
-
-    pub fn with_partition_and_shape(partition: SpatialPartition2D, shape: GridShape2D) -> Self {
-        // FIXME: this method makes no sense, as the tile position is always [0, 0]
-
-        let real_geotransform = GeoTransform::new(
-            partition.upper_left(),
-            partition.size_x() / shape.axis_size_x() as f64,
-            -partition.size_y() / shape.axis_size_y() as f64,
-        );
-
-        Self {
-            tile_size_in_pixels: shape,
-            global_tile_position: [0, 0].into(),
-            global_geo_transform: real_geotransform,
         }
     }
 

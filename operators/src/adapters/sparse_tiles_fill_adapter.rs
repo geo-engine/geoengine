@@ -294,7 +294,10 @@ impl<T: Pixel> StateContainer<T> {
     }
 
     fn update_current_time(&mut self, new_time: TimeInterval) {
-        debug_assert!(!new_time.is_instant(), "Tile time which is data validity must not be an instant!");
+        debug_assert!(
+            !new_time.is_instant(),
+            "Tile time is the data validity and must not be an instant!"
+        );
 
         if let Some(old_time) = self.current_time {
             if old_time == new_time {
@@ -344,6 +347,21 @@ impl<T: Pixel> StateContainer<T> {
         }
 
         true
+    }
+
+    fn store_tile(&mut self, tile: RasterTile2D<T>) {
+        debug_assert!(self.next_tile.is_none());
+        let current_time = self
+            .current_time
+            .expect("Time must be set when the first tile arrives");
+        debug_assert!(current_time.start() <= tile.time.start());
+        debug_assert!(
+            current_time.start() < tile.time.start()
+                || (self.current_idx.y() < tile.tile_position.y()
+                    || (self.current_idx.y() == tile.tile_position.y()
+                        && self.current_idx.x() < tile.tile_position.x()))
+        );
+        self.next_tile = Some(tile);
     }
 }
 
@@ -454,7 +472,7 @@ where
                             this.sc.state = State::PollingForNextTile; // return the received tile and set state to polling for the next tile
                             tile
                         } else {
-                            this.sc.next_tile = Some(tile);
+                            this.sc.store_tile(tile);
                             this.sc.state = State::FillAndProduceNextTile; // save the tile and go to fill mode
                             this.sc.current_no_data_tile()
                         }
@@ -560,7 +578,7 @@ where
                                 tile
                             } else {
                                 // the tile is not the next to produce. Save it and go to fill mode.
-                                this.sc.next_tile = Some(tile);
+                                this.sc.store_tile(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             }
@@ -581,13 +599,13 @@ where
                                 } else {
                                     // save the tile and go to fill mode.
                                     this.sc.update_current_time(tile.time);
-                                    this.sc.next_tile = Some(tile);
+                                    this.sc.store_tile(tile);
                                     this.sc.state = State::FillAndProduceNextTile;
                                     this.sc.current_no_data_tile()
                                 }
                             } else {
                                 // the received tile is in a new TimeInterval but we still need to finish the current one. Store tile and go to fill mode.
-                                this.sc.next_tile = Some(tile);
+                                this.sc.store_tile(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             }
@@ -604,12 +622,12 @@ where
                                         .end(),
                                     tile.time.start(),
                                 )?);
-                                this.sc.next_tile = Some(tile);
+                                this.sc.store_tile(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             } else {
                                 // the received tile is in a new TimeInterval but we still need to finish the current one. Store tile and go to fill mode.
-                                this.sc.next_tile = Some(tile);
+                                this.sc.store_tile(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             }

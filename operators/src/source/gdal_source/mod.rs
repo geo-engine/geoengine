@@ -713,7 +713,9 @@ where
 
         debug_assert!(
             loading_info.start_time_of_output_stream < loading_info.end_time_of_output_stream,
-            "Data bounds must not be TimeInstance"
+            "Data time validity must not be a TimeInstance. Is ({:?}, {:?}]",
+            loading_info.start_time_of_output_stream,
+            loading_info.end_time_of_output_stream
         );
 
         let time_bounds = match (
@@ -1188,7 +1190,7 @@ mod tests {
     use crate::util::Result;
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{
-        SpatialGridQueryRectangle, SpatialPartition2D, TimeInstance,
+        AxisAlignedRectangle, SpatialGridQueryRectangle, SpatialPartition2D, TimeInstance,
     };
     use geoengine_datatypes::raster::{BoundedGrid, GridShape2D, SpatialGridDefinition};
     use geoengine_datatypes::raster::{
@@ -1199,6 +1201,23 @@ mod tests {
     use httptest::matchers::request;
     use httptest::{responders, Expectation, Server};
     use reader::{GdalReadAdvise, GdalReadWindow};
+
+    fn tile_information_with_partition_and_shape(
+        partition: SpatialPartition2D,
+        shape: GridShape2D,
+    ) -> TileInformation {
+        let real_geotransform = GeoTransform::new(
+            partition.upper_left(),
+            partition.size_x() / shape.axis_size_x() as f64,
+            -partition.size_y() / shape.axis_size_y() as f64,
+        );
+
+        TileInformation {
+            tile_size_in_pixels: shape,
+            global_tile_position: [0, 0].into(),
+            global_geo_transform: real_geotransform,
+        }
+    }
 
     async fn query_gdal_source(
         exe_ctx: &MockExecutionContext,
@@ -1754,7 +1773,7 @@ mod tests {
             SpatialPartition2D::new_unchecked((-90., 90.).into(), (90., -90.).into());
         let output_shape: GridShape2D = [256, 256].into();
 
-        let tile_info = TileInformation::with_partition_and_shape(output_bounds, output_shape);
+        let tile_info = tile_information_with_partition_and_shape(output_bounds, output_shape);
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
         let params = None;
         let reader_mode = GdalReaderMode::OriginalResolution(ReaderState {
@@ -2336,7 +2355,7 @@ mod tests {
             SpatialPartition2D::new_unchecked((-90., 90.).into(), (90., -90.).into());
         let output_shape: GridShape2D = [256, 256].into();
 
-        let tile_info = TileInformation::with_partition_and_shape(output_bounds, output_shape);
+        let tile_info = tile_information_with_partition_and_shape(output_bounds, output_shape);
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
         let params = None;
 
