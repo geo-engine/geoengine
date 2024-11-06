@@ -169,6 +169,12 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
 
     let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
 
+    let band_numbers: [u32; 3] = [
+        query_rect.attributes.as_slice()[0],
+        query_rect.attributes.as_slice()[1],
+        query_rect.attributes.as_slice()[2],
+    ];
+
     let no_data_color = rgb_params.no_data_color;
 
     let tile_template: RasterTile2D<u32> = tile_template.convert_data_type();
@@ -179,9 +185,13 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
             .fold(Ok(tile_template), |raster2d, chunk| async move {
                 let chunk = chunk.boxed_context(error::QueryDidNotProduceNextChunk)?;
 
-                let tuple: [RasterTile2D<T>; RGB_CHANNEL_COUNT] = chunk
+                let mut tuple: [RasterTile2D<T>; RGB_CHANNEL_COUNT] = chunk
                     .try_into()
                     .map_err(|_| PngCreationError::RgbChunkIsNotThreeBands)?;
+
+                // tiles don't arrive in query order, so we need to sort them to be in query order
+                // TODO: remove this when we have a guarantee that tiles are in query order
+                sort_by_indices(&mut tuple, &band_numbers);
 
                 // TODO: spawn blocking task
                 let rgb_tile = compute_rgb_tile(tuple, &rgb_params);
@@ -197,6 +207,24 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
             .to_png_with_mapper(width, height, ColorMapper::Rgba, no_data_color)?,
         result.cache_hint,
     ))
+}
+
+/// Sorts the tiles by their band numbers and returns them in the order of the band numbers.
+/// Uses bubble sort since the number of bands is small.
+fn sort_by_indices<T>(tiles: &mut [T; 3], band_numbers: &[u32; 3]) {
+    debug_assert_eq!(tiles.len(), 3);
+    debug_assert_eq!(band_numbers.len(), 3);
+
+    let mut band_numbers = [band_numbers[0], band_numbers[1], band_numbers[2]];
+
+    for r in [2, 1] {
+        for i in 0..r {
+            if band_numbers[i] > band_numbers[i + 1] {
+                tiles.swap(i, i + 1);
+                band_numbers.swap(i, i + 1);
+            }
+        }
+    }
 }
 
 fn blit_tile<T>(
@@ -400,5 +428,22 @@ mod tests {
             include_bytes!("../../../test_data/raster/png/png_from_stream.png") as &[u8],
             image_bytes.as_slice()
         );
+    }
+
+    #[test]
+    fn it_sorts_by_index() {
+        let mut values = [2, 1, 3];
+        let band_numbers = [2, 1, 5];
+
+        sort_by_indices(&mut values, &band_numbers);
+
+        assert_eq!(values, [1, 2, 3]);
+
+        let mut values = [3, 2, 1];
+        let band_numbers = [5, 2, 1];
+
+        sort_by_indices(&mut values, &band_numbers);
+
+        assert_eq!(values, [1, 2, 3]);
     }
 }
