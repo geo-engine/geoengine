@@ -65,10 +65,10 @@ pub struct AddLayer {
     pub metadata: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
-// TODO: validate user input
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, Validate)]
 pub struct UpdateLayer {
     #[schema(example = "Example Layer")]
+    #[validate(length(min = 1))]
     pub name: String,
     #[schema(example = "Example layer description")]
     pub description: String,
@@ -272,11 +272,11 @@ pub struct AddLayerCollection {
     pub properties: Vec<Property>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, Validate)]
 #[serde(rename_all = "camelCase")]
-// TODO: validate user input
 pub struct UpdateLayerCollection {
     #[schema(example = "Example Collection")]
+    #[validate(length(min = 1))]
     pub name: String,
     #[schema(example = "A description for an example collection")]
     pub description: String,

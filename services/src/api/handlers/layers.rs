@@ -13,7 +13,7 @@ use crate::layers::listing::{
 };
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::config::get_config_element;
-use crate::util::extractors::ValidatedQuery;
+use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
@@ -895,7 +895,7 @@ async fn update_layer<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     layer: web::Path<LayerId>,
-    request: web::Json<UpdateLayer>,
+    request: ValidatedJson<UpdateLayer>,
 ) -> Result<HttpResponse> {
     let layer = layer.into_inner().into();
     let request = request.into_inner();
@@ -994,7 +994,7 @@ async fn update_collection<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     collection: web::Path<LayerCollectionId>,
-    request: web::Json<UpdateLayerCollection>,
+    request: ValidatedJson<UpdateLayerCollection>,
 ) -> Result<HttpResponse> {
     let collection = collection.into_inner();
     let update = request.into_inner();
