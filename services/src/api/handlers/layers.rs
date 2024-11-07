@@ -6,14 +6,14 @@ use crate::error::Error::NotImplemented;
 use crate::error::{Error, Result};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
-    ProviderLayerCollectionId,
+    ProviderLayerCollectionId, UpdateLayer, UpdateLayerCollection,
 };
 use crate::layers::listing::{
     LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchParameters,
 };
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::config::get_config_element;
-use crate::util::extractors::ValidatedQuery;
+use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
@@ -76,28 +76,39 @@ where
             ),
     )
     .service(
-        web::scope("/layerDb").service(
-            web::scope("/collections/{collection}")
-                .service(
-                    web::scope("/layers")
-                        .route("", web::post().to(add_layer::<C>))
-                        .service(
-                            web::resource("/{layer}")
-                                .route(web::post().to(add_existing_layer_to_collection::<C>))
-                                .route(web::delete().to(remove_layer_from_collection::<C>)),
-                        ),
-                )
-                .service(
-                    web::scope("/collections")
-                        .route("", web::post().to(add_collection::<C>))
-                        .service(
-                            web::resource("/{sub_collection}")
-                                .route(web::post().to(add_existing_collection_to_collection::<C>))
-                                .route(web::delete().to(remove_collection_from_collection::<C>)),
-                        ),
-                )
-                .route("", web::delete().to(remove_collection::<C>)),
-        ),
+        web::scope("/layerDb")
+            .service(
+                web::scope("/layers/{layer}")
+                    .route("", web::put().to(update_layer::<C>))
+                    .route("", web::delete().to(remove_layer::<C>)),
+            )
+            .service(
+                web::scope("/collections/{collection}")
+                    .service(
+                        web::scope("/layers")
+                            .route("", web::post().to(add_layer::<C>))
+                            .service(
+                                web::resource("/{layer}")
+                                    .route(web::post().to(add_existing_layer_to_collection::<C>))
+                                    .route(web::delete().to(remove_layer_from_collection::<C>)),
+                            ),
+                    )
+                    .service(
+                        web::scope("/collections")
+                            .route("", web::post().to(add_collection::<C>))
+                            .service(
+                                web::resource("/{sub_collection}")
+                                    .route(
+                                        web::post().to(add_existing_collection_to_collection::<C>),
+                                    )
+                                    .route(
+                                        web::delete().to(remove_collection_from_collection::<C>),
+                                    ),
+                            ),
+                    )
+                    .route("", web::put().to(update_collection::<C>))
+                    .route("", web::delete().to(remove_collection::<C>)),
+            ),
     );
 }
 
@@ -864,6 +875,71 @@ async fn add_layer<C: ApplicationContext>(
     Ok(web::Json(IdResponse { id }))
 }
 
+/// Update a layer
+#[utoipa::path(
+    tag = "Layers",
+    put,
+    path = "/layerDb/layers/{layer}",
+    params(
+        ("layer" = LayerId, description = "Layer id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
+    ),
+    request_body = UpdateLayer,
+    responses(
+        (status = 200)
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn update_layer<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    layer: web::Path<LayerId>,
+    request: ValidatedJson<UpdateLayer>,
+) -> Result<HttpResponse> {
+    let layer = layer.into_inner().into();
+    let request = request.into_inner();
+
+    app_ctx
+        .session_context(session)
+        .db()
+        .update_layer(&layer, request)
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+/// Remove a collection
+#[utoipa::path(
+    tag = "Layers",
+    delete,
+    path = "/layerDb/layers/{layer}",
+    params(
+        ("layer" = LayerId, description = "Layer id"),
+    ),
+    responses(
+        (status = 200, description = "OK")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn remove_layer<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    layer: web::Path<LayerId>,
+) -> Result<HttpResponse> {
+    let layer = layer.into_inner().into();
+
+    app_ctx
+        .session_context(session)
+        .db()
+        .remove_layer(&layer)
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
 /// Add a new collection to an existing collection
 #[utoipa::path(
     tag = "Layers",
@@ -896,6 +972,41 @@ async fn add_collection<C: ApplicationContext>(
         .await?;
 
     Ok(web::Json(IdResponse { id }))
+}
+
+/// Update a collection
+#[utoipa::path(
+    tag = "Layers",
+    put,
+    path = "/layerDb/collections/{collection}",
+    params(
+        ("collection" = LayerCollectionId, description = "Layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
+    ),
+    request_body = UpdateLayerCollection,
+    responses(
+        (status = 200)
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn update_collection<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    collection: web::Path<LayerCollectionId>,
+    request: ValidatedJson<UpdateLayerCollection>,
+) -> Result<HttpResponse> {
+    let collection = collection.into_inner();
+    let update = request.into_inner();
+
+    app_ctx
+        .into_inner()
+        .session_context(session)
+        .db()
+        .update_layer_collection(&collection, update)
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 /// Remove a collection
@@ -1088,7 +1199,7 @@ mod tests {
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::primitives::{CacheHint, Coordinate2D};
     use geoengine_datatypes::primitives::{
         RasterQueryRectangle, SpatialPartition2D, TimeGranularity, TimeInterval,
     };
@@ -1252,6 +1363,157 @@ mod tests {
             .load_layer_collection(&result.id, LayerCollectionListOptions::default())
             .await
             .unwrap();
+    }
+
+    #[ge_context::test]
+    async fn test_update_layer_collection(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = app_ctx.default_session_id().await;
+
+        let collection_id = ctx
+            .db()
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Foo".to_string(),
+                    description: "Bar".to_string(),
+                    properties: Default::default(),
+                },
+                &ctx.db().get_root_layer_collection_id().await.unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let req = test::TestRequest::put()
+            .uri(&format!("/layerDb/collections/{collection_id}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(serde_json::json!({
+                "name": "Foo new",
+                "description": "Bar new",
+            }));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        let result = ctx
+            .db()
+            .load_layer_collection(&collection_id, LayerCollectionListOptions::default())
+            .await
+            .unwrap();
+
+        assert_eq!(result.name, "Foo new");
+        assert_eq!(result.description, "Bar new");
+    }
+
+    #[ge_context::test]
+    async fn test_update_layer(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = app_ctx.default_session_id().await;
+
+        let add_layer = AddLayer {
+            name: "Foo".to_string(),
+            description: "Bar".to_string(),
+            properties: Default::default(),
+            workflow: Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: None,
+            metadata: Default::default(),
+        };
+
+        let layer_id = ctx
+            .db()
+            .add_layer(
+                add_layer.clone(),
+                &ctx.db().get_root_layer_collection_id().await.unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let update_layer = UpdateLayer {
+            name: "Foo new".to_string(),
+            description: "Bar new".to_string(),
+            workflow: Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: None,
+            metadata: Default::default(),
+            properties: Default::default(),
+        };
+
+        let req = test::TestRequest::put()
+            .uri(&format!("/layerDb/layers/{layer_id}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(serde_json::json!(update_layer));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        let result = ctx.db().load_layer(&layer_id).await.unwrap();
+
+        assert_eq!(result.name, "Foo new");
+        assert_eq!(result.description, "Bar new");
+    }
+
+    #[ge_context::test]
+    async fn test_remove_layer(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = app_ctx.default_session_id().await;
+
+        let add_layer = AddLayer {
+            name: "Foo".to_string(),
+            description: "Bar".to_string(),
+            properties: Default::default(),
+            workflow: Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: None,
+            metadata: Default::default(),
+        };
+
+        let layer_id = ctx
+            .db()
+            .add_layer(
+                add_layer.clone(),
+                &ctx.db().get_root_layer_collection_id().await.unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let req = test::TestRequest::delete()
+            .uri(&format!("/layerDb/layers/{layer_id}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        let result = ctx.db().load_layer(&layer_id).await;
+
+        assert!(result.is_err());
     }
 
     #[ge_context::test]
