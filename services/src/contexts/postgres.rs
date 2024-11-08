@@ -527,6 +527,7 @@ mod tests {
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::{NotNanF64, StringPair};
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
@@ -3087,7 +3088,6 @@ mod tests {
                     RgbaColor::new(5, 6, 7, 8),
                 )
                 .unwrap(),
-                Colorizer::Rgba,
             ],
         )
         .await;
@@ -3101,7 +3101,7 @@ mod tests {
                 },
                 ColorParam::Derived(DerivedColor {
                     attribute: "foobar".to_string(),
-                    colorizer: Colorizer::Rgba,
+                    colorizer: Colorizer::test_default(),
                 }),
             ],
         )
@@ -3146,6 +3146,30 @@ mod tests {
                     color: ColorParam::Static {
                         color: RgbaColor::new(0, 10, 20, 30),
                     },
+                },
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "RasterColorizer",
+            [RasterColorizer::SingleBand {
+                band: 0,
+                band_colorizer: Colorizer::LinearGradient {
+                    breakpoints: vec![
+                        Breakpoint {
+                            value: NotNan::<f64>::new(-10.0).unwrap(),
+                            color: RgbaColor::new(0, 0, 0, 0),
+                        },
+                        Breakpoint {
+                            value: NotNan::<f64>::new(2.0).unwrap(),
+                            color: RgbaColor::new(255, 0, 0, 255),
+                        },
+                    ],
+                    no_data_color: RgbaColor::new(0, 10, 20, 30),
+                    over_color: RgbaColor::new(1, 2, 3, 4),
+                    under_color: RgbaColor::new(5, 6, 7, 8),
                 },
             }],
         )

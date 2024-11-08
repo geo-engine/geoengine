@@ -414,6 +414,7 @@ mod tests {
     use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer};
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
     use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
     use tokio_postgres::{NoTls, Socket};
@@ -756,7 +757,7 @@ mod tests {
                     opacity: 1.0,
                     raster_colorizer: RasterColorizer::SingleBand {
                         band: 0,
-                        band_colorizer: Colorizer::Rgba,
+                        band_colorizer: Colorizer::test_default(),
                     }
                 })
             })],
@@ -774,7 +775,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "Error in user input: missing field `id` at line 1 column 313",
+            "Error in user input: missing field `id` at line 1 column 492",
         )
         .await;
     }
@@ -828,7 +829,7 @@ mod tests {
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
-                    band_colorizer: Colorizer::Rgba,
+                    band_colorizer: Colorizer::test_default(),
                 },
             }),
         };
@@ -844,7 +845,7 @@ mod tests {
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
-                    band_colorizer: Colorizer::Rgba,
+                    band_colorizer: Colorizer::test_default(),
                 },
             }),
         };

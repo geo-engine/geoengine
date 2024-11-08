@@ -477,7 +477,20 @@ pub struct CreateProject {
                 "type": "raster",
                 "opacity": 1.0,
                 "colorizer": {
-                   "type": "rgba"
+                    "type": "linearGradient",
+                    "breakpoints": [
+                        {
+                            "value": 1.0,
+                            "color": [255, 255, 255, 255],
+                        },
+                        {
+                            "value": 2.0,
+                            "color": [0, 0, 0, 255],
+                        },
+                    ],
+                    "noDataColor": [0, 0, 0, 0],
+                    "overColor": [255, 255, 255, 255],
+                    "underColor": [0, 0, 0, 255],
                 }
             }
         }
@@ -608,6 +621,7 @@ impl From<Option<Uuid>> for LoadVersion {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
     #[test]
@@ -680,7 +694,20 @@ mod tests {
                             "type": "singleBand",
                             "band": 0,
                             "bandColorizer": {
-                                "type": "rgba"
+                                "type": "linearGradient",
+                                "breakpoints": [
+                                    {
+                                        "value": 1.0,
+                                        "color": [255, 255, 255, 255],
+                                    },
+                                    {
+                                        "value": 2.0,
+                                        "color": [0, 0, 0, 255],
+                                    },
+                                ],
+                                "noDataColor": [0, 0, 0, 0],
+                                "overColor": [255, 255, 255, 255],
+                                "underColor": [0, 0, 0, 255],
                             }
                         }
                     }
@@ -699,7 +726,7 @@ mod tests {
                     opacity: 1.0,
                     raster_colorizer: RasterColorizer::SingleBand {
                         band: 0,
-                        band_colorizer: Colorizer::Rgba,
+                        band_colorizer: Colorizer::test_default(),
                     },
                 })
             })
@@ -723,7 +750,7 @@ mod tests {
                         opacity: 1.0,
                         raster_colorizer: RasterColorizer::SingleBand {
                             band: 0,
-                            band_colorizer: Colorizer::Rgba,
+                            band_colorizer: Colorizer::test_default(),
                         },
                     }),
                 }),
@@ -735,7 +762,7 @@ mod tests {
                         opacity: 1.0,
                         raster_colorizer: RasterColorizer::SingleBand {
                             band: 0,
-                            band_colorizer: Colorizer::Rgba,
+                            band_colorizer: Colorizer::test_default(),
                         },
                     }),
                 }),
@@ -768,7 +795,7 @@ mod tests {
             radius: NumberParam::Static { value: 1 },
             fill_color: ColorParam::Derived(DerivedColor {
                 attribute: "foo".to_owned(),
-                colorizer: Colorizer::Rgba,
+                colorizer: Colorizer::test_default(),
             }),
             stroke: StrokeParam {
                 width: NumberParam::Static { value: 1 },
@@ -791,7 +818,20 @@ mod tests {
                     "type": "derived",
                     "attribute": "foo",
                     "colorizer": {
-                        "type": "rgba"
+                        "type": "linearGradient",
+                        "breakpoints": [
+                            {
+                                "value": 1.0,
+                                "color": [255, 255, 255, 255],
+                            },
+                            {
+                                "value": 2.0,
+                                "color": [0, 0, 0, 255],
+                            },
+                        ],
+                        "noDataColor": [0, 0, 0, 0],
+                        "overColor": [255, 255, 255, 255],
+                        "underColor": [0, 0, 0, 255],
                     }
                 },
                 "stroke": {

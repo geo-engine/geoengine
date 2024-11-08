@@ -31,6 +31,39 @@ INSERT INTO workflows (id, workflow) VALUES (
 }'
 );
 
+INSERT INTO layers (
+    id,
+    name,
+    description,
+    workflow_id,
+    symbology,
+    properties,
+    metadata
+) VALUES (
+    '78aaa2b2-7d6b-4e6a-86bf-b3cd1b63553a',
+    'Test Layer',
+    'Test Layer Description',
+    '38ddfc17-016e-4910-8adf-b1af36a8590c',
+    (
+        (
+            1.0, -- noqa: PRS
+            (
+                'Rgba'::"ColorizerType", -- noqa: PRS
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL
+            )::"Colorizer"
+        )::"RasterSymbology", -- noqa: PRS
+        NULL,
+        NULL,
+        NULL
+    )::"Symbology",
+    ARRAY[]::"PropertyType" [],
+    ARRAY[]::"TextTextKeyValue" []
+);
+
 INSERT INTO datasets (
     id,
     name,
