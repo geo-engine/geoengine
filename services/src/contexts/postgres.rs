@@ -513,7 +513,7 @@ mod tests {
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::dataset::{DataProviderId, LayerId};
     use geoengine_datatypes::operations::image::{
-        Breakpoint, Colorizer, RasterColorizer, RgbaColor,
+        Breakpoint, Colorizer, RasterColorizer, RgbParams, RgbaColor,
     };
     use geoengine_datatypes::primitives::{
         BoundingBox2D, ClassificationMeasurement, ColumnSelection, ContinuousMeasurement,
@@ -3170,6 +3170,29 @@ mod tests {
                     no_data_color: RgbaColor::new(0, 10, 20, 30),
                     over_color: RgbaColor::new(1, 2, 3, 4),
                     under_color: RgbaColor::new(5, 6, 7, 8),
+                },
+            }],
+        )
+        .await;
+
+        assert_sql_type(
+            &pool,
+            "RasterColorizer",
+            [RasterColorizer::MultiBand {
+                red_band: 0,
+                green_band: 1,
+                blue_band: 2,
+                rgb_params: RgbParams {
+                    red_min: 0.,
+                    red_max: 255.,
+                    red_scale: 1.,
+                    green_min: 0.,
+                    green_max: 255.,
+                    green_scale: 1.,
+                    blue_min: 0.,
+                    blue_max: 255.,
+                    blue_scale: 1.,
+                    no_data_color: RgbaColor::new(0, 10, 20, 30),
                 },
             }],
         )
