@@ -519,7 +519,7 @@ pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, tokio_postgres::Config,
         .unwrap();
 
     // fix schema by providing `search_path` option
-    pg_config.options(&format!("-c search_path={}", db_config.schema));
+    pg_config.options(format!("-c search_path={}", db_config.schema));
 
     (permit, pg_config, db_config.schema)
 }
