@@ -11,42 +11,42 @@ repository.workspace = true
 [features]
 
 [dependencies]
-arrow = { version = "53.0", features = ["ipc_compression"] }
-arrow-array = "53.0"
-arrow-ord = "53.0"
-arrow-schema = { version = "53", features = ["serde"] }
-bytes = "1.5" # for postgres-types impls
-chrono = "0.4"
-fallible-iterator = "0.2" # only for postgres-protocol
-float-cmp = "0.9"
-gdal = "0.17"
-geo = "0.28"
-geojson = "0.24"
-image = "0.25"
-num = "0.4"
-num-traits = "0.2"
-ordered-float = { version = "4.2", features = ["serde"] }
-paste = "1.0"
-postgres-protocol = { version = "0.6" }
-postgres-types = { version = "0.2", features = [
+arrow = { workspace = true, features = ["ipc_compression"] }
+arrow-array = { workspace = true }
+arrow-ord = { workspace = true }
+arrow-schema = { workspace = true, features = ["serde"] }
+bytes = { workspace = true } # for postgres-types impls
+chrono = { workspace = true }
+fallible-iterator = { workspace = true } # only for postgres-protocol
+float-cmp = { workspace = true }
+gdal = { workspace = true }
+geo = { workspace = true }
+geojson = { workspace = true }
+image = { workspace = true }
+num = { workspace = true }
+num-traits = { workspace = true }
+ordered-float = { workspace = true, features = ["serde"] }
+paste = { workspace = true }
+postgres-protocol = { workspace = true }
+postgres-types = { workspace = true, features = [
     "array-impls",
     "derive",
     "with-chrono-0_4",
     "with-uuid-1",
 ] }
-proj = "0.22" # needs to stay fixed to use fixed proj version
-rayon = "1.8"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-serde_with = "3.6"
-snafu = "0.8"
-uuid = { version = "1.7", features = ["serde", "v4", "v5"] }
-wkt = "0.11"
-strum = { version = "0.26", features = ["derive"] }
+proj = { workspace = true } # needs to stay fixed to use fixed proj version
+rayon = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_with = { workspace = true }
+snafu = { workspace = true }
+uuid = { workspace = true, features = ["serde", "v4", "v5"] }
+wkt = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
-criterion = "0.5"
-tempfile = "3.10"
+criterion = { workspace = true }
+tempfile = { workspace = true }
 
 [[bench]]
 name = "multi_point_collection"
