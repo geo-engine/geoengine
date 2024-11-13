@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 pub type Result<T, E = ExpressionExecutionError> = std::result::Result<T, E>;
 
 const DEPS_CARGO_TOML: &[u8] = std::include_bytes!("../deps-workspace/Cargo.toml");
-const DEPS_CARGO_LOCK: &[u8] = std::include_bytes!("../../Cargo.lock");
+const DEPS_CARGO_LOCK: &[u8] = std::include_bytes!("../deps-workspace/Cargo.lock");
 const DEPS_LIB_RS: &[u8] = std::include_bytes!("../deps-workspace/lib.rs");
 
 /// A pre-built workspace for linking dependencies.
@@ -31,7 +31,7 @@ impl ExpressionDependencies {
             .current_dir(cargo_workspace.path())
             .arg("build")
             .arg("--release")
-            .arg("--offline")
+            .arg("--frozen")
             .output()
             .map_err(|e| ExpressionExecutionError::DepsBuild {
                 debug: format!("{e:?}"),
