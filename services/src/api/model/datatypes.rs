@@ -1634,11 +1634,20 @@ impl RasterColorizer {
                 green_band,
                 blue_band,
                 ..
-            } => BandSelection(vec![
-                *red_band as usize,
-                *green_band as usize,
-                *blue_band as usize,
-            ]),
+            } => {
+                let mut bands = Vec::with_capacity(3);
+                for band in [
+                    *red_band as usize,
+                    *green_band as usize,
+                    *blue_band as usize,
+                ] {
+                    if !bands.contains(&band) {
+                        bands.push(band);
+                    }
+                }
+                bands.sort_unstable(); // bands will be returned in ascending order anyway
+                BandSelection(bands)
+            }
         }
     }
 }
