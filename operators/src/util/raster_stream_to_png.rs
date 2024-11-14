@@ -8,9 +8,7 @@ use geoengine_datatypes::operations::image::{ColorMapper, RgbParams};
 use geoengine_datatypes::raster::{FromIndexFn, GridIndexAccess, GridShapeAccess};
 use geoengine_datatypes::{
     operations::image::{Colorizer, RasterColorizer, RgbaColor, ToPng},
-    primitives::{
-        AxisAlignedRectangle, BandSelection, CacheHint, RasterQueryRectangle, TimeInterval,
-    },
+    primitives::{AxisAlignedRectangle, CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{Blit, ConvertDataType, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
 };
 use num_traits::AsPrimitive;
@@ -23,7 +21,7 @@ use tracing::{span, Level};
 #[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
-    mut query_rect: RasterQueryRectangle,
+    query_rect: RasterQueryRectangle,
     mut query_ctx: C,
     width: u32,
     height: u32,
@@ -31,6 +29,16 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     raster_colorizer: Option<RasterColorizer>,
     conn_closed: BoxFuture<'_, ()>,
 ) -> Result<(Vec<u8>, CacheHint)> {
+    debug_assert!(
+        query_rect.attributes.count() <= 3
+            || query_rect
+                .attributes
+                .as_slice()
+                .windows(2)
+                .all(|w| w[0] < w[1]), // TODO: replace with `is_sorted` once it is stable
+        "bands must be sorted and at most three bands can be queried"
+    );
+
     let span = span!(Level::TRACE, "raster_stream_to_png_bytes");
     let _enter = span.enter();
 
@@ -52,20 +60,23 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
         RasterColorizer::SingleBand { band, .. } => vec![band],
     };
 
-    if query_rect
-        .attributes
-        .as_slice()
+    let band_positions = required_bands
         .iter()
-        .any(|band| !required_bands.contains(band))
-    {
+        .filter_map(|band| {
+            query_rect
+                .attributes
+                .as_slice()
+                .iter()
+                .position(|b| b == band)
+        })
+        .collect::<Vec<usize>>();
+
+    if band_positions.len() != required_bands.len() {
         return Err(PngCreationError::ColorizerBandsMustBePresentInQuery {
             bands_present: query_rect.attributes.as_vec(),
             required_bands,
         })?;
     }
-
-    // modify query to only query the required bands
-    query_rect.attributes = BandSelection::new_unchecked(required_bands);
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
@@ -114,6 +125,7 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
                 width,
                 height,
                 rgba_params,
+                band_positions,
                 conn_closed,
                 query_abort_trigger,
             )
@@ -160,45 +172,45 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     width: u32,
     height: u32,
     rgb_params: RgbParams,
+    band_positions: Vec<usize>,
     conn_closed: BoxFuture<'_, ()>,
     query_abort_trigger: QueryAbortTrigger,
 ) -> Result<(Vec<u8>, CacheHint)> {
-    const RGB_CHANNEL_COUNT: usize = 3;
-
-    debug_assert_eq!(query_rect.attributes.count(), RGB_CHANNEL_COUNT as u32);
+    let rgb_channel_count = query_rect.attributes.count() as usize;
+    let no_data_color = rgb_params.no_data_color;
+    let tile_template: RasterTile2D<u32> = tile_template.convert_data_type();
+    let red_band_index = band_positions[0];
+    let green_band_index = band_positions[1];
+    let blue_band_index = band_positions[2];
 
     let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
 
-    let band_numbers: [u32; 3] = [
-        query_rect.attributes.as_slice()[0],
-        query_rect.attributes.as_slice()[1],
-        query_rect.attributes.as_slice()[2],
-    ];
+    let output_tile = Box::pin(tile_stream.try_chunks(rgb_channel_count).fold(
+        Ok(tile_template),
+        |raster2d, chunk| async move {
+            let chunk = chunk.boxed_context(error::QueryDidNotProduceNextChunk)?;
 
-    let no_data_color = rgb_params.no_data_color;
+            if chunk.len() != rgb_channel_count {
+                return Err(PngCreationError::RgbChunkIsNotEnoughBands)?;
+            }
 
-    let tile_template: RasterTile2D<u32> = tile_template.convert_data_type();
-    let output_tile = Box::pin(
-        tile_stream
-            // .map_ok(|tile| tile.convert_data_type())
-            .try_chunks(RGB_CHANNEL_COUNT)
-            .fold(Ok(tile_template), |raster2d, chunk| async move {
-                let chunk = chunk.boxed_context(error::QueryDidNotProduceNextChunk)?;
+            // TODO: spawn blocking task
+            let rgb_tile = crate::util::spawn_blocking(move || {
+                compute_rgb_tile(
+                    [
+                        &chunk[red_band_index],
+                        &chunk[green_band_index],
+                        &chunk[blue_band_index],
+                    ],
+                    &rgb_params,
+                )
+            })
+            .await
+            .boxed_context(error::UnexpectedComputational)?;
 
-                let mut tuple: [RasterTile2D<T>; RGB_CHANNEL_COUNT] = chunk
-                    .try_into()
-                    .map_err(|_| PngCreationError::RgbChunkIsNotThreeBands)?;
-
-                // tiles don't arrive in query order, so we need to sort them to be in query order
-                // TODO: remove this when we have a guarantee that tiles are in query order
-                sort_by_indices(&mut tuple, &band_numbers);
-
-                // TODO: spawn blocking task
-                let rgb_tile = compute_rgb_tile(tuple, &rgb_params);
-
-                blit_tile(raster2d, Ok(rgb_tile))
-            }),
-    );
+            blit_tile(raster2d, Ok(rgb_tile))
+        },
+    ));
 
     let result = abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
     Ok((
@@ -207,24 +219,6 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
             .to_png_with_mapper(width, height, ColorMapper::Rgba, no_data_color)?,
         result.cache_hint,
     ))
-}
-
-/// Sorts the tiles by their band numbers and returns them in the order of the band numbers.
-/// Uses bubble sort since the number of bands is small.
-fn sort_by_indices<T>(tiles: &mut [T; 3], band_numbers: &[u32; 3]) {
-    debug_assert_eq!(tiles.len(), 3);
-    debug_assert_eq!(band_numbers.len(), 3);
-
-    let mut band_numbers = [band_numbers[0], band_numbers[1], band_numbers[2]];
-
-    for r in [2, 1] {
-        for i in 0..r {
-            if band_numbers[i] > band_numbers[i + 1] {
-                tiles.swap(i, i + 1);
-                band_numbers.swap(i, i + 1);
-            }
-        }
-    }
 }
 
 fn blit_tile<T>(
@@ -271,7 +265,7 @@ pub fn default_colorizer_gradient<T: Pixel>() -> Colorizer {
 }
 
 pub fn compute_rgb_tile<P: Pixel>(
-    [red, green, blue]: [RasterTile2D<P>; 3],
+    [red, green, blue]: [&RasterTile2D<P>; 3],
     params: &RgbParams,
 ) -> RasterTile2D<u32> {
     fn fit_to_interval_0_255(value: f64, min: f64, max: f64, scale: f64) -> u32 {
@@ -347,8 +341,10 @@ pub enum PngCreationError {
     },
     #[snafu(display("Query did not produce next chunk: {source}"))]
     QueryDidNotProduceNextChunk { source: Box<dyn ErrorSource> },
-    #[snafu(display("RGB chunk is not three bands"))]
-    RgbChunkIsNotThreeBands,
+    #[snafu(display("RGB chunk is not enough bands"))]
+    RgbChunkIsNotEnoughBands,
+    #[snafu(display("Unexpected computational error"))]
+    UnexpectedComputationalError { source: Box<dyn ErrorSource> },
 }
 
 #[cfg(test)]
@@ -428,22 +424,5 @@ mod tests {
             include_bytes!("../../../test_data/raster/png/png_from_stream.png") as &[u8],
             image_bytes.as_slice()
         );
-    }
-
-    #[test]
-    fn it_sorts_by_index() {
-        let mut values = [2, 1, 3];
-        let band_numbers = [2, 1, 5];
-
-        sort_by_indices(&mut values, &band_numbers);
-
-        assert_eq!(values, [1, 2, 3]);
-
-        let mut values = [3, 2, 1];
-        let band_numbers = [5, 2, 1];
-
-        sort_by_indices(&mut values, &band_numbers);
-
-        assert_eq!(values, [1, 2, 3]);
     }
 }
