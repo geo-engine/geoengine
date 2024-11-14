@@ -252,7 +252,7 @@ where
                 // extract the values as a raw vector because we expect one prediction per pixel.
                 // this works for 1d tensors as well as 2d tensors with a single column
                 let (predictions, offset) = predictions.into_owned().into_raw_vec_and_offset();
-                assert!(offset.is_none() || offset == Some(0));
+                debug_assert!(offset.is_none() || offset == Some(0));
 
                 // TODO: create no data mask from input no data masks
                 Ok(RasterTile2D::new(
