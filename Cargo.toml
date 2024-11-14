@@ -1,5 +1,6 @@
 [workspace]
-members = ["datatypes", "macros", "operators", "services"]
+members = ["datatypes", "expression", "macros", "operators", "services"]
+exclude = ["expression/deps-workspace"]
 # Edition 2021 defaults to resolver 2, but virtul workspaces default to resolver 1, so we need to set it explicitly.
 resolver = "2"
 
@@ -66,7 +67,7 @@ actix-web-httpauth = "0.8"
 aes-gcm = "0.10.3"
 anyhow = "1.0"
 approx = "0.5"
-arrow = "53.0"
+arrow = { version = "53.0", features = ["ipc_compression"] }
 arrow-array = "53.0"
 arrow-ord = "53.0"
 arrow-schema = "53"
@@ -87,10 +88,12 @@ derive_builder = "0.20"
 erased-serde = "0.4"
 fallible-iterator = "0.2"
 flexi_logger = "0.29"
+float-cmp = "0.9.0"
 futures = "0.3"
 futures-util = "0.3"
 gdal = "0.17"
 gdal-sys = "0.10"
+# when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
 geo = "0.29.1"
 geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
 geojson = "0.24"
@@ -166,4 +169,3 @@ walkdir = "2.4"
 wkt = "0.11"
 xml-rs = "0.8"
 zip = "2.1"
-float-cmp = "0.9.0"
