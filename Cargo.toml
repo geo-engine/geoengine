@@ -58,7 +58,7 @@ unwrap_used = { level = "warn", priority = 1 }
 [workspace.dependencies]
 actix = { version = "0.13", default-features = false }
 actix-files = "0.6"
-actix-http = "3.6"
+actix-http = { version = "3.6", features = ["ws"] }
 actix-multipart = "0.7"
 actix-rt = "2.9"
 actix-web = "4.5"
@@ -70,24 +70,28 @@ approx = "0.5"
 arrow = { version = "53.0", features = ["ipc_compression"] }
 arrow-array = "53.0"
 arrow-ord = "53.0"
-arrow-schema = "53"
+arrow-schema = { version = "53", features = ["serde"] }
 aruna-rust-api = "2.0.0-beta.12"
 assert-json-diff = "2.0.2"
 assert_cmd = "2.0"
 async-stream = "0.3"
 async-trait = "0.1"
 base64 = "0.22"
-bb8-postgres = "0.8"
-bytes = "1.5"
-chrono = "0.4"
+bb8-postgres = { version = "0.8", features = [
+    "with-uuid-1",
+    "with-chrono-0_4",
+    "with-serde_json-1",
+] }
+bytes = "1.5" # for postgres-types impls
+chrono = { version = "0.4", features = ["serde"] }
 config = "0.14"
 convert_case = "0.6.0"
 criterion = "0.5"
 csv = "1.3"
 derive_builder = "0.20"
 erased-serde = "0.4"
-fallible-iterator = "0.2"
-flexi_logger = "0.29"
+fallible-iterator = "0.2" # only for postgres-protocol
+flexi_logger = { version = "0.29", features = ["trc"] }
 float-cmp = "0.9.0"
 futures = "0.3"
 futures-util = "0.3"
@@ -96,7 +100,7 @@ gdal-sys = "0.10"
 # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
 geo = "0.29.1"
 geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
-geojson = "0.24"
+geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16.1"
 image = "0.25"
 itertools = "0.13"
@@ -105,15 +109,18 @@ log = "0.4"
 lru = "0.12"
 lz4_flex = "0.11"
 mime = "0.3"
-ndarray = "0.16"
+ndarray = { version = "0.16", features = ["approx"] }                      # has to match with `ort`
 num = "0.4"
 num-traits = "0.2"
 oauth2 = "4.4.2"
 openidconnect = "3.4"
-opentelemetry = { version = "0.24", default-features = false }
+# `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-*`
+opentelemetry = { version = "0.24", default-features = false, features = [
+    "trace",
+] }
 opentelemetry-otlp = "0.17"
 opentelemetry_sdk = "0.24"
-ordered-float = "4.2"
+ordered-float = { version = "4.2", features = ["serde"] }
 ort = "2.0.0-rc.2"
 ouroboros = "0.18"
 paste = "1.0"
@@ -122,20 +129,29 @@ pest = "2.7"
 pest_derive = "2.7"
 pin-project = "1.1"
 postgres-protocol = "0.6.6"
-postgres-types = "0.2"
+postgres-types = { version = "0.2", features = [
+    "array-impls",
+    "derive",
+    "with-chrono-0_4",
+    "with-uuid-1",
+] }
 pretty_assertions = "1.4"
 prettyplease = "0.2"
 proc-macro2 = "1.0"
-proj = "0.22"
-proj-sys = "0.19"
+proj = "0.22" # needs to stay fixed to use fixed proj version
+proj-sys = "0.19" # needs to stay fixed to use fixed proj version
 prost = "0.12.3"
 pwhash = "1.0"
 quote = "1.0"
 rand = "0.8"
 rayon = "1.8"
-reqwest = "0.11"
+reqwest = { version = "0.11", features = [
+    "json",
+    "multipart",
+    "stream",
+] } # has to match with `oauth`
 rustc-hash = { version = "2.0", default-features = false }
-serde = "1.0"
+serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 serde_path_to_error = "0.1"
 serde_urlencoded = "0.7"
@@ -145,27 +161,50 @@ sha2 = "0.10.8"
 snafu = "0.8"
 stac = "0.7"
 stream-cancel = "0.8"
-strum = "0.26"
+strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 syn = "2.0"
 tempfile = "3.10"
 time = "0.3"
-tokio = "1.36"
+tokio = { version = "1.36", features = [
+    "fs",
+    "macros",
+    "signal",
+    "sync",
+    "rt-multi-thread",
+    "time",
+] }
 tokio-postgres = "0.7"
-tonic = "0.11.0"
+tonic = { version = "0.11.0", features = [
+    "tls",
+    "tls-roots",
+] } # must be compatible with `aruna-rust-api`
 tracing = "0.1"
 tracing-actix-web = "0.7"
 tracing-opentelemetry = "0.25"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = [
+    "local-time",
+    "ansi",
+    "tracing-log",
+] }
 typetag = "0.2"
-url = "2.5"
-utoipa = "4.2"
-utoipa-swagger-ui = "7.1"
-uuid = "1.7"
-validator = "0.18"
+url = { version = "2.5", features = ["serde"] }
+utoipa = { version = "4.2", features = [
+    "actix_extras",
+    "chrono",
+    "url",
+    "uuid",
+] }
+utoipa-swagger-ui = { version = "7.1", features = ["actix-web"] }
+uuid = { version = "1.7", features = [
+    "serde",
+    "v4",
+    "v5",
+] } # must be compatible with `bb8-postgres`
+validator = { version = "0.19.0", features = ["derive"] }
 vergen = "9.0"
 vergen-gitcl = "1.0"
 walkdir = "2.4"
 wkt = "0.11"
 xml-rs = "0.8"
-zip = "2.1"
+zip = "2.2.0"

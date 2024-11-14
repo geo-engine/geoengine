@@ -16,7 +16,7 @@ pro = ["geoengine-macros/pro"]
 [dependencies]
 actix = { workspace = true }
 actix-files = { workspace = true }
-actix-http = { workspace = true, features = ["ws"] }
+actix-http = { workspace = true }
 actix-multipart = { workspace = true }
 actix-rt = { workspace = true }
 actix-web = { workspace = true }
@@ -26,13 +26,13 @@ aes-gcm = { workspace = true }
 aruna-rust-api = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
-bb8-postgres = { workspace = true, features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1"] }
+bb8-postgres = { workspace = true }
 bytes = { workspace = true }
-chrono = { workspace = true, features = ["serde"] }
+chrono = { workspace = true }
 config = { workspace = true }
 derive_builder = { workspace = true }
 erased-serde = { workspace = true }
-flexi_logger = { workspace = true, features = ["trc"] }
+flexi_logger = { workspace = true }
 float-cmp = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
@@ -42,49 +42,48 @@ geo = { workspace = true }
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-macros = { path = "../macros" }
 geoengine-operators = { path = "../operators" }
-geojson = { workspace = true, features = ["geo-types"] }
+geojson = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
 mime = { workspace = true }
 oauth2 = { workspace = true }
 openidconnect = { workspace = true }
-# `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-*`
-opentelemetry = { workspace = true, features = ["trace"] }
+opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 opentelemetry_sdk = { workspace = true }
-ordered-float = { workspace = true, features = ["serde"] }
+ordered-float = { workspace = true }
 num-traits = { workspace = true }
 pbkdf2 = { workspace = true }
-postgres-types = { workspace = true, features = ["derive", "array-impls"] }
-proj = { workspace = true } # needs to stay fixed to use fixed proj version
-proj-sys = { workspace = true } # needs to stay fixed to use fixed proj version
+postgres-types = { workspace = true }
+proj = { workspace = true }
+proj-sys = { workspace = true }
 pwhash = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
-reqwest = { workspace = true, features = ["json", "multipart", "stream"] } # has to match with `oauth`
-serde = { workspace = true, features = ["derive", "rc"] }
+reqwest = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 serde_urlencoded = { workspace = true }
 serde_with = { workspace = true }
 snafu = { workspace = true }
 stac = { workspace = true }
 stream-cancel = { workspace = true }
-strum = { workspace = true, features = ["derive"] }
+strum = { workspace = true }
 strum_macros = { workspace = true }
 time = { workspace = true }
-tokio = { workspace = true, features = ["macros", "fs", "signal", "sync", "rt-multi-thread"] }
+tokio = { workspace = true }
 tokio-postgres = { workspace = true }
-tonic = { workspace = true, features = ["tls", "tls-roots"] } # must be compatible with `aruna-rust-api`
+tonic = { workspace = true}
 tracing = { workspace = true }
 tracing-actix-web = { workspace = true }
 tracing-opentelemetry = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["local-time", "ansi", "tracing-log"] }
+tracing-subscriber = { workspace = true}
 typetag = { workspace = true }
-url = { workspace = true, features = ["serde"] }
-utoipa = { workspace = true, features = ["actix_extras", "chrono", "url", "uuid"] }
-utoipa-swagger-ui = { workspace = true, features = ["actix-web"] }
-uuid = { workspace = true, features = ["serde", "v4", "v5"] } # must be compatible with `bb8-postgres`
-validator = { workspace = true, features = ["derive"] }
+url = { workspace = true}
+utoipa = { workspace = true}
+utoipa-swagger-ui = { workspace = true }
+uuid = { workspace = true} 
+validator = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
 assert-json-diff = { workspace = true }
@@ -99,7 +98,7 @@ nix = { version = "0.29", features = ["socket"] }
 assert_cmd = { workspace = true }
 httptest = { workspace = true }
 pretty_assertions = { workspace = true }
-prost = { workspace = true }          # must be compatbile with aruna-rust-api
+prost = { workspace = true }             # must be compatbile with aruna-rust-api
 serial_test = { workspace = true }
 tempfile = { workspace = true }
 xml-rs = { workspace = true }

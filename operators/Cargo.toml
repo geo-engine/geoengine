@@ -14,7 +14,7 @@ repository.workspace = true
 arrow = { workspace = true }
 async-trait = { workspace = true }
 bb8-postgres = { workspace = true }
-bytes = { workspace = true } # for postgres-types impls
+bytes = { workspace = true }
 chrono = { workspace = true }
 csv = { workspace = true }
 float-cmp = { workspace = true }
@@ -29,39 +29,29 @@ libloading = { workspace = true }
 log = { workspace = true }
 lru = { workspace = true }
 lz4_flex = { workspace = true }
-ndarray = { workspace = true, features = ["approx"] } # has to match with `ort`
+ndarray = { workspace = true }
 num-traits = { workspace = true }
 num = { workspace = true }
 ouroboros = { workspace = true }
-ordered-float = { workspace = true, features = ["serde"] }
+ordered-float = { workspace = true }
 ort = { workspace = true }
 paste = { workspace = true }
 pin-project = { workspace = true }
 postgres-protocol = { workspace = true }
-postgres-types = { workspace = true, features = [
-    "derive",
-    "with-chrono-0_4",
-    "with-uuid-1",
-] }
+postgres-types = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true }
 serde_json = { workspace = true }
 snafu = { workspace = true }
 stream-cancel = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = [
-    "macros",
-    "signal",
-    "sync",
-    "rt-multi-thread",
-    "time",
-] }
+tokio = { workspace = true }
 tokio-postgres = { workspace = true }
 tracing = { workspace = true }
 typetag = { workspace = true }
-uuid = { workspace = true, features = ["serde", "v4", "v5"] }
-strum = { workspace = true, features = ["derive"] }
+uuid = { workspace = true }
+strum = { workspace = true }
 
 [dev-dependencies]
 async-stream = { workspace = true }
