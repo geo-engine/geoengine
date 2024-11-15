@@ -492,6 +492,8 @@ mod tests {
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::raster::{GridShape2D, RasterDataType, TilingSpecification};
+    use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::assert_image_equals;
     use geoengine_operators::engine::{
         ExecutionContext, RasterQueryProcessor, RasterResultDescriptor,
     };
@@ -657,12 +659,9 @@ mod tests {
         .await
         .unwrap();
 
-        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small.png");
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, test_data!("wms/raster_small.png"));
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/raster_small.png") as &[u8],
-            image_bytes.as_slice()
-        );
+        assert_image_equals(test_data!("wms/raster_small.png"), &image_bytes);
     }
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
