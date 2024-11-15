@@ -22,7 +22,7 @@ jobs:
 
     strategy:
       matrix:
-        cargo-features: ["pro"]
+        cargo-features: ["all"] # pro == all
 
     runs-on: ubuntu-22.04
 
@@ -42,6 +42,13 @@ jobs:
         run: |
           echo "FULL_TAG_NAME=${{matrix.cargo-features}}-${{env.TAG_NAME}}" >> $GITHUB_ENV
           echo "CARGO_FEATURES=--features=${{matrix.cargo-features}}" >> $GITHUB_ENV
+
+      # we keep the pro tag for --all-features for compatibility
+      - name: Features == all --> --all-features (== pro)
+        if: matrix.cargo-features == 'all'
+        run: |
+          echo "FULL_TAG_NAME=pro-${{env.TAG_NAME}}" >> $GITHUB_ENV
+          echo "CARGO_FEATURES=--all-features" >> $GITHUB_ENV
 
       - name: Checkout code
         uses: actions/checkout@v3
