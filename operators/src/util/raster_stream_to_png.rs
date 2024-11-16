@@ -420,9 +420,6 @@ mod tests {
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "png_from_stream.png");
 
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/png/png_from_stream.png") as &[u8],
-            image_bytes.as_slice()
-        );
+        assert_image_equals(test_data!("png/png_from_stream.png"), &image_bytes);
     }
 }
