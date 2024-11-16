@@ -354,7 +354,8 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{BandSelection, Coordinate2D, SpatialPartition2D, SpatialResolution},
         raster::{RasterDataType, TilingSpecification},
-        util::test::TestDefault,
+        test_data,
+        util::{assert_image_equals, test::TestDefault},
     };
 
     use crate::{
