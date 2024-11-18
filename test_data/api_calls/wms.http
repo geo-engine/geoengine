@@ -1,0 +1,49 @@
+
+###
+
+# @name anonymousSession
+POST http://localhost:3030/api/anonymous
+Content-Type: application/json
+
+### 
+
+# @name workflow
+POST http://localhost:3030/api/workflow
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "type": "Raster",
+  "operator": {
+    "type": "GdalSource",
+    "params": {
+      "data": "ndvi"
+    }
+  }
+}
+
+### 
+
+# @name workflow
+POST http://localhost:3030/api/workflow
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "type": "Raster",
+  "operator": {
+    "type": "GdalSource",
+    "params": {
+      "data": "ndvi_3857"
+    }
+  }
+}
+
+###
+
+# {{workflow.response.body.$.id}}
+
+# http://localhost:4200/api/wms/890d41ec-7e4c-5000-8ab8-7394a758a86f?REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&FORMAT=image/png&STYLES=custom:{"type":"singleBand","band":0,"bandColorizer":{"type":"linearGradient","breakpoints":[{"value":-1,"color":[0,0,0,255]},{"value":1,"color":[255,255,255,255]}],"noDataColor":[0,0,0,0],"overColor":[246,250,254,255],"underColor":[247,251,255,255]}}&TRANSPARENT=true&layers=890d41ec-7e4c-5000-8ab8-7394a758a86f&time=2000-01-01T00:00:00.000Z&EXCEPTIONS=application/json&WIDTH=256&HEIGHT=256&CRS=EPSG:32632&BBOX=353060.0,5644460.0,394020.0,5603500.0
+
+GET http://localhost:4200/api/wms/890d41ec-7e4c-5000-8ab8-7394a758a86f?REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&FORMAT=image%2Fpng&STYLES=custom%3A%7B%22type%22%3A%22singleBand%22%2C%22band%22%3A0%2C%22bandColorizer%22%3A%7B%22type%22%3A%22linearGradient%22%2C%22breakpoints%22%3A%5B%7B%22value%22%3A-1%2C%22color%22%3A%5B0%2C0%2C0%2C255%5D%7D%2C%7B%22value%22%3A1%2C%22color%22%3A%5B255%2C255%2C255%2C255%5D%7D%5D%2C%22noDataColor%22%3A%5B0%2C0%2C0%2C0%5D%2C%22overColor%22%3A%5B246%2C250%2C254%2C255%5D%2C%22underColor%22%3A%5B247%2C251%2C255%2C255%5D%7D%7D&TRANSPARENT=true&layers=890d41ec-7e4c-5000-8ab8-7394a758a86f&time=2022-01-01T00%3A00%3A00.000Z&EXCEPTIONS=application%2Fjson&WIDTH=256&HEIGHT=256&CRS=EPSG:32632&BBOX=353060.0%2C5603500.0%2C394020.0%2C5644460.0
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
