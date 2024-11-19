@@ -35,13 +35,14 @@ use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::ChunkByteSize;
-use geoengine_operators::meta::quota::{ComputationContext, QuotaChecker};
+use geoengine_operators::meta::quota::QuotaChecker;
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::info;
 use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use uuid::Uuid;
 
 // TODO: do not report postgres error details to user
 
@@ -299,7 +300,7 @@ where
         ProTaskManager::new(self.context.task_manager.clone(), self.session.clone())
     }
 
-    fn query_context(&self) -> Result<Self::QueryContext> {
+    fn query_context(&self, workflow: Uuid, computation: Uuid) -> Result<Self::QueryContext> {
         // TODO: load config only once
 
         Ok(QueryContextImpl::new_with_extensions(
@@ -474,6 +475,7 @@ mod tests {
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
         RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TypedOperator,
         TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+        WorkflowOperatorPath,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
@@ -3322,8 +3324,8 @@ mod tests {
 
         let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
-        tracking.work_unit_done();
-        tracking.work_unit_done();
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
 
         let db = app_ctx.session_context(session).db();
 
@@ -3379,8 +3381,8 @@ mod tests {
 
         let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
-        tracking.work_unit_done();
-        tracking.work_unit_done();
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
 
         let db = app_ctx.session_context(session).db();
 

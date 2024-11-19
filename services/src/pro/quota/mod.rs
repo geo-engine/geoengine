@@ -4,12 +4,11 @@ use super::{
 };
 use crate::pro::users::UserId;
 use geoengine_datatypes::util::test::TestDefault;
-use geoengine_operators::meta::quota::{
-    ComputationContext, ComputationUnit, QuotaMessage, QuotaTracking,
-};
+use geoengine_operators::meta::quota::{ComputationUnit, QuotaMessage, QuotaTracking};
 use snafu::Snafu;
 use std::{collections::HashMap, time::Duration};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use uuid::Uuid;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -31,14 +30,14 @@ impl QuotaTrackingFactory {
     pub fn create_quota_tracking(
         &self,
         session: &UserSession,
-        context: ComputationContext,
+        workflow: Uuid,
+        computation: Uuid,
     ) -> QuotaTracking {
         QuotaTracking::new(
             self.quota_sender.clone(),
-            ComputationUnit {
-                issuer: session.user.id.0,
-                context,
-            },
+            session.user.id.0,
+            workflow,
+            computation,
         )
     }
 }
@@ -183,6 +182,7 @@ mod tests {
         },
     };
     use geoengine_datatypes::util::Identifier;
+    use geoengine_operators::engine::WorkflowOperatorPath;
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
@@ -215,8 +215,8 @@ mod tests {
 
         let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
-        tracking.work_unit_done();
-        tracking.work_unit_done();
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
 
         let db = app_ctx.session_context(session).db();
 
@@ -267,11 +267,11 @@ mod tests {
 
         let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
-        tracking.work_unit_done();
-        tracking.work_unit_done();
-        tracking.work_unit_done();
-        tracking.work_unit_done();
-        tracking.work_unit_done();
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
 
         let db = app_ctx.session_context(session).db();
 
@@ -322,8 +322,8 @@ mod tests {
 
         let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
 
-        tracking.work_unit_done();
-        tracking.work_unit_done();
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
 
         let db = app_ctx.session_context(session).db();
 

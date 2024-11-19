@@ -26,6 +26,7 @@ use rayon::ThreadPool;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 pub use migrations::{
     initialize_database, migrate_database, migration_0000_initial::Migration0000Initial,
@@ -80,7 +81,7 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
     fn tasks(&self) -> Self::TaskManager;
 
     /// Create a new query context for executing queries on processors
-    fn query_context(&self) -> Result<Self::QueryContext>;
+    fn query_context(&self, workflow: Uuid, computation: Uuid) -> Result<Self::QueryContext>;
 
     /// Create a new execution context initializing operators
     fn execution_context(&self) -> Result<Self::ExecutionContext>;
@@ -107,6 +108,8 @@ pub trait GeoEngineDb:
 }
 
 pub struct QueryContextImpl {
+    workflow: Uuid,
+    computation: Uuid,
     chunk_byte_size: ChunkByteSize,
     thread_pool: Arc<ThreadPool>,
     cache: Option<Arc<SharedCache>>,
@@ -117,9 +120,16 @@ pub struct QueryContextImpl {
 }
 
 impl QueryContextImpl {
-    pub fn new(chunk_byte_size: ChunkByteSize, thread_pool: Arc<ThreadPool>) -> Self {
+    pub fn new(
+        workflow: Uuid,
+        computation: Uuid,
+        chunk_byte_size: ChunkByteSize,
+        thread_pool: Arc<ThreadPool>,
+    ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
+            workflow,
+            computation,
             chunk_byte_size,
             thread_pool,
             cache: None,
@@ -131,6 +141,8 @@ impl QueryContextImpl {
     }
 
     pub fn new_with_extensions(
+        workflow: Uuid,
+        computation: Uuid,
         chunk_byte_size: ChunkByteSize,
         thread_pool: Arc<ThreadPool>,
         cache: Option<Arc<SharedCache>>,
@@ -139,6 +151,8 @@ impl QueryContextImpl {
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
+            workflow,
+            computation,
             chunk_byte_size,
             thread_pool,
             cache,
