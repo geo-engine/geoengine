@@ -184,7 +184,7 @@ where
                     "Could not create ONNX session for {:?}. Error: {}",
                     self.model_path.file_name(),
                     e
-                )
+                );
             })?;
 
         tracing::debug!(
