@@ -31,7 +31,7 @@ impl ExpressionDependencies {
             .current_dir(cargo_workspace.path())
             .arg("build")
             .arg("--release")
-            .arg("--frozen")
+            .arg("--locked")
             .output()
             .map_err(|e| ExpressionExecutionError::DepsBuild {
                 debug: format!("{e:?}"),

@@ -460,7 +460,7 @@ impl TryFrom<config::Postgres> for Config {
             .dbname(&db_config.database)
             .port(db_config.port)
             // fix schema by providing `search_path` option
-            .options(&format!("-c search_path={}", db_config.schema));
+            .options(format!("-c search_path={}", db_config.schema));
         Ok(pg_config)
     }
 }

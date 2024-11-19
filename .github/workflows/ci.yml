@@ -28,7 +28,7 @@ jobs:
       matrix:
         os:
           - ubuntu-22.04
-        features: ["", "--features pro", "--all-features"]
+        features: ["--all-features"]
         build: [""]
 
     steps:
@@ -106,7 +106,7 @@ jobs:
       matrix:
         os:
           - ubuntu-22.04
-        features: ["", "--features pro", "--all-features"]
+        features: ["--all-features"]
         build: ["", "--release"]
 
     steps:

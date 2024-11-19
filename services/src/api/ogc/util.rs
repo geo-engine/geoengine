@@ -181,7 +181,7 @@ where
             (&s[0..idx], Some(&s[idx + 1..s.len()]))
         }
         _ => {
-            return Err(D::Error::custom(&format!(
+            return Err(D::Error::custom(format!(
                 "cannot parse bbox from string: {s}"
             )))
         }
@@ -192,7 +192,7 @@ where
         if let Some(crs) = crs_str.strip_prefix("urn:ogc:def:crs:") {
             Some(SpatialReference::from_str(&crs.replace("::", ":")).map_err(D::Error::custom)?)
         } else {
-            return Err(D::Error::custom(&format!(
+            return Err(D::Error::custom(format!(
                 "cannot parse crs from string: {crs_str}"
             )));
         }
