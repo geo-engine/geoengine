@@ -178,7 +178,19 @@ where
         let session = ort::Session::builder()
             .context(Ort)?
             .commit_from_file(&self.model_path)
-            .context(Ort)?;
+            .context(Ort)
+            .inspect_err(|e| {
+                tracing::debug!(
+                    "Could not create ONNX session for {:?}. Error: {}",
+                    self.model_path.file_name(),
+                    e
+                )
+            })?;
+
+        tracing::debug!(
+            "Created ONNX session for {:?}",
+            &self.model_path.file_name()
+        );
 
         let stream = self
             .source
