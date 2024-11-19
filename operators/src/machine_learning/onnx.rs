@@ -251,7 +251,8 @@ where
 
                 // extract the values as a raw vector because we expect one prediction per pixel.
                 // this works for 1d tensors as well as 2d tensors with a single column
-                let predictions = predictions.into_owned().into_raw_vec();
+                let (predictions, offset) = predictions.into_owned().into_raw_vec_and_offset();
+                debug_assert!(offset.is_none() || offset == Some(0));
 
                 // TODO: create no data mask from input no data masks
                 Ok(RasterTile2D::new(
@@ -419,8 +420,9 @@ mod tests {
             .try_extract_tensor::<f32>()
             .unwrap()
             .to_owned()
-            .into_shape((4,))
-            .unwrap();
+            .to_shape((4,))
+            .unwrap()
+            .to_owned();
 
         assert!(predictions.abs_diff_eq(&array![0.4f32, 0.5, 0.6, 0.5], 1e-6));
     }

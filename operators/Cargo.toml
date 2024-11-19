@@ -11,65 +11,55 @@ repository.workspace = true
 [features]
 
 [dependencies]
-arrow = { version = "53.0" }
-async-trait = "0.1"
-bb8-postgres = "0.8"
-bytes = "1.5" # for postgres-types impls
-chrono = "0.4"
-csv = "1.3"
-float-cmp = "0.9"
-futures = "0.3"
-gdal = "0.17"
-gdal-sys = "0.10"
-geo = "0.28"
+arrow = { workspace = true }
+async-trait = { workspace = true }
+bb8-postgres = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+csv = { workspace = true }
+float-cmp = { workspace = true }
+futures = { workspace = true }
+gdal = { workspace = true }
+gdal-sys = { workspace = true }
+geo = { workspace = true }
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-expression = { path = "../expression" }
-itertools = "0.13"
-libloading = "0.8"
-log = "0.4"
-lru = "0.12"
-lz4_flex = { version = "0.11" }
-ndarray = { version = "0.15", features = ["approx"] } # has to match with `ort`
-num-traits = "0.2"
-num = "0.4"
-ouroboros = "0.18"
-ordered-float = { version = "4.2", features = ["serde"] }
-ort = "2.0.0-rc.2"
-paste = "1.0"
-pin-project = "1.1"
-postgres-protocol = "0.6.6"
-postgres-types = { version = "0.2", features = [
-    "derive",
-    "with-chrono-0_4",
-    "with-uuid-1",
-] }
-rayon = "1.8"
-rustc-hash = { version = "2.0", default-features = false }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-snafu = "0.8"
-stream-cancel = "0.8"
-tempfile = "3.10"
-tokio = { version = "1.36", features = [
-    "macros",
-    "signal",
-    "sync",
-    "rt-multi-thread",
-    "time",
-] }
-tokio-postgres = "0.7"
-tracing = "0.1"
-typetag = "0.2"
-uuid = { version = "1.7", features = ["serde", "v4", "v5"] }
-strum = { version = "0.26", features = ["derive"] }
+itertools = { workspace = true }
+libloading = { workspace = true }
+log = { workspace = true }
+lru = { workspace = true }
+lz4_flex = { workspace = true }
+ndarray = { workspace = true }
+num-traits = { workspace = true }
+num = { workspace = true }
+ouroboros = { workspace = true }
+ordered-float = { workspace = true }
+ort = { workspace = true }
+paste = { workspace = true }
+pin-project = { workspace = true }
+postgres-protocol = { workspace = true }
+postgres-types = { workspace = true }
+rayon = { workspace = true }
+rustc-hash = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+snafu = { workspace = true }
+stream-cancel = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tokio-postgres = { workspace = true }
+tracing = { workspace = true }
+typetag = { workspace = true }
+uuid = { workspace = true }
+strum = { workspace = true }
 
 [dev-dependencies]
-async-stream = "0.3"
-approx = "0.5"
-geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
-httptest = "0.16.1"
-tracing-subscriber = { version = "0.3", features = ["json"] }
-rand = { version = "0.8", features = ["small_rng"] }
+async-stream = { workspace = true }
+approx = { workspace = true }
+geo-rand = { workspace = true }
+httptest = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["json"] }
+rand = { workspace = true, features = ["small_rng"] }
 
 [[bench]]
 name = "bands"
