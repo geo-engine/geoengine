@@ -272,6 +272,8 @@ mod tests {
     use super::*;
     use crate::operations::image::RgbaColor;
     use crate::raster::GridIndexAccessMut;
+    use crate::test_data;
+    use crate::util::assert_image_equals;
     use std::convert::TryInto;
 
     #[test]
@@ -298,10 +300,7 @@ mod tests {
 
         // crate::util::test::save_test_bytes(&image_bytes, "linear_gradient.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/colorizer/linear_gradient.png") as &[u8],
-            image_bytes.as_slice()
-        );
+        assert_image_equals(test_data!("colorizer/linear_gradient.png"), &image_bytes);
     }
 
     #[test]
@@ -328,9 +327,9 @@ mod tests {
 
         // crate::util::test::save_test_bytes(&image_bytes, "logarithmic_gradient.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/colorizer/logarithmic_gradient.png") as &[u8],
-            image_bytes.as_slice()
+        assert_image_equals(
+            test_data!("colorizer/logarithmic_gradient.png"),
+            &image_bytes,
         );
     }
 
@@ -359,10 +358,7 @@ mod tests {
 
         // crate::util::test::save_test_bytes(&image_bytes, "palette.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/colorizer/palette.png") as &[u8],
-            image_bytes.as_slice()
-        );
+        assert_image_equals(test_data!("colorizer/palette.png"), &image_bytes);
     }
 
     #[test]
@@ -378,10 +374,7 @@ mod tests {
 
         // crate::util::test::save_test_bytes(&image_bytes, "rgba.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/colorizer/rgba.png") as &[u8],
-            image_bytes.as_slice()
-        );
+        assert_image_equals(test_data!("colorizer/rgba.png"), &image_bytes);
     }
 
     #[test]
@@ -409,10 +402,7 @@ mod tests {
 
         // crate::util::test::save_test_bytes(&image_bytes, "no_data_2.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/colorizer/no_data.png") as &[u8],
-            image_bytes.as_slice()
-        );
+        assert_image_equals(test_data!("colorizer/no_data.png"), &image_bytes);
     }
 
     #[test]
@@ -436,9 +426,6 @@ mod tests {
 
         // crate::util::test::save_test_bytes(&image_bytes, "empty.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/colorizer/empty.png") as &[u8],
-            image_bytes.as_slice()
-        );
+        assert_image_equals(test_data!("colorizer/empty.png"), &image_bytes);
     }
 }

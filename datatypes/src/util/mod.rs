@@ -5,6 +5,7 @@ mod db_types;
 pub mod gdal;
 pub mod helpers;
 pub mod identifiers;
+mod image;
 pub mod ranges;
 mod result;
 pub mod test;
@@ -14,6 +15,7 @@ pub use self::identifiers::Identifier;
 pub use any::{AsAny, AsAnyArc};
 pub use byte_size::ByteSize;
 pub use db_types::{HashMapTextTextDbType, NotNanF64, StringPair, TextTextKeyValue};
+pub use image::assert_image_equals;
 pub use result::Result;
 use std::path::{Path, PathBuf};
 
