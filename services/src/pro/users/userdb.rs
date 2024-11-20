@@ -1,9 +1,11 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
 use crate::pro::permissions::{RoleDescription, RoleId};
+use crate::pro::quota::ComputationQuota;
 use crate::pro::users::oidc::{OidcTokens, UserClaims};
 use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use crate::projects::{ProjectId, STRectangle};
+use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_operators::meta::quota::ComputationUnit;
@@ -133,6 +135,17 @@ pub trait UserDb: Send + Sync {
         &self,
         log: I,
     ) -> Result<()>;
+
+    /// Retrieve the quota log for the current user
+    ///
+    /// # Errors
+    ///
+    /// This call
+    async fn quota_used_by_computations(
+        &self,
+        workflow: WorkflowId,
+        limit: usize,
+    ) -> Result<Vec<ComputationQuota>>;
 
     /// Gets a specific users used quota
     ///

@@ -60,6 +60,7 @@ use crate::pro::api::handlers::users::{Quota, UpdateQuota};
 use crate::pro::permissions::{
     Permission, PermissionListing, ResourceId, Role, RoleDescription, RoleId,
 };
+use crate::pro::quota::{ComputationQuota, OperatorQuota};
 use crate::pro::users::{
     AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
     UserSession,
@@ -138,6 +139,7 @@ use utoipa::{Modify, OpenApi};
         pro::api::handlers::users::assign_role_handler,
         pro::api::handlers::users::revoke_role_handler,
         pro::api::handlers::users::get_role_descriptions,
+        pro::api::handlers::users::computations_quota_handler,
         handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
@@ -197,6 +199,8 @@ use utoipa::{Modify, OpenApi};
             UserInfo,
             Quota,
             UpdateQuota,
+            ComputationQuota,
+            OperatorQuota,
             AuthCodeResponse,
             AuthCodeRequestURL,
 

@@ -3,11 +3,13 @@ use super::{
     util::config::QuotaTrackingMode,
 };
 use crate::pro::users::UserId;
-use geoengine_datatypes::util::test::TestDefault;
+use geoengine_datatypes::{primitives::DateTime, util::test::TestDefault};
 use geoengine_operators::meta::quota::{ComputationUnit, QuotaMessage, QuotaTracking};
+use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::HashMap, time::Duration};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 #[derive(Debug, Snafu)]
@@ -123,7 +125,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                     }
                 };
 
-                if flush_buffer {
+                if flush_buffer && self.buffer_used > 0 {
                     // TODO: what to do if this fails (quota can't be recorded)? Try again later?
 
                     if let Err(error) = self
@@ -180,19 +182,21 @@ pub fn initialize_quota_tracking<U: UserDb + 'static>(
     QuotaTrackingFactory::new(quota_sender)
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct OperatorQuota {
     pub operator_path: String,
+    // TODO: operator name
     pub count: u64,
 }
 
-pub struct WorkflowQuota {
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComputationQuota {
+    pub timestamp: DateTime,
+    pub computation_id: Uuid,
     pub workflow_id: Uuid,
     pub operators: Vec<OperatorQuota>,
-}
-
-pub struct ComputationQuota {
-    pub computation_id: Uuid,
-    pub workflows: Vec<WorkflowQuota>,
 }
 
 #[cfg(test)]

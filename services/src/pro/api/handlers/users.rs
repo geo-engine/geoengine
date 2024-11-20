@@ -6,6 +6,7 @@ use crate::error::Result;
 use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::permissions::{RoleDescription, RoleId};
+use crate::pro::quota::ComputationQuota;
 use crate::pro::users::UserAuth;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserId;
@@ -16,6 +17,7 @@ use crate::projects::ProjectId;
 use crate::projects::STRectangle;
 use crate::util::config;
 use crate::util::extractors::ValidatedJson;
+use crate::workflows::workflow::WorkflowId;
 use actix_web::FromRequest;
 use actix_web::{web, HttpResponse, Responder};
 use geoengine_datatypes::error::BoxedResultExt;
@@ -23,6 +25,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use snafu::ensure;
 use snafu::ResultExt;
+use utoipa::IntoParams;
 use utoipa::ToSchema;
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
@@ -42,6 +45,10 @@ where
         )
         .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)))
         .service(web::resource("/quota").route(web::get().to(quota_handler::<C>)))
+        .service(
+            web::resource("/quota/computations")
+                .route(web::get().to(computations_quota_handler::<C>)),
+        )
         .service(
             web::resource("/quotas/{user}")
                 .route(web::get().to(get_user_quota_handler::<C>))
@@ -336,6 +343,46 @@ where
     let used = db.quota_used().await?;
 
     Ok(web::Json(Quota { available, used }))
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+
+pub struct ComputationQuotaParams {
+    pub workflow: WorkflowId,
+    pub limit: usize,
+}
+
+/// Retrieves the quota used by computations
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/quota/computations",
+    responses(
+        (status = 200, description = "The quota used by computations", body = Vec<ComputationQuota>)
+    ),
+    security(
+        ("session_token" = [])
+    ),
+    params(
+        ComputationQuotaParams
+    )
+)]
+pub(crate) async fn computations_quota_handler<C: ProApplicationContext>(
+    app_ctx: web::Data<C>,
+    params: web::Query<ComputationQuotaParams>,
+    session: C::Session,
+) -> Result<web::Json<Vec<ComputationQuota>>>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let params = params.into_inner();
+
+    let db = app_ctx.session_context(session).db();
+    let computations_quota = db
+        .quota_used_by_computations(params.workflow, params.limit)
+        .await?;
+
+    Ok(web::Json(computations_quota))
 }
 
 /// Retrieves the available and used quota of a specific user.
@@ -779,11 +826,14 @@ mod tests {
     use core::time::Duration;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use geoengine_operators::engine::WorkflowOperatorPath;
+    use geoengine_operators::meta::quota::ComputationUnit;
     use httptest::matchers::request;
     use httptest::responders::status_code;
     use httptest::{Expectation, Server};
     use serde_json::json;
     use tokio_postgres::NoTls;
+    use uuid::Uuid;
 
     async fn register_test_helper(
         app_ctx: ProPostgresContext<NoTls>,
@@ -2026,5 +2076,50 @@ mod tests {
             ],
             role_descriptions
         );
+    }
+
+    #[ge_context::test]
+    async fn it_logs_quota(app_ctx: ProPostgresContext<NoTls>) {
+        let user = UserRegistration {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+            real_name: "Foo Bar".to_string(),
+        };
+
+        app_ctx.register_user(user).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+        };
+
+        let session = app_ctx.login(credentials).await.unwrap();
+
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_db = app_ctx.session_context(admin_session.clone()).db();
+
+        let workflow_id = Uuid::new_v4();
+
+        admin_db
+            .log_quota_used(vec![ComputationUnit {
+                user: session.user.id.0,
+                workflow: workflow_id,
+                computation: Uuid::new_v4(),
+                operator: WorkflowOperatorPath::initialize_root(),
+            }])
+            .await
+            .unwrap();
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/quota/computations?workflow={workflow_id}&limit=10"
+            ))
+            .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        let json: serde_json::Value = test::read_body_json(res).await;
+
+        let quota: Vec<ComputationQuota> = test::read_body_json(res).await;
+        assert_eq!(quota.len(), 1);
     }
 }

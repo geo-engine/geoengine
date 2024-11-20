@@ -133,6 +133,7 @@ pub enum Error {
 
     NoWorkflowForGivenId,
 
+    #[snafu(display("Database error: {source}"))]
     TokioPostgres {
         source: bb8_postgres::tokio_postgres::Error,
     },

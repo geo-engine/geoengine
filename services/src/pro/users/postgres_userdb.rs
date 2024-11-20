@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use crate::contexts::SessionId;
 use crate::error::{Error, Result};
 use crate::pro::contexts::{ProApplicationContext, ProPostgresDb};
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Role, RoleDescription, RoleId};
+use crate::pro::quota::{ComputationQuota, OperatorQuota};
 use crate::pro::users::oidc::{FlatMaybeEncryptedOidcTokens, OidcTokens, UserClaims};
 use crate::pro::users::userdb::{
     CannotRevokeRoleThatIsNotAssignedRoleDbError, RoleIdDoesNotExistRoleDbError,
@@ -14,8 +17,10 @@ use crate::pro::users::{
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::postgres::PostgresErrorExt;
 use crate::util::Identifier;
+use crate::workflows::workflow::WorkflowId;
 use crate::{error, pro::contexts::ProPostgresContext};
 use async_trait::async_trait;
+use geoengine_datatypes::primitives::DateTime;
 use geoengine_operators::meta::quota::ComputationUnit;
 
 use crate::util::encryption::MaybeEncryptedBytes;
@@ -867,26 +872,113 @@ where
         Ok(())
     }
 
-    async fn quota_used_by_computations(&self) -> Result<()> {
+    async fn quota_used_by_computations(
+        &self,
+        workflow: WorkflowId, // TODO: make filtering by workflow optional
+        limit: usize,         // TODO: implement proper pagination
+    ) -> Result<Vec<ComputationQuota>> {
+        let limit = limit.max(10); // TODO: use list limit from config
+
         let conn = self.conn_pool.get().await?;
 
-        conn.execute(
-            "SELECT
+        struct QuotaLogEntry {
+            computation_id: Uuid,
+            workflow_id: Uuid,
+            operator_path: String,
+            timestamp: chrono::DateTime<chrono::Utc>,
+            count: i64,
+        }
+
+        struct OperatorQuotaLog {
+            operator_path: String,
+            timestamp: DateTime,
+            count: i64,
+        }
+
+        #[derive(Hash, Eq, PartialEq)]
+        struct WorkflowComputation {
+            computation_id: Uuid,
+            workflow_id: Uuid,
+        }
+
+        let rows = conn
+            .query(
+                "
+            SELECT
                 computation_id,
+                workflow_id,
                 operator_path,
+                MIN(timestamp) AS timestamp,
                 COUNT(*) AS count
             FROM
                 quota_log
             WHERE
-                user_id = '550e8400-e29b-41d4-a716-446655440000'
+                user_id = $1 AND
+                computation_id IN (
+                    SELECT computation_id
+                    FROM quota_log 
+                    WHERE user_id = $1 AND workflow_id = $2 
+                    GROUP BY computation_id
+                    ORDER BY min(timestamp) DESC
+                    LIMIT $3
+                )
             GROUP BY
                 computation_id,
+                workflow_id,
                 operator_path;",
-            &[&self.session.user_id],
-        )
-        .await?;
+                &[&self.session.user.id, &workflow, &(limit as i64)],
+            )
+            .await?;
 
-        Ok(())
+        let entries = rows.iter().map(|row| QuotaLogEntry {
+            computation_id: row.get(0),
+            workflow_id: row.get(1),
+            operator_path: row.get(2),
+            timestamp: row.get(3),
+            count: row.get(4),
+        });
+
+        let mut computations: HashMap<WorkflowComputation, Vec<OperatorQuotaLog>> = HashMap::new();
+
+        for entry in entries {
+            computations
+                .entry(WorkflowComputation {
+                    workflow_id: entry.workflow_id,
+                    computation_id: entry.computation_id,
+                })
+                .or_default()
+                .push({
+                    OperatorQuotaLog {
+                        operator_path: entry.operator_path,
+                        timestamp: entry.timestamp.into(),
+                        count: entry.count,
+                    }
+                });
+        }
+
+        let mut logs = computations
+            .into_iter()
+            .map(|(workflow_computation, operator_quotas)| ComputationQuota {
+                computation_id: workflow_computation.computation_id,
+                workflow_id: workflow_computation.workflow_id,
+                timestamp: operator_quotas
+                    .iter()
+                    .map(|o| o.timestamp)
+                    .max()
+                    .unwrap_or(DateTime::MIN),
+                operators: operator_quotas
+                    .into_iter()
+                    .map(|o| OperatorQuota {
+                        operator_path: o.operator_path,
+                        count: o.count as u64,
+                    })
+                    .collect(),
+            })
+            .collect::<Vec<_>>();
+
+        logs.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+
+        Ok(logs)
     }
 
     async fn update_quota_available_by_user(
