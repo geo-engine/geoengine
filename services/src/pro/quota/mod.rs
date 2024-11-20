@@ -54,10 +54,11 @@ pub struct QuotaManager<U: UserDb + 'static> {
     user_db: U,
     quota_receiver: UnboundedReceiver<QuotaMessage>,
     quota_sender: UnboundedSender<QuotaMessage>,
+    quota_log_buffer: Vec<ComputationUnit>,
     increment_quota_buffer: HashMap<UserId, u64>,
-    increment_quota_buffer_size: usize,
-    increment_quota_buffer_used: usize,
-    increment_quota_buffer_timeout_seconds: u64,
+    buffer_size: usize,
+    buffer_used: usize,
+    buffer_timeout_seconds: u64,
 }
 
 impl<U: UserDb + 'static> QuotaManager<U> {
@@ -66,18 +67,19 @@ impl<U: UserDb + 'static> QuotaManager<U> {
         user_db: U,
         quota_receiver: UnboundedReceiver<QuotaMessage>,
         quota_sender: UnboundedSender<QuotaMessage>,
-        increment_quota_buffer_size: usize,
-        increment_quota_buffer_timeout_seconds: u64,
+        buffer_size: usize,
+        buffer_timeout_seconds: u64,
     ) -> Self {
         Self {
             mode,
             user_db,
             quota_receiver,
             quota_sender,
+            quota_log_buffer: Vec::new(),
             increment_quota_buffer: HashMap::new(),
-            increment_quota_buffer_size,
-            increment_quota_buffer_timeout_seconds,
-            increment_quota_buffer_used: 0,
+            buffer_size,
+            buffer_used: 0,
+            buffer_timeout_seconds,
         }
     }
 
@@ -98,21 +100,22 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                 let flush_buffer = match message {
                     QuotaMessage::ComputationUnit(computation) => {
                         // TODO: issue a tracing event instead?
-                        // TODO: also log workflow, or connect the computation context to a workflow beforehand.
-                        //       However, currently it is possible to reuse a context for multiple queries.
-                        //       Also: the operators crate knows nothing about workflows as of yet.
                         log::trace!(
-                            "Quota received. User: {}, Context: {}",
-                            computation.issuer,
-                            computation.context
+                            "Quota received. User: {}, Workflow: {}, Computation: {}",
+                            computation.user,
+                            computation.workflow,
+                            computation.computation
                         );
 
-                        let user = UserId(computation.issuer);
+                        let user = UserId(computation.user);
 
                         *self.increment_quota_buffer.entry(user).or_default() += 1;
-                        self.increment_quota_buffer_used += 1;
 
-                        self.increment_quota_buffer_used >= self.increment_quota_buffer_size
+                        self.quota_log_buffer.push(computation);
+
+                        self.buffer_used += 1;
+
+                        self.buffer_used >= self.buffer_size
                     }
                     QuotaMessage::Flush => {
                         log::trace!("Flush `increment_quota_buffer'");
@@ -131,14 +134,22 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                         log::error!("Could not increment quota for users {error:?}");
                     }
 
-                    self.increment_quota_buffer_used = 0;
+                    if let Err(error) = self
+                        .user_db
+                        .log_quota_used(self.quota_log_buffer.drain(..))
+                        .await
+                    {
+                        log::error!("Could not log quota used {error:?}");
+                    }
+
+                    self.buffer_used = 0;
                 }
             }
         });
 
         // Periodically flush the increment_quota_buffer
         crate::util::spawn(async move {
-            let timeout_duration = Duration::from_secs(self.increment_quota_buffer_timeout_seconds);
+            let timeout_duration = Duration::from_secs(self.buffer_timeout_seconds);
 
             loop {
                 tokio::time::sleep(timeout_duration).await;
@@ -169,6 +180,21 @@ pub fn initialize_quota_tracking<U: UserDb + 'static>(
     QuotaTrackingFactory::new(quota_sender)
 }
 
+pub struct OperatorQuota {
+    pub operator_path: String,
+    pub count: u64,
+}
+
+pub struct WorkflowQuota {
+    pub workflow_id: Uuid,
+    pub operators: Vec<OperatorQuota>,
+}
+
+pub struct ComputationQuota {
+    pub computation_id: Uuid,
+    pub workflows: Vec<WorkflowQuota>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,7 +207,6 @@ mod tests {
             util::tests::admin_login,
         },
     };
-    use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::WorkflowOperatorPath;
     use tokio_postgres::NoTls;
 
@@ -213,7 +238,7 @@ mod tests {
             60,
         );
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
         tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
         tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
@@ -265,7 +290,7 @@ mod tests {
             60,
         );
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
         tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
         tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
@@ -320,7 +345,7 @@ mod tests {
             2,
         );
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
         tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
         tracking.work_unit_done(WorkflowOperatorPath::initialize_root());

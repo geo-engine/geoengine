@@ -35,6 +35,7 @@ use reqwest::Url;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
+use uuid::Uuid;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -279,10 +280,8 @@ async fn wms_map_handler<C: ApplicationContext>(
 
         let ctx = app_ctx.session_context(session);
 
-        let workflow = ctx
-            .db()
-            .load_workflow(&WorkflowId::from_str(&request.layers)?)
-            .await?;
+        let workflow_id = WorkflowId::from_str(&request.layers)?;
+        let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
         let operator = workflow.operator.get_raster()?;
 
@@ -365,7 +364,7 @@ async fn wms_map_handler<C: ApplicationContext>(
             attributes,
         };
 
-        let query_ctx = ctx.query_context()?;
+        let query_ctx = ctx.query_context(workflow_id.0, Uuid::new_v4())?;
 
         call_on_generic_raster_processor!(
             processor,
@@ -483,7 +482,7 @@ mod tests {
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
         register_ndvi_workflow_helper_with_cache_ttl, register_ne2_multiband_workflow,
-        send_test_request,
+        send_test_request, MockQueryContext,
     };
     use actix_http::header::{self, CONTENT_TYPE};
     use actix_web::dev::ServiceResponse;
@@ -647,7 +646,7 @@ mod tests {
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
                 attributes: BandSelection::first(),
             },
-            ctx.query_context().unwrap(),
+            ctx.mock_query_context().unwrap(),
             360,
             180,
             None,

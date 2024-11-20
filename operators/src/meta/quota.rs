@@ -1,6 +1,5 @@
 use crate::{engine::WorkflowOperatorPath, util::Result};
 use async_trait::async_trait;
-use geoengine_datatypes::identifier;
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 

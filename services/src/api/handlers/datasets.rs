@@ -1485,7 +1485,7 @@ mod tests {
     use crate::projects::{PointSymbology, RasterSymbology, Symbology};
     use crate::util::tests::{
         add_ndvi_to_datasets, read_body_json, read_body_string, send_test_request,
-        SetMultipartBody, TestDataUploads,
+        MockQueryContext, SetMultipartBody, TestDataUploads,
     };
     use crate::{ge_context, test_data};
     use actix_web;
@@ -1834,7 +1834,7 @@ mod tests {
         .await?;
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
-        let query_ctx = ctx.query_context()?;
+        let query_ctx = ctx.mock_query_context()?;
 
         let query = query_processor
             .query(

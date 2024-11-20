@@ -32,7 +32,6 @@ use bb8_postgres::{
 };
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
-use geoengine_datatypes::util::Identifier;
 use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::meta::quota::QuotaChecker;
@@ -304,13 +303,15 @@ where
         // TODO: load config only once
 
         Ok(QueryContextImpl::new_with_extensions(
+            workflow,
+            computation,
             self.context.query_ctx_chunk_size,
             self.context.thread_pool.clone(),
             Some(self.context.tile_cache.clone()),
             Some(
                 self.context
                     .quota
-                    .create_quota_tracking(&self.session, ComputationContext::new()),
+                    .create_quota_tracking(&self.session, workflow, computation),
             ),
             Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
         ))
@@ -3322,7 +3323,7 @@ mod tests {
             60,
         );
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
         tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
         tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
@@ -3379,7 +3380,7 @@ mod tests {
             60,
         );
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
         tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
         tracking.work_unit_done(WorkflowOperatorPath::initialize_root());

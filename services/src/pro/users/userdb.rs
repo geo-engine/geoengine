@@ -6,6 +6,7 @@ use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use crate::projects::{ProjectId, STRectangle};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::DateTime;
+use geoengine_operators::meta::quota::ComputationUnit;
 use oauth2::AccessToken;
 use snafu::Snafu;
 use tokio_postgres::Transaction;
@@ -119,6 +120,18 @@ pub trait UserDb: Send + Sync {
     async fn bulk_increment_quota_used<I: IntoIterator<Item = (UserId, u64)> + Send>(
         &self,
         quota_used_updates: I,
+    ) -> Result<()>;
+
+    /// Log quota usage (computation units)
+    ///
+    /// # Errors
+    ///
+    /// This call fails if database cannot be accessed
+    ///
+    // TODO: move this method to some AdminDb?
+    async fn log_quota_used<I: IntoIterator<Item = ComputationUnit> + Send>(
+        &self,
+        log: I,
     ) -> Result<()>;
 
     /// Gets a specific users used quota

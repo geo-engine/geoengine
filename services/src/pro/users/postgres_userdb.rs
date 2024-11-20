@@ -16,6 +16,7 @@ use crate::util::postgres::PostgresErrorExt;
 use crate::util::Identifier;
 use crate::{error, pro::contexts::ProPostgresContext};
 use async_trait::async_trait;
+use geoengine_operators::meta::quota::ComputationUnit;
 
 use crate::util::encryption::MaybeEncryptedBytes;
 use bb8_postgres::{
@@ -832,6 +833,60 @@ where
             .map_err(|_error| error::Error::InvalidSession)?;
 
         Ok(row.get::<usize, i64>(0))
+    }
+
+    async fn log_quota_used<I: IntoIterator<Item = ComputationUnit> + Send>(
+        &self,
+        log: I,
+    ) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        // collect the log into separate vectors to pass them as parameters to the query
+        let mut users = Vec::new();
+        let mut workflows = Vec::new();
+        let mut computations = Vec::new();
+        let mut operators = Vec::new();
+
+        for unit in log {
+            users.push(unit.user);
+            workflows.push(unit.workflow);
+            computations.push(unit.computation);
+            operators.push(format!("{}", unit.operator));
+        }
+
+        let query = "
+            INSERT INTO quota_log (user_id, workflow_id, computation_id, operator_path)
+                (SELECT * FROM UNNEST($1::uuid[], $2::uuid[], $3::uuid[], $4::text[]))
+        ";
+
+        conn.execute(query, &[&users, &workflows, &computations, &operators])
+            .await?;
+
+        Ok(())
+    }
+
+    async fn quota_used_by_computations(&self) -> Result<()> {
+        let conn = self.conn_pool.get().await?;
+
+        conn.execute(
+            "SELECT
+                computation_id,
+                operator_path,
+                COUNT(*) AS count
+            FROM
+                quota_log
+            WHERE
+                user_id = '550e8400-e29b-41d4-a716-446655440000'
+            GROUP BY
+                computation_id,
+                operator_path;",
+            &[&self.session.user_id],
+        )
+        .await?;
+
+        Ok(())
     }
 
     async fn update_quota_available_by_user(
