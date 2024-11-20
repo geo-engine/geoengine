@@ -9,9 +9,6 @@ documentation.workspace = true
 repository.workspace = true
 build = "build.rs"
 
-[features]
-pro = []
-
 [dependencies]
 actix = { workspace = true }
 actix-files = { workspace = true }
@@ -110,7 +107,6 @@ vergen-gitcl = { workspace = true, features = ["build"] }
 [[bench]]
 name = "quota_check"
 harness = false
-required-features = ["pro"]
 
 [lints]
 workspace = true

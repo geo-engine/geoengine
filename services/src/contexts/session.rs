@@ -4,7 +4,6 @@ use crate::error::{self};
 use crate::identifier;
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
-use crate::util::config;
 use actix_http::Payload;
 use actix_web::{web, FromRequest, HttpRequest};
 use futures::future::{err, LocalBoxFuture};
@@ -46,13 +45,8 @@ impl SimpleSession {
 
 impl Default for SimpleSession {
     fn default() -> Self {
-        let id = config::get_config_element::<crate::util::config::Session>()
-            .ok()
-            .and_then(|session| session.fixed_session_token)
-            .unwrap_or_else(SessionId::new);
-
         Self {
-            id,
+            id: SessionId::new(),
             project: None,
             view: None,
         }

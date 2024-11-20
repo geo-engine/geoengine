@@ -8,7 +8,6 @@ pub mod machine_learning;
 pub mod permissions;
 pub mod projects;
 pub mod quota;
-pub mod server;
 pub mod tasks;
 pub mod users;
 pub mod util;
