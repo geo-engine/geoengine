@@ -58,6 +58,12 @@ where
         let mut this = self.project();
         *this.poll_next_count += 1;
 
+        let operator_name = this
+            .span
+            .metadata()
+            .map_or("unknown", tracing::Metadata::name)
+            .to_string();
+
         let _enter = this.span.enter();
 
         tracing::trace!(
@@ -76,7 +82,7 @@ where
                     empty = false,
                 );
 
-                (*this.quota).work_unit_done(this.path.clone());
+                (*this.quota).work_unit_done(format!("{} {}", operator_name, this.path));
             }
             None => {
                 tracing::debug!(
@@ -146,7 +152,7 @@ mod tests {
                 user,
                 workflow,
                 computation,
-                operator: WorkflowOperatorPath::initialize_root()
+                operator: String::new()
             }
             .into()
         );

@@ -9,7 +9,7 @@ pub struct ComputationUnit {
     pub user: Uuid,
     pub workflow: Uuid,
     pub computation: Uuid,
-    pub operator: WorkflowOperatorPath,
+    pub operator: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,7 +49,7 @@ impl QuotaTracking {
         }
     }
 
-    pub fn work_unit_done(&self, operator: WorkflowOperatorPath) {
+    pub fn work_unit_done(&self, operator: String) {
         let _ = self
             .quota_sender
             .send(QuotaMessage::ComputationUnit(ComputationUnit {
