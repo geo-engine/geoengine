@@ -10,8 +10,7 @@ repository.workspace = true
 build = "build.rs"
 
 [features]
-# This compiles Geo Engine Pro
-pro = ["geoengine-macros/pro"]
+pro = []
 
 [dependencies]
 actix = { workspace = true }
@@ -73,16 +72,16 @@ strum_macros = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
-tonic = { workspace = true}
+tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-actix-web = { workspace = true }
 tracing-opentelemetry = { workspace = true }
-tracing-subscriber = { workspace = true}
+tracing-subscriber = { workspace = true }
 typetag = { workspace = true }
-url = { workspace = true}
-utoipa = { workspace = true}
+url = { workspace = true }
+utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
-uuid = { workspace = true} 
+uuid = { workspace = true }
 validator = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
