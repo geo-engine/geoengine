@@ -5,7 +5,7 @@ use crate::error::{Error, Result};
 use crate::pro::contexts::{ProApplicationContext, ProPostgresDb};
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Role, RoleDescription, RoleId};
-use crate::pro::quota::{ComputationQuota, OperatorQuota};
+use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
 use crate::pro::users::oidc::{FlatMaybeEncryptedOidcTokens, OidcTokens, UserClaims};
 use crate::pro::users::userdb::{
     CannotRevokeRoleThatIsNotAssignedRoleDbError, RoleIdDoesNotExistRoleDbError,
@@ -20,6 +20,7 @@ use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
 use crate::{error, pro::contexts::ProPostgresContext};
 use async_trait::async_trait;
+use chrono::Utc;
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_operators::meta::quota::ComputationUnit;
 
@@ -997,6 +998,87 @@ where
         logs.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
 
         Ok(logs)
+    }
+
+    async fn quota_used_on_data(&self) -> Result<Vec<DataUsage>> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        let rows = conn
+            .query(
+                "
+            SELECT
+                user_id,
+                computation_id,
+                workflow_id,
+                operator_name,
+                MIN(timestamp) AS timestamp,
+                COUNT(*) AS count
+            FROM
+                quota_log
+            WHERE 
+                operator_name IN ('GdalSource', 'OgrSource')
+            GROUP BY
+               user_id,
+               computation_id,
+               workflow_id,
+               operator_name
+            ORDER BY
+                MIN(timestamp) DESC, user_id ASC, computation_id ASC, workflow_id ASC, operator_name ASC;",
+                &[],
+            )
+            .await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| DataUsage {
+                user_id: row.get(0),
+                computation_id: row.get(1),
+                workflow_id: row.get(2),
+                data: row.get(3),
+                timestamp: row.get(4),
+                count: row.get::<_, i64>(5) as u64,
+            })
+            .collect())
+    }
+
+    async fn quota_used_on_data_summary(&self) -> Result<Vec<DataUsageSummary>> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        let rows = conn
+            .query(
+                "
+            SELECT
+                operator_name,
+                EXTRACT(YEAR FROM timestamp)::integer AS year,
+                EXTRACT(MONTH FROM timestamp)::integer AS month,
+                COUNT(*) AS count
+            FROM
+                quota_log
+            WHERE 
+                operator_name IN ('GdalSource', 'OgrSource')
+            GROUP BY
+               EXTRACT(YEAR FROM timestamp),
+               EXTRACT(MONTH FROM timestamp),
+               operator_name
+            ORDER BY
+                year DESC, month DESC, operator_name ASC;",
+                &[],
+            )
+            .await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| DataUsageSummary {
+                data: row.get(0),
+                year: row.get::<_, i32>(1) as u32,
+                month: row.get::<_, i32>(2) as u32,
+                count: row.get::<_, i64>(3) as u64,
+            })
+            .collect())
     }
 
     async fn update_quota_available_by_user(

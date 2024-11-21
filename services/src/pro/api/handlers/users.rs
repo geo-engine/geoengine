@@ -7,6 +7,8 @@ use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::permissions::{RoleDescription, RoleId};
 use crate::pro::quota::ComputationQuota;
+use crate::pro::quota::DataUsage;
+use crate::pro::quota::DataUsageSummary;
 use crate::pro::users::UserAuth;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserId;
@@ -48,6 +50,11 @@ where
         .service(
             web::resource("/quota/computations")
                 .route(web::get().to(computations_quota_handler::<C>)),
+        )
+        .service(web::resource("/quota/dataUsage").route(web::get().to(data_usage_handler::<C>)))
+        .service(
+            web::resource("/quota/dataUsage/summary")
+                .route(web::get().to(data_usage_summary_handler::<C>)),
         )
         .service(
             web::resource("/quotas/{user}")
@@ -383,6 +390,56 @@ where
         .await?;
 
     Ok(web::Json(computations_quota))
+}
+
+/// Retrieves the quota used on data
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/quota/dataUsage",
+    responses(
+        (status = 200, description = "The quota used on data", body = Vec<DataUsage>)
+    ),
+    security(
+        ("session_token" = [])
+    ),
+)]
+pub(crate) async fn data_usage_handler<C: ProApplicationContext>(
+    app_ctx: web::Data<C>,
+    session: C::Session,
+) -> Result<web::Json<Vec<DataUsage>>>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let db = app_ctx.session_context(session).db();
+    let data_usage = db.quota_used_on_data().await?;
+
+    Ok(web::Json(data_usage))
+}
+
+/// Retrieves the quota used by computations
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/quota/dataUsage/summary",
+    responses(
+        (status = 200, description = "The quota used on data", body = Vec<DataUsage>)
+    ),
+    security(
+        ("session_token" = [])
+    ),
+)]
+pub(crate) async fn data_usage_summary_handler<C: ProApplicationContext>(
+    app_ctx: web::Data<C>,
+    session: C::Session,
+) -> Result<web::Json<Vec<DataUsageSummary>>>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let db = app_ctx.session_context(session).db();
+    let data_usage = db.quota_used_on_data_summary().await?;
+
+    Ok(web::Json(data_usage))
 }
 
 /// Retrieves the available and used quota of a specific user.
@@ -2120,5 +2177,108 @@ mod tests {
 
         let quota: Vec<ComputationQuota> = test::read_body_json(res).await;
         assert_eq!(quota.len(), 1);
+    }
+
+    #[ge_context::test]
+    async fn it_logs_data_usage(app_ctx: ProPostgresContext<NoTls>) {
+        let user = UserRegistration {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+            real_name: "Foo Bar".to_string(),
+        };
+
+        app_ctx.register_user(user).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+        };
+
+        let session = app_ctx.login(credentials).await.unwrap();
+
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_db = app_ctx.session_context(admin_session.clone()).db();
+
+        let workflow_id = Uuid::new_v4();
+        let computation_id = Uuid::new_v4();
+        let computation_id2 = Uuid::new_v4();
+
+        admin_db
+            .log_quota_used(vec![ComputationUnit {
+                user: session.user.id.0,
+                workflow: workflow_id,
+                computation: computation_id,
+                operator_name: "GdalSource".to_string(),
+                operator_path: WorkflowOperatorPath::initialize_root(),
+            }])
+            .await
+            .unwrap();
+
+        admin_db
+            .log_quota_used(vec![ComputationUnit {
+                user: session.user.id.0,
+                workflow: workflow_id,
+                computation: computation_id,
+                operator_name: "GdalSource".to_string(),
+                operator_path: WorkflowOperatorPath::initialize_root(),
+            }])
+            .await
+            .unwrap();
+
+        admin_db
+            .log_quota_used(vec![ComputationUnit {
+                user: session.user.id.0,
+                workflow: workflow_id,
+                computation: computation_id,
+                operator_name: "OgrSource".to_string(),
+                operator_path: WorkflowOperatorPath::initialize_root(),
+            }])
+            .await
+            .unwrap();
+
+        admin_db
+            .log_quota_used(vec![ComputationUnit {
+                user: session.user.id.0,
+                workflow: workflow_id,
+                computation: computation_id2,
+                operator_name: "GdalSource".to_string(),
+                operator_path: WorkflowOperatorPath::initialize_root(),
+            }])
+            .await
+            .unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/quota/dataUsage")
+            .append_header((
+                header::AUTHORIZATION,
+                format!("Bearer {}", admin_session.id),
+            ));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        let usage: Vec<DataUsage> = test::read_body_json(res).await;
+
+        assert_eq!(usage.len(), 3);
+        assert_eq!(usage[0].data, "GdalSource");
+        assert_eq!(usage[0].count, 1);
+        assert_eq!(usage[1].data, "OgrSource");
+        assert_eq!(usage[1].count, 1);
+        assert_eq!(usage[2].data, "GdalSource");
+        assert_eq!(usage[2].count, 2);
+
+        let req = test::TestRequest::get()
+            .uri("/quota/dataUsage/summary")
+            .append_header((
+                header::AUTHORIZATION,
+                format!("Bearer {}", admin_session.id),
+            ));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        let usage: Vec<DataUsageSummary> = test::read_body_json(res).await;
+
+        assert_eq!(usage.len(), 2);
+        assert_eq!(usage[0].data, "GdalSource");
+        assert_eq!(usage[0].count, 3);
+        assert_eq!(usage[1].data, "OgrSource");
+        assert_eq!(usage[1].count, 1);
     }
 }

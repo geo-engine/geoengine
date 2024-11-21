@@ -1,7 +1,7 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
 use crate::pro::permissions::{RoleDescription, RoleId};
-use crate::pro::quota::ComputationQuota;
+use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary};
 use crate::pro::users::oidc::{OidcTokens, UserClaims};
 use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use crate::projects::{ProjectId, STRectangle};
@@ -146,6 +146,20 @@ pub trait UserDb: Send + Sync {
         workflow: WorkflowId,
         limit: usize,
     ) -> Result<Vec<ComputationQuota>>;
+
+    /// Retrieve the quota log for data
+    ///
+    /// # Errors
+    ///
+    /// This call
+    async fn quota_used_on_data(&self) -> Result<Vec<DataUsage>>;
+
+    /// Retrieve the quota log for data (summary)
+    ///
+    /// # Errors
+    ///
+    /// This call
+    async fn quota_used_on_data_summary(&self) -> Result<Vec<DataUsageSummary>>;
 
     /// Gets a specific users used quota
     ///

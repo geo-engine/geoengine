@@ -199,6 +199,26 @@ pub struct ComputationQuota {
     pub operators: Vec<OperatorQuota>,
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DataUsage {
+    pub timestamp: DateTime,
+    pub user_id: Uuid,
+    pub workflow_id: Uuid,
+    pub computation_id: Uuid,
+    pub data: String,
+    pub count: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DataUsageSummary {
+    pub year: u32,
+    pub month: u32,
+    pub data: String,
+    pub count: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

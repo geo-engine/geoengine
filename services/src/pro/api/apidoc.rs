@@ -60,7 +60,7 @@ use crate::pro::api::handlers::users::{Quota, UpdateQuota};
 use crate::pro::permissions::{
     Permission, PermissionListing, ResourceId, Role, RoleDescription, RoleId,
 };
-use crate::pro::quota::{ComputationQuota, OperatorQuota};
+use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
 use crate::pro::users::{
     AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
     UserSession,
@@ -201,6 +201,8 @@ use utoipa::{Modify, OpenApi};
             UpdateQuota,
             ComputationQuota,
             OperatorQuota,
+            DataUsage,
+            DataUsageSummary,
             AuthCodeResponse,
             AuthCodeRequestURL,
 
