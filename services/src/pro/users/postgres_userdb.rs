@@ -852,22 +852,33 @@ where
         let mut users = Vec::new();
         let mut workflows = Vec::new();
         let mut computations = Vec::new();
-        let mut operators = Vec::new();
+        let mut operators_names = Vec::new();
+        let mut operator_paths = Vec::new();
 
         for unit in log {
             users.push(unit.user);
             workflows.push(unit.workflow);
             computations.push(unit.computation);
-            operators.push(format!("{}", unit.operator));
+            operators_names.push(unit.operator_name);
+            operator_paths.push(unit.operator_path.to_string());
         }
 
         let query = "
-            INSERT INTO quota_log (user_id, workflow_id, computation_id, operator_path)
-                (SELECT * FROM UNNEST($1::uuid[], $2::uuid[], $3::uuid[], $4::text[]))
+            INSERT INTO quota_log (user_id, workflow_id, computation_id, operator_name, operator_path)
+                (SELECT * FROM UNNEST($1::uuid[], $2::uuid[], $3::uuid[], $4::text[], $5::text[]))
         ";
 
-        conn.execute(query, &[&users, &workflows, &computations, &operators])
-            .await?;
+        conn.execute(
+            query,
+            &[
+                &users,
+                &workflows,
+                &computations,
+                &operators_names,
+                &operator_paths,
+            ],
+        )
+        .await?;
 
         Ok(())
     }
@@ -884,12 +895,14 @@ where
         struct QuotaLogEntry {
             computation_id: Uuid,
             workflow_id: Uuid,
+            operator_name: String,
             operator_path: String,
             timestamp: chrono::DateTime<chrono::Utc>,
             count: i64,
         }
 
         struct OperatorQuotaLog {
+            operator_name: String,
             operator_path: String,
             timestamp: DateTime,
             count: i64,
@@ -907,6 +920,7 @@ where
             SELECT
                 computation_id,
                 workflow_id,
+                operator_name,
                 operator_path,
                 MIN(timestamp) AS timestamp,
                 COUNT(*) AS count
@@ -925,6 +939,7 @@ where
             GROUP BY
                 computation_id,
                 workflow_id,
+                operator_name,
                 operator_path;",
                 &[&self.session.user.id, &workflow, &(limit as i64)],
             )
@@ -933,9 +948,10 @@ where
         let entries = rows.iter().map(|row| QuotaLogEntry {
             computation_id: row.get(0),
             workflow_id: row.get(1),
-            operator_path: row.get(2),
-            timestamp: row.get(3),
-            count: row.get(4),
+            operator_name: row.get(2),
+            operator_path: row.get(3),
+            timestamp: row.get(4),
+            count: row.get(5),
         });
 
         let mut computations: HashMap<WorkflowComputation, Vec<OperatorQuotaLog>> = HashMap::new();
@@ -949,6 +965,7 @@ where
                 .or_default()
                 .push({
                     OperatorQuotaLog {
+                        operator_name: entry.operator_name,
                         operator_path: entry.operator_path,
                         timestamp: entry.timestamp.into(),
                         count: entry.count,
@@ -969,6 +986,7 @@ where
                 operators: operator_quotas
                     .into_iter()
                     .map(|o| OperatorQuota {
+                        operator_name: o.operator_name,
                         operator_path: o.operator_path,
                         count: o.count as u64,
                     })

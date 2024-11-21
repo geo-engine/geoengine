@@ -450,7 +450,7 @@ mod tests {
     };
     use crate::pro::util::config::QuotaTrackingMode;
     use crate::pro::util::tests::mock_oidc::{mock_refresh_server, MockRefreshServerConfig};
-    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
+    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper, MockQuotaTracking};
     use crate::projects::{
         CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
         ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
@@ -476,7 +476,6 @@ mod tests {
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
         RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TypedOperator,
         TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
-        WorkflowOperatorPath,
     };
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
@@ -3325,8 +3324,8 @@ mod tests {
 
         let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
 
         let db = app_ctx.session_context(session).db();
 
@@ -3382,8 +3381,8 @@ mod tests {
 
         let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
 
         let db = app_ctx.session_context(session).db();
 

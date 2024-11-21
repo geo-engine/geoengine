@@ -2105,7 +2105,8 @@ mod tests {
                 user: session.user.id.0,
                 workflow: workflow_id,
                 computation: Uuid::new_v4(),
-                operator: WorkflowOperatorPath::initialize_root(),
+                operator_name: "Foo".to_string(),
+                operator_path: WorkflowOperatorPath::initialize_root(),
             }])
             .await
             .unwrap();
@@ -2116,8 +2117,6 @@ mod tests {
             ))
             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
         let res = send_pro_test_request(req, app_ctx.clone()).await;
-
-        let json: serde_json::Value = test::read_body_json(res).await;
 
         let quota: Vec<ComputationQuota> = test::read_body_json(res).await;
         assert_eq!(quota.len(), 1);

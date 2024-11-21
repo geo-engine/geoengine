@@ -185,8 +185,8 @@ pub fn initialize_quota_tracking<U: UserDb + 'static>(
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OperatorQuota {
+    pub operator_name: String,
     pub operator_path: String,
-    // TODO: operator name
     pub count: u64,
 }
 
@@ -208,10 +208,9 @@ mod tests {
             contexts::ProPostgresContext,
             ge_context,
             users::{UserAuth, UserCredentials, UserRegistration},
-            util::tests::admin_login,
+            util::tests::{admin_login, MockQuotaTracking},
         },
     };
-    use geoengine_operators::engine::WorkflowOperatorPath;
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
@@ -244,8 +243,8 @@ mod tests {
 
         let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
 
         let db = app_ctx.session_context(session).db();
 
@@ -296,11 +295,11 @@ mod tests {
 
         let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
 
         let db = app_ctx.session_context(session).db();
 
@@ -351,8 +350,8 @@ mod tests {
 
         let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
-        tracking.work_unit_done(WorkflowOperatorPath::initialize_root());
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
 
         let db = app_ctx.session_context(session).db();
 

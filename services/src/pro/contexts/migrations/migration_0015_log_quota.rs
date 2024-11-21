@@ -10,11 +10,12 @@ impl ProMigration for ProMigrationImpl<Migration0015LogQuota> {
         tx.batch_execute(
             r"
                 CREATE TABLE quota_log (
-                    timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    user_id UUID NOT NULL,
-                    workflow_id UUID NOT NULL,
-                    computation_id UUID NOT NULL,
-                    operator_path TEXT NOT NULL
+                    timestamp timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    user_id uuid NOT NULL,
+                    workflow_id uuid NOT NULL,
+                    computation_id uuid NOT NULL,
+                    operator_name text NOT NULL,
+                    operator_path text NOT NULL,
                 );
 
                 CREATE INDEX ON quota_log (user_id, timestamp, computation_id);

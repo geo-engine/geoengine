@@ -82,7 +82,7 @@ where
                     empty = false,
                 );
 
-                (*this.quota).work_unit_done(format!("{} {}", operator_name, this.path));
+                (*this.quota).work_unit_done(operator_name.to_string(), this.path.clone());
             }
             None => {
                 tracing::debug!(
@@ -152,7 +152,8 @@ mod tests {
                 user,
                 workflow,
                 computation,
-                operator: String::new()
+                operator_name: String::new(),
+                operator_path: WorkflowOperatorPath::initialize_root()
             }
             .into()
         );

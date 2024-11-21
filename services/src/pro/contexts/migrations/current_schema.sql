@@ -115,7 +115,9 @@ CREATE TABLE user_sessions (
 );
 
 CREATE TABLE project_version_authors (
-    project_version_id uuid REFERENCES project_versions (id) ON DELETE CASCADE NOT NULL,
+    project_version_id uuid REFERENCES project_versions (
+        id
+    ) ON DELETE CASCADE NOT NULL,
     user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
     PRIMARY KEY (project_version_id, user_id)
 );
@@ -126,7 +128,7 @@ CREATE TABLE user_uploads (
     PRIMARY KEY (user_id, upload_id)
 );
 
-CREATE TYPE "Permission" AS ENUM('Read', 'Owner');
+CREATE TYPE "Permission" AS ENUM ('Read', 'Owner');
 
 -- TODO: uploads, providers permissions
 
@@ -146,14 +148,20 @@ CREATE TABLE permissions (
     permission "Permission" NOT NULL,
     dataset_id uuid REFERENCES datasets (id) ON DELETE CASCADE,
     layer_id uuid REFERENCES layers (id) ON DELETE CASCADE,
-    layer_collection_id uuid REFERENCES layer_collections (id) ON DELETE CASCADE,
+    layer_collection_id uuid REFERENCES layer_collections (
+        id
+    ) ON DELETE CASCADE,
     project_id uuid REFERENCES projects (id) ON DELETE CASCADE,
     ml_model_id uuid REFERENCES ml_models (id) ON DELETE CASCADE,
     CHECK (
         (
-            (dataset_id IS NOT NULL)::integer + (layer_id IS NOT NULL)::integer + (
+            (dataset_id IS NOT NULL)::integer
+            + (layer_id IS NOT NULL)::integer
+            + (
                 layer_collection_id IS NOT NULL
-            )::integer + (project_id IS NOT NULL)::integer + (ml_model_id IS NOT NULL)::integer
+            )::integer
+            + (project_id IS NOT NULL)::integer
+            + (ml_model_id IS NOT NULL)::integer
         ) = 1
     )
 );
@@ -185,39 +193,53 @@ CREATE UNIQUE INDEX ON permissions (
 );
 
 CREATE VIEW user_permitted_datasets AS
-SELECT r.user_id, p.dataset_id, p.permission
+SELECT
+    r.user_id,
+    p.dataset_id,
+    p.permission
 FROM user_roles AS r
-    INNER JOIN permissions AS p ON (
-        r.role_id = p.role_id
-        AND p.dataset_id IS NOT NULL
-    );
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id
+    AND p.dataset_id IS NOT NULL
+);
 
 CREATE VIEW user_permitted_projects AS
-SELECT r.user_id, p.project_id, p.permission
+SELECT
+    r.user_id,
+    p.project_id,
+    p.permission
 FROM user_roles AS r
-    INNER JOIN permissions AS p ON (
-        r.role_id = p.role_id
-        AND p.project_id IS NOT NULL
-    );
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id
+    AND p.project_id IS NOT NULL
+);
 
 CREATE VIEW user_permitted_layer_collections AS
-SELECT r.user_id, p.layer_collection_id, p.permission
+SELECT
+    r.user_id,
+    p.layer_collection_id,
+    p.permission
 FROM user_roles AS r
-    INNER JOIN permissions AS p ON (
-        r.role_id = p.role_id
-        AND p.layer_collection_id IS NOT NULL
-    );
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id
+    AND p.layer_collection_id IS NOT NULL
+);
 
 CREATE VIEW user_permitted_layers AS
-SELECT r.user_id, p.layer_id, p.permission
+SELECT
+    r.user_id,
+    p.layer_id,
+    p.permission
 FROM user_roles AS r
-    INNER JOIN permissions AS p ON (
-        r.role_id = p.role_id
-        AND p.layer_id IS NOT NULL
-    );
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id
+    AND p.layer_id IS NOT NULL
+);
 
 CREATE TABLE oidc_session_tokens (
-    session_id uuid PRIMARY KEY REFERENCES sessions (id) ON DELETE CASCADE NOT NULL,
+    session_id uuid PRIMARY KEY REFERENCES sessions (
+        id
+    ) ON DELETE CASCADE NOT NULL,
     access_token bytea NOT NULL,
     access_token_encryption_nonce bytea,
     access_token_valid_until timestamp with time zone NOT NULL,
@@ -226,19 +248,23 @@ CREATE TABLE oidc_session_tokens (
 );
 
 CREATE VIEW user_permitted_ml_models AS
-SELECT r.user_id, p.ml_model_id, p.permission
+SELECT
+    r.user_id,
+    p.ml_model_id,
+    p.permission
 FROM user_roles AS r
-    INNER JOIN permissions AS p ON (
-        r.role_id = p.role_id
-        AND p.ml_model_id IS NOT NULL
-    );
-
-CREATE TABLE quota_log (
-    timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    user_id UUID NOT NULL,
-    workflow_id UUID NOT NULL,
-    computation_id UUID NOT NULL,
-    operator_path TEXT NOT NULL
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id
+    AND p.ml_model_id IS NOT NULL
 );
 
-CREATE INDEX ON quota_log ( user_id, timestamp, computation_id );
+CREATE TABLE quota_log (
+    timestamp timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_id uuid NOT NULL,
+    workflow_id uuid NOT NULL,
+    computation_id uuid NOT NULL,
+    operator_name text NOT NULL,
+    operator_path text NOT NULL
+);
+
+CREATE INDEX ON quota_log (user_id, timestamp, computation_id);
