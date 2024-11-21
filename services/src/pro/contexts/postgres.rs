@@ -303,8 +303,6 @@ where
         // TODO: load config only once
 
         Ok(QueryContextImpl::new_with_extensions(
-            workflow,
-            computation,
             self.context.query_ctx_chunk_size,
             self.context.thread_pool.clone(),
             Some(self.context.tile_cache.clone()),

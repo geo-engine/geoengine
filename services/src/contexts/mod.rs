@@ -109,10 +109,6 @@ pub trait GeoEngineDb:
 }
 
 pub struct QueryContextImpl {
-    #[allow(dead_code)] // TODO: remove again, as this info is already inside the quota tracking(?)
-    workflow: Uuid,
-    #[allow(dead_code)] // TODO
-    computation: Uuid,
     chunk_byte_size: ChunkByteSize,
     thread_pool: Arc<ThreadPool>,
     cache: Option<Arc<SharedCache>>,
@@ -123,16 +119,9 @@ pub struct QueryContextImpl {
 }
 
 impl QueryContextImpl {
-    pub fn new(
-        workflow: Uuid,
-        computation: Uuid,
-        chunk_byte_size: ChunkByteSize,
-        thread_pool: Arc<ThreadPool>,
-    ) -> Self {
+    pub fn new(chunk_byte_size: ChunkByteSize, thread_pool: Arc<ThreadPool>) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
-            workflow,
-            computation,
             chunk_byte_size,
             thread_pool,
             cache: None,
@@ -144,8 +133,6 @@ impl QueryContextImpl {
     }
 
     pub fn new_with_extensions(
-        workflow: Uuid,
-        computation: Uuid,
         chunk_byte_size: ChunkByteSize,
         thread_pool: Arc<ThreadPool>,
         cache: Option<Arc<SharedCache>>,
@@ -154,8 +141,6 @@ impl QueryContextImpl {
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
-            workflow,
-            computation,
             chunk_byte_size,
             thread_pool,
             cache,
