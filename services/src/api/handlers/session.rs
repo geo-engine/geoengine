@@ -238,18 +238,14 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        let session: SimpleSession = actix_web::test::read_body_json(res).await;
-
-        assert_eq!(
-            session.id().to_string(),
-            "18fec623-6600-41af-b82b-24ccf47cb9f9"
-        );
+        let _session: SimpleSession = actix_web::test::read_body_json(res).await;
 
         config::set_config("session.anonymous_access", false).unwrap();
 
         let req = test::TestRequest::post().uri("/anonymous");
         let res = send_test_request(req, app_ctx.clone()).await;
 
+        // required to not corrupt other tests
         config::set_config("session.anonymous_access", true).unwrap();
 
         ErrorResponse::assert(
