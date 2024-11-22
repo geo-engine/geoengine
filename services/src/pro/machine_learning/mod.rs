@@ -13,7 +13,7 @@ use crate::{
             MachineLearningError,
         },
         name::MlModelName,
-        MlModel, MlModelDb, MlModelId, MlModelListOptions, MlModelMetadata,
+        MlModel, MlModelDb, MlModelId, MlModelIdAndName, MlModelListOptions, MlModelMetadata,
     },
     util::postgres::PostgresErrorExt,
 };
@@ -147,7 +147,7 @@ where
         Ok(row.get(1))
     }
 
-    async fn add_model(&self, model: MlModel) -> Result<(), MachineLearningError> {
+    async fn add_model(&self, model: MlModel) -> Result<MlModelIdAndName, MachineLearningError> {
         self.check_ml_model_namespace(&model.name)?;
 
         let mut conn = self
@@ -202,6 +202,9 @@ where
 
         tx.commit().await.context(PostgresMachineLearningError)?;
 
-        Ok(())
+        Ok(MlModelIdAndName {
+            id,
+            name: model.name,
+        })
     }
 }

@@ -61,7 +61,7 @@ pub(crate) async fn add_ml_model<C: ApplicationContext>(
     model: web::Json<MlModel>,
 ) -> Result<HttpResponse, MachineLearningError> {
     let model = model.into_inner();
-    app_ctx
+    let id_and_name = app_ctx
         .session_context(session)
         .db()
         .add_model(model)
