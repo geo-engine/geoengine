@@ -8,6 +8,7 @@ license-file.workspace = true
 documentation.workspace = true
 repository.workspace = true
 build = "build.rs"
+default-run = "main"
 
 [dependencies]
 actix = { workspace = true }
@@ -81,6 +82,7 @@ zip = { workspace = true }
 assert-json-diff = { workspace = true }
 sha2 = { workspace = true }
 convert_case = { workspace = true }
+clap = { version = "4.5.21", features = ["derive"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nix = { version = "0.29", features = ["socket"] }

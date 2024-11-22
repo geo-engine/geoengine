@@ -1,5 +1,5 @@
 [workspace]
-members = ["datatypes", "expression", "macros", "operators", "services"]
+members = ["cli", "datatypes", "expression", "macros", "operators", "services"]
 exclude = ["expression/deps-workspace"]
 # Edition 2021 defaults to resolver 2, but virtul workspaces default to resolver 1, so we need to set it explicitly.
 resolver = "2"
@@ -83,6 +83,8 @@ bb8-postgres = { version = "0.8", features = [
 ] }
 bytes = "1.5" # for postgres-types impls
 chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.5", features = ["derive"] }
+clap_derive = "4.5"
 config = "0.14"
 convert_case = "0.6.0"
 criterion = "0.5"
