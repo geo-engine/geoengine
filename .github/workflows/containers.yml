@@ -16,6 +16,11 @@ on:
         required: true
         default: "nightly"
 
+      container_repository_branch:
+        description: "Branch of the container repository"
+        required: true
+        default: "main"
+
 jobs:
   create-container:
     if: github.event_name != 'schedule' || github.repository_owner == 'geo-engine'
@@ -24,6 +29,7 @@ jobs:
 
     env:
       TAG_NAME: nightly
+      CONTAINER_REPOSITORY_BRANCH: main
 
     services:
       postgres:
@@ -42,6 +48,11 @@ jobs:
         run: |
           echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
 
+      - name: Modify CONTAINER_REPOSITORY_BRANCH if on `container_repository_branch` is set on `workflow_dispatch`
+        if: github.event.inputs.container_repository_branch != ''
+        run: |
+          echo "CONTAINER_REPOSITORY_BRANCH=${{ github.event.inputs.container_repository_branch }}" >> $GITHUB_ENV
+
       - name: Checkout code
         uses: actions/checkout@v3
         with:
@@ -52,6 +63,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: geo-engine/geoengine-container
+          ref: ${{ env.CONTAINER_REPOSITORY_BRANCH }}
           ssh-key: ${{ secrets.CONTAINER_GITHUB_TOKEN }}
           path: "container"
 
