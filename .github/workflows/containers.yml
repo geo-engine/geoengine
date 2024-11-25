@@ -80,7 +80,9 @@ jobs:
 
       - name: Test the container
         working-directory: geoengine
-        run: (cargo run --bin geoengine-cli -- check-successful-startup) < <(podman run --rm geoengine:${{env.TAG_NAME}} |& tee)
+        run: |
+          cargo build --bin geoengine-cli --release
+          (./target/release/geoengine-cli check-successful-startup) < <(podman run --rm geoengine:${{env.TAG_NAME}} |& tee)
 
       - name: Push image to quay.io
         run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}
