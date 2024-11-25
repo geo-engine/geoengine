@@ -79,6 +79,7 @@ jobs:
             .
 
       - name: Test the container
+        working-directory: geoengine
         run: (cargo run --bin geoengine-cli -- check-successful-startup) < <(podman run --rm geoengine:${{env.TAG_NAME}} |& tee)
 
       - name: Push image to quay.io
