@@ -220,18 +220,7 @@ mod tests {
         .await;
     }
 
-    fn it_disables_anonymous_access_before() {
-        config::set_config(
-            "session.fixed_session_token",
-            "18fec623-6600-41af-b82b-24ccf47cb9f9",
-        )
-        .unwrap();
-    }
-
-    #[ge_context::test(
-        test_execution = "serial",
-        before = "it_disables_anonymous_access_before"
-    )]
+    #[ge_context::test(test_execution = "serial")]
     async fn it_disables_anonymous_access(app_ctx: PostgresContext<NoTls>) {
         let req = test::TestRequest::post().uri("/anonymous");
         let res = send_test_request(req, app_ctx.clone()).await;
