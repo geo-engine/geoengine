@@ -53,6 +53,31 @@ jobs:
         run: |
           echo "CONTAINER_REPOSITORY_BRANCH=${{ github.event.inputs.container_repository_branch }}" >> $GITHUB_ENV
 
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+      - name: Install lld & GDAL & Protobuf
+        run: |
+          sudo apt-get update
+          sudo apt-get install lld libgdal-dev gdal-bin build-essential clang curl protobuf-compiler
+          sudo apt-get clean
+          export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
+          export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
+          sudo ldconfig
+      - name: Install Rustup
+        run: |
+          curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL "https://sh.rustup.rs" | sh -s -- --profile minimal --default-toolchain none -y
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
+      - name: Init rustup toolchain
+        run: rustup show # enough to initialize the toolchain
+
       - name: Checkout code
         uses: actions/checkout@v3
         with:
