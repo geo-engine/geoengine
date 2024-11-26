@@ -12,7 +12,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName, };
+use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
     Grid, GridIdx2D, GridIndexAccess, GridShapeAccess, GridSize, Pixel, RasterTile2D,
@@ -181,10 +181,22 @@ impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
 where
     TIn: Pixel + NoDataValue,
     TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
-    ort::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>>,
-    ort::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>>,
-    ort::Error: From<<ort::Value as std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>>>::Error>,
-    ort::Error: From<<ort::Value as std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>>>::Error>
+    ort::Value: std::convert::TryFrom<
+        ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
+    >,
+    ort::Value: std::convert::TryFrom<
+        ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>,
+    >,
+    ort::Error: From<
+        <ort::Value as std::convert::TryFrom<
+            ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
+        >>::Error,
+    >,
+    ort::Error: From<
+        <ort::Value as std::convert::TryFrom<
+            ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>,
+        >>::Error,
+    >,
 {
     type RasterType = TOut;
 
@@ -288,9 +300,9 @@ where
                     let samples = Array4::from_shape_vec((1, height, width, num_bands), pixels).expect( // y,x, attributes
                         "Array2 should be valid because it is created from a Vec with the correct size",
                     );
-    
+
                     let input_name = &session.inputs[0].name;
-    
+
                     let out = session
                         .run(ort::inputs![input_name => samples].context(Ort)?)
                         .context(Ort)?;
