@@ -1,3 +1,4 @@
+use crate::contexts::migrations::Migration0015MlModelTensorShape;
 use crate::contexts::{
     Migration, Migration0000Initial, Migration0001RasterStacks,
     Migration0002DatasetListingProvider, Migration0003GbifConfig,
@@ -44,6 +45,7 @@ where
         Box::new(ProMigrationImpl::from(Migration0012MlModelDb)),
         Box::new(ProMigrationImpl::from(Migration0013CopernicusProvider)),
         Box::new(NoProMigrationImpl::from(Migration0014MultibandColorizer)),
+        Box::new(NoProMigrationImpl::from(Migration0015MlModelTensorShape)),
     ]
 }
 

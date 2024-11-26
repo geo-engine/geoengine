@@ -135,7 +135,10 @@ mod tests {
     use tokio_postgres::NoTls;
 
     use crate::{
-        api::model::{datatypes::RasterDataType, responses::IdResponse},
+        api::model::{
+            datatypes::{RasterDataType, TensorShape3D},
+            responses::IdResponse,
+        },
         contexts::Session,
         datasets::upload::UploadId,
         machine_learning::MlModelMetadata,
@@ -180,8 +183,9 @@ mod tests {
             metadata: MlModelMetadata {
                 file_name: "model.onnx".to_string(),
                 input_type: RasterDataType::F32,
-                num_input_bands: 2,
                 output_type: RasterDataType::I64,
+                input_shape: TensorShape3D::new_y_x_attr(1, 1, 2),
+                output_shape: TensorShape3D::new_y_x_attr(1, 1, 1),
             },
         };
 
@@ -191,7 +195,6 @@ mod tests {
             .set_json(&model);
 
         let res = send_pro_test_request(req, app_ctx.clone()).await;
-
         assert_eq!(res.status(), 200);
 
         let req = test::TestRequest::get()

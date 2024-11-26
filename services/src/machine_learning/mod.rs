@@ -14,7 +14,7 @@ use utoipa::{IntoParams, ToSchema};
 use validator::{Validate, ValidationError};
 
 use crate::{
-    api::model::datatypes::RasterDataType,
+    api::model::datatypes::{RasterDataType, TensorShape3D},
     contexts::PostgresDb,
     datasets::upload::{UploadId, UploadRootPath},
     identifier,
@@ -44,9 +44,10 @@ pub struct MlModel {
 pub struct MlModelMetadata {
     pub file_name: String,
     pub input_type: RasterDataType,
-    pub num_input_bands: u32, // number of features per sample (bands per pixel)
-    pub output_type: RasterDataType, // TODO: support multiple outputs, e.g. one band for the probability of prediction
-                                     // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
+    pub output_type: RasterDataType,
+    pub input_shape: TensorShape3D,
+    pub output_shape: TensorShape3D,
+    // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
 }
 
 impl MlModel {
@@ -63,8 +64,9 @@ impl MlModel {
             )
             .context(CouldNotFindMlModelFileMachineLearningError)?,
             input_type: self.metadata.input_type.into(),
-            num_input_bands: self.metadata.num_input_bands,
             output_type: self.metadata.output_type.into(),
+            input_shape: self.metadata.input_shape.into(),
+            output_shape: self.metadata.output_shape.into(),
         })
     }
 }
