@@ -15,6 +15,10 @@ pub struct CheckSuccessfulStartup {
     /// Fail on warnings
     #[arg(long, default_value = "false")]
     fail_on_warnings: bool,
+
+    /// Output `STDIN` to `STDERR`
+    #[arg(long, default_value = "false")]
+    output_stdin: bool,
 }
 
 /// Checks the program's `STDERR` for successful startup
@@ -27,7 +31,11 @@ pub async fn check_successful_startup(params: CheckSuccessfulStartup) -> Result<
 
     let success = tokio::time::timeout(
         std::time::Duration::from_secs(params.timeout.into()),
-        check_lines(params.max_lines, params.fail_on_warnings),
+        check_lines(
+            params.max_lines,
+            params.fail_on_warnings,
+            params.output_stdin,
+        ),
     )
     .await
     .map_err(|_| anyhow::anyhow!("Timeout"))??;
@@ -40,11 +48,20 @@ pub async fn check_successful_startup(params: CheckSuccessfulStartup) -> Result<
     }
 }
 
-async fn check_lines(max_lines: u16, fail_on_warnings: bool) -> Result<bool, anyhow::Error> {
+#[allow(clippy::print_stderr)]
+async fn check_lines(
+    max_lines: u16,
+    fail_on_warnings: bool,
+    output_stdin: bool,
+) -> Result<bool, anyhow::Error> {
     let mut line_reader = tokio::io::BufReader::new(tokio::io::stdin()).lines();
     let mut lines_left = max_lines;
 
     while let Some(line) = line_reader.next_line().await? {
+        if output_stdin {
+            eprintln!("{line}");
+        }
+
         if line.contains("Tokio runtime found") {
             return Ok(true);
         }
