@@ -67,7 +67,7 @@ where
         api = serve_openapi_json(
             api,
             &mut api_urls,
-            "Geo Engine Pro",
+            "Geo Engine",
             "../api-docs/openapi.json",
             "/api-docs/openapi.json",
             openapi.clone(),

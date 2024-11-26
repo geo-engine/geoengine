@@ -144,7 +144,6 @@ allowed_drivers = [
 # Whether to allow requests to `/anonymous` that return a valid session.
 anonymous_access = true
 
-# Settings for Geo Engine Pro
 [user]
 registration = true
 admin_email = "admin@localhost"
