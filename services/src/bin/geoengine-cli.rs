@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
-use geoengine_cli::{check_successful_startup, CheckSuccessfulStartup};
+use geoengine_services::cli::{
+    check_heartbeat, check_successful_startup, CheckSuccessfulStartup, Heartbeat,
+};
 
 /// CLI for Geo Engine Utilities
 #[derive(Debug, Parser)]
@@ -13,6 +15,18 @@ struct Cli {
 enum Commands {
     /// Checks the program's `STDERR` for successful startup
     CheckSuccessfulStartup(CheckSuccessfulStartup),
+
+    /// Checks if the Geo Engine server is alive
+    Heartbeat(Heartbeat),
+}
+
+impl Commands {
+    async fn execute(self) -> Result<(), anyhow::Error> {
+        match self {
+            Commands::CheckSuccessfulStartup(params) => check_successful_startup(params).await,
+            Commands::Heartbeat(params) => check_heartbeat(params).await,
+        }
+    }
 }
 
 #[tokio::main]
@@ -20,11 +34,7 @@ enum Commands {
 async fn main() {
     let cli = Cli::parse();
 
-    let result = match cli.command {
-        Commands::CheckSuccessfulStartup(params) => check_successful_startup(params).await,
-    };
-
-    if let Err(err) = result {
+    if let Err(err) = cli.command.execute().await {
         eprintln!("Error: {err}");
         std::process::exit(1);
     }

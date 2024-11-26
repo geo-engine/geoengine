@@ -11,6 +11,10 @@ pub struct CheckSuccessfulStartup {
     /// Maximum number of lines to check
     #[arg(long, default_value = "1000")]
     max_lines: u16,
+
+    /// Fail on warnings
+    #[arg(long, default_value = "false")]
+    fail_on_warnings: bool,
 }
 
 /// Checks the program's `STDERR` for successful startup
@@ -23,7 +27,7 @@ pub async fn check_successful_startup(params: CheckSuccessfulStartup) -> Result<
 
     let success = tokio::time::timeout(
         std::time::Duration::from_secs(params.timeout.into()),
-        check_lines(params.max_lines),
+        check_lines(params.max_lines, params.fail_on_warnings),
     )
     .await
     .map_err(|_| anyhow::anyhow!("Timeout"))??;
@@ -36,13 +40,17 @@ pub async fn check_successful_startup(params: CheckSuccessfulStartup) -> Result<
     }
 }
 
-async fn check_lines(max_lines: u16) -> Result<bool, anyhow::Error> {
+async fn check_lines(max_lines: u16, fail_on_warnings: bool) -> Result<bool, anyhow::Error> {
     let mut line_reader = tokio::io::BufReader::new(tokio::io::stdin()).lines();
     let mut lines_left = max_lines;
 
     while let Some(line) = line_reader.next_line().await? {
         if line.contains("Tokio runtime found") {
             return Ok(true);
+        }
+
+        if fail_on_warnings && line.contains("WARN") {
+            return Err(anyhow::anyhow!("Warning in log output: {line}"));
         }
 
         lines_left -= 1;

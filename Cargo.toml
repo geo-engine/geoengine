@@ -1,7 +1,7 @@
 [workspace]
-members = ["cli", "datatypes", "expression", "macros", "operators", "services"]
+members = ["datatypes", "expression", "macros", "operators", "services"]
 exclude = ["expression/deps-workspace"]
-# Edition 2021 defaults to resolver 2, but virtul workspaces default to resolver 1, so we need to set it explicitly.
+# Edition 2021 defaults to resolver 2, but virtual workspaces default to resolver 1, so we need to set it explicitly.
 resolver = "2"
 
 [workspace.package]

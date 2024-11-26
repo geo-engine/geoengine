@@ -2455,16 +2455,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "geoengine-cli"
-version = "0.8.0"
-dependencies = [
- "anyhow",
- "clap 4.5.21",
- "clap_derive",
- "tokio",
-]
-
-[[package]]
 name = "geoengine-datatypes"
 version = "0.8.0"
 dependencies = [
@@ -2610,6 +2600,7 @@ dependencies = [
  "bytes",
  "chrono",
  "clap 4.5.21",
+ "clap_derive",
  "config",
  "convert_case 0.6.0",
  "erased-serde",

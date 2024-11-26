@@ -1,4 +1,5 @@
 pub mod api;
+pub mod cli;
 pub mod contexts;
 pub mod datasets;
 pub mod error;
@@ -7,9 +8,9 @@ pub mod machine_learning;
 pub mod projects;
 pub mod server;
 pub mod stac;
+pub mod tasks;
 #[macro_use]
 pub mod util;
-pub mod tasks;
 pub mod workflows;
 
 /// TODO: merge with rest of the code

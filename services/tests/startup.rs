@@ -2,10 +2,7 @@
 
 use assert_cmd::cargo::CommandCargoExt;
 use geoengine_services::test_data;
-use std::{
-    io::BufRead,
-    process::{Command, Stdio},
-};
+use std::process::{ChildStderr, Command, Stdio};
 
 struct DroppingServer {
     process: std::process::Child,
@@ -30,18 +27,8 @@ impl DroppingServer {
         Self { process }
     }
 
-    fn stderr_lines(&mut self) -> impl Iterator<Item = String> {
-        let mut reader =
-            std::io::BufReader::new(self.process.stderr.take().expect("failed to read stderr"));
-
-        std::iter::from_fn(move || {
-            let mut buf = String::new();
-            reader
-                .read_line(&mut buf)
-                .ok()
-                .filter(|_| !buf.is_empty())
-                .map(|_| buf)
-        })
+    fn stderr(&mut self) -> ChildStderr {
+        self.process.stderr.take().expect("failed to read stderr")
     }
 }
 
@@ -51,28 +38,38 @@ async fn it_starts_without_warnings_and_accepts_connections() {
 
     const SCHEMA_NAME: &str = "it_starts_without_warnings_and_accepts_connections";
 
-    async fn run_server_and_check_warnings() {
+    fn run_server_and_check_warnings() {
         let mut server = DroppingServer::new(SCHEMA_NAME);
 
         // read log output and check for warnings
-        let mut startup_succesful = false;
-        for line in server.stderr_lines().take(200) {
-            // eprintln!("Line: {line}");
+        let startup_result = Command::cargo_bin("geoengine-cli")
+            .unwrap()
+            .args([
+                "check-successful-startup",
+                "--max-lines",
+                "200",
+                "--fail-on-warnings",
+            ])
+            .stdin(Stdio::from(server.stderr()))
+            .output()
+            .unwrap();
 
-            assert!(!line.contains("WARN"), "Warning in log output: {line}");
-
-            if line.contains("Tokio runtime found") {
-                startup_succesful = true;
-                break;
-            }
-        }
+        assert!(
+            startup_result.status.success(),
+            "failed to check startup: {startup_result:?}",
+        );
 
         // once log outputs stop, perform a test request
-        reqwest::get("http://127.0.0.1:3030/info")
-            .await
-            .expect("failed to connect to server");
+        let heartbeat_result = Command::cargo_bin("geoengine-cli")
+            .unwrap()
+            .args(["heartbeat", "--server-url", "http://127.0.0.1:3030/api"])
+            .output()
+            .unwrap();
 
-        assert!(startup_succesful);
+        assert!(
+            heartbeat_result.status.success(),
+            "server is not alive: {heartbeat_result:?}",
+        );
     }
 
     // change cwd s.t. the config file can be found
@@ -110,15 +107,11 @@ async fn it_starts_without_warnings_and_accepts_connections() {
         .unwrap();
 
     let result = std::panic::catch_unwind(move || {
-        tokio::task::block_in_place(move || {
-            tokio::runtime::Handle::current().block_on(async move {
-                // run server 1st time -> initialization
-                run_server_and_check_warnings().await;
+        // run server 1st time -> initialization
+        run_server_and_check_warnings();
 
-                // run server 2nd time on initialized schmea
-                run_server_and_check_warnings().await;
-            });
-        });
+        // run server 2nd time on initialized schema
+        run_server_and_check_warnings();
     });
 
     client
