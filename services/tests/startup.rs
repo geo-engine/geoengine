@@ -16,7 +16,7 @@ impl Drop for DroppingServer {
 
 impl DroppingServer {
     fn new(schema_name: &str) -> Self {
-        let process = Command::cargo_bin("main")
+        let process = Command::cargo_bin("geoengine-server")
             .unwrap()
             .env("GEOENGINE_WEB__BACKEND", "postgres")
             .env("GEOENGINE_POSTGRES__SCHEMA", schema_name)
