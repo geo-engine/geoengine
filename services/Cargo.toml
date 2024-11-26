@@ -8,7 +8,7 @@ license-file.workspace = true
 documentation.workspace = true
 repository.workspace = true
 build = "build.rs"
-default-run = "main"
+default-run = "geoengine-server"
 
 [dependencies]
 actix = { workspace = true }
