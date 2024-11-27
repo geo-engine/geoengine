@@ -28,7 +28,7 @@ jobs:
       matrix:
         os:
           - ubuntu-22.04
-        features: ["--all-features"]
+        features: [""]
         build: [""]
 
     steps:
@@ -93,11 +93,11 @@ jobs:
       - name: Check with Rustfmt
         run: cargo fmt --all -- --check
       - name: Check with Clippy
-        run: cargo clippy --all-targets ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
+        run: cargo clippy --all-targets --locked ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
       - name: Check with SQLFluff
         run: sqlfluff lint
       - name: Run tests
-        run: cargo test ${{ matrix.features }} ${{ matrix.build }} --verbose
+        run: cargo test --locked ${{ matrix.features }} ${{ matrix.build }} --verbose
 
   build:
     runs-on: ${{matrix.os}}
@@ -106,7 +106,7 @@ jobs:
       matrix:
         os:
           - ubuntu-22.04
-        features: ["--all-features"]
+        features: [""]
         build: ["", "--release"]
 
     steps:
@@ -158,4 +158,4 @@ jobs:
           # Default: "false"
           #cache-on-failure: ""
       - name: Build
-        run: cargo build ${{ matrix.features }} ${{ matrix.build }} --verbose
+        run: cargo build --locked ${{ matrix.features }} ${{ matrix.build }} --verbose
