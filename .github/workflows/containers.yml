@@ -81,7 +81,7 @@ jobs:
       - name: Test the container
         working-directory: geoengine
         run: |
-          CONTAINER_ID=geoengine::${{env.TAG_NAME}})
+          CONTAINER_ID=geoengine:${{env.TAG_NAME}}
           POD_ID=$(podman run --rm -d --network=host $CONTAINER_ID)
           (podman run --rm -i $CONTAINER_ID ./geoengine-cli check-successful-startup --output-stdin) < <(podman logs --follow $POD_ID |& tee)
           podman run --rm --network=host $CONTAINER_ID ./geoengine-cli heartbeat --server-url http://localhost:8080/api
