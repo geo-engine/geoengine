@@ -9,6 +9,7 @@ use crate::pro::permissions::{RoleDescription, RoleId};
 use crate::pro::quota::ComputationQuota;
 use crate::pro::quota::DataUsage;
 use crate::pro::quota::DataUsageSummary;
+use crate::pro::quota::OperatorQuota;
 use crate::pro::users::UserAuth;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserId;
@@ -19,7 +20,6 @@ use crate::projects::ProjectId;
 use crate::projects::STRectangle;
 use crate::util::config;
 use crate::util::extractors::ValidatedJson;
-use crate::workflows::workflow::WorkflowId;
 use actix_web::FromRequest;
 use actix_web::{web, HttpResponse, Responder};
 use geoengine_datatypes::error::BoxedResultExt;
@@ -29,6 +29,7 @@ use snafu::ensure;
 use snafu::ResultExt;
 use utoipa::IntoParams;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -50,6 +51,10 @@ where
         .service(
             web::resource("/quota/computations")
                 .route(web::get().to(computations_quota_handler::<C>)),
+        )
+        .service(
+            web::resource("/quota/computations/{computation}")
+                .route(web::get().to(computation_quota_handler::<C>)),
         )
         .service(web::resource("/quota/dataUsage").route(web::get().to(data_usage_handler::<C>)))
         .service(
@@ -355,7 +360,7 @@ where
 #[derive(Debug, Deserialize, IntoParams)]
 
 pub struct ComputationQuotaParams {
-    pub workflow: WorkflowId,
+    pub offset: usize,
     pub limit: usize,
 }
 
@@ -386,10 +391,41 @@ where
 
     let db = app_ctx.session_context(session).db();
     let computations_quota = db
-        .quota_used_by_computations(params.workflow, params.limit)
+        .quota_used_by_computations(params.offset, params.limit)
         .await?;
 
     Ok(web::Json(computations_quota))
+}
+
+/// Retrieves the quota used by computations
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/quota/computations/{computation}",
+    responses(
+        (status = 200, description = "The quota used by computation", body = Vec<OperatorQuota>)
+    ),
+    security(
+        ("session_token" = [])
+    ),
+    params(
+        ("computation" = Uuid, description = "Computation id")
+    )
+)]
+pub(crate) async fn computation_quota_handler<C: ProApplicationContext>(
+    app_ctx: web::Data<C>,
+    computation: web::Path<Uuid>,
+    session: C::Session,
+) -> Result<web::Json<Vec<OperatorQuota>>>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let computation = computation.into_inner();
+
+    let db = app_ctx.session_context(session).db();
+    let computation_quota = db.quota_used_by_computation(computation).await?;
+
+    Ok(web::Json(computation_quota))
 }
 
 /// Retrieves the quota used on data
@@ -2169,14 +2205,31 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri(&format!(
-                "/quota/computations?workflow={workflow_id}&limit=10"
-            ))
+            .uri("/quota/computations?offset=0&limit=10")
             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
         let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         let quota: Vec<ComputationQuota> = test::read_body_json(res).await;
         assert_eq!(quota.len(), 1);
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/quota/computations/{}", quota[0].computation_id))
+            .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        // let json: serde_json::Value = test::read_body_json(res).await;
+        // dbg!(json);
+
+        let computation: Vec<OperatorQuota> = test::read_body_json(res).await;
+
+        assert_eq!(
+            computation,
+            vec![OperatorQuota {
+                operator_name: "Foo".to_string(),
+                operator_path: "[]".to_string(),
+                count: 1
+            }]
+        );
     }
 
     #[ge_context::test]

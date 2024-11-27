@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::contexts::SessionId;
 use crate::error::{Error, Result};
 use crate::pro::contexts::{ProApplicationContext, ProPostgresDb};
@@ -17,11 +15,8 @@ use crate::pro::users::{
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::postgres::PostgresErrorExt;
 use crate::util::Identifier;
-use crate::workflows::workflow::WorkflowId;
 use crate::{error, pro::contexts::ProPostgresContext};
 use async_trait::async_trait;
-use chrono::Utc;
-use geoengine_datatypes::primitives::DateTime;
 use geoengine_operators::meta::quota::ComputationUnit;
 
 use crate::util::encryption::MaybeEncryptedBytes;
@@ -884,36 +879,15 @@ where
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn quota_used_by_computations(
         &self,
-        workflow: WorkflowId, // TODO: make filtering by workflow optional
-        limit: usize,         // TODO: implement proper pagination
+        offset: usize,
+        limit: usize,
     ) -> Result<Vec<ComputationQuota>> {
-        let limit = limit.max(10); // TODO: use list limit from config
+        let limit = limit.min(10); // TODO: use list limit from config
 
         let conn = self.conn_pool.get().await?;
-
-        struct QuotaLogEntry {
-            computation_id: Uuid,
-            workflow_id: Uuid,
-            operator_name: String,
-            operator_path: String,
-            timestamp: chrono::DateTime<chrono::Utc>,
-            count: i64,
-        }
-
-        struct OperatorQuotaLog {
-            operator_name: String,
-            operator_path: String,
-            timestamp: DateTime,
-            count: i64,
-        }
-
-        #[derive(Hash, Eq, PartialEq)]
-        struct WorkflowComputation {
-            computation_id: Uuid,
-            workflow_id: Uuid,
-        }
 
         let rows = conn
             .query(
@@ -921,83 +895,65 @@ where
             SELECT
                 computation_id,
                 workflow_id,
-                operator_name,
-                operator_path,
                 MIN(timestamp) AS timestamp,
                 COUNT(*) AS count
             FROM
                 quota_log
             WHERE
-                user_id = $1 AND
-                computation_id IN (
-                    SELECT computation_id
-                    FROM quota_log 
-                    WHERE user_id = $1 AND workflow_id = $2 
-                    GROUP BY computation_id
-                    ORDER BY min(timestamp) DESC
-                    LIMIT $3
-                )
+                user_id = $1
             GROUP BY
                 computation_id,
-                workflow_id,
-                operator_name,
-                operator_path;",
-                &[&self.session.user.id, &workflow, &(limit as i64)],
+                workflow_id
+            ORDER BY 
+                MIN(TIMESTAMP) DESC
+            OFFSET $2
+            LIMIT $3;",
+                &[&self.session.user.id, &(offset as i64), &(limit as i64)],
             )
             .await?;
 
-        let entries = rows.iter().map(|row| QuotaLogEntry {
-            computation_id: row.get(0),
-            workflow_id: row.get(1),
-            operator_name: row.get(2),
-            operator_path: row.get(3),
-            timestamp: row.get(4),
-            count: row.get(5),
-        });
-
-        let mut computations: HashMap<WorkflowComputation, Vec<OperatorQuotaLog>> = HashMap::new();
-
-        for entry in entries {
-            computations
-                .entry(WorkflowComputation {
-                    workflow_id: entry.workflow_id,
-                    computation_id: entry.computation_id,
-                })
-                .or_default()
-                .push({
-                    OperatorQuotaLog {
-                        operator_name: entry.operator_name,
-                        operator_path: entry.operator_path,
-                        timestamp: entry.timestamp.into(),
-                        count: entry.count,
-                    }
-                });
-        }
-
-        let mut logs = computations
-            .into_iter()
-            .map(|(workflow_computation, operator_quotas)| ComputationQuota {
-                computation_id: workflow_computation.computation_id,
-                workflow_id: workflow_computation.workflow_id,
-                timestamp: operator_quotas
-                    .iter()
-                    .map(|o| o.timestamp)
-                    .max()
-                    .unwrap_or(DateTime::MIN),
-                operators: operator_quotas
-                    .into_iter()
-                    .map(|o| OperatorQuota {
-                        operator_name: o.operator_name,
-                        operator_path: o.operator_path,
-                        count: o.count as u64,
-                    })
-                    .collect(),
+        Ok(rows
+            .iter()
+            .map(|row| ComputationQuota {
+                computation_id: row.get(0),
+                workflow_id: row.get(1),
+                timestamp: row.get(2),
+                count: row.get::<_, i64>(3) as u64,
             })
-            .collect::<Vec<_>>();
+            .collect())
+    }
 
-        logs.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+    async fn quota_used_by_computation(&self, computation_id: Uuid) -> Result<Vec<OperatorQuota>> {
+        let conn = self.conn_pool.get().await?;
 
-        Ok(logs)
+        let rows = conn
+            .query(
+                "
+            SELECT
+                operator_name,
+                operator_path,
+                COUNT(*) AS count
+            FROM
+                quota_log
+            WHERE
+                user_id = $1 AND
+                computation_id = $2
+            GROUP BY
+                operator_name, operator_path
+            ORDER BY 
+            operator_name DESC;",
+                &[&self.session.user.id, &computation_id],
+            )
+            .await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| OperatorQuota {
+                operator_name: row.get(0),
+                operator_path: row.get(1),
+                count: row.get::<_, i64>(2) as u64,
+            })
+            .collect())
     }
 
     async fn quota_used_on_data(&self) -> Result<Vec<DataUsage>> {

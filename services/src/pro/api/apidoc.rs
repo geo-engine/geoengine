@@ -140,6 +140,7 @@ use utoipa::{Modify, OpenApi};
         pro::api::handlers::users::revoke_role_handler,
         pro::api::handlers::users::get_role_descriptions,
         pro::api::handlers::users::computations_quota_handler,
+        pro::api::handlers::users::computation_quota_handler,
         handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,

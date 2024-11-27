@@ -182,7 +182,7 @@ pub fn initialize_quota_tracking<U: UserDb + 'static>(
     QuotaTrackingFactory::new(quota_sender)
 }
 
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct OperatorQuota {
     pub operator_name: String,
@@ -196,7 +196,7 @@ pub struct ComputationQuota {
     pub timestamp: DateTime,
     pub computation_id: Uuid,
     pub workflow_id: Uuid,
-    pub operators: Vec<OperatorQuota>,
+    pub count: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
