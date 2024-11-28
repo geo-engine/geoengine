@@ -358,7 +358,6 @@ where
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
-
 pub struct ComputationQuotaParams {
     pub offset: usize,
     pub limit: usize,
@@ -428,6 +427,12 @@ where
     Ok(web::Json(computation_quota))
 }
 
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct UsageParams {
+    pub offset: u64,
+    pub limit: u64,
+}
+
 /// Retrieves the quota used on data
 #[utoipa::path(
     tag = "User",
@@ -436,21 +441,46 @@ where
     responses(
         (status = 200, description = "The quota used on data", body = Vec<DataUsage>)
     ),
+    params(
+        UsageParams
+    ),
     security(
         ("session_token" = [])
     ),
 )]
 pub(crate) async fn data_usage_handler<C: ProApplicationContext>(
     app_ctx: web::Data<C>,
+    params: web::Query<UsageParams>,
     session: C::Session,
 ) -> Result<web::Json<Vec<DataUsage>>>
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
+    let params = params.into_inner();
+
     let db = app_ctx.session_context(session).db();
-    let data_usage = db.quota_used_on_data().await?;
+    let data_usage = db.quota_used_on_data(params.offset, params.limit).await?;
 
     Ok(web::Json(data_usage))
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum UsageSummaryGranularity {
+    Minutes,
+    Hours,
+    Days,
+    Months,
+    Years,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageSummaryParams {
+    pub granularity: UsageSummaryGranularity,
+    pub offset: u64,
+    pub limit: u64,
+    pub dataset: Option<String>,
 }
 
 /// Retrieves the quota used by computations
@@ -459,7 +489,10 @@ where
     get,
     path = "/quota/dataUsage/summary",
     responses(
-        (status = 200, description = "The quota used on data", body = Vec<DataUsage>)
+        (status = 200, description = "The quota used on data", body = Vec<DataUsageSummary>)
+    ),
+    params(
+        UsageSummaryParams
     ),
     security(
         ("session_token" = [])
@@ -467,13 +500,23 @@ where
 )]
 pub(crate) async fn data_usage_summary_handler<C: ProApplicationContext>(
     app_ctx: web::Data<C>,
+    params: web::Query<UsageSummaryParams>,
     session: C::Session,
 ) -> Result<web::Json<Vec<DataUsageSummary>>>
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
+    let params = params.into_inner();
+
     let db = app_ctx.session_context(session).db();
-    let data_usage = db.quota_used_on_data_summary().await?;
+    let data_usage = db
+        .quota_used_on_data_summary(
+            params.dataset,
+            params.granularity,
+            params.offset,
+            params.limit,
+        )
+        .await?;
 
     Ok(web::Json(data_usage))
 }
@@ -2301,7 +2344,7 @@ mod tests {
             .unwrap();
 
         let req = test::TestRequest::get()
-            .uri("/quota/dataUsage")
+            .uri("/quota/dataUsage?offset=0&limit=10")
             .append_header((
                 header::AUTHORIZATION,
                 format!("Bearer {}", admin_session.id),
@@ -2319,7 +2362,7 @@ mod tests {
         assert_eq!(usage[2].count, 2);
 
         let req = test::TestRequest::get()
-            .uri("/quota/dataUsage/summary")
+            .uri("/quota/dataUsage/summary?granularity=years&offset=0&limit=10")
             .append_header((
                 header::AUTHORIZATION,
                 format!("Bearer {}", admin_session.id),
@@ -2329,9 +2372,9 @@ mod tests {
         let usage: Vec<DataUsageSummary> = test::read_body_json(res).await;
 
         assert_eq!(usage.len(), 2);
-        assert_eq!(usage[0].data, "GdalSource");
+        assert_eq!(usage[0].dataset, "GdalSource");
         assert_eq!(usage[0].count, 3);
-        assert_eq!(usage[1].data, "OgrSource");
+        assert_eq!(usage[1].dataset, "OgrSource");
         assert_eq!(usage[1].count, 1);
     }
 }

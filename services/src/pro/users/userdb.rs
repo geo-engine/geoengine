@@ -1,5 +1,6 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
+use crate::pro::api::handlers::users::UsageSummaryGranularity;
 use crate::pro::permissions::{RoleDescription, RoleId};
 use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
 use crate::pro::users::oidc::{OidcTokens, UserClaims};
@@ -159,14 +160,20 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call
-    async fn quota_used_on_data(&self) -> Result<Vec<DataUsage>>;
+    async fn quota_used_on_data(&self, offset: u64, limit: u64) -> Result<Vec<DataUsage>>;
 
     /// Retrieve the quota log for data (summary)
     ///
     /// # Errors
     ///
     /// This call
-    async fn quota_used_on_data_summary(&self) -> Result<Vec<DataUsageSummary>>;
+    async fn quota_used_on_data_summary(
+        &self,
+        dataset: Option<String>,
+        granularity: UsageSummaryGranularity,
+        offset: u64,
+        limit: u64,
+    ) -> Result<Vec<DataUsageSummary>>;
 
     /// Gets a specific users used quota
     ///
