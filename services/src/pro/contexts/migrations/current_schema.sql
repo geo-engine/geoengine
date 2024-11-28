@@ -6,7 +6,10 @@ CREATE TYPE "StacBand" AS (
     data_type "RasterDataType"
 );
 
-CREATE TYPE "StacZone" AS ("name" text, epsg oid);
+CREATE TYPE "StacZone" AS (
+    "name" text,
+    epsg oid
+);
 
 CREATE TYPE "StacApiRetries" AS (
     number_of_retries bigint,
@@ -14,7 +17,9 @@ CREATE TYPE "StacApiRetries" AS (
     exponential_backoff_factor double precision
 );
 
-CREATE TYPE "GdalRetries" AS (number_of_retries bigint);
+CREATE TYPE "GdalRetries" AS (
+    number_of_retries bigint
+);
 
 CREATE TYPE "StacQueryBuffer" AS (
     start_seconds bigint,
@@ -49,8 +54,10 @@ CREATE TYPE "CopernicusDataspaceDataProviderDefinition" AS (
 
 CREATE TYPE "ProDataProviderDefinition" AS (
     -- one of
-    sentinel_s2_l2_a_cogs_provider_definition "SentinelS2L2ACogsProviderDefinition",
-    copernicus_dataspace_provider_definition "CopernicusDataspaceDataProviderDefinition"
+    sentinel_s2_l2_a_cogs_provider_definition
+    "SentinelS2L2ACogsProviderDefinition",
+    copernicus_dataspace_provider_definition
+    "CopernicusDataspaceDataProviderDefinition"
 );
 
 CREATE TABLE pro_layer_providers (
@@ -81,17 +88,16 @@ CREATE TABLE users (
     quota_available bigint NOT NULL DEFAULT 0,
     quota_used bigint NOT NULL DEFAULT 0,
     -- TODO: rename to total_quota_used?
-    CONSTRAINT users_anonymous_ck CHECK (
-        (
-            email IS NULL
-            AND password_hash IS NULL
-            AND real_name IS NULL
-        )
-        OR (
-            email IS NOT NULL
-            AND password_hash IS NOT NULL
-            AND real_name IS NOT NULL
-        )
+    CONSTRAINT users_anonymous_ck CHECK ((
+        email IS NULL
+        AND password_hash IS NULL
+        AND real_name IS NULL
+    )
+    OR (
+        email IS NOT NULL
+        AND password_hash IS NOT NULL
+        AND real_name IS NOT NULL
+    )
     ),
     CONSTRAINT users_quota_used_ck CHECK (quota_used >= 0)
 );
@@ -157,9 +163,7 @@ CREATE TABLE permissions (
         (
             (dataset_id IS NOT NULL)::integer
             + (layer_id IS NOT NULL)::integer
-            + (
-                layer_collection_id IS NOT NULL
-            )::integer
+            + (layer_collection_id IS NOT NULL)::integer
             + (project_id IS NOT NULL)::integer
             + (ml_model_id IS NOT NULL)::integer
         ) = 1
@@ -192,48 +196,48 @@ CREATE UNIQUE INDEX ON permissions (
     ml_model_id
 );
 
-CREATE VIEW user_permitted_datasets AS
+CREATE VIEW user_permitted_datasets
+AS
 SELECT
     r.user_id,
     p.dataset_id,
     p.permission
 FROM user_roles AS r
 INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id
-    AND p.dataset_id IS NOT NULL
+    r.role_id = p.role_id AND p.dataset_id IS NOT NULL
 );
 
-CREATE VIEW user_permitted_projects AS
+CREATE VIEW user_permitted_projects
+AS
 SELECT
     r.user_id,
     p.project_id,
     p.permission
 FROM user_roles AS r
 INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id
-    AND p.project_id IS NOT NULL
+    r.role_id = p.role_id AND p.project_id IS NOT NULL
 );
 
-CREATE VIEW user_permitted_layer_collections AS
+CREATE VIEW user_permitted_layer_collections
+AS
 SELECT
     r.user_id,
     p.layer_collection_id,
     p.permission
 FROM user_roles AS r
 INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id
-    AND p.layer_collection_id IS NOT NULL
+    r.role_id = p.role_id AND p.layer_collection_id IS NOT NULL
 );
 
-CREATE VIEW user_permitted_layers AS
+CREATE VIEW user_permitted_layers
+AS
 SELECT
     r.user_id,
     p.layer_id,
     p.permission
 FROM user_roles AS r
 INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id
-    AND p.layer_id IS NOT NULL
+    r.role_id = p.role_id AND p.layer_id IS NOT NULL
 );
 
 CREATE TABLE oidc_session_tokens (
@@ -247,15 +251,15 @@ CREATE TABLE oidc_session_tokens (
     refresh_token_encryption_nonce bytea
 );
 
-CREATE VIEW user_permitted_ml_models AS
+CREATE VIEW user_permitted_ml_models
+AS
 SELECT
     r.user_id,
     p.ml_model_id,
     p.permission
 FROM user_roles AS r
 INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id
-    AND p.ml_model_id IS NOT NULL
+    r.role_id = p.role_id AND p.ml_model_id IS NOT NULL
 );
 
 CREATE TABLE quota_log (
