@@ -459,7 +459,7 @@ struct ApiDocInfo;
 
 impl Modify for ApiDocInfo {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        openapi.info.title = "Geo Engine Pro API".to_string();
+        openapi.info.title = "Geo Engine API".to_string();
 
         openapi.info.contact = Some(
             utoipa::openapi::ContactBuilder::new()

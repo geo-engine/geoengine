@@ -1,4 +1,4 @@
-// This is an inclusion point of Geo Engine Pro
+// This is an inclusion point of Geo Engine Pro – TODO: migrate
 
 pub mod api;
 pub mod contexts;
@@ -8,7 +8,6 @@ pub mod machine_learning;
 pub mod permissions;
 pub mod projects;
 pub mod quota;
-pub mod server;
 pub mod tasks;
 pub mod users;
 pub mod util;

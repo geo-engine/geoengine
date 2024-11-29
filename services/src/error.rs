@@ -431,7 +431,6 @@ pub enum Error {
         spatial_reference_string: String,
     },
 
-    #[cfg(feature = "pro")]
     #[snafu(context(false), display("OidcError: {}", source))]
     Oidc {
         source: crate::pro::users::OidcError,

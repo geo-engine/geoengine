@@ -1390,6 +1390,7 @@ mod tests {
         let req = test::TestRequest::post().uri("/anonymous");
         let res = send_pro_test_request(req, app_ctx.clone()).await;
 
+        // required to not corrupt other tests
         config::set_config("session.anonymous_access", true).unwrap();
 
         ErrorResponse::assert(
