@@ -4,7 +4,7 @@ use serde::{de::Visitor, Deserialize, Serialize};
 
 use crate::{
     dataset::{is_invalid_name_char, SYSTEM_NAMESPACE},
-    raster::RasterDataType,
+    raster::{GridShape2D, GridShape3D, GridSize, RasterDataType},
 };
 
 const NAME_DELIMITER: char = ':';
@@ -112,13 +112,86 @@ impl<'de> Visitor<'de> for MlModelNameDeserializeVisitor {
     }
 }
 
+/// A struct describing tensor shape for `MlModelMetadata`
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
+pub struct TensorShape3D {
+    pub y: u32,
+    pub x: u32,
+    pub attributes: u32, // TODO: named attributes?
+}
+
+impl From<TensorShape3D> for GridShape3D {
+    fn from(value: TensorShape3D) -> Self {
+        GridShape3D::new(value.axis_size())
+    }
+}
+
+impl GridSize for TensorShape3D {
+    type ShapeArray = [usize; 3];
+
+    const NDIM: usize = 3;
+
+    fn axis_size(&self) -> Self::ShapeArray {
+        [
+            self.attributes as usize,
+            self.axis_size_y(),
+            self.axis_size_x(),
+        ]
+    }
+
+    fn axis_size_x(&self) -> usize {
+        self.x as usize
+    }
+
+    fn axis_size_y(&self) -> usize {
+        self.y as usize
+    }
+
+    fn number_of_elements(&self) -> usize {
+        self.attributes as usize * self.axis_size_y() * self.axis_size_x()
+    }
+}
+
+impl TensorShape3D {
+    pub fn new_y_x_attr(y: u32, x: u32, attributes: u32) -> Self {
+        Self { y, x, attributes }
+    }
+
+    pub fn yx_matches_tile_shape(&self, tile_shape: &GridShape2D) -> bool {
+        self.axis_size_x() == tile_shape.axis_size_x()
+            && self.axis_size_y() == tile_shape.axis_size_y()
+    }
+}
+
 // For now we assume all models are pixel-wise, i.e., they take a single pixel with multiple bands as input and produce a single output value.
 // To support different inputs, we would need a more sophisticated logic to produce the inputs for the model.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct MlModelMetadata {
     pub file_path: PathBuf,
     pub input_type: RasterDataType,
-    pub num_input_bands: u32, // number of features per sample (bands per pixel)
-    pub output_type: RasterDataType, // TODO: support multiple outputs, e.g. one band for the probability of prediction
-                                     // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
+    pub output_type: RasterDataType,
+    pub input_shape: TensorShape3D,
+    pub output_shape: TensorShape3D, // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
+}
+
+impl MlModelMetadata {
+    pub fn num_input_bands(&self) -> u32 {
+        self.input_shape.attributes
+    }
+
+    pub fn mun_output_bands(&self) -> u32 {
+        self.output_shape.attributes
+    }
+
+    pub fn input_is_single_pixel(&self) -> bool {
+        self.input_shape.x == 1 && self.input_shape.y == 1
+    }
+
+    pub fn output_is_single_pixel(&self) -> bool {
+        self.output_shape.x == 1 && self.output_shape.y == 1
+    }
+
+    pub fn output_is_single_attribute(&self) -> bool {
+        self.mun_output_bands() == 1
+    }
 }

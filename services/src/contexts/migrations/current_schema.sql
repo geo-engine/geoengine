@@ -887,11 +887,18 @@ CREATE TABLE ebv_provider_loading_infos (
     ) ON DELETE CASCADE DEFERRABLE
 );
 
+CREATE TYPE "TensorShape3D" AS (
+    x OID,
+    y OID,
+    attributes OID
+);
+
 CREATE TYPE "MlModelMetadata" AS (
     file_name text,
     input_type "RasterDataType",
-    num_input_bands OID,
-    output_type "RasterDataType"
+    output_type "RasterDataType",
+    input_shape "TensorShape3D",
+    output_shape "TensorShape3D"
 );
 
 CREATE TYPE "MlModelName" AS (namespace text, name text);
