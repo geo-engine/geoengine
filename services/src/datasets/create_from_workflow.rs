@@ -6,7 +6,7 @@ use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::datasets::AddDataset;
 use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
-use crate::workflows::workflow::Workflow;
+use crate::workflows::workflow::{Workflow, WorkflowId};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -28,6 +28,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use super::{DatasetIdAndName, DatasetName};
 
@@ -62,6 +63,7 @@ impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
 
 pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
     pub source_name: String,
+    pub workflow_id: WorkflowId,
     pub workflow: Workflow,
     pub ctx: Arc<C>,
     pub info: RasterDatasetFromWorkflow,
@@ -89,7 +91,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
         let processor = initialized.query_processor()?;
 
         let query_rect = self.info.query;
-        let query_ctx = self.ctx.query_context()?;
+        let query_ctx = self.ctx.query_context(self.workflow_id.0, Uuid::new_v4())?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
                 .ok_or(crate::error::Error::MissingSpatialReference)?;
@@ -179,6 +181,7 @@ impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C
 
 pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
     source_name: String,
+    workflow_id: WorkflowId,
     workflow: Workflow,
     ctx: Arc<C>,
     info: RasterDatasetFromWorkflow,
@@ -208,6 +211,7 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
 
     let task = RasterDatasetFromWorkflowTask {
         source_name,
+        workflow_id,
         workflow,
         ctx: ctx.clone(),
         info,

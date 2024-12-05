@@ -14,6 +14,7 @@ pub use crate::contexts::migrations::{
     migration_0012_ml_model_db::Migration0012MlModelDb,
     migration_0013_copernicus_provider::Migration0013CopernicusProvider,
     migration_0014_multiband_colorizer::Migration0014MultibandColorizer,
+    migration_0015_log_quota::Migration0015LogQuota,
 };
 pub use database_migration::{
     initialize_database, migrate_database, DatabaseVersion, Migration, MigrationResult,
@@ -36,6 +37,7 @@ pub mod migration_0011_remove_xgb;
 pub mod migration_0012_ml_model_db;
 pub mod migration_0013_copernicus_provider;
 pub mod migration_0014_multiband_colorizer;
+pub mod migration_0015_log_quota;
 
 #[cfg(test)]
 mod schema_info;
@@ -64,6 +66,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0012MlModelDb),
         Box::new(Migration0013CopernicusProvider),
         Box::new(Migration0014MultibandColorizer),
+        Box::new(Migration0015LogQuota),
     ]
 }
 

@@ -1,8 +1,10 @@
 use crate::contexts::SessionId;
 use crate::error::{Error, Result};
+use crate::pro::api::handlers::users::UsageSummaryGranularity;
 use crate::pro::contexts::{ProApplicationContext, ProPostgresDb};
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Role, RoleDescription, RoleId};
+use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
 use crate::pro::users::oidc::{FlatMaybeEncryptedOidcTokens, OidcTokens, UserClaims};
 use crate::pro::users::userdb::{
     CannotRevokeRoleThatIsNotAssignedRoleDbError, RoleIdDoesNotExistRoleDbError,
@@ -16,6 +18,7 @@ use crate::util::postgres::PostgresErrorExt;
 use crate::util::Identifier;
 use crate::{error, pro::contexts::ProPostgresContext};
 use async_trait::async_trait;
+use geoengine_operators::meta::quota::ComputationUnit;
 
 use crate::util::encryption::MaybeEncryptedBytes;
 use bb8_postgres::{
@@ -832,6 +835,228 @@ where
             .map_err(|_error| error::Error::InvalidSession)?;
 
         Ok(row.get::<usize, i64>(0))
+    }
+
+    async fn log_quota_used<I: IntoIterator<Item = ComputationUnit> + Send>(
+        &self,
+        log: I,
+    ) -> Result<()> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        // collect the log into separate vectors to pass them as parameters to the query
+        let mut users = Vec::new();
+        let mut workflows = Vec::new();
+        let mut computations = Vec::new();
+        let mut operators_names = Vec::new();
+        let mut operator_paths = Vec::new();
+
+        for unit in log {
+            users.push(unit.user);
+            workflows.push(unit.workflow);
+            computations.push(unit.computation);
+            operators_names.push(unit.operator_name);
+            operator_paths.push(unit.operator_path.to_string());
+        }
+
+        let query = "
+            INSERT INTO quota_log (user_id, workflow_id, computation_id, operator_name, operator_path)
+                (SELECT * FROM UNNEST($1::uuid[], $2::uuid[], $3::uuid[], $4::text[], $5::text[]))
+        ";
+
+        conn.execute(
+            query,
+            &[
+                &users,
+                &workflows,
+                &computations,
+                &operators_names,
+                &operator_paths,
+            ],
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn quota_used_by_computations(
+        &self,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<ComputationQuota>> {
+        let limit = limit.min(10); // TODO: use list limit from config
+
+        let conn = self.conn_pool.get().await?;
+
+        let rows = conn
+            .query(
+                "
+            SELECT
+                computation_id,
+                workflow_id,
+                MIN(timestamp) AS timestamp,
+                COUNT(*) AS count
+            FROM
+                quota_log
+            WHERE
+                user_id = $1
+            GROUP BY
+                computation_id,
+                workflow_id
+            ORDER BY 
+                MIN(TIMESTAMP) DESC
+            OFFSET $2
+            LIMIT $3;",
+                &[&self.session.user.id, &(offset as i64), &(limit as i64)],
+            )
+            .await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| ComputationQuota {
+                computation_id: row.get(0),
+                workflow_id: row.get(1),
+                timestamp: row.get(2),
+                count: row.get::<_, i64>(3) as u64,
+            })
+            .collect())
+    }
+
+    async fn quota_used_by_computation(&self, computation_id: Uuid) -> Result<Vec<OperatorQuota>> {
+        let conn = self.conn_pool.get().await?;
+
+        let rows = conn
+            .query(
+                "
+            SELECT
+                operator_name,
+                operator_path,
+                COUNT(*) AS count
+            FROM
+                quota_log
+            WHERE
+                user_id = $1 AND
+                computation_id = $2
+            GROUP BY
+                operator_name, operator_path
+            ORDER BY 
+            operator_name DESC;",
+                &[&self.session.user.id, &computation_id],
+            )
+            .await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| OperatorQuota {
+                operator_name: row.get(0),
+                operator_path: row.get(1),
+                count: row.get::<_, i64>(2) as u64,
+            })
+            .collect())
+    }
+
+    async fn quota_used_on_data(&self, offset: u64, limit: u64) -> Result<Vec<DataUsage>> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        let conn = self.conn_pool.get().await?;
+
+        let rows = conn
+            .query(
+                "
+            SELECT
+                user_id,
+                computation_id,
+                operator_name,
+                MIN(timestamp) AS timestamp,
+                COUNT(*) AS count
+            FROM
+                quota_log
+            WHERE 
+                operator_name IN ('GdalSource', 'OgrSource')
+            GROUP BY
+               user_id,
+               computation_id,
+               workflow_id,
+               operator_name
+            ORDER BY
+                MIN(timestamp) DESC, user_id ASC, computation_id ASC, workflow_id ASC, operator_name ASC
+            OFFSET
+                $1
+            LIMIT
+                $2;",
+                &[ &(offset as i64), &(limit as i64)],
+            )
+            .await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| DataUsage {
+                user_id: row.get(0),
+                computation_id: row.get(1),
+                data: row.get(2),
+                timestamp: row.get(3),
+                count: row.get::<_, i64>(4) as u64,
+            })
+            .collect())
+    }
+
+    async fn quota_used_on_data_summary(
+        &self,
+        _dataset: Option<String>,
+        granularity: UsageSummaryGranularity,
+        offset: u64,
+        limit: u64,
+    ) -> Result<Vec<DataUsageSummary>> {
+        ensure!(self.session.is_admin(), error::PermissionDenied);
+
+        // TODO: check if user is Owner of dataset
+
+        let conn = self.conn_pool.get().await?;
+
+        let trunc = match granularity {
+            UsageSummaryGranularity::Minutes => "minute",
+            UsageSummaryGranularity::Hours => "hour",
+            UsageSummaryGranularity::Days => "day",
+            UsageSummaryGranularity::Months => "month",
+            UsageSummaryGranularity::Years => "year",
+        };
+
+        // TODO: include dataset in query
+        let rows = conn
+            .query(
+                &format!(
+                    "
+            SELECT
+                date_trunc('{trunc}', timestamp) AS trunc,
+                operator_name as dataset,
+                COUNT(*) AS count
+            FROM
+                quota_log
+            WHERE 
+                operator_name IN ('GdalSource', 'OgrSource')
+            GROUP BY
+                trunc, dataset
+            ORDER BY
+                trunc DESC, dataset ASC
+            OFFSET
+                $1
+            LIMIT 
+                $2;"
+                ),
+                &[&(offset as i64), &(limit as i64)],
+            )
+            .await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| DataUsageSummary {
+                timestamp: row.get(0),
+                dataset: row.get(1),
+                count: row.get::<_, i64>(2) as u64,
+            })
+            .collect())
     }
 
     async fn update_quota_available_by_user(

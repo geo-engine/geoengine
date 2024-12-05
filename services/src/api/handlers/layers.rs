@@ -780,6 +780,8 @@ async fn layer_to_dataset<C: ApplicationContext>(
         }
     };
 
+    let workflow_id = db.register_workflow(layer.workflow.clone()).await?;
+
     let execution_context = ctx.execution_context()?;
 
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
@@ -829,6 +831,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("layer {item}"),
+        workflow_id,
         layer.workflow,
         ctx,
         from_workflow,
@@ -1190,7 +1193,7 @@ mod tests {
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
-    use crate::util::tests::{read_body_string, TestDataUploads};
+    use crate::util::tests::{read_body_string, MockQueryContext, TestDataUploads};
     use crate::{
         contexts::{PostgresContext, Session},
         util::tests::send_test_request,
@@ -1974,7 +1977,7 @@ mod tests {
         query_rectangle: RasterQueryRectangle,
     ) -> geoengine_operators::util::Result<Vec<Vec<u8>>> {
         let exe_ctx = ctx.execution_context().unwrap();
-        let query_ctx = ctx.query_context().unwrap();
+        let query_ctx = ctx.mock_query_context().unwrap();
 
         let initialized_operator = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

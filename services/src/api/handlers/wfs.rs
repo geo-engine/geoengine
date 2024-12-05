@@ -40,6 +40,7 @@ use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 pub(crate) fn init_wfs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -522,7 +523,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
             .map_or_else(SpatialResolution::zero_point_one, |r| r.0),
         attributes: ColumnSelection::all(),
     };
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(type_names.0, Uuid::new_v4())?;
 
     let (json, cache_hint) = match processor {
         TypedVectorQueryProcessor::Data(p) => {

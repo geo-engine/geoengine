@@ -30,6 +30,7 @@ use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 use url::Url;
+use uuid::Uuid;
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -429,7 +430,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         attributes: BandSelection::first(), // TODO: support multi bands in API and set the selection here
     };
 
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(identifier.0, Uuid::new_v4())?;
 
     let (bytes, cache_hint) = call_on_generic_raster_processor_gdal_types!(processor, p =>
         raster_stream_to_multiband_geotiff_bytes(

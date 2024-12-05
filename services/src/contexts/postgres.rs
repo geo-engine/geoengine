@@ -29,6 +29,7 @@ use rayon::ThreadPool;
 use snafu::ensure;
 use std::path::PathBuf;
 use std::sync::Arc;
+use uuid::Uuid;
 
 // TODO: distinguish user-facing errors from system-facing error messages
 
@@ -368,7 +369,7 @@ where
         SimpleTaskManager::new(self.context.task_manager.clone())
     }
 
-    fn query_context(&self) -> Result<Self::QueryContext> {
+    fn query_context(&self, _workflow: Uuid, _computation: Uuid) -> Result<Self::QueryContext> {
         Ok(QueryContextImpl::new(
             self.context.query_ctx_chunk_size,
             self.context.thread_pool.clone(),

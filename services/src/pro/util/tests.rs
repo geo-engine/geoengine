@@ -35,6 +35,8 @@ use geoengine_datatypes::{
     test_data,
     util::{test::TestDefault, Identifier},
 };
+use geoengine_operators::engine::WorkflowOperatorPath;
+use geoengine_operators::meta::quota::QuotaTracking;
 use geoengine_operators::{
     engine::{ChunkByteSize, RasterOperator, TypedOperator},
     source::{GdalSource, GdalSourceParameters},
@@ -447,6 +449,16 @@ where
     match executed_fn {
         Ok(res) => res,
         Err(err) => std::panic::resume_unwind(err),
+    }
+}
+
+pub trait MockQuotaTracking {
+    fn mock_work_unit_done(&self);
+}
+
+impl MockQuotaTracking for QuotaTracking {
+    fn mock_work_unit_done(&self) {
+        self.work_unit_done("test".to_string(), WorkflowOperatorPath::initialize_root());
     }
 }
 
