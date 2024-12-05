@@ -15,7 +15,7 @@ impl ProMigration for ProMigrationImpl<Migration0015LogQuota> {
                     workflow_id uuid NOT NULL,
                     computation_id uuid NOT NULL,
                     operator_name text NOT NULL,
-                    operator_path text NOT NULL,
+                    operator_path text NOT NULL
                 );
 
                 CREATE INDEX ON quota_log (user_id, timestamp, computation_id);

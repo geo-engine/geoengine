@@ -152,7 +152,7 @@ mod tests {
                 user,
                 workflow,
                 computation,
-                operator_name: "unknown".to_string(),
+                operator_name: "test".to_string(),
                 operator_path: WorkflowOperatorPath::initialize_root()
             }
             .into()
