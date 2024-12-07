@@ -8,8 +8,6 @@ license-file.workspace = true
 documentation.workspace = true
 repository.workspace = true
 
-[features]
-
 [dependencies]
 arrow = { workspace = true }
 async-trait = { workspace = true }

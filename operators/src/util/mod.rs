@@ -1,4 +1,5 @@
 mod async_util;
+pub mod test;
 pub mod gdal;
 pub mod input;
 pub mod math;
@@ -12,6 +13,7 @@ pub mod stream_zip;
 pub mod string_token;
 pub mod sunpos;
 mod temporary_gdal_thread_local_config_options;
+mod wrap_with_projection_and_resample;
 
 use crate::error::Error;
 use std::collections::HashSet;
@@ -23,6 +25,7 @@ pub use self::async_util::{
 };
 pub use self::rayon::create_rayon_thread_pool;
 pub use self::temporary_gdal_thread_local_config_options::TemporaryGdalThreadLocalConfigOptions;
+pub use wrap_with_projection_and_resample::WrapWithProjectionAndResample;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 

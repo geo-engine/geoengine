@@ -248,11 +248,12 @@ pub fn rectangle_from_ogc_params<A: AxisAlignedRectangle>(
     spatial_reference: SpatialReference,
 ) -> Result<A> {
     let [a, b, c, d] = values;
-    match spatial_reference_specification(&spatial_reference.proj_string()?)?
+    let axis_order = spatial_reference_specification(&spatial_reference.into())?
         .axis_order
         .ok_or(error::Error::AxisOrderingNotKnownForSrs {
             srs_string: spatial_reference.srs_string(),
-        })? {
+        })?;
+    match axis_order {
         AxisOrder::EastNorth => A::from_min_max((a, b).into(), (c, d).into()).map_err(Into::into),
         AxisOrder::NorthEast => A::from_min_max((b, a).into(), (d, c).into()).map_err(Into::into),
     }
@@ -264,7 +265,7 @@ pub fn tuple_from_ogc_params(
     b: f64,
     spatial_reference: SpatialReference,
 ) -> Result<(f64, f64)> {
-    match spatial_reference_specification(&spatial_reference.proj_string()?)?
+    match spatial_reference_specification(&spatial_reference.into())?
         .axis_order
         .ok_or(error::Error::AxisOrderingNotKnownForSrs {
             srs_string: spatial_reference.srs_string(),

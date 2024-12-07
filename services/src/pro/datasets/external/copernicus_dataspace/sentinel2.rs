@@ -6,13 +6,14 @@ use crate::pro::datasets::external::copernicus_dataspace::stac::{
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::{
     primitives::{
-        CacheTtlSeconds, DateTime, RasterQueryRectangle, SpatialResolution, TimeInstance,
-        TimeInterval,
+        AxisAlignedRectangle, CacheTtlSeconds, ColumnSelection, DateTime, RasterQueryRectangle,
+        TimeInstance, TimeInterval, VectorQueryRectangle,
     },
+    raster::{GeoTransform, GridShape2D, SpatialGridDefinition, TilingSpecification},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
 };
 use geoengine_operators::{
-    engine::{MetaData, RasterBandDescriptor, RasterResultDescriptor},
+    engine::{MetaData, RasterBandDescriptor, RasterResultDescriptor, SpatialGridDescriptor},
     source::{
         GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoTemporalSlice,
         GdalLoadingInfoTemporalSliceIterator,
@@ -84,7 +85,7 @@ pub struct Sentinel2Metadata {
 impl Sentinel2Metadata {
     async fn crate_loading_info(
         &self,
-        query: RasterQueryRectangle,
+        query: VectorQueryRectangle, // TODO: here the name is misleading :(
     ) -> Result<GdalLoadingInfo, CopernicusSentinel2Error> {
         let mut stac_items = load_stac_items(
             Url::parse(&self.stac_url).context(CannotParseStacUrl)?,
@@ -241,14 +242,48 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
         &self,
         query: RasterQueryRectangle,
     ) -> geoengine_operators::util::Result<GdalLoadingInfo> {
-        self.crate_loading_info(query).await.map_err(|e| {
-            geoengine_operators::error::Error::LoadingInfo {
+        let utm_extent = self
+            .zone
+            .native_extent()
+            .expect("UTM zone must have bounds"); // TODO throw an error here
+        let px_size = self.product_band.resolution_meters() as f64;
+        let geo_transform = GeoTransform::new(utm_extent.upper_left(), px_size, -px_size);
+        let grid_bounds = geo_transform.spatial_to_grid_bounds(&utm_extent);
+        let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
+
+        // FIXME: get tiling_spec!
+        let tiling_specification = TilingSpecification::new(GridShape2D::new_2d(512, 512));
+
+        let spatial_bounds = SpatialGridDescriptor::new_source(spatial_grid)
+            .tiling_grid_definition(tiling_specification)
+            .tiling_geo_transform()
+            .grid_to_spatial_bounds(&query.spatial_query.grid_bounds());
+
+        let spatial_bounds_query = VectorQueryRectangle::with_bounds(
+            spatial_bounds.as_bbox(),
+            query.time_interval,
+            ColumnSelection::all(),
+        );
+
+        self.crate_loading_info(spatial_bounds_query)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
-            }
-        })
+            })
     }
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
+        let utm_extent = self
+            .zone
+            .native_extent()
+            .expect("UTM zone must have bounds"); // TODO throw an error here
+        let px_size = self.product_band.resolution_meters() as f64;
+        let geo_transform = GeoTransform::new(utm_extent.upper_left(), px_size, -px_size);
+        let grid_bounds = geo_transform.spatial_to_grid_bounds(&utm_extent);
+        let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
+
+        let spatial_grid_desc = SpatialGridDescriptor::new_source(spatial_grid);
+
         Ok(RasterResultDescriptor {
             data_type: self.product_band.data_type(),
             spatial_reference: SpatialReference::new(
@@ -264,11 +299,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
                 DateTime::new_utc(2015, 7, 4, 10, 10, 6),
                 DateTime::now(),
             )),
-            bbox: self.zone.extent(),
-            resolution: Some(SpatialResolution::new(
-                self.product_band.resolution_meters() as f64,
-                self.product_band.resolution_meters() as f64,
-            )?),
+            spatial_grid: spatial_grid_desc,
             bands: vec![RasterBandDescriptor::new_unitless(
                 self.product_band.band_name(),
             )]
@@ -285,10 +316,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
 
 #[cfg(test)]
 mod tests {
-    use std::env;
-
+    use super::*;
+    use crate::pro::datasets::external::copernicus_dataspace::ids::{L2ABand, UtmZoneDirection};
     use geoengine_datatypes::{
-        primitives::{BandSelection, Coordinate2D, DateTime, SpatialPartition2D},
+        primitives::{Coordinate2D, DateTime, SpatialPartition2D},
         test_data,
     };
     use geoengine_operators::source::{FileNotFoundHandling, GdalDatasetGeoTransform};
@@ -298,10 +329,7 @@ mod tests {
         responders::status_code,
         Expectation, Server,
     };
-
-    use crate::pro::datasets::external::copernicus_dataspace::ids::{L2ABand, UtmZoneDirection};
-
-    use super::*;
+    use std::env;
 
     fn add_partial_responses(
         server: &Server,
@@ -480,18 +508,18 @@ mod tests {
 
         // time=2020-07-01T12%3A00%3A00.000Z/2020-07-03T12%3A00%3A00.000Z&EXCEPTIONS=application%2Fjson&WIDTH=256&HEIGHT=256&CRS=EPSG%3A32632&BBOX=482500%2C5627500%2C483500%2C5628500
         let loading_info = metadata
-            .crate_loading_info(RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
+            .crate_loading_info(VectorQueryRectangle::with_bounds(
+                SpatialPartition2D::new_unchecked(
                     (482_500., 5_627_500.).into(),
                     (483_500., 5_628_500.).into(),
-                ),
-                time_interval: TimeInterval::new_unchecked(
+                )
+                .as_bbox(),
+                TimeInterval::new_unchecked(
                     DateTime::parse_from_rfc3339("2020-07-01T12:00:00.000Z").unwrap(),
                     DateTime::parse_from_rfc3339("2020-07-03T12:00:00.000Z").unwrap(),
                 ),
-                spatial_resolution: SpatialResolution::new(10., 10.).unwrap(),
-                attributes: BandSelection::first(),
-            })
+                ColumnSelection::all(),
+            ))
             .await
             .unwrap();
 

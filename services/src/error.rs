@@ -496,6 +496,8 @@ pub enum Error {
     #[snafu(display("Raster band names must not be longer than 256 bytes"))]
     RasterBandNameTooLong,
 
+    ResolutionMissmatch, // FIXME: added this to mark sections where we need to do something about resolutions later
+
     #[snafu(display("Resource id is invalid: type: {}, id: {}", resource_type, resource_id))]
     InvalidResourceId {
         resource_type: String,

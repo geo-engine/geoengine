@@ -288,6 +288,7 @@ impl CopernicusDataspaceDataProvider {
                                 self.id,
                             )
                             .into(),
+                            overview_level: None,
                         },
                     }
                     .boxed(),

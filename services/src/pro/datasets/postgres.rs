@@ -22,7 +22,8 @@ use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterResultDescriptor, TypedResultDescriptor,
+    VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
@@ -150,6 +151,9 @@ where
         Ok(rows
             .iter()
             .map(|row| {
+                let result_desc: TypedResultDescriptor = row.get(6);
+                let result_desc = result_desc.into();
+
                 Result::<DatasetListing>::Ok(DatasetListing {
                     id: row.get(0),
                     name: row.get(1),
@@ -157,7 +161,7 @@ where
                     description: row.get(3),
                     tags: row.get::<_, Option<Vec<String>>>(4).unwrap_or_default(),
                     source_operator: row.get(5),
-                    result_descriptor: row.get(6),
+                    result_descriptor: result_desc,
                     symbology: row.get(7),
                 })
             })

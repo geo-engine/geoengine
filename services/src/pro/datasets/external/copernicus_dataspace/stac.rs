@@ -1,9 +1,6 @@
 use geoengine_datatypes::{
     operations::reproject::{CoordinateProjection, CoordinateProjector, ReprojectClipped},
-    primitives::{
-        AxisAlignedRectangle, BoundingBox2D, DateTime, DateTimeError, Duration,
-        RasterQueryRectangle, SpatialPartitioned,
-    },
+    primitives::{AxisAlignedRectangle, DateTime, DateTimeError, Duration, VectorQueryRectangle},
     spatial_reference::SpatialReference,
 };
 use snafu::{ResultExt, Snafu};
@@ -44,7 +41,7 @@ pub enum CopernicusStacError {
 }
 
 fn bbox_time_query(
-    query: &RasterQueryRectangle,
+    query: &VectorQueryRectangle,
     query_projection: SpatialReference,
 ) -> Result<[(&'static str, String); 2], CopernicusStacError> {
     // TODO: add query buffer like in Element84 provider?
@@ -55,11 +52,7 @@ fn bbox_time_query(
         CoordinateProjector::from_known_srs(query_projection, SpatialReference::epsg_4326())
             .context(CannotReprojectBbox)?;
 
-    let spatial_partition = query.spatial_partition(); // TODO: use SpatialPartition2D directly
-    let bbox = BoundingBox2D::new_upper_left_lower_right_unchecked(
-        spatial_partition.upper_left(),
-        spatial_partition.lower_right(),
-    );
+    let bbox = query.spatial_query.spatial_bounds; // TODO: use SpatialPartition2D directly
 
     // TODO: query the whole zone instead? (for Sentinel-2)
     let bbox = bbox
@@ -100,7 +93,7 @@ fn bbox_time_query(
 pub async fn load_stac_items(
     stac_url: Url,
     collection: &str,
-    query: RasterQueryRectangle,
+    query: VectorQueryRectangle,
     query_projection: SpatialReference,
     product_type: &str,
 ) -> Result<Vec<stac::Item>, CopernicusStacError> {

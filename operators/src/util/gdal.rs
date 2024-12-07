@@ -1,32 +1,7 @@
-use std::{
-    collections::HashSet,
-    convert::TryInto,
-    hash::BuildHasher,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
-
-use gdal::{Dataset, DatasetOptions, DriverManager};
-use geoengine_datatypes::{
-    collections::VectorDataType,
-    dataset::{DataId, DatasetId, NamedData},
-    hashmap,
-    primitives::{
-        BoundingBox2D, CacheTtlSeconds, ContinuousMeasurement, DateTimeParseFormat,
-        FeatureDataType, Measurement, SpatialPartition2D, SpatialResolution, TimeGranularity,
-        TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle,
-    },
-    raster::{GeoTransform, RasterDataType},
-    spatial_reference::SpatialReference,
-    util::Identifier,
-};
-use itertools::Itertools;
-use snafu::ResultExt;
-
 use crate::{
     engine::{
         MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
-        StaticMetaData, VectorColumnInfo, VectorResultDescriptor,
+        SpatialGridDescriptor, StaticMetaData, VectorColumnInfo, VectorResultDescriptor,
     },
     error::{self, Error},
     source::{
@@ -37,9 +12,38 @@ use crate::{
     test_data,
     util::Result,
 };
+use gdal::{Dataset, DatasetOptions, DriverManager};
+use geoengine_datatypes::{
+    collections::VectorDataType,
+    dataset::{DataId, DatasetId, NamedData},
+    hashmap,
+    primitives::{
+        BoundingBox2D, CacheTtlSeconds, ContinuousMeasurement, DateTimeParseFormat,
+        FeatureDataType, Measurement, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+        VectorQueryRectangle,
+    },
+    raster::{BoundedGrid, GeoTransform, GridBoundingBox2D, GridShape2D, RasterDataType},
+    spatial_reference::SpatialReference,
+    util::Identifier,
+};
+use itertools::Itertools;
+use log::Level::Debug;
+use log::{debug, log_enabled};
+use snafu::ResultExt;
+use std::{
+    collections::HashSet,
+    convert::TryInto,
+    hash::BuildHasher,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 // TODO: move test helper somewhere else?
 pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
+    create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::default())
+}
+
+pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds() -> GdalMetaDataRegular {
     create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::default())
 }
 
@@ -90,11 +94,78 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
                 TimeInstance::from_str("2014-07-01T00:00:00.000Z")
                     .expect("it should only be used in tests"),
             )),
-            bbox: Some(SpatialPartition2D::new_unchecked(
-                (-180., 90.).into(),
-                (180., -90.).into(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new((-180., 90.).into(), 0.1, -0.1),
+                GridBoundingBox2D::new([0, 0], [1799, 3599]).expect("should only be used in tests"),
+            ),
+            bands: vec![RasterBandDescriptor {
+                name: "ndvi".to_string(),
+                measurement: Measurement::Continuous(ContinuousMeasurement {
+                    measurement: "vegetation".to_string(),
+                    unit: None,
+                }),
+            }]
+            .try_into()
+            .expect("it should only be used in tests"),
+        },
+        cache_ttl,
+    }
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds_with_cache_ttl(
+    cache_ttl: CacheTtlSeconds,
+) -> GdalMetaDataRegular {
+    let no_data_value = Some(0.); // TODO: is it really 0?
+    GdalMetaDataRegular {
+        data_time: TimeInterval::new_unchecked(
+            TimeInstance::from_str("2014-01-01T00:00:00.000Z")
+                .expect("should only be used in tests"),
+            TimeInstance::from_str("2014-07-01T00:00:00.000Z")
+                .expect("should only be used in tests"),
+        ),
+        step: TimeStep {
+            granularity: TimeGranularity::Months,
+            step: 1,
+        },
+        time_placeholders: hashmap! {
+            "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
+                format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
+                reference: TimeReference::Start,
+            },
+        },
+        params: GdalDatasetParameters {
+            file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF").into(),
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (-180., 85.).into(),
+                x_pixel_size: 0.1,
+                y_pixel_size: -0.1,
+            },
+            width: 3600,
+            height: 1700,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        },
+        result_descriptor: RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new((0., 0.).into(), 0.1, -0.1),
+                GridBoundingBox2D::new([-850, -1800], [-845, -1799])
+                    .expect("should only be used in tests"),
+            ),
+            time: Some(TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z")
+                    .expect("should only be used in tests"),
+                TimeInstance::from_str("2014-07-01T00:00:00.000Z")
+                    .expect("should only be used in tests"),
             )),
-            resolution: Some(SpatialResolution::new_unchecked(0.1, 0.1)),
             bands: vec![RasterBandDescriptor {
                 name: "ndvi".to_string(),
                 measurement: Measurement::Continuous(ContinuousMeasurement {
@@ -114,6 +185,19 @@ pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> NamedData {
     let id: DataId = DatasetId::new().into();
     let name = NamedData::with_system_name("ndvi");
     ctx.add_meta_data(id, name.clone(), Box::new(create_ndvi_meta_data()));
+    name
+}
+
+pub fn add_ndvi_dataset_cropped_to_valid_webmercator_bounds(
+    ctx: &mut MockExecutionContext,
+) -> NamedData {
+    let id: DataId = DatasetId::new().into();
+    let name = NamedData::with_system_name("ndvi_crop_y_85");
+    ctx.add_meta_data(
+        id,
+        name.clone(),
+        Box::new(create_ndvi_meta_data_cropped_to_valid_webmercator_bounds()),
+    );
     name
 }
 
@@ -240,14 +324,17 @@ pub fn raster_descriptor_from_dataset(
     let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
 
-    let geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+    let data_geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+    let data_shape = GridShape2D::new([dataset.raster_size().1, dataset.raster_size().0]);
 
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
         time: None,
-        bbox: None,
-        resolution: Some(geo_transfrom.spatial_resolution()),
+        spatial_grid: SpatialGridDescriptor::source_from_parts(
+            data_geo_transfrom,
+            data_shape.bounding_box(),
+        ),
         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO: derive better name?
             measurement_from_rasterband(dataset, band)?,
@@ -266,14 +353,17 @@ pub fn raster_descriptor_from_dataset_and_sref(
     let data_type = RasterDataType::from_gdal_data_type(rasterband.band_type())
         .map_err(|_| Error::GdalRasterDataTypeNotSupported)?;
 
-    let geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+    let data_geo_transfrom = GeoTransform::from(dataset.geo_transform()?);
+    let data_shape = GridShape2D::new([dataset.raster_size().1, dataset.raster_size().0]);
 
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
         time: None,
-        bbox: None,
-        resolution: Some(geo_transfrom.spatial_resolution()),
+        spatial_grid: SpatialGridDescriptor::source_from_parts(
+            data_geo_transfrom,
+            data_shape.bounding_box(),
+        ),
         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO derive better name?
             measurement_from_rasterband(dataset, band)?,
