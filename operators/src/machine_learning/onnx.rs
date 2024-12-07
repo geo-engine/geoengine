@@ -15,7 +15,7 @@ use geoengine_datatypes::raster::{
     Grid, GridIdx2D, GridIndexAccess, GridSize, Pixel, RasterTile2D,
 };
 use ndarray::Array2;
-use ort::{IntoTensorElementType, PrimitiveTensorElementType};
+use ort::tensor::{IntoTensorElementType, PrimitiveTensorElementType};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
@@ -152,11 +152,11 @@ impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
 where
     TIn: Pixel + NoDataValue,
     TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
-    ort::Value: std::convert::TryFrom<
+    ort::value::Value: std::convert::TryFrom<
         ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
     >,
     ort::Error: std::convert::From<
-        <ort::Value as std::convert::TryFrom<
+        <ort::value::Value as std::convert::TryFrom<
             ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
         >>::Error,
     >,
@@ -174,10 +174,22 @@ where
         source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
 
         // TODO: re-use session accross queries?
-        let session = ort::Session::builder()
+        let session = ort::session::Session::builder()
             .context(Ort)?
             .commit_from_file(&self.model_path)
-            .context(Ort)?;
+            .context(Ort)
+            .inspect_err(|e| {
+                tracing::debug!(
+                    "Could not create ONNX session for {:?}. Error: {}",
+                    self.model_path.file_name(),
+                    e
+                );
+            })?;
+
+        tracing::debug!(
+            "Created ONNX session for {:?}",
+            &self.model_path.file_name()
+        );
 
         let stream = self
             .source
@@ -250,7 +262,8 @@ where
 
                 // extract the values as a raw vector because we expect one prediction per pixel.
                 // this works for 1d tensors as well as 2d tensors with a single column
-                let predictions = predictions.into_owned().into_raw_vec();
+                let (predictions, offset) = predictions.into_owned().into_raw_vec_and_offset();
+                debug_assert!(offset.is_none() || offset == Some(0));
 
                 // TODO: create no data mask from input no data masks
                 Ok(RasterTile2D::new(
@@ -327,7 +340,7 @@ mod tests {
 
     #[test]
     fn ort() {
-        let session = ort::Session::builder()
+        let session = ort::session::Session::builder()
             .unwrap()
             .commit_from_file(test_data!("pro/ml/onnx/test_classification.onnx"))
             .unwrap();
@@ -352,7 +365,7 @@ mod tests {
 
     #[test]
     fn ort_dynamic() {
-        let session = ort::Session::builder()
+        let session = ort::session::Session::builder()
             .unwrap()
             .commit_from_file(test_data!("pro/ml/onnx/test_classification.onnx"))
             .unwrap();
@@ -390,7 +403,7 @@ mod tests {
 
     #[test]
     fn regression() {
-        let session = ort::Session::builder()
+        let session = ort::session::Session::builder()
             .unwrap()
             .commit_from_file(test_data!("pro/ml/onnx/test_regression.onnx"))
             .unwrap();
@@ -420,8 +433,9 @@ mod tests {
             .try_extract_tensor::<f32>()
             .unwrap()
             .to_owned()
-            .into_shape((4,))
-            .unwrap();
+            .to_shape((4,))
+            .unwrap()
+            .to_owned();
 
         assert!(predictions.abs_diff_eq(&array![0.4f32, 0.5, 0.6, 0.5], 1e-6));
     }

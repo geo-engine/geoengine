@@ -430,7 +430,6 @@ pub enum Error {
         spatial_reference_string: String,
     },
 
-    #[cfg(feature = "pro")]
     #[snafu(context(false), display("OidcError: {}", source))]
     Oidc {
         source: crate::pro::users::OidcError,
@@ -507,6 +506,11 @@ pub enum Error {
 
     #[snafu(display("Unknown volume name: {}", volume_name))]
     UnknownVolumeName {
+        volume_name: String,
+    },
+
+    #[snafu(display("Cannot access path of volume with name {}", volume_name))]
+    CannotAccessVolumePath {
         volume_name: String,
     },
 }

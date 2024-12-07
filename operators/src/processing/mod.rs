@@ -16,7 +16,6 @@ mod raster_type_conversion;
 mod raster_vector_join;
 mod rasterization;
 mod reprojection;
-mod rgb;
 mod temporal_raster_aggregation;
 mod time_projection;
 mod time_shift;
@@ -63,7 +62,6 @@ pub use reprojection::{
     DeriveOutRasterSpecsSource, InitializedRasterReprojection, InitializedVectorReprojection,
     Reprojection, ReprojectionParams,
 };
-pub use rgb::{Rgb, RgbOperatorError, RgbParams, RgbSources};
 pub use temporal_raster_aggregation::{
     Aggregation, TemporalRasterAggregation, TemporalRasterAggregationParameters,
 };

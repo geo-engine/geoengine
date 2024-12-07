@@ -1,6 +1,7 @@
 use super::handlers::permissions::{PermissionListOptions, PermissionRequest, Resource};
 use super::handlers::users::AddRole;
 use crate::api::handlers;
+use crate::api::handlers::datasets::VolumeFileLayersResponse;
 use crate::api::handlers::plots::WrappedPlotOutput;
 use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use crate::api::handlers::tasks::{TaskAbortOptions, TaskResponse};
@@ -48,7 +49,8 @@ use crate::datasets::upload::{UploadId, VolumeName};
 use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
-    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
+    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId, UpdateLayer,
+    UpdateLayerCollection,
 };
 use crate::layers::listing::{
     LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
@@ -99,6 +101,9 @@ use utoipa::{Modify, OpenApi};
         handlers::layers::add_existing_collection_to_collection,
         handlers::layers::remove_collection_from_collection,
         handlers::layers::layer_to_dataset,
+        handlers::layers::update_layer,
+        handlers::layers::update_collection,
+        handlers::layers::remove_layer,
         handlers::tasks::abort_handler,
         handlers::tasks::list_handler,
         handlers::tasks::status_handler,
@@ -147,6 +152,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::update_loading_info_handler,
         handlers::datasets::update_dataset_symbology_handler,
         handlers::datasets::update_dataset_provenance_handler,
+        handlers::datasets::list_volume_file_layers_handler,
         pro::api::handlers::machine_learning::add_ml_model,
         pro::api::handlers::machine_learning::get_ml_model,
         pro::api::handlers::machine_learning::list_ml_models,
@@ -272,6 +278,8 @@ use utoipa::{Modify, OpenApi};
             CollectionItem,
             AddLayer,
             AddLayerCollection,
+            UpdateLayer,
+            UpdateLayerCollection,
             SearchCapabilities,
             ProviderCapabilities,
             SearchTypes,
@@ -327,6 +335,7 @@ use utoipa::{Modify, OpenApi};
 
             UploadFilesResponse,
             UploadFileLayersResponse,
+            VolumeFileLayersResponse,
 
             CreateDataset,
             UpdateDataset,
@@ -449,7 +458,7 @@ struct ApiDocInfo;
 
 impl Modify for ApiDocInfo {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        openapi.info.title = "Geo Engine Pro API".to_string();
+        openapi.info.title = "Geo Engine API".to_string();
 
         openapi.info.contact = Some(
             utoipa::openapi::ContactBuilder::new()

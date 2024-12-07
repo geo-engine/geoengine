@@ -339,13 +339,14 @@ async fn wms_map_handler<C: ApplicationContext>(
 
         debug!("WMS re-scale-project: {:?}", query_tiling_pixel_grid);
 
-        let (attributes, colorizer) = match raster_colorizer {
-            Some(RasterColorizer::SingleBand {
-                band,
-                band_colorizer,
-            }) => (BandSelection::new_single(band), Some(band_colorizer.into())),
-            _ => (BandSelection::new_single(0), None),
-        };
+        let attributes = raster_colorizer.as_ref().map_or_else(
+            || BandSelection::new_single(0),
+            |colorizer: &RasterColorizer| {
+                RasterColorizer::band_selection(colorizer)
+                    .try_into()
+                    .expect("conversion of usize to u32 succeeds for small band numbers")
+            },
+        );
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
             query_tiling_pixel_grid.grid_bounds(),
@@ -361,7 +362,7 @@ async fn wms_map_handler<C: ApplicationContext>(
         call_on_generic_raster_processor!(
             processor,
             p =>
-                raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), colorizer, conn_closed).await
+                raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), raster_colorizer.map(Into::into), conn_closed).await
         ).map_err(error::Error::from)
     }
 
@@ -473,7 +474,8 @@ mod tests {
     use crate::ge_context;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
-        register_ndvi_workflow_helper_with_cache_ttl, send_test_request,
+        register_ndvi_workflow_helper_with_cache_ttl, register_ne2_multiband_workflow,
+        send_test_request,
     };
     use actix_http::header::{self, CONTENT_TYPE};
     use actix_web::dev::ServiceResponse;
@@ -841,6 +843,143 @@ mod tests {
 
         assert_eq!(
             include_bytes!("../../../../test_data/wms/get_map_colorizer.png") as &[u8],
+            image_bytes
+        );
+    }
+
+    #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
+    async fn it_supports_multiband_colorizer(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ne2_multiband_workflow(&app_ctx).await;
+
+        let raster_colorizer = RasterColorizer::MultiBand {
+            red_band: 2,
+            red_min: 0.,
+            red_max: 255.,
+            red_scale: 1.0,
+            green_band: 1,
+            green_min: 0.,
+            green_max: 255.,
+            green_scale: 1.0,
+            blue_band: 0,
+            blue_min: 0.,
+            blue_max: 255.,
+            blue_scale: 1.0,
+            no_data_color: RgbaColor::transparent().into(),
+        };
+
+        let params = &[
+            ("request", "GetMap"),
+            ("service", "WMS"),
+            ("version", "1.3.0"),
+            ("layers", &id.to_string()),
+            ("bbox", "-90,-180,90,180"),
+            ("width", "600"),
+            ("height", "300"),
+            ("crs", "EPSG:4326"),
+            (
+                "styles",
+                &format!(
+                    "custom:{}",
+                    serde_json::to_string(&raster_colorizer).unwrap()
+                ),
+            ),
+            ("format", "image/png"),
+            ("time", "2022-01-01T00:00:00.0Z"),
+        ];
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/wms/{}?{}",
+                id,
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "ne2_rgb_colorizer.png");
+
+        assert_eq!(
+            include_bytes!("../../../../test_data/wms/ne2_rgb_colorizer.png") as &[u8],
+            image_bytes
+        );
+    }
+
+    #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
+    async fn it_supports_multiband_colorizer_with_less_then_3_bands(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = ctx.session().id();
+
+        let (_, id) = register_ne2_multiband_workflow(&app_ctx).await;
+
+        let raster_colorizer = RasterColorizer::MultiBand {
+            red_band: 1,
+            red_min: 0.,
+            red_max: 255.,
+            red_scale: 1.0,
+            green_band: 1,
+            green_min: 0.,
+            green_max: 255.,
+            green_scale: 1.0,
+            blue_band: 1,
+            blue_min: 0.,
+            blue_max: 255.,
+            blue_scale: 1.0,
+            no_data_color: RgbaColor::transparent().into(),
+        };
+
+        let params = &[
+            ("request", "GetMap"),
+            ("service", "WMS"),
+            ("version", "1.3.0"),
+            ("layers", &id.to_string()),
+            ("bbox", "-90,-180,90,180"),
+            ("width", "600"),
+            ("height", "300"),
+            ("crs", "EPSG:4326"),
+            (
+                "styles",
+                &format!(
+                    "custom:{}",
+                    serde_json::to_string(&raster_colorizer).unwrap()
+                ),
+            ),
+            ("format", "image/png"),
+            ("time", "2022-01-01T00:00:00.0Z"),
+        ];
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/wms/{}?{}",
+                id,
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(
+        //     &image_bytes,
+        //     geoengine_datatypes::test_data!("wms/ne2_rgb_colorizer_gray.png")
+        //         .to_str()
+        //         .unwrap(),
+        // );
+
+        assert_eq!(
+            include_bytes!("../../../../test_data/wms/ne2_rgb_colorizer_gray.png") as &[u8],
             image_bytes
         );
     }

@@ -95,6 +95,7 @@ impl ConversionMetadataEntityPart {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case", tag = "status")]
+#[allow(clippy::large_enum_variant)]
 pub enum OverviewGeneration {
     Created { details: NetCdfOverview },
     Skipped,

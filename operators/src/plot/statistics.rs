@@ -812,7 +812,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "Raster-1": {
                     "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
@@ -833,7 +833,6 @@ mod tests {
                     "percentiles": [],
                 },
             })
-            .to_string()
         );
     }
 
@@ -925,7 +924,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "A": {
                     "valueCount": 66_246, // 362*183 Note: this is caused by the inclusive nature of the bounding box. Since the right and lower bounds are included this wraps to a new row/column of tiles. In this test the tiles are 3x2 pixels in size.
@@ -946,7 +945,6 @@ mod tests {
                     "percentiles": [],
                 },
             })
-            .to_string()
         );
     }
 
@@ -1098,7 +1096,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "foo": {
                     "valueCount": 7,
@@ -1119,7 +1117,6 @@ mod tests {
                     "percentiles": [],
                 },
             })
-            .to_string()
         );
     }
 
@@ -1283,7 +1280,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            result.to_string(),
+            result,
             json!({
                 "foo": {
                     "valueCount": 7,
@@ -1304,7 +1301,6 @@ mod tests {
                     "percentiles": [],
                 },
             })
-            .to_string()
         );
     }
 

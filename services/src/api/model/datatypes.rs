@@ -1,5 +1,6 @@
 use crate::error::{self, Error, Result};
 use crate::identifier;
+use geoengine_datatypes::operations::image::RgbParams;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
@@ -1555,8 +1556,6 @@ pub enum Colorizer {
         no_data_color: RgbaColor,
         default_color: RgbaColor,
     },
-    #[schema(title = "RgbaColorizer")]
-    Rgba,
 }
 
 impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
@@ -1599,7 +1598,6 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 no_data_color: no_data_color.into(),
                 default_color: default_color.into(),
             },
-            geoengine_datatypes::operations::image::Colorizer::Rgba => Self::Rgba,
         }
     }
 }
@@ -1637,12 +1635,11 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
                 no_data_color: no_data_color.into(),
                 default_color: default_color.into(),
             },
-            Colorizer::Rgba => Self::Rgba,
         }
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum RasterColorizer {
     #[serde(rename_all = "camelCase")]
@@ -1651,18 +1648,75 @@ pub enum RasterColorizer {
         band: u32,
         band_colorizer: Colorizer,
     },
-    // TODO: multiband colorizer, e.g.
-    // MultiBand {
-    //     red: ...,
-    //     green: ...,
-    //     blue: ..,
-    // },
+    #[serde(rename_all = "camelCase")]
+    #[schema(title = "MultiBandRasterColorizer")]
+    MultiBand {
+        /// The band index of the red channel.
+        red_band: u32,
+        /// The minimum value for the red channel.
+        red_min: f64,
+        /// The maximum value for the red channel.
+        red_max: f64,
+        /// A scaling factor for the red channel between 0 and 1.
+        #[serde(default = "num_traits::One::one")]
+        red_scale: f64,
+
+        /// The band index of the green channel.
+        green_band: u32,
+        /// The minimum value for the red channel.
+        green_min: f64,
+        /// The maximum value for the red channel.
+        green_max: f64,
+        /// A scaling factor for the green channel between 0 and 1.
+        #[serde(default = "num_traits::One::one")]
+        green_scale: f64,
+
+        /// The band index of the blue channel.
+        blue_band: u32,
+        /// The minimum value for the red channel.
+        blue_min: f64,
+        /// The maximum value for the red channel.
+        blue_max: f64,
+        /// A scaling factor for the blue channel between 0 and 1.
+        #[serde(default = "num_traits::One::one")]
+        blue_scale: f64,
+
+        /// The color to use for no data values.
+        /// If not specified, the no data values will be transparent.
+        #[serde(default = "rgba_transparent")]
+        no_data_color: RgbaColor,
+    },
 }
+
+fn rgba_transparent() -> RgbaColor {
+    RgbaColor([0, 0, 0, 0])
+}
+
+impl Eq for RasterColorizer {}
 
 impl RasterColorizer {
     pub fn band_selection(&self) -> BandSelection {
         match self {
             RasterColorizer::SingleBand { band, .. } => BandSelection(vec![*band as usize]),
+            RasterColorizer::MultiBand {
+                red_band,
+                green_band,
+                blue_band,
+                ..
+            } => {
+                let mut bands = Vec::with_capacity(3);
+                for band in [
+                    *red_band as usize,
+                    *green_band as usize,
+                    *blue_band as usize,
+                ] {
+                    if !bands.contains(&band) {
+                        bands.push(band);
+                    }
+                }
+                bands.sort_unstable(); // bands will be returned in ascending order anyway
+                BandSelection(bands)
+            }
         }
     }
 }
@@ -1677,9 +1731,75 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
                 band,
                 band_colorizer: colorizer.into(),
             },
+            geoengine_datatypes::operations::image::RasterColorizer::MultiBand {
+                red_band,
+                green_band,
+                blue_band,
+                rgb_params,
+            } => Self::MultiBand {
+                red_band,
+                green_band,
+                blue_band,
+                red_min: rgb_params.red_min,
+                red_max: rgb_params.red_max,
+                red_scale: rgb_params.red_scale,
+                green_min: rgb_params.green_min,
+                green_max: rgb_params.green_max,
+                green_scale: rgb_params.green_scale,
+                blue_min: rgb_params.blue_min,
+                blue_max: rgb_params.blue_max,
+                blue_scale: rgb_params.blue_scale,
+                no_data_color: rgb_params.no_data_color.into(),
+            },
         }
     }
 }
+
+impl From<RasterColorizer> for geoengine_datatypes::operations::image::RasterColorizer {
+    fn from(v: RasterColorizer) -> Self {
+        match v {
+            RasterColorizer::SingleBand {
+                band,
+                band_colorizer: colorizer,
+            } => Self::SingleBand {
+                band,
+                band_colorizer: colorizer.into(),
+            },
+            RasterColorizer::MultiBand {
+                red_band,
+                red_min,
+                red_max,
+                red_scale,
+                green_band,
+                green_min,
+                green_max,
+                green_scale,
+                blue_band,
+                blue_min,
+                blue_max,
+                blue_scale,
+                no_data_color,
+            } => Self::MultiBand {
+                red_band,
+                green_band,
+                blue_band,
+                rgb_params: RgbParams {
+                    red_min,
+                    red_max,
+                    red_scale,
+                    green_min,
+                    green_max,
+                    green_scale,
+                    blue_min,
+                    blue_max,
+                    blue_scale,
+                    no_data_color: no_data_color.into(),
+                },
+            },
+        }
+    }
+}
+
 /// A map from value to color
 ///
 /// It is assumed that is has at least one and at most 256 entries.
@@ -1788,11 +1908,40 @@ impl From<RasterPropertiesEntryType> for geoengine_datatypes::raster::RasterProp
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct DateTimeParseFormat {
     fmt: String,
     has_tz: bool,
     has_time: bool,
+}
+
+impl<'a> ToSchema<'a> for DateTimeParseFormat {
+    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+        use utoipa::openapi::*;
+        (
+            "DateTimeParseFormat",
+            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+        )
+    }
+}
+
+impl<'de> Deserialize<'de> for DateTimeParseFormat {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(geoengine_datatypes::primitives::DateTimeParseFormat::custom(s).into())
+    }
+}
+
+impl Serialize for DateTimeParseFormat {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.fmt)
+    }
 }
 
 impl From<geoengine_datatypes::primitives::DateTimeParseFormat> for DateTimeParseFormat {
@@ -1960,6 +2109,12 @@ impl From<(String, String)> for StringPair {
 impl From<StringPair> for (String, String) {
     fn from(value: StringPair) -> Self {
         value.0
+    }
+}
+
+impl From<StringPair> for geoengine_datatypes::util::StringPair {
+    fn from(value: StringPair) -> Self {
+        Self::new(value.0 .0, value.0 .1)
     }
 }
 

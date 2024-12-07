@@ -1,6 +1,7 @@
 use crate::error::{self, Error};
 use crate::operations::image::RgbaTransmutable;
 use crate::raster::Pixel;
+use crate::util::test::TestDefault;
 use crate::util::Result;
 use ordered_float::{FloatIsNan, NotNan};
 use postgres_types::{FromSql, ToSql};
@@ -10,7 +11,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
 
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum RasterColorizer {
     #[serde(rename_all = "camelCase")]
@@ -18,12 +19,64 @@ pub enum RasterColorizer {
         band: u32,
         band_colorizer: Colorizer,
     },
-    // TODO: multiband colorizer, e.g.
-    // MultiBand {
-    //     red: ...,
-    //     green: ...,
-    //     blue: ..,
-    // },
+    #[serde(rename_all = "camelCase")]
+    MultiBand {
+        /// The band index of the red channel.
+        red_band: u32,
+
+        /// The band index of the green channel.
+        green_band: u32,
+
+        /// The band index of the blue channel.
+        blue_band: u32,
+
+        #[serde(flatten)]
+        rgb_params: RgbParams,
+    },
+}
+
+impl Eq for RasterColorizer {}
+
+impl From<Colorizer> for RasterColorizer {
+    fn from(value: Colorizer) -> Self {
+        Self::SingleBand {
+            band: 0,
+            band_colorizer: value,
+        }
+    }
+}
+
+/// The parameters for the RGBA colorizer
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RgbParams {
+    /// The minimum value for the red channel.
+    pub red_min: f64,
+    /// The maximum value for the red channel.
+    pub red_max: f64,
+    /// A scaling factor for the red channel between 0 and 1.
+    #[serde(default = "num_traits::One::one")]
+    pub red_scale: f64,
+
+    /// The minimum value for the red channel.
+    pub green_min: f64,
+    /// The maximum value for the red channel.
+    pub green_max: f64,
+    /// A scaling factor for the green channel between 0 and 1.
+    #[serde(default = "num_traits::One::one")]
+    pub green_scale: f64,
+
+    /// The minimum value for the red channel.
+    pub blue_min: f64,
+    /// The maximum value for the red channel.
+    pub blue_max: f64,
+    /// A scaling factor for the blue channel between 0 and 1.
+    #[serde(default = "num_traits::One::one")]
+    pub blue_scale: f64,
+
+    /// The color for no data values.
+    #[serde(default = "RgbaColor::transparent")]
+    pub no_data_color: RgbaColor,
 }
 
 /// A colorizer specifies a mapping between raster values and an output image
@@ -51,7 +104,6 @@ pub enum Colorizer {
         no_data_color: RgbaColor,
         default_color: RgbaColor,
     },
-    Rgba,
 }
 
 impl Colorizer {
@@ -145,11 +197,6 @@ impl Colorizer {
         })
     }
 
-    /// Rgba colorization means treating the values as red, green, blue and alpha bytes
-    pub fn rgba() -> Self {
-        Self::Rgba
-    }
-
     /// Returns the minimum value that is covered by this colorizer
     ///
     /// # Examples
@@ -174,7 +221,7 @@ impl Colorizer {
         match self {
             Self::LinearGradient { breakpoints, .. }
             | Self::LogarithmicGradient { breakpoints, .. } => *breakpoints[0].value,
-            Self::Palette { .. } | Self::Rgba { .. } => f64::from(u8::MIN),
+            Self::Palette { .. } => f64::from(u8::MIN),
         }
     }
 
@@ -204,7 +251,7 @@ impl Colorizer {
             | Self::LogarithmicGradient { breakpoints, .. } => {
                 *breakpoints[breakpoints.len() - 1].value
             }
-            Self::Palette { .. } | Self::Rgba { .. } => f64::from(u8::MAX),
+            Self::Palette { .. } => f64::from(u8::MAX),
         }
     }
 
@@ -233,7 +280,6 @@ impl Colorizer {
             Colorizer::LinearGradient { no_data_color, .. }
             | Colorizer::LogarithmicGradient { no_data_color, .. }
             | Colorizer::Palette { no_data_color, .. } => *no_data_color,
-            Colorizer::Rgba => RgbaColor::transparent(),
         }
     }
 
@@ -242,7 +288,6 @@ impl Colorizer {
             Colorizer::LinearGradient { over_color, .. }
             | Colorizer::LogarithmicGradient { over_color, .. } => *over_color,
             Colorizer::Palette { default_color, .. } => *default_color,
-            Colorizer::Rgba => RgbaColor::transparent(),
         }
     }
 
@@ -251,7 +296,6 @@ impl Colorizer {
             Colorizer::LinearGradient { under_color, .. }
             | Colorizer::LogarithmicGradient { under_color, .. } => *under_color,
             Colorizer::Palette { default_color, .. } => *default_color,
-            Colorizer::Rgba => RgbaColor::transparent(),
         }
     }
 
@@ -327,7 +371,6 @@ impl Colorizer {
                 no_data_color: *no_data_color,
                 default_color: *default_color,
             },
-            Self::Rgba => ColorMapper::Rgba,
         }
     }
 
@@ -386,7 +429,7 @@ impl Colorizer {
                             let denominator = f64::log10(next_value) - f64::log10(prev_value);
                             nominator / denominator
                         }
-                        _ => unreachable!(), // cf. first match in function
+                        Self::Palette { .. } => unreachable!(), // cf. first match in function
                     };
 
                     prev_color.factor_add(next_color, fraction)
@@ -469,10 +512,23 @@ impl Colorizer {
             } => Err(Error::ColorizerRescaleNotSupported {
                 colorizer: "palette".to_string(),
             }),
-            Self::Rgba => Err(Error::ColorizerRescaleNotSupported {
-                colorizer: "rgba".to_string(),
-            }),
         }
+    }
+}
+
+impl TestDefault for Colorizer {
+    #[allow(clippy::unwrap_used)]
+    fn test_default() -> Self {
+        Colorizer::linear_gradient(
+            vec![
+                (1.0, RgbaColor::white()).try_into().unwrap(),
+                (2.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::white(),
+            RgbaColor::black(),
+        )
+        .unwrap()
     }
 }
 

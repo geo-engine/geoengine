@@ -187,6 +187,7 @@ where
             global_geo_transform,
             tile_shape,
             cache_expiration,
+            query_time_bounds,
             FillerTimeBounds::from(query_time_bounds), // operator should at least fill the query rect. Adapter will handle overflow at start / end gracefully.
         );
         s_filled.boxed()

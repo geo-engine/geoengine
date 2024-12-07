@@ -172,6 +172,7 @@ where
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::FixedValue(CacheExpiration::max()), // cache forever because we know all mock data
+            query.time_interval,
             FillerTimeBounds::new(known_time_before, known_time_after),
         )
         .boxed())

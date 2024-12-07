@@ -709,7 +709,8 @@ mod tests {
             RgbaColor::white(),
             RgbaColor::black(),
         )
-        .unwrap();
+        .unwrap()
+        .into();
 
         let (bytes, _) = raster_stream_to_png_bytes(
             processor,
@@ -785,7 +786,8 @@ mod tests {
             RgbaColor::white(),
             RgbaColor::black(),
         )
-        .unwrap();
+        .unwrap()
+        .into();
 
         let (bytes, _) = raster_stream_to_png_bytes(
             processor,

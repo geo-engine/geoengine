@@ -467,6 +467,48 @@ impl SentinelS2L2aCogsMetaData {
                 start + query_end_buffer
             };
 
+            /*
+            Sentinel-2 data are typically acquired around local noon in all UTM zones.
+            Therefore, a Sentinel-2 image is typically viewed as a time series with daily time steps.
+            However, the Geo Engine source doesn't yet handle datasets with multiple files per time step.
+            This requires us to "fake" smaller time steps, so we use the actual capture time of each tile as the start.
+            To determine the end, we simply assume that the start of the next tile is the end of the previous one.
+            The first step in using the Sentinel-2 data is usually to aggregate it to a 1-day time series in order to use it in a meaningful way.
+            An efficient way to aggregate the data to days is to simply use the first valid/last pixel, as there should only be one per day (and overlaps should be the same value).
+            This start/end time derivation strategy can cause a problem if there is no following tile on the same day: a single tile of day "1" will be valid until a new tile is created on day "1+x".
+            Firstly, a tile valid for more than one day will appear on days where it is not actually valid.
+            Secondly, if "first" is used as the aggregation method, an old tile will overlap a new tile starting at noon and therefore the old values will be included in the daily data.
+            To solve both problems, we limit the validity of each tile to the end of the day on which it was recorded.
+            This way there is no overlap and the aggregation of the daily data produces valid (expected) results.
+             */
+            let end = {
+                let start_date = start
+                    .as_date_time()
+                    .expect("must be a valid date since Sentinel-2 is a very recent thing.");
+
+                let end_date = end
+                    .as_date_time()
+                    .expect("must be a valid date since Sentinel-2 is a very recent thing.");
+
+                if start_date.year() < end_date.year()
+                    || start_date.day_of_year() < end_date.day_of_year()
+                {
+                    TimeInstance::from(
+                        DateTime::new_utc_checked(
+                            start_date.year(),
+                            start_date.month(),
+                            start_date.day(),
+                            0,
+                            0,
+                            0,
+                        )
+                        .expect("Must be a valid date since it is already valid."),
+                    ) + Duration::days(1)
+                } else {
+                    end
+                }
+            };
+
             let time_interval = TimeInterval::new(start, end)?;
 
             if time_interval.contains(&query.time_interval) {
@@ -515,12 +557,12 @@ impl SentinelS2L2aCogsMetaData {
         }
         debug!("number of generated loading infos: {}", parts.len());
 
-        // if there is no information of time outside the query, we fallback to the only information we know: query -/+ buffer.
-        let known_time_before =
-            known_time_start.unwrap_or(query.time_interval.start() - query_start_buffer);
+        // if there is no information of time outside the query, we fallback to the only information we know: query -/+ buffer. We also use that information if we did not find a better time
+        let query_start = query.time_interval.start() - query_start_buffer;
+        let known_time_before = known_time_start.unwrap_or(query_start).min(query_start);
 
-        let known_time_after =
-            known_time_end.unwrap_or(query.time_interval.end() + query_end_buffer);
+        let query_end = query.time_interval.end() + query_end_buffer;
+        let known_time_after = known_time_end.unwrap_or(query_end).max(query_end);
 
         Ok(GdalLoadingInfo::new(
             GdalLoadingInfoTemporalSliceIterator::Static {
@@ -1152,7 +1194,7 @@ mod tests {
                 responders::status_code(500),
                 // then time out
                 responders::delay_and_then(
-                    std::time::Duration::from_secs(10),
+                    std::time::Duration::from_secs(2),
                     responders::status_code(500)
                 ),
                 // then succeed
@@ -1205,7 +1247,7 @@ mod tests {
                 responders::status_code(500),
                 // then time out
                 responders::delay_and_then(
-                    std::time::Duration::from_secs(10),
+                    std::time::Duration::from_secs(2),
                     responders::status_code(500)
                 ),
                 // then succeed
@@ -1230,7 +1272,7 @@ mod tests {
                 responders::status_code(500),
                 // then time out
                 responders::delay_and_then(
-                    std::time::Duration::from_secs(10),
+                    std::time::Duration::from_secs(2),
                     responders::status_code(500)
                 ),
                 // then return incomplete tile (to force error "band 1: IReadBlock failed at X offset 0, Y offset 0: TIFFReadEncodedTile() failed.")

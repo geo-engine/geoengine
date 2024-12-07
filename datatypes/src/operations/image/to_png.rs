@@ -11,9 +11,27 @@ use crate::{
 };
 use image::{DynamicImage, ImageBuffer, ImageFormat, RgbaImage};
 
+use super::colorizer::ColorMapper;
+use super::RgbaColor;
+
 pub trait ToPng {
     /// Outputs png bytes of an image of size width x height
-    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>>;
+    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+        self.to_png_with_mapper(
+            width,
+            height,
+            colorizer.create_color_mapper(),
+            colorizer.no_data_color(),
+        )
+    }
+
+    fn to_png_with_mapper(
+        &self,
+        width: u32,
+        height: u32,
+        color_mapper: ColorMapper<'_>,
+        no_data_color: RgbaColor,
+    ) -> Result<Vec<u8>>;
 }
 
 fn image_buffer_to_png_bytes(
@@ -32,15 +50,28 @@ impl<P> ToPng for Grid2D<P>
 where
     P: Pixel + RgbaTransmutable,
 {
-    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+    fn to_png_with_mapper(
+        &self,
+        width: u32,
+        height: u32,
+        color_mapper: ColorMapper<'_>,
+        no_data_color: RgbaColor,
+    ) -> Result<Vec<u8>> {
         // TODO: use PNG color palette once it is available
 
         let [.., raster_y_size, raster_x_size] = self.shape.shape_array;
         let scale_x = (raster_x_size as f64) / f64::from(width);
         let scale_y = (raster_y_size as f64) / f64::from(height);
 
-        let image_buffer =
-            create_rgba_image_from_grid(self, width, height, colorizer, scale_x, scale_y);
+        let image_buffer = create_rgba_image_from_grid(
+            self,
+            width,
+            height,
+            &color_mapper,
+            no_data_color,
+            scale_x,
+            scale_y,
+        );
 
         image_buffer_to_png_bytes(image_buffer)
     }
@@ -50,15 +81,28 @@ impl<P> ToPng for MaskedGrid2D<P>
 where
     P: Pixel + RgbaTransmutable,
 {
-    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+    fn to_png_with_mapper(
+        &self,
+        width: u32,
+        height: u32,
+        color_mapper: ColorMapper<'_>,
+        no_data_color: RgbaColor,
+    ) -> Result<Vec<u8>> {
         // TODO: use PNG color palette once it is available
 
         let [.., raster_y_size, raster_x_size] = self.shape().shape_array;
         let scale_x = (raster_x_size as f64) / f64::from(width);
         let scale_y = (raster_y_size as f64) / f64::from(height);
 
-        let image_buffer =
-            create_rgba_image_from_masked_grid(self, width, height, colorizer, scale_x, scale_y);
+        let image_buffer = create_rgba_image_from_masked_grid(
+            self,
+            width,
+            height,
+            &color_mapper,
+            no_data_color,
+            scale_x,
+            scale_y,
+        );
 
         image_buffer_to_png_bytes(image_buffer)
     }
@@ -68,12 +112,16 @@ impl<P> ToPng for EmptyGrid2D<P>
 where
     P: Pixel + RgbaTransmutable,
 {
-    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+    fn to_png_with_mapper(
+        &self,
+        width: u32,
+        height: u32,
+        _color_mapper: ColorMapper<'_>,
+        no_data_color: RgbaColor,
+    ) -> Result<Vec<u8>> {
         // TODO: use PNG color palette once it is available
 
-        let no_data_color: image::Rgba<u8> = colorizer.no_data_color().into();
-
-        let image_buffer = ImageBuffer::from_pixel(width, height, no_data_color);
+        let image_buffer = ImageBuffer::from_pixel(width, height, no_data_color.into());
 
         image_buffer_to_png_bytes(image_buffer)
     }
@@ -83,10 +131,20 @@ impl<P> ToPng for GridOrEmpty2D<P>
 where
     P: Pixel + RgbaTransmutable,
 {
-    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+    fn to_png_with_mapper(
+        &self,
+        width: u32,
+        height: u32,
+        color_mapper: ColorMapper<'_>,
+        no_data_color: RgbaColor,
+    ) -> Result<Vec<u8>> {
         match self {
-            GridOrEmpty::Grid(g) => g.to_png(width, height, colorizer),
-            GridOrEmpty::Empty(n) => n.to_png(width, height, colorizer),
+            GridOrEmpty::Grid(g) => {
+                g.to_png_with_mapper(width, height, color_mapper, no_data_color)
+            }
+            GridOrEmpty::Empty(n) => {
+                n.to_png_with_mapper(width, height, color_mapper, no_data_color)
+            }
         }
     }
 }
@@ -95,18 +153,17 @@ fn create_rgba_image_from_grid<P: Pixel + RgbaTransmutable>(
     raster_grid: &Grid2D<P>,
     width: u32,
     height: u32,
-    colorizer: &Colorizer,
+    color_mapper: &ColorMapper<'_>,
+    no_data_color: RgbaColor,
     scale_x: f64,
     scale_y: f64,
 ) -> RgbaImage {
-    let color_mapper = colorizer.create_color_mapper();
-
     RgbaImage::from_fn(width, height, |x, y| {
         let (grid_pixel_x, grid_pixel_y) = image_pixel_to_raster_pixel(x, y, scale_x, scale_y);
         if let Ok(pixel_value) = raster_grid.get_at_grid_index([grid_pixel_y, grid_pixel_x]) {
             color_mapper.call(pixel_value)
         } else {
-            colorizer.no_data_color()
+            no_data_color
         }
         .into()
     })
@@ -116,42 +173,74 @@ fn create_rgba_image_from_masked_grid<P: Pixel + RgbaTransmutable>(
     raster_grid: &MaskedGrid2D<P>,
     width: u32,
     height: u32,
-    colorizer: &Colorizer,
+    color_mapper: &ColorMapper<'_>,
+    no_data_color: RgbaColor,
     scale_x: f64,
     scale_y: f64,
 ) -> RgbaImage {
-    let color_mapper = colorizer.create_color_mapper();
-
     RgbaImage::from_fn(width, height, |x, y| {
         let (grid_pixel_x, grid_pixel_y) = image_pixel_to_raster_pixel(x, y, scale_x, scale_y);
         if let Ok(Some(pixel_value)) = raster_grid.get_at_grid_index([grid_pixel_y, grid_pixel_x]) {
             color_mapper.call(pixel_value)
         } else {
-            colorizer.no_data_color()
+            no_data_color
         }
         .into()
     })
 }
 
 impl<T: Pixel> ToPng for RasterTile2D<T> {
-    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
-        self.grid_array.to_png(width, height, colorizer)
+    fn to_png_with_mapper(
+        &self,
+        width: u32,
+        height: u32,
+        color_mapper: ColorMapper<'_>,
+        no_data_color: RgbaColor,
+    ) -> Result<Vec<u8>> {
+        self.grid_array
+            .to_png_with_mapper(width, height, color_mapper, no_data_color)
     }
 }
 
 impl ToPng for TypedRasterTile2D {
-    fn to_png(&self, width: u32, height: u32, colorizer: &Colorizer) -> Result<Vec<u8>> {
+    fn to_png_with_mapper(
+        &self,
+        width: u32,
+        height: u32,
+        color_mapper: ColorMapper<'_>,
+        no_data_color: RgbaColor,
+    ) -> Result<Vec<u8>> {
         match self {
-            TypedRasterTile2D::U8(r) => r.to_png(width, height, colorizer),
-            TypedRasterTile2D::U16(r) => r.to_png(width, height, colorizer),
-            TypedRasterTile2D::U32(r) => r.to_png(width, height, colorizer),
-            TypedRasterTile2D::U64(r) => r.to_png(width, height, colorizer),
-            TypedRasterTile2D::I8(r) => r.to_png(width, height, colorizer),
-            TypedRasterTile2D::I16(r) => r.to_png(width, height, colorizer),
-            TypedRasterTile2D::I32(r) => r.to_png(width, height, colorizer),
-            TypedRasterTile2D::I64(r) => r.to_png(width, height, colorizer),
-            TypedRasterTile2D::F32(r) => r.to_png(width, height, colorizer),
-            TypedRasterTile2D::F64(r) => r.to_png(width, height, colorizer),
+            TypedRasterTile2D::U8(r) => {
+                r.to_png_with_mapper(width, height, color_mapper, no_data_color)
+            }
+            TypedRasterTile2D::U16(r) => {
+                r.to_png_with_mapper(width, height, color_mapper, no_data_color)
+            }
+            TypedRasterTile2D::U32(r) => {
+                r.to_png_with_mapper(width, height, color_mapper, no_data_color)
+            }
+            TypedRasterTile2D::U64(r) => {
+                r.to_png_with_mapper(width, height, color_mapper, no_data_color)
+            }
+            TypedRasterTile2D::I8(r) => {
+                r.to_png_with_mapper(width, height, color_mapper, no_data_color)
+            }
+            TypedRasterTile2D::I16(r) => {
+                r.to_png_with_mapper(width, height, color_mapper, no_data_color)
+            }
+            TypedRasterTile2D::I32(r) => {
+                r.to_png_with_mapper(width, height, color_mapper, no_data_color)
+            }
+            TypedRasterTile2D::I64(r) => {
+                r.to_png_with_mapper(width, height, color_mapper, no_data_color)
+            }
+            TypedRasterTile2D::F32(r) => {
+                r.to_png_with_mapper(width, height, color_mapper, no_data_color)
+            }
+            TypedRasterTile2D::F64(r) => {
+                r.to_png_with_mapper(width, height, color_mapper, no_data_color)
+            }
         }
     }
 }
@@ -283,9 +372,9 @@ mod tests {
         raster.set_at_grid_index([0, 0], 0xFF00_00FF_u32).unwrap();
         raster.set_at_grid_index([1, 0], 0x00FF_00FF_u32).unwrap();
 
-        let colorizer = Colorizer::rgba();
-
-        let image_bytes = raster.to_png(100, 100, &colorizer).unwrap();
+        let image_bytes = raster
+            .to_png_with_mapper(100, 100, ColorMapper::Rgba, RgbaColor::transparent())
+            .unwrap();
 
         // crate::util::test::save_test_bytes(&image_bytes, "rgba.png");
 

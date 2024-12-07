@@ -7,6 +7,7 @@ use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
 use crate::datasets::upload::UploadRootPath;
 use crate::datasets::AddDataset;
+use crate::datasets::DatasetIdAndName;
 use crate::datasets::DatasetName;
 use crate::projects::{
     CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,
@@ -41,17 +42,21 @@ use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::raster::GeoTransform;
 use geoengine_datatypes::raster::GridBoundingBox2D;
 use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::raster::RenameBands;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::test_data;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::ChunkByteSize;
+use geoengine_operators::engine::MultipleRasterSources;
 use geoengine_operators::engine::RasterBandDescriptor;
 use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::engine::RasterResultDescriptor;
 use geoengine_operators::engine::SpatialGridDescriptor;
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
+use geoengine_operators::processing::RasterStacker;
+use geoengine_operators::processing::RasterStackerParams;
 use geoengine_operators::source::FileNotFoundHandling;
 use geoengine_operators::source::GdalDatasetGeoTransform;
 use geoengine_operators::source::GdalDatasetParameters;
@@ -59,7 +64,10 @@ use geoengine_operators::source::GdalMetaDataStatic;
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 use geoengine_operators::util::gdal::create_ndvi_meta_data_with_cache_ttl;
 use rand::RngCore;
+use std::fs::File;
+use std::io::BufReader;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -104,7 +112,7 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
-                    band_colorizer: Colorizer::Rgba,
+                    band_colorizer: Colorizer::test_default(),
                 },
             }),
         })]),
@@ -306,6 +314,107 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
         .await
         .expect("dataset db access")
         .id
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn register_ne2_multiband_workflow<A: SimpleApplicationContext>(
+    app_ctx: &A,
+) -> (Workflow, WorkflowId) {
+    let ctx = app_ctx.default_session_context().await.unwrap();
+    let red = add_file_definition_to_datasets(
+        &ctx.db(),
+        test_data!("dataset_defs/natural_earth_2_red.json"),
+    )
+    .await;
+    let green = add_file_definition_to_datasets(
+        &ctx.db(),
+        test_data!("dataset_defs/natural_earth_2_green.json"),
+    )
+    .await;
+    let blue = add_file_definition_to_datasets(
+        &ctx.db(),
+        test_data!("dataset_defs/natural_earth_2_blue.json"),
+    )
+    .await;
+
+    let workflow = Workflow {
+        operator: TypedOperator::Raster(
+            RasterStacker {
+                params: RasterStackerParams {
+                    rename_bands: RenameBands::Rename(vec![
+                        "blue".into(),
+                        "green".into(),
+                        "red".into(),
+                    ]),
+                },
+                sources: MultipleRasterSources {
+                    rasters: vec![
+                        GdalSource {
+                            params: GdalSourceParameters {
+                                data: blue.name.into(),
+                                overview_level: None,
+                            },
+                        }
+                        .boxed(),
+                        GdalSource {
+                            params: GdalSourceParameters {
+                                data: green.name.into(),
+                                overview_level: None,
+                            },
+                        }
+                        .boxed(),
+                        GdalSource {
+                            params: GdalSourceParameters {
+                                data: red.name.into(),
+                                overview_level: None,
+                            },
+                        }
+                        .boxed(),
+                    ],
+                },
+            }
+            .boxed(),
+        ),
+    };
+
+    let session = app_ctx.default_session().await.unwrap();
+
+    let id = app_ctx
+        .session_context(session)
+        .db()
+        .register_workflow(workflow.clone())
+        .await
+        .unwrap();
+
+    (workflow, id)
+}
+
+/// Add a definition from a file to the datasets.
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_file_definition_to_datasets<D: GeoEngineDb>(
+    db: &D,
+    definition: &Path,
+) -> DatasetIdAndName {
+    let mut def: DatasetDefinition =
+        serde_json::from_reader(BufReader::new(File::open(definition).unwrap())).unwrap();
+
+    // rewrite metadata to use the correct file path
+    def.meta_data = match def.meta_data {
+        MetaDataDefinition::GdalStatic(mut meta_data) => {
+            meta_data.params.file_path = test_data!(meta_data
+                .params
+                .file_path
+                .strip_prefix("test_data/")
+                .unwrap())
+            .into();
+            MetaDataDefinition::GdalStatic(meta_data)
+        }
+        _ => todo!("Implement for other meta data types when used"),
+    };
+
+    db.add_dataset(def.properties.clone(), def.meta_data.clone())
+        .await
+        .unwrap()
 }
 
 pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(
@@ -521,7 +630,7 @@ pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, tokio_postgres::Config,
         .unwrap();
 
     // fix schema by providing `search_path` option
-    pg_config.options(&format!("-c search_path={}", db_config.schema));
+    pg_config.options(format!("-c search_path={}", db_config.schema));
 
     (permit, pg_config, db_config.schema)
 }
@@ -587,6 +696,7 @@ where
                         tokio_postgres::NoTls,
                         tiling_spec,
                         query_ctx_chunk_size,
+                        TestDefault::test_default(),
                     )
                     .await
                     .unwrap();
@@ -633,4 +743,24 @@ pub async fn assert_eq_two_raster_operator_res_u8<S: SessionContext>(
         compare_cache_hint,
     )
     .await;
+}
+
+#[cfg(test)]
+/// A matcher that inspects the request and prints it to the console.
+pub struct HttpTestInspectMatcher {}
+
+#[cfg(test)]
+#[allow(clippy::dbg_macro)]
+impl<IN> httptest::matchers::Matcher<IN> for HttpTestInspectMatcher
+where
+    IN: std::fmt::Debug,
+{
+    fn matches(&mut self, req: &IN, _ctx: &mut httptest::matchers::ExecutionContext) -> bool {
+        dbg!(req);
+        true
+    }
+
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "InspectMatcher")
+    }
 }
