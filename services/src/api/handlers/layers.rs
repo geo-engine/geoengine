@@ -14,6 +14,7 @@ use crate::layers::listing::{
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
 use crate::util::config::get_config_element;
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
+use crate::util::workflows::validate_workflow;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
@@ -862,15 +863,13 @@ async fn add_layer<C: ApplicationContext>(
     request: web::Json<AddLayer>,
 ) -> Result<web::Json<IdResponse<LayerId>>> {
     let request = request.into_inner();
-
     let add_layer = request;
 
-    let id = app_ctx
-        .session_context(session)
-        .db()
-        .add_layer(add_layer, &collection)
-        .await?
-        .into();
+    let ctx = app_ctx.session_context(session);
+
+    validate_workflow(&add_layer.workflow, &ctx.execution_context()?).await?;
+
+    let id = ctx.db().add_layer(add_layer, &collection).await?.into();
 
     Ok(web::Json(IdResponse { id }))
 }
@@ -900,11 +899,11 @@ async fn update_layer<C: ApplicationContext>(
     let layer = layer.into_inner().into();
     let request = request.into_inner();
 
-    app_ctx
-        .session_context(session)
-        .db()
-        .update_layer(&layer, request)
-        .await?;
+    let ctx = app_ctx.session_context(session);
+
+    validate_workflow(&request.workflow, &ctx.execution_context()?).await?;
+
+    ctx.db().update_layer(&layer, request).await?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -1472,6 +1471,84 @@ mod tests {
         assert_eq!(result.symbology, update_layer.symbology);
         assert_eq!(result.metadata, update_layer.metadata);
         assert_eq!(result.properties, update_layer.properties);
+    }
+
+    #[ge_context::test]
+    async fn it_checks_for_workflow_validity(app_ctx: PostgresContext<NoTls>) {
+        let ctx = app_ctx.default_session_context().await.unwrap();
+
+        let session_id = app_ctx.default_session_id().await;
+
+        let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+
+        let invalid_workflow_layer = serde_json::json!({
+            "name": "Foo",
+            "description": "Bar",
+            "workflow":{
+                "type": "Raster",
+                "operator": {
+                    "type": "GdalSource",
+                    "params": {
+                    "data": "example"
+                    }
+                }
+            }
+        });
+        let req = test::TestRequest::post()
+            .uri(&format!("/layerDb/collections/{collection_id}/layers"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(invalid_workflow_layer.clone());
+
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        ErrorResponse::assert(
+            response,
+            400,
+            "UnknownDatasetName",
+            "Dataset name 'example' does not exist",
+        )
+        .await;
+
+        let add_layer = AddLayer {
+            name: "Foo".to_string(),
+            description: "Bar".to_string(),
+            properties: Default::default(),
+            workflow: Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: None,
+            metadata: Default::default(),
+        };
+
+        let layer_id = ctx
+            .db()
+            .add_layer(
+                add_layer.clone(),
+                &ctx.db().get_root_layer_collection_id().await.unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let req = test::TestRequest::put()
+            .uri(&format!("/layerDb/layers/{layer_id}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(invalid_workflow_layer);
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        ErrorResponse::assert(
+            response,
+            400,
+            "UnknownDatasetName",
+            "Dataset name 'example' does not exist",
+        )
+        .await;
     }
 
     #[ge_context::test]
