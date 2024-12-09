@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::pro::contexts::ProPostgresDb;
+use crate::workflows::registry::TxWorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{error, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
@@ -7,6 +8,35 @@ use bb8_postgres::{
     tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
 use snafu::ResultExt;
+
+#[async_trait]
+impl<Tls> TxWorkflowRegistry for ProPostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn register_workflow_in_tx(
+        &self,
+        workflow: Workflow,
+        tx: &tokio_postgres::Transaction<'_>,
+    ) -> Result<WorkflowId> {
+        let workflow_id = WorkflowId::from_hash(&workflow);
+
+        tx.execute(
+            "INSERT INTO workflows (id, workflow) VALUES ($1, $2) 
+            ON CONFLICT DO NOTHING;",
+            &[
+                &workflow_id,
+                &serde_json::to_value(&workflow).context(error::SerdeJson)?,
+            ],
+        )
+        .await?;
+
+        Ok(workflow_id)
+    }
+}
 
 #[async_trait]
 impl<Tls> WorkflowRegistry for ProPostgresDb<Tls>
@@ -17,26 +47,14 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn register_workflow(&self, workflow: Workflow) -> Result<WorkflowId> {
-        let conn = self.conn_pool.get().await?;
-        let stmt = conn
-            .prepare(
-                "INSERT INTO workflows (id, workflow) VALUES ($1, $2) 
-            ON CONFLICT DO NOTHING;",
-            )
-            .await?;
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.transaction().await?;
 
-        let workflow_id = WorkflowId::from_hash(&workflow);
+        let id = self.register_workflow_in_tx(workflow, &tx).await?;
 
-        conn.execute(
-            &stmt,
-            &[
-                &workflow_id,
-                &serde_json::to_value(&workflow).context(error::SerdeJson)?,
-            ],
-        )
-        .await?;
+        tx.commit().await?;
 
-        Ok(workflow_id)
+        Ok(id)
     }
 
     async fn load_workflow(&self, id: &WorkflowId) -> Result<Workflow> {
