@@ -1445,7 +1445,7 @@ mod tests {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
+                            points: vec![Coordinate2D::new(4., 5.); 3],
                         },
                     }
                     .boxed(),
@@ -1459,15 +1459,19 @@ mod tests {
         let req = test::TestRequest::put()
             .uri(&format!("/layerDb/layers/{layer_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .set_json(serde_json::json!(update_layer));
+            .set_json(serde_json::json!(update_layer.clone()));
         let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
         let result = ctx.db().load_layer(&layer_id).await.unwrap();
 
-        assert_eq!(result.name, "Foo new");
-        assert_eq!(result.description, "Bar new");
+        assert_eq!(result.name, update_layer.name);
+        assert_eq!(result.description, update_layer.description);
+        assert_eq!(result.workflow, update_layer.workflow);
+        assert_eq!(result.symbology, update_layer.symbology);
+        assert_eq!(result.metadata, update_layer.metadata);
+        assert_eq!(result.properties, update_layer.properties);
     }
 
     #[ge_context::test]
