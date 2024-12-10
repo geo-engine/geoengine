@@ -216,7 +216,6 @@ pub enum Error {
 
     UploadFieldMissingFileName,
     UnknownUploadId,
-    UnknownModelId,
     PathIsNotAFile,
     #[snafu(display("Failed loading multipart body: {reason}"))]
     Multipart {
@@ -510,6 +509,12 @@ pub enum Error {
     #[snafu(display("Cannot access path of volume with name {}", volume_name))]
     CannotAccessVolumePath {
         volume_name: String,
+    },
+
+    #[snafu(display("Unknown resource name {} of kind {}", name, kind))]
+    UnknownResource {
+        kind: String,
+        name: String,
     },
 }
 
