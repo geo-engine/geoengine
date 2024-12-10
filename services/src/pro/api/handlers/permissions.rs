@@ -1,13 +1,17 @@
-use crate::api::model::datatypes::{DatasetId, LayerId};
+use crate::api::model::datatypes::LayerId;
 use crate::contexts::{ApplicationContext, SessionContext};
-use crate::error::Result;
+use crate::datasets::storage::DatasetDb;
+use crate::datasets::DatasetName;
+use crate::error::{self, Result};
 use crate::layers::listing::LayerCollectionId;
+use crate::machine_learning::MlModelDb;
 use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use crate::pro::permissions::{Permission, PermissionListing};
 use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
 use crate::projects::ProjectId;
 use actix_web::{web, FromRequest, HttpResponse};
 use geoengine_datatypes::error::BoxedResultExt;
+use geoengine_datatypes::machine_learning::MlModelName;
 use serde::Deserialize;
 use utoipa::{IntoParams, ToSchema};
 
@@ -45,24 +49,47 @@ pub struct PermissionRequest {
 #[serde(rename_all = "camelCase", tag = "type", content = "id")]
 pub enum Resource {
     #[schema(title = "LayerResource")]
-    Layer(LayerId),
+    Layer(LayerId), // TODO: check model
     #[schema(title = "LayerCollectionResource")]
     LayerCollection(LayerCollectionId),
     #[schema(title = "ProjectResource")]
     Project(ProjectId),
     #[schema(title = "DatasetResource")]
-    Dataset(DatasetId),
+    Dataset(DatasetName), // TODO: add a DatasetName to model!
+    #[schema(title = "MlModelResource")]
+    MlModel(MlModelName),
 }
 
-impl From<Resource> for ResourceId {
-    fn from(resource: Resource) -> Self {
-        match resource {
-            Resource::Layer(layer_id) => ResourceId::Layer(layer_id.into()),
-            Resource::LayerCollection(layer_collection_id) => {
-                ResourceId::LayerCollection(layer_collection_id)
+impl Resource {
+    pub async fn resolve_resource_id<D: DatasetDb + MlModelDb>(self, db: &D) -> Result<ResourceId> {
+        match self {
+            Resource::Layer(layer) => Ok(ResourceId::Layer(layer.into())),
+            Resource::LayerCollection(layer_collection) => {
+                Ok(ResourceId::LayerCollection(layer_collection))
             }
-            Resource::Project(project_id) => ResourceId::Project(project_id),
-            Resource::Dataset(dataset_id) => ResourceId::DatasetId(dataset_id.into()),
+            Resource::Project(project) => Ok(ResourceId::Project(project)),
+            Resource::Dataset(dataset_name) => {
+                let dataset_id_option = db.resolve_dataset_name_to_id(&dataset_name).await?;
+                dataset_id_option
+                    .ok_or(error::Error::UnknownResource {
+                        kind: "Dataset".to_owned(),
+                        name: dataset_name.to_string(),
+                    })
+                    .map(ResourceId::DatasetId)
+            }
+            Resource::MlModel(model_name) => {
+                let actual_name = model_name.into();
+                let model_id_option = db
+                    .resolve_model_name_to_id(&actual_name)
+                    .await
+                    .map_err(|_| error::Error::RoleNotAssigned)?; // TODO: use a matching error here!
+                model_id_option
+                    .ok_or(error::Error::UnknownResource {
+                        kind: "MlModel".to_owned(),
+                        name: actual_name.to_string(),
+                    })
+                    .map(ResourceId::MlModel)
+            }
         }
     }
 }
@@ -144,13 +171,11 @@ where
     let permission = permission.into_inner();
 
     let db = app_ctx.session_context(session).db();
-    db.add_permission::<ResourceId>(
-        permission.role_id,
-        permission.resource.into(),
-        permission.permission,
-    )
-    .await
-    .boxed_context(crate::error::PermissionDb)?;
+    let permission_id = permission.resource.resolve_resource_id(&db).await?;
+
+    db.add_permission::<ResourceId>(permission.role_id, permission_id, permission.permission)
+        .await
+        .boxed_context(crate::error::PermissionDb)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -188,13 +213,11 @@ where
     let permission = permission.into_inner();
 
     let db = app_ctx.session_context(session).db();
-    db.remove_permission::<ResourceId>(
-        permission.role_id,
-        permission.resource.into(),
-        permission.permission,
-    )
-    .await
-    .boxed_context(crate::error::PermissionDb)?;
+    let permission_id = permission.resource.resolve_resource_id(&db).await?;
+
+    db.remove_permission::<ResourceId>(permission.role_id, permission_id, permission.permission)
+        .await
+        .boxed_context(crate::error::PermissionDb)?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -324,11 +347,11 @@ mod tests {
     async fn it_lists_permissions(app_ctx: ProPostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
 
-        let (gdal_dataset_id, _) = add_ndvi_to_datasets(&app_ctx, true, true).await;
+        let (dataset_id, _named_data) = add_ndvi_to_datasets(&app_ctx, true, true).await;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
-                "/permissions/resources/dataset/{gdal_dataset_id}?offset=0&limit=10",
+                "/permissions/resources/dataset/{dataset_id}?offset=0&limit=10",
             ))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((
@@ -346,7 +369,7 @@ mod tests {
             json!([{
                    "permission":"Owner",
                    "resourceId":  {
-                       "id": gdal_dataset_id.to_string(),
+                       "id": dataset_id.to_string(),
                        "type": "DatasetId"
                    },
                    "role": {
@@ -357,7 +380,7 @@ mod tests {
                }, {
                    "permission": "Read",
                    "resourceId": {
-                       "id": gdal_dataset_id.to_string(),
+                       "id": dataset_id.to_string(),
                        "type": "DatasetId"
                    },
                    "role": {
@@ -367,7 +390,7 @@ mod tests {
                }, {
                    "permission": "Read",
                    "resourceId": {
-                       "id": gdal_dataset_id.to_string(),
+                       "id": dataset_id.to_string(),
                        "type": "DatasetId"
                    },
                    "role": {
