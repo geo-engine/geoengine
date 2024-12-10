@@ -1,7 +1,6 @@
 use proc_macro2::TokenStream;
 
-/// Compiles Geo Engine Pro
-#[cfg(feature = "pro")]
+/// TODO: migrate
 mod pro;
 mod testing;
 
@@ -27,8 +26,7 @@ pub fn test(
     }
 }
 
-#[cfg(feature = "pro")]
-/// A macro to generate tests for Geo Engine pro services.
+/// A macro to generate tests for Geo Engine services.
 /// It automatically spins up a database context.
 ///
 /// # Parameters

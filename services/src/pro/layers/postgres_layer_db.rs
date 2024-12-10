@@ -12,6 +12,7 @@ use crate::pro::contexts::ProPostgresDb;
 use crate::pro::datasets::TypedProDataProviderDefinition;
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Permission, RoleId};
+use crate::workflows::registry::TxWorkflowRegistry;
 use crate::{
     error::Result,
     layers::{
@@ -71,18 +72,22 @@ where
             .await
             .boxed_context(crate::error::PermissionDb)?;
 
-        transaction
-            .execute(
+        let workflow_id = self
+            .register_workflow_in_tx(layer.workflow, &transaction)
+            .await?;
+
+        transaction.execute(
                 "
                 UPDATE layers
-                SET name = $1, description = $2, symbology = $3, properties = $4, metadata = $5
-                WHERE id = $6;",
+                SET name = $1, description = $2, symbology = $3, properties = $4, metadata = $5, workflow_id = $6
+                WHERE id = $7;",
                 &[
                     &layer.name,
                     &layer.description,
                     &layer.symbology,
                     &layer.properties,
                     &HashMapTextTextDbType::from(&layer.metadata),
+                    &workflow_id,
                     &layer_id,
                 ],
             )
@@ -129,7 +134,7 @@ where
             .await
             .boxed_context(crate::error::PermissionDb)?;
 
-        let layer_id = insert_layer(&trans, id, layer, collection).await?;
+        let layer_id = insert_layer(self, &trans, id, layer, collection).await?;
 
         // TODO: `ON CONFLICT DO NOTHING` means, we do not get an error if the permission already exists.
         //       Do we want that, or should we report an error and let the caller decide whether to ignore it?
