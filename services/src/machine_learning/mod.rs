@@ -114,6 +114,11 @@ pub trait MlModelDb {
     ) -> Result<MlModelMetadata, MachineLearningError>;
 
     async fn add_model(&self, model: MlModel) -> Result<MlModelIdAndName, MachineLearningError>;
+
+    async fn resolve_model_name_to_id(
+        &self,
+        name: &MlModelName,
+    ) -> Result<Option<MlModelId>, MachineLearningError>;
 }
 
 #[async_trait]
@@ -143,6 +148,13 @@ where
     }
 
     async fn add_model(&self, _model: MlModel) -> Result<MlModelIdAndName, MachineLearningError> {
+        unimplemented!()
+    }
+
+    async fn resolve_model_name_to_id(
+        &self,
+        _name: &MlModelName,
+    ) -> Result<Option<MlModelId>, MachineLearningError> {
         unimplemented!()
     }
 }

@@ -207,4 +207,27 @@ where
             name: model.name,
         })
     }
+
+    async fn resolve_model_name_to_id(
+        &self,
+        model_name: &MlModelName,
+    ) -> Result<Option<MlModelId>, MachineLearningError> {
+        let conn = self
+            .conn_pool
+            .get()
+            .await
+            .context(Bb8MachineLearningError)?;
+
+        let stmt = conn
+            .prepare(
+                "SELECT id
+        FROM ml_models
+        WHERE name = $1::\"MlModelName\"",
+            )
+            .await?;
+
+        let row_option = conn.query_opt(&stmt, &[&model_name]).await?;
+
+        Ok(row_option.map(|row| row.get(0)))
+    }
 }
