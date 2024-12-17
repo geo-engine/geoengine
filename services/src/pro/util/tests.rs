@@ -458,7 +458,7 @@ pub trait MockQuotaTracking {
 
 impl MockQuotaTracking for QuotaTracking {
     fn mock_work_unit_done(&self) {
-        self.work_unit_done("test".to_string(), WorkflowOperatorPath::initialize_root());
+        self.work_unit_done("test", WorkflowOperatorPath::initialize_root(), None);
     }
 }
 

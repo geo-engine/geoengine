@@ -21,12 +21,9 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_operators::engine::{
-    CanonicOperatorName, ExecutionContext, ResultDescriptor, SingleRasterOrVectorSource,
-    WorkflowOperatorPath,
+    RasterOperator, ResultDescriptor, SingleRasterOrVectorSource, WorkflowOperatorPath,
 };
-use geoengine_operators::processing::{
-    InitializedRasterReprojection, Reprojection, ReprojectionParams,
-};
+use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
@@ -325,14 +322,15 @@ async fn wms_map_handler<C: ApplicationContext>(
                 sources: SingleRasterOrVectorSource {
                     source: RasterOrVectorOperator::Raster(operator),
                 },
-            };
+            }
+            .boxed();
 
-            let irp = InitializedRasterReprojection::try_new_with_input(
-                CanonicOperatorName::from(&reprojected_workflow),
-                reprojection_params,
-                initialized,
-                execution_context.tiling_specification(),
-            )?;
+            let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+            // TODO: avoid re-initialization and re-use unprojected workflow. However, this requires updating all operator paths
+            let irp = reprojected_workflow
+                .initialize(workflow_operator_path_root, &execution_context)
+                .await?;
 
             Box::new(irp)
         };

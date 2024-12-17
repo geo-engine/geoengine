@@ -16,6 +16,8 @@ pub struct StreamStatisticsAdapter<S> {
     span: Span,
     quota: QuotaTracking,
     path: WorkflowOperatorPath,
+    operator_name: &'static str,
+    data: Option<String>,
 }
 
 impl<S> StreamStatisticsAdapter<S> {
@@ -24,6 +26,8 @@ impl<S> StreamStatisticsAdapter<S> {
         span: Span,
         quota: QuotaTracking,
         path: WorkflowOperatorPath,
+        operator_name: &'static str,
+        data: Option<String>,
     ) -> StreamStatisticsAdapter<S> {
         StreamStatisticsAdapter {
             stream,
@@ -32,6 +36,8 @@ impl<S> StreamStatisticsAdapter<S> {
             span,
             quota,
             path,
+            operator_name,
+            data,
         }
     }
 
@@ -58,12 +64,6 @@ where
         let mut this = self.project();
         *this.poll_next_count += 1;
 
-        let operator_name = this
-            .span
-            .metadata()
-            .map_or("unknown", tracing::Metadata::name)
-            .to_string();
-
         let _enter = this.span.enter();
 
         tracing::trace!(
@@ -82,7 +82,11 @@ where
                     empty = false,
                 );
 
-                (*this.quota).work_unit_done(operator_name.to_string(), this.path.clone());
+                (*this.quota).work_unit_done(
+                    this.operator_name,
+                    this.path.clone(),
+                    this.data.clone(),
+                );
             }
             None => {
                 tracing::debug!(
@@ -126,6 +130,8 @@ mod tests {
             span!(Level::TRACE, "test"),
             quota,
             WorkflowOperatorPath::initialize_root(),
+            "test",
+            None,
         );
 
         let one = v_stat_stream.next().await;
@@ -152,8 +158,9 @@ mod tests {
                 user,
                 workflow,
                 computation,
-                operator_name: "test".to_string(),
-                operator_path: WorkflowOperatorPath::initialize_root()
+                operator_name: "test",
+                operator_path: WorkflowOperatorPath::initialize_root(),
+                data: None,
             }
             .into()
         );

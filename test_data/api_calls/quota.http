@@ -39,7 +39,7 @@ Content-Type: application/json
 ###
 
 # @name lastTask
-GET http://localhost:3030/api/quota/dataUsage
+GET http://localhost:3030/api/quota/dataUsage?offset=0&limit=10
 Authorization: Bearer {{adminSession.response.body.$.id}}
 Content-Type: application/json
 Accept: application/json

@@ -16,11 +16,9 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
-use geoengine_operators::engine::{CanonicOperatorName, ExecutionContext, WorkflowOperatorPath};
+use geoengine_operators::engine::{ExecutionContext, RasterOperator, WorkflowOperatorPath};
 use geoengine_operators::engine::{ResultDescriptor, SingleRasterOrVectorSource};
-use geoengine_operators::processing::{
-    InitializedRasterReprojection, Reprojection, ReprojectionParams,
-};
+use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use geoengine_operators::util::raster_stream_to_geotiff::{
     raster_stream_to_multiband_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
@@ -397,15 +395,15 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Raster(operator),
             },
-        };
+        }
+        .boxed();
 
-        // create the inititalized operator directly, to avoid re-initializing everything
-        let irp = InitializedRasterReprojection::try_new_with_input(
-            CanonicOperatorName::from(&reprojected_workflow),
-            reprojection_params,
-            initialized,
-            execution_context.tiling_specification(),
-        )?;
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        // TODO: avoid re-initialization and re-use unprojected workflow. However, this requires updating all operator paths
+        let irp = reprojected_workflow
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
 
         Box::new(irp)
     };

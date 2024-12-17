@@ -268,7 +268,8 @@ CREATE TABLE quota_log (
     workflow_id uuid NOT NULL,
     computation_id uuid NOT NULL,
     operator_name text NOT NULL,
-    operator_path text NOT NULL
+    operator_path text NOT NULL,
+    data text
 );
 
 CREATE INDEX ON quota_log (user_id, timestamp, computation_id);

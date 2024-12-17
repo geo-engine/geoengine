@@ -851,6 +851,7 @@ where
         let mut computations = Vec::new();
         let mut operators_names = Vec::new();
         let mut operator_paths = Vec::new();
+        let mut datas = Vec::new();
 
         for unit in log {
             users.push(unit.user);
@@ -858,11 +859,12 @@ where
             computations.push(unit.computation);
             operators_names.push(unit.operator_name);
             operator_paths.push(unit.operator_path.to_string());
+            datas.push(unit.data);
         }
 
         let query = "
-            INSERT INTO quota_log (user_id, workflow_id, computation_id, operator_name, operator_path)
-                (SELECT * FROM UNNEST($1::uuid[], $2::uuid[], $3::uuid[], $4::text[], $5::text[]))
+            INSERT INTO quota_log (user_id, workflow_id, computation_id, operator_name, operator_path, data)
+                (SELECT * FROM UNNEST($1::uuid[], $2::uuid[], $3::uuid[], $4::text[], $5::text[], $6::text[]))
         ";
 
         conn.execute(
@@ -873,6 +875,7 @@ where
                 &computations,
                 &operators_names,
                 &operator_paths,
+                &datas,
             ],
         )
         .await?;
@@ -968,25 +971,25 @@ where
             SELECT
                 user_id,
                 computation_id,
-                operator_name,
+                data,
                 MIN(timestamp) AS timestamp,
                 COUNT(*) AS count
             FROM
                 quota_log
             WHERE 
-                operator_name IN ('GdalSource', 'OgrSource')
+                data IS NOT NULL
             GROUP BY
                user_id,
                computation_id,
                workflow_id,
-               operator_name
+               data
             ORDER BY
-                MIN(timestamp) DESC, user_id ASC, computation_id ASC, workflow_id ASC, operator_name ASC
+                MIN(timestamp) DESC, user_id ASC, computation_id ASC, workflow_id ASC, data ASC
             OFFSET
                 $1
             LIMIT
                 $2;",
-                &[ &(offset as i64), &(limit as i64)],
+                &[&(offset as i64), &(limit as i64)],
             )
             .await?;
 
@@ -1004,7 +1007,7 @@ where
 
     async fn quota_used_on_data_summary(
         &self,
-        _dataset: Option<String>,
+        dataset: Option<String>,
         granularity: UsageSummaryGranularity,
         offset: u64,
         limit: u64,
@@ -1023,31 +1026,55 @@ where
             UsageSummaryGranularity::Years => "year",
         };
 
-        // TODO: include dataset in query
-        let rows = conn
-            .query(
+        let rows = if let Some(dataset) = dataset {
+            conn.query(
                 &format!(
                     "
             SELECT
                 date_trunc('{trunc}', timestamp) AS trunc,
-                operator_name as dataset,
+                data
                 COUNT(*) AS count
             FROM
                 quota_log
             WHERE 
-                operator_name IN ('GdalSource', 'OgrSource')
+                data = $3
             GROUP BY
-                trunc, dataset
+                trunc, data
             ORDER BY
-                trunc DESC, dataset ASC
+                trunc DESC, data ASC
             OFFSET
                 $1
             LIMIT 
-                $2;"
+                $2;",
+                ),
+                &[&(offset as i64), &(limit as i64), &dataset],
+            )
+            .await?
+        } else {
+            conn.query(
+                &format!(
+                    "
+            SELECT
+                date_trunc('{trunc}', timestamp) AS trunc,
+                data,
+                COUNT(*) AS count
+            FROM
+                quota_log
+            WHERE 
+                data IS NOT NULL
+            GROUP BY
+                trunc, data
+            ORDER BY
+                trunc DESC, data ASC
+            OFFSET
+                $1
+            LIMIT 
+                $2;",
                 ),
                 &[&(offset as i64), &(limit as i64)],
             )
-            .await?;
+            .await?
+        };
 
         Ok(rows
             .iter()

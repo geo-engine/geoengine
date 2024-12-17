@@ -17,7 +17,6 @@ use geoengine_operators::engine::{
     ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
     InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
     QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
-    WorkflowOperatorPath,
 };
 use geoengine_operators::meta::quota::{QuotaChecker, QuotaTracking};
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
@@ -235,7 +234,6 @@ where
         &self,
         op: Box<dyn geoengine_operators::engine::InitializedRasterOperator>,
         _span: CreateSpan,
-        _path: WorkflowOperatorPath,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
         op
     }
@@ -244,7 +242,6 @@ where
         &self,
         op: Box<dyn InitializedVectorOperator>,
         _span: CreateSpan,
-        _path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedVectorOperator> {
         op
     }
@@ -253,7 +250,6 @@ where
         &self,
         op: Box<dyn InitializedPlotOperator>,
         _span: CreateSpan,
-        _path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedPlotOperator> {
         op
     }

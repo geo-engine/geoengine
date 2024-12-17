@@ -9,8 +9,9 @@ pub struct ComputationUnit {
     pub user: Uuid,
     pub workflow: Uuid,
     pub computation: Uuid,
-    pub operator_name: String,
+    pub operator_name: &'static str,
     pub operator_path: WorkflowOperatorPath,
+    pub data: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,7 +51,12 @@ impl QuotaTracking {
         }
     }
 
-    pub fn work_unit_done(&self, operator_name: String, operator_path: WorkflowOperatorPath) {
+    pub fn work_unit_done(
+        &self,
+        operator_name: &'static str,
+        operator_path: WorkflowOperatorPath,
+        data: Option<String>,
+    ) {
         let _ = self
             .quota_sender
             .send(QuotaMessage::ComputationUnit(ComputationUnit {
@@ -59,6 +65,7 @@ impl QuotaTracking {
                 computation: self.computation,
                 operator_name,
                 operator_path,
+                data,
             })); // ignore the Result because the quota receiver should never close the receiving end of the channel
     }
 }

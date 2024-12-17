@@ -2242,8 +2242,9 @@ mod tests {
                 user: session.user.id.0,
                 workflow: workflow_id,
                 computation: Uuid::new_v4(),
-                operator_name: "Foo".to_string(),
+                operator_name: "Foo",
                 operator_path: WorkflowOperatorPath::initialize_root(),
+                data: None,
             }])
             .await
             .unwrap();
@@ -2305,8 +2306,9 @@ mod tests {
                 user: session.user.id.0,
                 workflow: workflow_id,
                 computation: computation_id,
-                operator_name: "GdalSource".to_string(),
+                operator_name: "GdalSource",
                 operator_path: WorkflowOperatorPath::initialize_root(),
+                data: Some("foo".to_string()),
             }])
             .await
             .unwrap();
@@ -2316,8 +2318,9 @@ mod tests {
                 user: session.user.id.0,
                 workflow: workflow_id,
                 computation: computation_id,
-                operator_name: "GdalSource".to_string(),
+                operator_name: "GdalSource",
                 operator_path: WorkflowOperatorPath::initialize_root(),
+                data: Some("foo".to_string()),
             }])
             .await
             .unwrap();
@@ -2327,8 +2330,9 @@ mod tests {
                 user: session.user.id.0,
                 workflow: workflow_id,
                 computation: computation_id,
-                operator_name: "OgrSource".to_string(),
+                operator_name: "OgrSource",
                 operator_path: WorkflowOperatorPath::initialize_root(),
+                data: Some("bar".to_string()),
             }])
             .await
             .unwrap();
@@ -2338,8 +2342,9 @@ mod tests {
                 user: session.user.id.0,
                 workflow: workflow_id,
                 computation: computation_id2,
-                operator_name: "GdalSource".to_string(),
+                operator_name: "GdalSource",
                 operator_path: WorkflowOperatorPath::initialize_root(),
+                data: Some("foo".to_string()),
             }])
             .await
             .unwrap();
@@ -2355,11 +2360,11 @@ mod tests {
         let usage: Vec<DataUsage> = test::read_body_json(res).await;
 
         assert_eq!(usage.len(), 3);
-        assert_eq!(usage[0].data, "GdalSource");
+        assert_eq!(usage[0].data, "foo");
         assert_eq!(usage[0].count, 1);
-        assert_eq!(usage[1].data, "OgrSource");
+        assert_eq!(usage[1].data, "bar");
         assert_eq!(usage[1].count, 1);
-        assert_eq!(usage[2].data, "GdalSource");
+        assert_eq!(usage[2].data, "foo");
         assert_eq!(usage[2].count, 2);
 
         let req = test::TestRequest::get()
@@ -2372,10 +2377,12 @@ mod tests {
 
         let usage: Vec<DataUsageSummary> = test::read_body_json(res).await;
 
+        dbg!(&usage);
+
         assert_eq!(usage.len(), 2);
-        assert_eq!(usage[0].dataset, "GdalSource");
-        assert_eq!(usage[0].count, 3);
-        assert_eq!(usage[1].dataset, "OgrSource");
-        assert_eq!(usage[1].count, 1);
+        assert_eq!(usage[0].dataset, "bar");
+        assert_eq!(usage[0].count, 1);
+        assert_eq!(usage[1].dataset, "foo");
+        assert_eq!(usage[1].count, 3);
     }
 }

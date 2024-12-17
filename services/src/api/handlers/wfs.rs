@@ -24,13 +24,11 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 use geoengine_operators::engine::{
-    CanonicOperatorName, QueryContext, ResultDescriptor, SingleRasterOrVectorSource,
-    TypedVectorQueryProcessor, VectorQueryProcessor,
+    QueryContext, ResultDescriptor, SingleRasterOrVectorSource, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor,
 };
 use geoengine_operators::engine::{QueryProcessor, WorkflowOperatorPath};
-use geoengine_operators::processing::{
-    InitializedVectorReprojection, Reprojection, ReprojectionParams,
-};
+use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::util::abortable_query_execution;
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use reqwest::Url;
@@ -500,14 +498,15 @@ async fn wfs_feature_handler<C: ApplicationContext>(
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Vector(operator),
             },
-        };
+        }
+        .boxed();
 
-        // create the inititalized operator directly, to avoid re-initializing everything
-        let ivp = InitializedVectorReprojection::try_new_with_input(
-            CanonicOperatorName::from(&reprojected_workflow),
-            reprojection_params,
-            initialized,
-        )?;
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        // TODO: avoid re-initialization and re-use unprojected workflow. However, this requires updating all operator paths
+        let ivp = reprojected_workflow
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
 
         Box::new(ivp)
     };
