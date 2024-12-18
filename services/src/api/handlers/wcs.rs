@@ -14,6 +14,7 @@ use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialPartition2D,
 };
+use geoengine_datatypes::raster::GeoTransform;
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::engine::{CanonicOperatorName, ExecutionContext, WorkflowOperatorPath};
@@ -176,6 +177,7 @@ async fn wcs_capabilities_handler<C: ApplicationContext>(
         ("session_token" = [])
     )
 )]
+#[allow(clippy::too_many_lines)]
 async fn wcs_describe_coverage_handler<C: ApplicationContext>(
     workflow: web::Path<WorkflowId>,
     request: web::Query<DescribeCoverage>,
@@ -219,28 +221,54 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
     let spatial_reference: Option<SpatialReference> = result_descriptor.spatial_reference.into();
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
 
-    // TODO: give tighter bounds if possible
-    let area_of_use: SpatialPartition2D = spatial_reference.area_of_use_projected()?;
+    let resolution = result_descriptor
+        .resolution
+        .unwrap_or(SpatialResolution::zero_point_one());
 
-    let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) =
-        match spatial_reference_specification(&spatial_reference.proj_string()?)?
-            .axis_order
-            .ok_or(Error::AxisOrderingNotKnownForSrs {
-                srs_string: spatial_reference.srs_string(),
-            })? {
-            AxisOrder::EastNorth => (
-                area_of_use.lower_left().x,
-                area_of_use.lower_left().y,
-                area_of_use.upper_right().x,
-                area_of_use.upper_right().y,
-            ),
-            AxisOrder::NorthEast => (
-                area_of_use.lower_left().y,
-                area_of_use.lower_left().x,
-                area_of_use.upper_right().y,
-                area_of_use.upper_right().x,
-            ),
-        };
+    // TODO: swap depending on axis order?
+    let pixel_size_x = resolution.x;
+    let pixel_size_y = -resolution.y;
+
+    let bbox = if let Some(bbox) = result_descriptor.bbox {
+        bbox
+    } else {
+        spatial_reference.area_of_use_projected()?
+    };
+
+    let axis_order = spatial_reference_specification(&spatial_reference.proj_string()?)?
+        .axis_order
+        .ok_or(Error::AxisOrderingNotKnownForSrs {
+            srs_string: spatial_reference.srs_string(),
+        })?;
+    let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) = match axis_order {
+        AxisOrder::EastNorth => (
+            bbox.lower_left().x,
+            bbox.lower_left().y,
+            bbox.upper_right().x,
+            bbox.upper_right().y,
+        ),
+        AxisOrder::NorthEast => (
+            bbox.lower_left().y,
+            bbox.lower_left().x,
+            bbox.upper_right().y,
+            bbox.upper_right().x,
+        ),
+    };
+
+    // TODO: swap depending on axis order?
+    // let raster_size_x = (bbox.size_x() / pixel_size_x.abs()).ceil() as usize;
+    // let raster_size_y = (bbox.size_y() / pixel_size_y.abs()).ceil() as usize;
+
+    let geo_transform = GeoTransform::new(bbox.upper_left(), pixel_size_x, pixel_size_y);
+
+    let [raster_size_x, raster_size_y] =
+        *(geo_transform.lower_right_pixel_idx(&bbox) + [1, 1]).inner();
+
+    // TODO: swap order of GridOffsets ix axis is swapped? Currently, GDAL seems to take the rotation as pixel size. WCS spec says
+    // "When the GridType is “urn:ogc:def:method:WCS:1.1:2dGridIn2dCrs”, there shall be four values in this GridOffsets. The center two of these offsets will be zero when the GridCRS is not rotated or skewed in the GridBaseCRS."
+    // though.
+
+    // TODO: output all available bands
 
     let mock = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -259,15 +287,29 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
                         <ows:LowerCorner>{bbox_ll_0} {bbox_ll_1}</ows:LowerCorner>
                         <ows:UpperCorner>{bbox_ur_0} {bbox_ur_1}</ows:UpperCorner>
                     </ows:BoundingBox>
+                    <ows:BoundingBox crs="urn:ogc:def:crs:OGC:1.3:CRS:imageCRS" dimensions="2">
+                        <ows:LowerCorner>0 0</ows:LowerCorner>
+                        <ows:UpperCorner>{raster_size_y} {raster_size_x}</ows:UpperCorner>
+                    </ows:BoundingBox>
                     <wcs:GridCRS>
                         <wcs:GridBaseCRS>urn:ogc:def:crs:{srs_authority}::{srs_code}</wcs:GridBaseCRS>
                         <wcs:GridType>urn:ogc:def:method:WCS:1.1:2dGridIn2dCrs</wcs:GridType>
                         <wcs:GridOrigin>{origin_x} {origin_y}</wcs:GridOrigin>
-                        <wcs:GridOffsets>0 0.0 0.0 -0</wcs:GridOffsets>
+                        <wcs:GridOffsets>{pixel_size_x} 0.0 0.0 {pixel_size_y}</wcs:GridOffsets>
                         <wcs:GridCS>urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS</wcs:GridCS>
                     </wcs:GridCRS>
                 </wcs:SpatialDomain>
             </wcs:Domain>
+            <wcs:Range>
+                <wcs:Field>
+                    <wcs:Identifier>contents</wcs:Identifier>
+                    <wcs:Axis identifier="Bands">
+                        <wcs:AvailableKeys>
+                            <wcs:Key>{band_name}</wcs:Key>
+                        </wcs:AvailableKeys>
+                    </wcs:Axis>
+                </wcs:Field>
+            </wcs:Range>
             <wcs:SupportedCRS>{srs_authority}:{srs_code}</wcs:SupportedCRS>
             <wcs:SupportedFormat>image/tiff</wcs:SupportedFormat>
         </wcs:CoverageDescription>
@@ -276,12 +318,9 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
         workflow_id = identifiers,
         srs_authority = spatial_reference.authority(),
         srs_code = spatial_reference.code(),
-        origin_x = area_of_use.upper_left().x,
-        origin_y = area_of_use.upper_left().y,
-        bbox_ll_0 = bbox_ll_0,
-        bbox_ll_1 = bbox_ll_1,
-        bbox_ur_0 = bbox_ur_0,
-        bbox_ur_1 = bbox_ur_1,
+        origin_x = bbox.upper_left().x,
+        origin_y = bbox.upper_left().y,
+        band_name = result_descriptor.bands[0].name,
     );
 
     Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
@@ -422,8 +461,18 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
             }
         };
 
+    // snap bbox to grid
+    let geo_transform = GeoTransform::new(
+        request_partition.upper_left(),
+        spatial_resolution.x,
+        -spatial_resolution.y,
+    );
+    let idx = geo_transform.lower_right_pixel_idx(&request_partition) + [1, 1];
+    let lower_right = geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(idx);
+    let snapped_partition = SpatialPartition2D::new(request_partition.upper_left(), lower_right)?;
+
     let query_rect = RasterQueryRectangle {
-        spatial_bounds: request_partition,
+        spatial_bounds: snapped_partition,
         time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
         spatial_resolution,
         attributes: BandSelection::first(), // TODO: support multi bands in API and set the selection here
