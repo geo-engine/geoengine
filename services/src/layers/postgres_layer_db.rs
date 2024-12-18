@@ -2,10 +2,9 @@ use super::external::TypedDataProviderDefinition;
 use super::layer::{UpdateLayer, UpdateLayerCollection};
 use super::listing::{ProviderCapabilities, SearchType};
 use crate::contexts::PostgresDb;
-use crate::error;
 use crate::layers::layer::Property;
 use crate::layers::listing::{SearchCapabilities, SearchParameters, SearchTypes};
-use crate::workflows::workflow::WorkflowId;
+use crate::workflows::registry::TxWorkflowRegistry;
 use crate::{
     error::Result,
     layers::{
@@ -86,7 +85,8 @@ async fn _remove_layers_without_parent_collection(
     Ok(())
 }
 
-pub async fn insert_layer(
+pub async fn insert_layer<W: TxWorkflowRegistry>(
+    workflow_registry: &W,
     trans: &Transaction<'_>,
     id: &LayerId,
     layer: AddLayer,
@@ -101,23 +101,8 @@ pub async fn insert_layer(
             found: collection.0.clone(),
         })?;
 
-    let workflow_id = WorkflowId::from_hash(&layer.workflow);
-
-    let stmt = trans
-        .prepare(
-            "INSERT INTO workflows (id, workflow) VALUES ($1, $2) 
-            ON CONFLICT DO NOTHING;",
-        )
-        .await?;
-
-    trans
-        .execute(
-            &stmt,
-            &[
-                &workflow_id,
-                &serde_json::to_value(&layer.workflow).context(error::SerdeJson)?,
-            ],
-        )
+    let workflow_id = workflow_registry
+        .register_workflow_in_tx(layer.workflow, trans)
         .await?;
 
     let stmt = trans
@@ -421,23 +406,30 @@ where
                 found: id.0.clone(),
             })?;
 
-        let conn = self.conn_pool.get().await?;
+        let mut conn = self.conn_pool.get().await?;
 
-        conn.execute(
+        let tx = conn.build_transaction().start().await?;
+
+        let workflow_id = self.register_workflow_in_tx(layer.workflow, &tx).await?;
+
+        tx.execute(
             "
             UPDATE layers
-            SET name = $1, description = $2, symbology = $3, properties = $4, metadata = $5
-            WHERE id = $6;",
+            SET name = $1, description = $2, symbology = $3, properties = $4, metadata = $5, workflow_id = $6
+            WHERE id = $7;",
             &[
                 &layer.name,
                 &layer.description,
                 &layer.symbology,
                 &layer.properties,
                 &HashMapTextTextDbType::from(&layer.metadata),
+                &workflow_id,
                 &layer_id,
             ],
         )
         .await?;
+
+        tx.commit().await?;
 
         Ok(())
     }
@@ -471,7 +463,7 @@ where
 
         let trans = conn.build_transaction().start().await?;
 
-        insert_layer(&trans, id, layer, collection).await?;
+        insert_layer(self, &trans, id, layer, collection).await?;
 
         trans.commit().await?;
 

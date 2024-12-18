@@ -22,6 +22,7 @@ pub mod server;
 // TODO: this should actually be only used in tests
 #[allow(clippy::unwrap_used)]
 pub mod tests;
+pub mod workflows;
 
 /// Serde deserializer <https://docs.rs/serde_qs/0.6.0/serde_qs/index.html#flatten-workaround>
 pub fn from_str<'de, D, S>(deserializer: D) -> Result<S, D::Error>
