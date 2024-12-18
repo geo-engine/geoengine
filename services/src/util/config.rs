@@ -1,4 +1,3 @@
-use crate::contexts::SessionId;
 use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
@@ -372,7 +371,6 @@ impl ConfigElement for Gdal {
 #[derive(Debug, Deserialize)]
 pub struct Session {
     pub anonymous_access: bool,
-    pub fixed_session_token: Option<SessionId>,
 }
 
 impl ConfigElement for Session {

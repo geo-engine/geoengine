@@ -16,32 +16,42 @@ on:
         required: true
         default: "nightly"
 
+      container_repository_branch:
+        description: "Branch of the container repository"
+        required: true
+        default: "main"
+
 jobs:
   create-container:
     if: github.event_name != 'schedule' || github.repository_owner == 'geo-engine'
-
-    strategy:
-      matrix:
-        cargo-features: ["pro", ""]
 
     runs-on: ubuntu-22.04
 
     env:
       TAG_NAME: nightly
-      FULL_TAG_NAME: nightly
+      CONTAINER_REPOSITORY_BRANCH: main
+
+    services:
+      postgres:
+        image: postgis/postgis
+        env:
+          POSTGRES_USER: geoengine
+          POSTGRES_PASSWORD: geoengine
+          POSTGRES_DB: geoengine
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
       - name: Modify TAG_NAME if on `tag_name` is set on `workflow_dispatch`
         if: github.event.inputs.tag_name != ''
         run: |
           echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
-          echo "FULL_TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
 
-      - name: Set `FULL_TAG_NAME` wrt. cargo features
-        if: matrix.cargo-features != ''
+      - name: Modify CONTAINER_REPOSITORY_BRANCH if on `container_repository_branch` is set on `workflow_dispatch`
+        if: github.event.inputs.container_repository_branch != ''
         run: |
-          echo "FULL_TAG_NAME=${{matrix.cargo-features}}-${{env.TAG_NAME}}" >> $GITHUB_ENV
-          echo "CARGO_FEATURES=--features=${{matrix.cargo-features}}" >> $GITHUB_ENV
+          echo "CONTAINER_REPOSITORY_BRANCH=${{ github.event.inputs.container_repository_branch }}" >> $GITHUB_ENV
 
       - name: Checkout code
         uses: actions/checkout@v3
@@ -53,6 +63,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: geo-engine/geoengine-container
+          ref: ${{ env.CONTAINER_REPOSITORY_BRANCH }}
           ssh-key: ${{ secrets.CONTAINER_GITHUB_TOKEN }}
           path: "container"
 
@@ -62,17 +73,26 @@ jobs:
       - name: Build with podman
         run: |
           podman build \
-            --tag geoengine:${{env.FULL_TAG_NAME}} \
-            --build-arg GEO_ENGINE_CARGO_BUILD_PARAMS="--release ${{env.CARGO_FEATURES}}" \
+            --tag geoengine:${{env.TAG_NAME}} \
+            --build-arg GEO_ENGINE_CARGO_BUILD_PARAMS="--release" \
             -f container/geoengine/Dockerfile \
             .
 
+      - name: Test the container
+        working-directory: geoengine
+        run: |
+          CONTAINER_ID=geoengine:${{env.TAG_NAME}}
+          POD_ID=$(podman run --rm -d --network=host $CONTAINER_ID)
+          (podman run --rm -i $CONTAINER_ID ./geoengine-cli check-successful-startup --output-stdin) < <(podman logs --follow $POD_ID |& tee)
+          podman run --rm --network=host $CONTAINER_ID ./geoengine-cli heartbeat --server-url http://localhost:8080/api
+          podman stop $POD_ID
+
       - name: Push image to quay.io
-        run: podman push geoengine:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine:${{env.FULL_TAG_NAME}}
+        run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}
 
       - name: Push nightly with date
         if: env.TAG_NAME == 'nightly'
-        run: podman push geoengine:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine:${{env.FULL_TAG_NAME}}-$(date +'%Y-%m-%d')
+        run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}-$(date +'%Y-%m-%d')
 
   notify-slack-on-failure:
     name: Post to a Slack channel in case of failure

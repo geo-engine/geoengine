@@ -257,7 +257,7 @@ impl From<&RasterColorizer> for RasterColorizerDbType {
                 blue_band,
                 rgb_params: rgba_params,
             } => Self {
-                r#type: RasterColorizerDbTypeType::SingleBand,
+                r#type: RasterColorizerDbTypeType::MultiBand,
                 band: None,
                 band_colorizer: None,
                 red_band: Some(i64::from(*red_band)),
