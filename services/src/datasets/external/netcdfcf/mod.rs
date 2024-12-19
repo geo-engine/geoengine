@@ -215,7 +215,7 @@ trait ToNetCdfSubgroup {
     ) -> Result<NetCdfGroup>;
 }
 
-impl<'a> ToNetCdfSubgroup for Group<'a> {
+impl ToNetCdfSubgroup for Group<'_> {
     fn to_net_cdf_subgroup(
         &self,
         group_path: &Path,

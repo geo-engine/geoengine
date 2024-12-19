@@ -24,7 +24,6 @@ pub trait MapElements<In, Out, F: Fn(In) -> Out> {
 /// On `Grid` elements are mapped, e.g., as `|element: In| { element + 1 }` with `F: Fn(In) -> Out`
 ///
 /// On `MaskedGrid` you can map either only valid data (excluding no data), e.g., `|element: In| { element + 1 }` with `F: Fn(In) -> Out` or handling no data as `|element: Option<In>| { element.map(|e| e+ 1) }` with `F: Fn(Option<In>) -> Option<Out>`.
-
 pub trait MapElementsParallel<In, Out, F: Fn(In) -> Out> {
     type Output;
     /// Create a new instance from the current one. The `map_fn` transforms all elements to a new value. Use a `ThreadPool` for parallel map operations.
