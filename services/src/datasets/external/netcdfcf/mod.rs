@@ -1399,6 +1399,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for NetCdfCfDataProvider<D> {
         collection: &LayerCollectionId,
         options: LayerCollectionListOptions,
     ) -> crate::error::Result<LayerCollection> {
+        #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
         self._load_layer_collection(collection, options, NetCdfCfIdFn)
             .await
     }
