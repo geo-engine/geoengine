@@ -159,6 +159,7 @@ mod tests {
     use crate::datasets::DatasetName;
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::ge_context;
+    use crate::util::tests::MockQueryContext;
     use crate::{
         api::model::services::{AddDataset, DataPath, DatasetDefinition, MetaDataDefinition},
         contexts::{Session, SessionContext, SessionId},
@@ -358,7 +359,7 @@ mod tests {
         let source = make_ogr_source(&exe_ctx, dataset_name.into()).await?;
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
-        let query_ctx = ctx.query_context()?;
+        let query_ctx = ctx.mock_query_context()?;
 
         let query = query_processor
             .query(

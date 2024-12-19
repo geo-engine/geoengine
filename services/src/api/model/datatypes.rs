@@ -761,6 +761,14 @@ impl From<chrono::DateTime<chrono::FixedOffset>> for DateTime {
     }
 }
 
+impl From<geoengine_datatypes::primitives::DateTime> for DateTime {
+    fn from(datetime: geoengine_datatypes::primitives::DateTime) -> Self {
+        Self {
+            datetime: datetime.into(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum FeatureDataType {

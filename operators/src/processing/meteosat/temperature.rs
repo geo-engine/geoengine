@@ -50,6 +50,7 @@ impl OperatorName for Temperature {
 
 pub struct InitializedTemperature {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     params: TemperatureParams,
@@ -65,7 +66,10 @@ impl RasterOperator for Temperature {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let initialized_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let input = initialized_sources.raster;
 
         let in_desc = input.result_descriptor();
@@ -127,6 +131,7 @@ impl RasterOperator for Temperature {
 
         let initialized_operator = InitializedTemperature {
             name,
+            path,
             result_descriptor: out_desc,
             source: input,
             params: self.params,
@@ -182,6 +187,14 @@ impl InitializedRasterOperator for InitializedTemperature {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        Temperature::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 

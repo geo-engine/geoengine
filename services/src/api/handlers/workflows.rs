@@ -32,6 +32,7 @@ use std::collections::HashMap;
 use std::io::{Cursor, Write};
 use std::sync::Arc;
 use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
 use zip::{write::SimpleFileOptions, ZipWriter};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
@@ -444,6 +445,7 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("workflow {id}"),
+        id,
         workflow,
         ctx,
         info.into_inner(),
@@ -513,7 +515,8 @@ async fn raster_stream_websocket<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_workflow(&id.into_inner()).await?;
+    let workflow_id = id.into_inner();
+    let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let operator = workflow
         .operator
@@ -537,7 +540,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         operator,
         query_rectangle,
         ctx.execution_context()?,
-        ctx.query_context()?,
+        ctx.query_context(workflow_id.0, Uuid::new_v4())?,
     )
     .await?;
 
@@ -596,7 +599,8 @@ async fn vector_stream_websocket<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_workflow(&id.into_inner()).await?;
+    let workflow_id = id.into_inner();
+    let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let operator = workflow
         .operator
@@ -620,7 +624,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         operator,
         query_rectangle,
         ctx.execution_context()?,
-        ctx.query_context()?,
+        ctx.query_context(workflow_id.0, Uuid::new_v4())?,
     )
     .await?;
 
@@ -1437,7 +1441,7 @@ mod tests {
             .await
             .unwrap();
 
-        let query_ctx = ctx.query_context().unwrap();
+        let query_ctx = ctx.query_context(workflow_id.0, Uuid::new_v4()).unwrap();
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),

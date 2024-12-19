@@ -148,11 +148,15 @@ impl RasterOperator for NeighborhoodAggregate {
             }
         );
 
-        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let initialized_source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let raster_source = initialized_source.raster;
 
         let initialized_operator = InitializedNeighborhoodAggregate {
             name,
+            path,
             result_descriptor: raster_source.result_descriptor().clone(),
             raster_source,
             neighborhood: self.params.neighborhood.try_into()?,
@@ -168,6 +172,7 @@ impl RasterOperator for NeighborhoodAggregate {
 
 pub struct InitializedNeighborhoodAggregate {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     raster_source: Box<dyn InitializedRasterOperator>,
     neighborhood: Neighborhood,
@@ -205,6 +210,14 @@ impl InitializedRasterOperator for InitializedNeighborhoodAggregate {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        NeighborhoodAggregate::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 

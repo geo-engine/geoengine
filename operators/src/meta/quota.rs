@@ -1,19 +1,20 @@
-use crate::util::Result;
+use crate::{engine::WorkflowOperatorPath, util::Result};
 use async_trait::async_trait;
-use geoengine_datatypes::identifier;
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 
-identifier!(ComputationContext);
-
 /// An Id for a computation used for quota tracking
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComputationUnit {
-    pub issuer: Uuid,                // TODO: use UserId?
-    pub context: ComputationContext, // TODO: introduce the concept of workflows to the operators crate and use/add it here
+    pub user: Uuid,
+    pub workflow: Uuid,
+    pub computation: Uuid,
+    pub operator_name: &'static str,
+    pub operator_path: WorkflowOperatorPath,
+    pub data: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QuotaMessage {
     ComputationUnit(ComputationUnit),
     Flush,
@@ -30,19 +31,42 @@ impl From<ComputationUnit> for QuotaMessage {
 #[derive(Clone)]
 pub struct QuotaTracking {
     quota_sender: UnboundedSender<QuotaMessage>,
-    computation: ComputationUnit,
+    user: Uuid,
+    workflow: Uuid,
+    computation: Uuid,
 }
 
 impl QuotaTracking {
-    pub fn new(quota_sender: UnboundedSender<QuotaMessage>, computation: ComputationUnit) -> Self {
+    pub fn new(
+        quota_sender: UnboundedSender<QuotaMessage>,
+        user: Uuid,
+        workflow: Uuid,
+        computation: Uuid,
+    ) -> Self {
         Self {
             quota_sender,
+            user,
+            workflow,
             computation,
         }
     }
 
-    pub fn work_unit_done(&self) {
-        let _ = self.quota_sender.send(self.computation.into()); // ignore the Result because the quota receiver should never close the receiving end of the channel
+    pub fn work_unit_done(
+        &self,
+        operator_name: &'static str,
+        operator_path: WorkflowOperatorPath,
+        data: Option<String>,
+    ) {
+        let _ = self
+            .quota_sender
+            .send(QuotaMessage::ComputationUnit(ComputationUnit {
+                user: self.user,
+                workflow: self.workflow,
+                computation: self.computation,
+                operator_name,
+                operator_path,
+                data,
+            })); // ignore the Result because the quota receiver should never close the receiving end of the channel
     }
 }
 

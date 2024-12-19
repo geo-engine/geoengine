@@ -3,13 +3,14 @@ use super::{
     util::config::QuotaTrackingMode,
 };
 use crate::pro::users::UserId;
-use geoengine_datatypes::util::test::TestDefault;
-use geoengine_operators::meta::quota::{
-    ComputationContext, ComputationUnit, QuotaMessage, QuotaTracking,
-};
+use geoengine_datatypes::{primitives::DateTime, util::test::TestDefault};
+use geoengine_operators::meta::quota::{ComputationUnit, QuotaMessage, QuotaTracking};
+use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::HashMap, time::Duration};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use utoipa::ToSchema;
+use uuid::Uuid;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -31,14 +32,14 @@ impl QuotaTrackingFactory {
     pub fn create_quota_tracking(
         &self,
         session: &UserSession,
-        context: ComputationContext,
+        workflow: Uuid,
+        computation: Uuid,
     ) -> QuotaTracking {
         QuotaTracking::new(
             self.quota_sender.clone(),
-            ComputationUnit {
-                issuer: session.user.id.0,
-                context,
-            },
+            session.user.id.0,
+            workflow,
+            computation,
         )
     }
 }
@@ -55,10 +56,11 @@ pub struct QuotaManager<U: UserDb + 'static> {
     user_db: U,
     quota_receiver: UnboundedReceiver<QuotaMessage>,
     quota_sender: UnboundedSender<QuotaMessage>,
+    quota_log_buffer: Vec<ComputationUnit>,
     increment_quota_buffer: HashMap<UserId, u64>,
-    increment_quota_buffer_size: usize,
-    increment_quota_buffer_used: usize,
-    increment_quota_buffer_timeout_seconds: u64,
+    buffer_size: usize,
+    buffer_used: usize,
+    buffer_timeout_seconds: u64,
 }
 
 impl<U: UserDb + 'static> QuotaManager<U> {
@@ -67,18 +69,19 @@ impl<U: UserDb + 'static> QuotaManager<U> {
         user_db: U,
         quota_receiver: UnboundedReceiver<QuotaMessage>,
         quota_sender: UnboundedSender<QuotaMessage>,
-        increment_quota_buffer_size: usize,
-        increment_quota_buffer_timeout_seconds: u64,
+        buffer_size: usize,
+        buffer_timeout_seconds: u64,
     ) -> Self {
         Self {
             mode,
             user_db,
             quota_receiver,
             quota_sender,
+            quota_log_buffer: Vec::new(),
             increment_quota_buffer: HashMap::new(),
-            increment_quota_buffer_size,
-            increment_quota_buffer_timeout_seconds,
-            increment_quota_buffer_used: 0,
+            buffer_size,
+            buffer_used: 0,
+            buffer_timeout_seconds,
         }
     }
 
@@ -99,21 +102,22 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                 let flush_buffer = match message {
                     QuotaMessage::ComputationUnit(computation) => {
                         // TODO: issue a tracing event instead?
-                        // TODO: also log workflow, or connect the computation context to a workflow beforehand.
-                        //       However, currently it is possible to reuse a context for multiple queries.
-                        //       Also: the operators crate knows nothing about workflows as of yet.
                         log::trace!(
-                            "Quota received. User: {}, Context: {}",
-                            computation.issuer,
-                            computation.context
+                            "Quota received. User: {}, Workflow: {}, Computation: {}",
+                            computation.user,
+                            computation.workflow,
+                            computation.computation
                         );
 
-                        let user = UserId(computation.issuer);
+                        let user = UserId(computation.user);
 
                         *self.increment_quota_buffer.entry(user).or_default() += 1;
-                        self.increment_quota_buffer_used += 1;
 
-                        self.increment_quota_buffer_used >= self.increment_quota_buffer_size
+                        self.quota_log_buffer.push(computation);
+
+                        self.buffer_used += 1;
+
+                        self.buffer_used >= self.buffer_size
                     }
                     QuotaMessage::Flush => {
                         log::trace!("Flush `increment_quota_buffer'");
@@ -121,7 +125,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                     }
                 };
 
-                if flush_buffer {
+                if flush_buffer && self.buffer_used > 0 {
                     // TODO: what to do if this fails (quota can't be recorded)? Try again later?
 
                     if let Err(error) = self
@@ -132,14 +136,22 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                         log::error!("Could not increment quota for users {error:?}");
                     }
 
-                    self.increment_quota_buffer_used = 0;
+                    if let Err(error) = self
+                        .user_db
+                        .log_quota_used(self.quota_log_buffer.drain(..))
+                        .await
+                    {
+                        log::error!("Could not log quota used {error:?}");
+                    }
+
+                    self.buffer_used = 0;
                 }
             }
         });
 
         // Periodically flush the increment_quota_buffer
         crate::util::spawn(async move {
-            let timeout_duration = Duration::from_secs(self.increment_quota_buffer_timeout_seconds);
+            let timeout_duration = Duration::from_secs(self.buffer_timeout_seconds);
 
             loop {
                 tokio::time::sleep(timeout_duration).await;
@@ -170,6 +182,41 @@ pub fn initialize_quota_tracking<U: UserDb + 'static>(
     QuotaTrackingFactory::new(quota_sender)
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OperatorQuota {
+    pub operator_name: String,
+    pub operator_path: String,
+    pub count: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComputationQuota {
+    pub timestamp: DateTime,
+    pub computation_id: Uuid,
+    pub workflow_id: Uuid,
+    pub count: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DataUsage {
+    pub timestamp: DateTime,
+    pub user_id: Uuid,
+    pub computation_id: Uuid,
+    pub data: String,
+    pub count: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DataUsageSummary {
+    pub timestamp: DateTime,
+    pub data: String,
+    pub count: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,10 +226,9 @@ mod tests {
             contexts::ProPostgresContext,
             ge_context,
             users::{UserAuth, UserCredentials, UserRegistration},
-            util::tests::admin_login,
+            util::tests::{admin_login, MockQuotaTracking},
         },
     };
-    use geoengine_datatypes::util::Identifier;
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
@@ -213,10 +259,10 @@ mod tests {
             60,
         );
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
-        tracking.work_unit_done();
-        tracking.work_unit_done();
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
 
         let db = app_ctx.session_context(session).db();
 
@@ -265,13 +311,13 @@ mod tests {
             60,
         );
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
-        tracking.work_unit_done();
-        tracking.work_unit_done();
-        tracking.work_unit_done();
-        tracking.work_unit_done();
-        tracking.work_unit_done();
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
 
         let db = app_ctx.session_context(session).db();
 
@@ -320,10 +366,10 @@ mod tests {
             2,
         );
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
-        tracking.work_unit_done();
-        tracking.work_unit_done();
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
 
         let db = app_ctx.session_context(session).db();
 

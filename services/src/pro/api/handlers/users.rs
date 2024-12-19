@@ -6,6 +6,10 @@ use crate::error::Result;
 use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::permissions::{RoleDescription, RoleId};
+use crate::pro::quota::ComputationQuota;
+use crate::pro::quota::DataUsage;
+use crate::pro::quota::DataUsageSummary;
+use crate::pro::quota::OperatorQuota;
 use crate::pro::users::UserAuth;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserId;
@@ -23,7 +27,9 @@ use serde::Deserialize;
 use serde::Serialize;
 use snafu::ensure;
 use snafu::ResultExt;
+use utoipa::IntoParams;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 pub(crate) fn init_user_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -42,6 +48,19 @@ where
         )
         .service(web::resource("/session/view").route(web::post().to(session_view_handler::<C>)))
         .service(web::resource("/quota").route(web::get().to(quota_handler::<C>)))
+        .service(
+            web::resource("/quota/computations")
+                .route(web::get().to(computations_quota_handler::<C>)),
+        )
+        .service(
+            web::resource("/quota/computations/{computation}")
+                .route(web::get().to(computation_quota_handler::<C>)),
+        )
+        .service(web::resource("/quota/dataUsage").route(web::get().to(data_usage_handler::<C>)))
+        .service(
+            web::resource("/quota/dataUsage/summary")
+                .route(web::get().to(data_usage_summary_handler::<C>)),
+        )
         .service(
             web::resource("/quotas/{user}")
                 .route(web::get().to(get_user_quota_handler::<C>))
@@ -336,6 +355,170 @@ where
     let used = db.quota_used().await?;
 
     Ok(web::Json(Quota { available, used }))
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct ComputationQuotaParams {
+    pub offset: usize,
+    pub limit: usize,
+}
+
+/// Retrieves the quota used by computations
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/quota/computations",
+    responses(
+        (status = 200, description = "The quota used by computations", body = Vec<ComputationQuota>)
+    ),
+    security(
+        ("session_token" = [])
+    ),
+    params(
+        ComputationQuotaParams
+    )
+)]
+pub(crate) async fn computations_quota_handler<C: ProApplicationContext>(
+    app_ctx: web::Data<C>,
+    params: web::Query<ComputationQuotaParams>,
+    session: C::Session,
+) -> Result<web::Json<Vec<ComputationQuota>>>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let params = params.into_inner();
+
+    let db = app_ctx.session_context(session).db();
+    let computations_quota = db
+        .quota_used_by_computations(params.offset, params.limit)
+        .await?;
+
+    Ok(web::Json(computations_quota))
+}
+
+/// Retrieves the quota used by computation with the given computation id
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/quota/computations/{computation}",
+    responses(
+        (status = 200, description = "The quota used by computation", body = Vec<OperatorQuota>)
+    ),
+    security(
+        ("session_token" = [])
+    ),
+    params(
+        ("computation" = Uuid, description = "Computation id")
+    )
+)]
+pub(crate) async fn computation_quota_handler<C: ProApplicationContext>(
+    app_ctx: web::Data<C>,
+    computation: web::Path<Uuid>,
+    session: C::Session,
+) -> Result<web::Json<Vec<OperatorQuota>>>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let computation = computation.into_inner();
+
+    let db = app_ctx.session_context(session).db();
+    let computation_quota = db.quota_used_by_computation(computation).await?;
+
+    Ok(web::Json(computation_quota))
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct UsageParams {
+    pub offset: u64,
+    pub limit: u64,
+}
+
+/// Retrieves the data usage
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/quota/dataUsage",
+    responses(
+        (status = 200, description = "The quota used on data", body = Vec<DataUsage>)
+    ),
+    params(
+        UsageParams
+    ),
+    security(
+        ("session_token" = [])
+    ),
+)]
+pub(crate) async fn data_usage_handler<C: ProApplicationContext>(
+    app_ctx: web::Data<C>,
+    params: web::Query<UsageParams>,
+    session: C::Session,
+) -> Result<web::Json<Vec<DataUsage>>>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let params = params.into_inner();
+
+    let db = app_ctx.session_context(session).db();
+    let data_usage = db.quota_used_on_data(params.offset, params.limit).await?;
+
+    Ok(web::Json(data_usage))
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum UsageSummaryGranularity {
+    Minutes,
+    Hours,
+    Days,
+    Months,
+    Years,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageSummaryParams {
+    pub granularity: UsageSummaryGranularity,
+    pub offset: u64,
+    pub limit: u64,
+    pub dataset: Option<String>,
+}
+
+/// Retrieves the data usage summary
+#[utoipa::path(
+    tag = "User",
+    get,
+    path = "/quota/dataUsage/summary",
+    responses(
+        (status = 200, description = "The quota used on data", body = Vec<DataUsageSummary>)
+    ),
+    params(
+        UsageSummaryParams
+    ),
+    security(
+        ("session_token" = [])
+    ),
+)]
+pub(crate) async fn data_usage_summary_handler<C: ProApplicationContext>(
+    app_ctx: web::Data<C>,
+    params: web::Query<UsageSummaryParams>,
+    session: C::Session,
+) -> Result<web::Json<Vec<DataUsageSummary>>>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let params = params.into_inner();
+
+    let db = app_ctx.session_context(session).db();
+    let data_usage = db
+        .quota_used_on_data_summary(
+            params.dataset,
+            params.granularity,
+            params.offset,
+            params.limit,
+        )
+        .await?;
+
+    Ok(web::Json(data_usage))
 }
 
 /// Retrieves the available and used quota of a specific user.
@@ -779,11 +962,14 @@ mod tests {
     use core::time::Duration;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
+    use geoengine_operators::engine::WorkflowOperatorPath;
+    use geoengine_operators::meta::quota::ComputationUnit;
     use httptest::matchers::request;
     use httptest::responders::status_code;
     use httptest::{Expectation, Server};
     use serde_json::json;
     use tokio_postgres::NoTls;
+    use uuid::Uuid;
 
     async fn register_test_helper(
         app_ctx: ProPostgresContext<NoTls>,
@@ -2027,5 +2213,174 @@ mod tests {
             ],
             role_descriptions
         );
+    }
+
+    #[ge_context::test]
+    async fn it_logs_quota(app_ctx: ProPostgresContext<NoTls>) {
+        let user = UserRegistration {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+            real_name: "Foo Bar".to_string(),
+        };
+
+        app_ctx.register_user(user).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+        };
+
+        let session = app_ctx.login(credentials).await.unwrap();
+
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_db = app_ctx.session_context(admin_session.clone()).db();
+
+        let workflow_id = Uuid::new_v4();
+
+        admin_db
+            .log_quota_used(vec![ComputationUnit {
+                user: session.user.id.0,
+                workflow: workflow_id,
+                computation: Uuid::new_v4(),
+                operator_name: "Foo",
+                operator_path: WorkflowOperatorPath::initialize_root(),
+                data: None,
+            }])
+            .await
+            .unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/quota/computations?offset=0&limit=10")
+            .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        let quota: Vec<ComputationQuota> = test::read_body_json(res).await;
+        assert_eq!(quota.len(), 1);
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/quota/computations/{}", quota[0].computation_id))
+            .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        // let json: serde_json::Value = test::read_body_json(res).await;
+        // dbg!(json);
+
+        let computation: Vec<OperatorQuota> = test::read_body_json(res).await;
+
+        assert_eq!(
+            computation,
+            vec![OperatorQuota {
+                operator_name: "Foo".to_string(),
+                operator_path: "[]".to_string(),
+                count: 1
+            }]
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_logs_data_usage(app_ctx: ProPostgresContext<NoTls>) {
+        let user = UserRegistration {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+            real_name: "Foo Bar".to_string(),
+        };
+
+        app_ctx.register_user(user).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@example.com".to_string(),
+            password: "secret123".to_string(),
+        };
+
+        let session = app_ctx.login(credentials).await.unwrap();
+
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_db = app_ctx.session_context(admin_session.clone()).db();
+
+        let workflow_id = Uuid::new_v4();
+        let computation_id = Uuid::new_v4();
+        let computation_id2 = Uuid::new_v4();
+
+        admin_db
+            .log_quota_used(vec![ComputationUnit {
+                user: session.user.id.0,
+                workflow: workflow_id,
+                computation: computation_id,
+                operator_name: "GdalSource",
+                operator_path: WorkflowOperatorPath::initialize_root(),
+                data: Some("foo".to_string()),
+            }])
+            .await
+            .unwrap();
+
+        admin_db
+            .log_quota_used(vec![ComputationUnit {
+                user: session.user.id.0,
+                workflow: workflow_id,
+                computation: computation_id,
+                operator_name: "GdalSource",
+                operator_path: WorkflowOperatorPath::initialize_root(),
+                data: Some("foo".to_string()),
+            }])
+            .await
+            .unwrap();
+
+        admin_db
+            .log_quota_used(vec![ComputationUnit {
+                user: session.user.id.0,
+                workflow: workflow_id,
+                computation: computation_id,
+                operator_name: "OgrSource",
+                operator_path: WorkflowOperatorPath::initialize_root(),
+                data: Some("bar".to_string()),
+            }])
+            .await
+            .unwrap();
+
+        admin_db
+            .log_quota_used(vec![ComputationUnit {
+                user: session.user.id.0,
+                workflow: workflow_id,
+                computation: computation_id2,
+                operator_name: "GdalSource",
+                operator_path: WorkflowOperatorPath::initialize_root(),
+                data: Some("foo".to_string()),
+            }])
+            .await
+            .unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/quota/dataUsage?offset=0&limit=10")
+            .append_header((
+                header::AUTHORIZATION,
+                format!("Bearer {}", admin_session.id),
+            ));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        let usage: Vec<DataUsage> = test::read_body_json(res).await;
+
+        assert_eq!(usage.len(), 3);
+        assert_eq!(usage[0].data, "foo");
+        assert_eq!(usage[0].count, 1);
+        assert_eq!(usage[1].data, "bar");
+        assert_eq!(usage[1].count, 1);
+        assert_eq!(usage[2].data, "foo");
+        assert_eq!(usage[2].count, 2);
+
+        let req = test::TestRequest::get()
+            .uri("/quota/dataUsage/summary?granularity=years&offset=0&limit=10")
+            .append_header((
+                header::AUTHORIZATION,
+                format!("Bearer {}", admin_session.id),
+            ));
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
+
+        let usage: Vec<DataUsageSummary> = test::read_body_json(res).await;
+
+        assert_eq!(usage.len(), 2);
+        assert_eq!(usage[0].data, "bar");
+        assert_eq!(usage[0].count, 1);
+        assert_eq!(usage[1].data, "foo");
+        assert_eq!(usage[1].count, 3);
     }
 }
