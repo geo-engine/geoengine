@@ -213,7 +213,7 @@ pub struct DataUsage {
 #[serde(rename_all = "camelCase")]
 pub struct DataUsageSummary {
     pub timestamp: DateTime,
-    pub dataset: String,
+    pub data: String,
     pub count: u64,
 }
 

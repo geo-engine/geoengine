@@ -1080,7 +1080,7 @@ where
             .iter()
             .map(|row| DataUsageSummary {
                 timestamp: row.get(0),
-                dataset: row.get(1),
+                data: row.get(1),
                 count: row.get::<_, i64>(2) as u64,
             })
             .collect())

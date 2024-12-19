@@ -2377,12 +2377,10 @@ mod tests {
 
         let usage: Vec<DataUsageSummary> = test::read_body_json(res).await;
 
-        dbg!(&usage);
-
         assert_eq!(usage.len(), 2);
-        assert_eq!(usage[0].dataset, "bar");
+        assert_eq!(usage[0].data, "bar");
         assert_eq!(usage[0].count, 1);
-        assert_eq!(usage[1].dataset, "foo");
+        assert_eq!(usage[1].data, "foo");
         assert_eq!(usage[1].count, 3);
     }
 }
