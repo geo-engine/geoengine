@@ -396,7 +396,7 @@ where
     Ok(web::Json(computations_quota))
 }
 
-/// Retrieves the quota used by computations
+/// Retrieves the quota used by computation with the given computation id
 #[utoipa::path(
     tag = "User",
     get,
@@ -433,7 +433,7 @@ pub struct UsageParams {
     pub limit: u64,
 }
 
-/// Retrieves the quota used on data
+/// Retrieves the data usage
 #[utoipa::path(
     tag = "User",
     get,
@@ -483,7 +483,7 @@ pub struct UsageSummaryParams {
     pub dataset: Option<String>,
 }
 
-/// Retrieves the quota used by computations
+/// Retrieves the data usage summary
 #[utoipa::path(
     tag = "User",
     get,
