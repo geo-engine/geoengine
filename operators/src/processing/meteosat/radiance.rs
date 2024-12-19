@@ -51,6 +51,7 @@ impl OperatorName for Radiance {
 
 pub struct InitializedRadiance {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
 }
@@ -65,7 +66,10 @@ impl RasterOperator for Radiance {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let initialized_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let input = initialized_sources.raster;
 
         let in_desc = input.result_descriptor();
@@ -127,6 +131,7 @@ impl RasterOperator for Radiance {
 
         let initialized_operator = InitializedRadiance {
             name,
+            path,
             result_descriptor: out_desc,
             source: input,
         };
@@ -181,6 +186,14 @@ impl InitializedRasterOperator for InitializedRadiance {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        Radiance::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 

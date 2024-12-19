@@ -17,7 +17,6 @@ use geoengine_operators::engine::{
     ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
     InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
     QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
-    WorkflowOperatorPath,
 };
 use geoengine_operators::meta::quota::{QuotaChecker, QuotaTracking};
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
@@ -26,6 +25,7 @@ use rayon::ThreadPool;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 pub use migrations::{
     initialize_database, migrate_database, migration_0000_initial::Migration0000Initial,
@@ -35,7 +35,7 @@ pub use migrations::{
     Migration0006EbvProvider, Migration0007OwnerRole, Migration0008BandNames,
     Migration0009OidcTokens, Migration0010S2StacTimeBuffers, Migration0011RemoveXgb,
     Migration0012MlModelDb, Migration0013CopernicusProvider, Migration0014MultibandColorizer,
-    MigrationResult,
+    Migration0015LogQuota, MigrationResult,
 };
 pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{MockableSession, Session, SessionId, SimpleSession};
@@ -80,7 +80,8 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
     fn tasks(&self) -> Self::TaskManager;
 
     /// Create a new query context for executing queries on processors
-    fn query_context(&self) -> Result<Self::QueryContext>;
+    // TODO: assign computation id inside SessionContext or let it be provided from outside?
+    fn query_context(&self, workflow: Uuid, computation: Uuid) -> Result<Self::QueryContext>;
 
     /// Create a new execution context initializing operators
     fn execution_context(&self) -> Result<Self::ExecutionContext>;
@@ -233,7 +234,6 @@ where
         &self,
         op: Box<dyn geoengine_operators::engine::InitializedRasterOperator>,
         _span: CreateSpan,
-        _path: WorkflowOperatorPath,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
         op
     }
@@ -242,7 +242,6 @@ where
         &self,
         op: Box<dyn InitializedVectorOperator>,
         _span: CreateSpan,
-        _path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedVectorOperator> {
         op
     }
@@ -251,7 +250,6 @@ where
         &self,
         op: Box<dyn InitializedPlotOperator>,
         _span: CreateSpan,
-        _path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedPlotOperator> {
         op
     }

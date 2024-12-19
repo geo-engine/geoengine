@@ -343,6 +343,8 @@ pub struct OgrSourceState {
 
 pub struct InitializedOgrSource {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
+    data: String,
     result_descriptor: VectorResultDescriptor,
     state: OgrSourceState,
 }
@@ -399,7 +401,9 @@ impl VectorOperator for OgrSource {
 
         let initialized_source = InitializedOgrSource {
             name: CanonicOperatorName::from(&self),
+            path,
             result_descriptor,
+            data: self.params.data.to_string(),
             state: OgrSourceState {
                 dataset_information: info,
                 attribute_filters: self.params.attribute_filters.unwrap_or_default(),
@@ -476,6 +480,18 @@ impl InitializedVectorOperator for InitializedOgrSource {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        OgrSource::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
+    }
+
+    fn data(&self) -> Option<String> {
+        Some(self.data.clone())
     }
 }
 

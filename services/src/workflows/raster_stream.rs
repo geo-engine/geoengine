@@ -187,6 +187,7 @@ mod tests {
         util::arrow::arrow_ipc_file_to_record_batches,
     };
     use tokio_postgres::NoTls;
+    use uuid::Uuid;
 
     #[ge_context::test]
     async fn test_websocket_stream(app_ctx: PostgresContext<NoTls>) {
@@ -205,7 +206,7 @@ mod tests {
 
         let ctx = app_ctx.default_session_context().await.unwrap();
 
-        let (workflow, _workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (workflow, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let query_rectangle = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
@@ -220,7 +221,7 @@ mod tests {
             workflow.operator.get_raster().unwrap(),
             query_rectangle,
             ctx.execution_context().unwrap(),
-            ctx.query_context().unwrap(),
+            ctx.query_context(workflow_id.0, Uuid::new_v4()).unwrap(),
         )
         .await
         .unwrap();

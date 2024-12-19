@@ -56,10 +56,11 @@ use crate::layers::listing::{
 use crate::machine_learning::name::MlModelName;
 use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
 use crate::pro;
-use crate::pro::api::handlers::users::{Quota, UpdateQuota};
+use crate::pro::api::handlers::users::{Quota, UpdateQuota, UsageSummaryGranularity};
 use crate::pro::permissions::{
     Permission, PermissionListing, ResourceId, Role, RoleDescription, RoleId,
 };
+use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
 use crate::pro::users::{
     AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
     UserSession,
@@ -138,6 +139,10 @@ use utoipa::{Modify, OpenApi};
         pro::api::handlers::users::assign_role_handler,
         pro::api::handlers::users::revoke_role_handler,
         pro::api::handlers::users::get_role_descriptions,
+        pro::api::handlers::users::computations_quota_handler,
+        pro::api::handlers::users::computation_quota_handler,
+        pro::api::handlers::users::data_usage_summary_handler,
+        pro::api::handlers::users::data_usage_handler,
         handlers::datasets::delete_dataset_handler,
         handlers::datasets::list_datasets_handler,
         handlers::datasets::list_volumes_handler,
@@ -197,6 +202,11 @@ use utoipa::{Modify, OpenApi};
             UserInfo,
             Quota,
             UpdateQuota,
+            ComputationQuota,
+            OperatorQuota,
+            DataUsage,
+            DataUsageSummary,
+            UsageSummaryGranularity,
             AuthCodeResponse,
             AuthCodeRequestURL,
 

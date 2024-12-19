@@ -73,7 +73,10 @@ impl RasterOperator for Interpolation {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let initialized_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let raster_source = initialized_sources.raster;
         let in_descriptor = raster_source.result_descriptor();
 
@@ -100,6 +103,7 @@ impl RasterOperator for Interpolation {
 
         let initialized_operator = InitializedInterpolation {
             name,
+            path,
             result_descriptor: out_descriptor,
             raster_source,
             interpolation_method: self.params.interpolation,
@@ -115,6 +119,7 @@ impl RasterOperator for Interpolation {
 
 pub struct InitializedInterpolation {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     raster_source: Box<dyn InitializedRasterOperator>,
     interpolation_method: InterpolationMethod,
@@ -154,6 +159,14 @@ impl InitializedRasterOperator for InitializedInterpolation {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        Interpolation::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 

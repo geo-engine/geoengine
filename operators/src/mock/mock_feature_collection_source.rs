@@ -141,6 +141,7 @@ where
 
 pub struct InitializedMockFeatureCollectionSource<R: ResultDescriptor, G: Geometry> {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: R,
     collections: Vec<FeatureCollection<G>>,
 }
@@ -169,7 +170,7 @@ macro_rules! impl_mock_feature_collection_source {
         impl VectorOperator for $newtype {
             async fn _initialize(
                 self: Box<Self>,
-                _path: WorkflowOperatorPath,
+                path: WorkflowOperatorPath,
                 _context: &dyn ExecutionContext,
             ) -> Result<Box<dyn InitializedVectorOperator>> {
                 let columns = self.params.collections[0]
@@ -202,6 +203,7 @@ macro_rules! impl_mock_feature_collection_source {
 
                 Ok(InitializedMockFeatureCollectionSource {
                     name: CanonicOperatorName::from(&self),
+                    path,
                     result_descriptor,
                     collections: self.params.collections,
                 }
@@ -228,6 +230,12 @@ macro_rules! impl_mock_feature_collection_source {
             }
             fn canonic_name(&self) -> CanonicOperatorName {
                 self.name.clone()
+            }
+            fn name(&self) -> &'static str {
+                MockFeatureCollectionSource::<$geometry>::TYPE_NAME
+            }
+            fn path(&self) -> WorkflowOperatorPath {
+                self.path.clone()
             }
         }
     };

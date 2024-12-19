@@ -48,6 +48,7 @@ use geoengine_datatypes::test_data;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::engine::MultipleRasterSources;
+use geoengine_operators::engine::QueryContext;
 use geoengine_operators::engine::RasterBandDescriptor;
 use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::engine::RasterResultDescriptor;
@@ -74,6 +75,7 @@ use tokio::sync::RwLock;
 use tokio::sync::Semaphore;
 use tokio_postgres::NoTls;
 use tracing_actix_web::TracingLogger;
+use uuid::Uuid;
 
 use super::config::get_config_element;
 use super::config::Postgres;
@@ -727,5 +729,20 @@ where
 
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "InspectMatcher")
+    }
+}
+
+pub trait MockQueryContext {
+    type Q: QueryContext;
+    fn mock_query_context(&self) -> Result<Self::Q, crate::error::Error>;
+}
+
+impl<C> MockQueryContext for C
+where
+    C: SessionContext,
+{
+    type Q = C::QueryContext;
+    fn mock_query_context(&self) -> Result<C::QueryContext, crate::error::Error> {
+        self.query_context(Uuid::new_v4(), Uuid::new_v4())
     }
 }
