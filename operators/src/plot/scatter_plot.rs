@@ -57,7 +57,10 @@ impl PlotOperator for ScatterPlot {
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_sources = self.sources.initialize_sources(path.clone(), context).await?;
+        let initialized_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let source = initialized_sources.vector;
         for cn in [&self.params.column_x, &self.params.column_y] {
             match source.result_descriptor().column_data_type(cn.as_str()) {
