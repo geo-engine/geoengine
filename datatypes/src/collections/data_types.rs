@@ -314,7 +314,7 @@ impl VectorDataTyped for TypedFeatureCollectionRef<'_> {
     }
 }
 
-impl<'c> TypedFeatureCollectionRef<'c> {
+impl TypedFeatureCollectionRef<'_> {
     pub fn try_into_points(&self) -> Result<&MultiPointCollection> {
         self.try_into()
     }
@@ -372,7 +372,7 @@ impl FeatureCollectionInfos for TypedFeatureCollection {
     impl_function_by_forwarding_ref!(fn column_names(&self) -> Keys<String, FeatureDataType>);
 }
 
-impl<'c> FeatureCollectionInfos for TypedFeatureCollectionRef<'c> {
+impl FeatureCollectionInfos for TypedFeatureCollectionRef<'_> {
     impl_function_by_forwarding_ref2!(fn len(&self) -> usize);
     impl_function_by_forwarding_ref2!(fn is_simple(&self) -> bool);
     impl_function_by_forwarding_ref2!(fn column_type(&self, column_name: &str) -> Result<FeatureDataType>);
@@ -388,7 +388,7 @@ impl ToGeoJson<'_> for TypedFeatureCollection {
     impl_function_by_forwarding_ref!(fn to_geo_json(&self) -> String);
 }
 
-impl<'c> ToGeoJson<'_> for TypedFeatureCollectionRef<'c> {
+impl ToGeoJson<'_> for TypedFeatureCollectionRef<'_> {
     impl_function_by_forwarding_ref2!(fn to_geo_json(&self) -> String);
 }
 
@@ -482,7 +482,7 @@ impl FeatureCollectionModifications for TypedFeatureCollection {
     impl_mod_function_by_forwarding_ref!(fn replace_time(&self, time_intervals: &[TimeInterval]) -> Result<Self::Output>);
 }
 
-impl<'c> FeatureCollectionModifications for TypedFeatureCollectionRef<'c> {
+impl FeatureCollectionModifications for TypedFeatureCollectionRef<'_> {
     type Output = TypedFeatureCollection;
 
     impl_mod_function_by_forwarding_ref2!(fn filter<M>(&self, mask: M) -> Result<Self::Output> where M: FilterArray);

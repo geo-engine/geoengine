@@ -111,7 +111,7 @@ where
     }
 }
 
-impl<'g, P> Reproject<P> for MultiPointRef<'g>
+impl<P> Reproject<P> for MultiPointRef<'_>
 where
     P: CoordinateProjection,
 {
@@ -151,7 +151,7 @@ where
     }
 }
 
-impl<'g, P> Reproject<P> for MultiLineStringRef<'g>
+impl<P> Reproject<P> for MultiLineStringRef<'_>
 where
     P: CoordinateProjection,
 {
@@ -185,7 +185,7 @@ where
     }
 }
 
-impl<'g, P> Reproject<P> for MultiPolygonRef<'g>
+impl<P> Reproject<P> for MultiPolygonRef<'_>
 where
     P: CoordinateProjection,
 {

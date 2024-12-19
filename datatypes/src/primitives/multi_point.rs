@@ -341,7 +341,7 @@ impl<'g> MultiPointRef<'g> {
     }
 }
 
-impl<'r> GeometryRef for MultiPointRef<'r> {
+impl GeometryRef for MultiPointRef<'_> {
     type GeometryType = MultiPoint;
 
     fn as_geometry(&self) -> Self::GeometryType {
@@ -353,13 +353,13 @@ impl<'r> GeometryRef for MultiPointRef<'r> {
     }
 }
 
-impl<'g> MultiPointAccess for MultiPointRef<'g> {
+impl MultiPointAccess for MultiPointRef<'_> {
     fn points(&self) -> &[Coordinate2D] {
         self.point_coordinates
     }
 }
 
-impl<'r> ToWkt<f64> for MultiPointRef<'r> {
+impl ToWkt<f64> for MultiPointRef<'_> {
     fn to_wkt(&self) -> Wkt<f64> {
         let points = self.points();
         let mut multi_point = wkt::types::MultiPoint(Vec::with_capacity(points.len()));

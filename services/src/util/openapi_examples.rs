@@ -68,7 +68,7 @@ where
         }
     }
 
-    fn resolve_schema(&'a self, ref_or: &'a RefOr<Schema>) -> &Schema {
+    fn resolve_schema(&'a self, ref_or: &'a RefOr<Schema>) -> &'a Schema {
         match ref_or {
             RefOr::Ref(reference) => {
                 const SCHEMA_REF_PREFIX_LEN: usize = "#/components/schemas/".len();

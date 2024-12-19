@@ -325,7 +325,7 @@ impl NamedDataDeserializeVisitor {
     }
 }
 
-impl<'de> Visitor<'de> for NamedDataDeserializeVisitor {
+impl Visitor<'_> for NamedDataDeserializeVisitor {
     type Value = NamedData;
 
     /// always keep in sync with [`is_allowed_name_char`]

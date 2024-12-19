@@ -215,7 +215,7 @@ trait ToNetCdfSubgroup {
     ) -> Result<NetCdfGroup>;
 }
 
-impl<'a> ToNetCdfSubgroup for Group<'a> {
+impl ToNetCdfSubgroup for Group<'_> {
     fn to_net_cdf_subgroup(
         &self,
         group_path: &Path,
@@ -1399,6 +1399,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for NetCdfCfDataProvider<D> {
         collection: &LayerCollectionId,
         options: LayerCollectionListOptions,
     ) -> crate::error::Result<LayerCollection> {
+        #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
         self._load_layer_collection(collection, options, NetCdfCfIdFn)
             .await
     }

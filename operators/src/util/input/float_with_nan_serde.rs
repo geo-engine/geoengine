@@ -9,7 +9,7 @@ pub mod float {
 
     pub(super) struct FloatOrStringVisitor;
 
-    impl<'de> Visitor<'de> for FloatOrStringVisitor {
+    impl Visitor<'_> for FloatOrStringVisitor {
         type Value = f64;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -118,6 +118,7 @@ pub mod float_option {
 
     /// write no data as either number or "nan"
     #[allow(clippy::trivially_copy_pass_by_ref)]
+    #[allow(clippy::ref_option)]
     pub fn serialize<S>(x: &Option<f64>, s: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

@@ -167,7 +167,7 @@ impl<'l> Iterator for MultiLineStringIterator<'l> {
     }
 }
 
-impl<'l> DoubleEndedIterator for MultiLineStringIterator<'l> {
+impl DoubleEndedIterator for MultiLineStringIterator<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.index >= self.length {
             return None;
@@ -203,7 +203,7 @@ impl<'l> DoubleEndedIterator for MultiLineStringIterator<'l> {
     }
 }
 
-impl<'l> ExactSizeIterator for MultiLineStringIterator<'l> {}
+impl ExactSizeIterator for MultiLineStringIterator<'_> {}
 
 impl<'l> IntoParallelIterator for MultiLineStringIterator<'l> {
     type Item = MultiLineStringRef<'l>;
@@ -269,7 +269,7 @@ impl<'l> Producer for MultiLineStringParIterator<'l> {
     }
 }
 
-impl<'l> IndexedParallelIterator for MultiLineStringParIterator<'l> {
+impl IndexedParallelIterator for MultiLineStringParIterator<'_> {
     fn len(&self) -> usize {
         self.0.len()
     }

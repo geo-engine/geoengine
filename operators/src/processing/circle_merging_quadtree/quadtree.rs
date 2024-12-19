@@ -134,7 +134,7 @@ where
     }
 }
 
-impl<'t> Iterator for Iter<'t> {
+impl Iterator for Iter<'_> {
     type Item = CircleOfPoints;
 
     fn next(&mut self) -> Option<Self::Item> {
