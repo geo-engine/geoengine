@@ -387,7 +387,7 @@ impl FeatureHelper {
     {
         struct V;
 
-        impl<'de> de::Visitor<'de> for V {
+        impl de::Visitor<'_> for V {
             type Value = BoundingBox2D;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

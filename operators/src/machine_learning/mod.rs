@@ -13,7 +13,7 @@ pub enum MachineLearningError {
     #[snafu(display("Onnx model may only have one input. Found {}.", num_inputs))]
     MultipleInputsNotSupported { num_inputs: usize },
     #[snafu(display("Onnx model must have Tensor input. Found {:?}.", input_type))]
-    InvalidInputType { input_type: ort::ValueType },
+    InvalidInputType { input_type: ort::value::ValueType },
     #[snafu(display(
         "Onnx model must have two dimensional input ([-1, b], b > 0). Found [{}].",
         dimensions.iter().map(std::string::ToString::to_string).collect::<Vec<_>>().join(", ")
@@ -25,10 +25,10 @@ pub enum MachineLearningError {
     ))]
     InvalidOutputDimensions { dimensions: Vec<i64> },
     #[snafu(display("Onnx model must have Tensor output. Found {:?}.", output_type))]
-    InvalidOutputType { output_type: ort::ValueType },
+    InvalidOutputType { output_type: ort::value::ValueType },
     #[snafu(display("Onnx tensor element type {:?} is not supported.", element_type))]
     UnsupportedTensorElementType {
-        element_type: ort::TensorElementType,
+        element_type: ort::tensor::TensorElementType,
     },
     #[snafu(display("Number of bands in source ({source_bands}) does not match the model input bands ({model_input_bands})."))]
     InputBandsMismatch {

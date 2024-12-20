@@ -193,7 +193,7 @@ impl<'l> Iterator for MultiPolygonIterator<'l> {
     }
 }
 
-impl<'l> DoubleEndedIterator for MultiPolygonIterator<'l> {
+impl DoubleEndedIterator for MultiPolygonIterator<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.index >= self.length {
             return None;
@@ -239,7 +239,7 @@ impl<'l> DoubleEndedIterator for MultiPolygonIterator<'l> {
     }
 }
 
-impl<'l> ExactSizeIterator for MultiPolygonIterator<'l> {}
+impl ExactSizeIterator for MultiPolygonIterator<'_> {}
 
 impl<'l> IntoParallelIterator for MultiPolygonIterator<'l> {
     type Item = MultiPolygonRef<'l>;
@@ -305,7 +305,7 @@ impl<'l> Producer for MultiPolygonParIterator<'l> {
     }
 }
 
-impl<'l> IndexedParallelIterator for MultiPolygonParIterator<'l> {
+impl IndexedParallelIterator for MultiPolygonParIterator<'_> {
     fn len(&self) -> usize {
         self.0.len()
     }

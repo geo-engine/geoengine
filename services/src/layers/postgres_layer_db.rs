@@ -67,6 +67,7 @@ async fn _remove_collections_without_parent_collection(
 }
 
 /// delete all layers without parent collection
+#[allow(clippy::used_underscore_items)] // TODO: maybe rename?
 async fn _remove_layers_without_parent_collection(
     transaction: &tokio_postgres::Transaction<'_>,
 ) -> Result<()> {
@@ -250,8 +251,10 @@ pub async fn delete_layer_collection(
         .execute(&remove_layer_collection_stmt, &[&collection])
         .await?;
 
+    #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
     _remove_collections_without_parent_collection(transaction).await?;
 
+    #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
     _remove_layers_without_parent_collection(transaction).await?;
 
     Ok(())
@@ -294,6 +297,7 @@ pub async fn delete_layer_from_collection(
         .into());
     }
 
+    #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
     _remove_layers_without_parent_collection(transaction).await?;
 
     Ok(())
@@ -336,8 +340,10 @@ pub async fn delete_layer_collection_from_parent(
         .into());
     }
 
+    #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
     _remove_collections_without_parent_collection(transaction).await?;
 
+    #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
     _remove_layers_without_parent_collection(transaction).await?;
 
     Ok(())

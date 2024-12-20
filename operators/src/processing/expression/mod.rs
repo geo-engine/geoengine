@@ -84,7 +84,7 @@ trait FromExpressionGeo: Sized {
     fn from_expression_geo(geom: Self::ExpressionGeometryType) -> Option<Self>;
 }
 
-impl<'c> AsExpressionGeo for MultiPointRef<'c> {
+impl AsExpressionGeo for MultiPointRef<'_> {
     type ExpressionGeometryType = geoengine_expression::MultiPoint;
 
     fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
@@ -92,7 +92,7 @@ impl<'c> AsExpressionGeo for MultiPointRef<'c> {
     }
 }
 
-impl<'c> AsExpressionGeo for MultiLineStringRef<'c> {
+impl AsExpressionGeo for MultiLineStringRef<'_> {
     type ExpressionGeometryType = geoengine_expression::MultiLineString;
 
     fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {
@@ -100,7 +100,7 @@ impl<'c> AsExpressionGeo for MultiLineStringRef<'c> {
     }
 }
 
-impl<'c> AsExpressionGeo for MultiPolygonRef<'c> {
+impl AsExpressionGeo for MultiPolygonRef<'_> {
     type ExpressionGeometryType = geoengine_expression::MultiPolygon;
 
     fn as_expression_geo(&self) -> Option<Self::ExpressionGeometryType> {

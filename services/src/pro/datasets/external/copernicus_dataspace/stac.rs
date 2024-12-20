@@ -1,8 +1,8 @@
 use geoengine_datatypes::{
     operations::reproject::{CoordinateProjection, CoordinateProjector, ReprojectClipped},
     primitives::{
-        AxisAlignedRectangle, BoundingBox2D, DateTime, DateTimeError, Duration,
-        RasterQueryRectangle, SpatialPartitioned,
+        AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, RasterQueryRectangle,
+        SpatialPartitioned,
     },
     spatial_reference::SpatialReference,
 };
@@ -21,9 +21,6 @@ const MAX_PAGE_SIZE: usize = 1000;
 pub enum CopernicusStacError {
     DateTimeMissing,
     CannotDisplayDateTimeAsString,
-    CannotParseDateTimeFromString {
-        source: DateTimeError,
-    },
     CannotBuildStacUrl {
         source: url::ParseError,
     },
@@ -184,8 +181,7 @@ pub fn resolve_datetime_duplicates(items: &mut [stac::Item]) -> Result<(), Coper
         .as_ref()
         .ok_or(CopernicusStacError::DateTimeMissing)?;
 
-    let mut current_time =
-        DateTime::parse_from_rfc3339(current_time).context(CannotParseDateTimeFromString)?;
+    let mut current_time = DateTime::from(*current_time);
 
     for item in items.iter_mut().skip(1) {
         let item_time = item
@@ -193,15 +189,14 @@ pub fn resolve_datetime_duplicates(items: &mut [stac::Item]) -> Result<(), Coper
             .datetime
             .as_ref()
             .ok_or(CopernicusStacError::DateTimeMissing)?;
-        let mut item_time =
-            DateTime::parse_from_rfc3339(item_time).context(CannotParseDateTimeFromString)?;
+        let mut item_time = DateTime::from(*item_time);
 
         // ensure that the datetime is strictly increasing with respect to the previous item
         if item_time <= current_time {
             item_time = item_time + Duration::milliseconds(1);
         }
 
-        item.properties.datetime = Some(item_time.to_datetime_string_with_millis());
+        item.properties.datetime = Some(item_time.into());
 
         current_time = item_time;
     }
@@ -222,7 +217,7 @@ impl StacItemExt for stac::Item {
             .as_ref()
             .ok_or(CopernicusStacError::DateTimeMissing)?;
 
-        DateTime::parse_from_rfc3339(datetime).context(CannotParseDateTimeFromString)
+        Ok(DateTime::from(*datetime))
     }
 
     fn s3_assert_product_url(&self) -> Result<String, CopernicusStacError> {

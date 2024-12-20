@@ -556,7 +556,7 @@ pub struct MultiPolygonRef<'g> {
     polygons: Vec<PolygonRef<'g>>,
 }
 
-impl<'r> GeometryRef for MultiPolygonRef<'r> {
+impl GeometryRef for MultiPolygonRef<'_> {
     type GeometryType = MultiPolygon;
 
     fn as_geometry(&self) -> Self::GeometryType {
@@ -615,7 +615,7 @@ impl<'g> MultiPolygonAccess for MultiPolygonRef<'g> {
     }
 }
 
-impl<'r> ToWkt<f64> for MultiPolygonRef<'r> {
+impl ToWkt<f64> for MultiPolygonRef<'_> {
     fn to_wkt(&self) -> Wkt<f64> {
         let multi_polygon = self.polygons();
         let mut wkt_multi_polygon =

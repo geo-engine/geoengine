@@ -145,7 +145,7 @@ pub struct OperatorCacheEntryView<'a, C: CacheBackendElementExt> {
     lru: &'a mut LruCache<CacheEntryId, TypedCanonicOperatorName>,
 }
 
-impl<'a, C> OperatorCacheEntryView<'a, C>
+impl<C> OperatorCacheEntryView<'_, C>
 where
     C: CacheBackendElementExt + ByteSize,
     C::Query: Clone + CacheQueryMatch,

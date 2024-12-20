@@ -40,7 +40,7 @@ impl<'c> FeatureTimeSpanIter<'c> {
     }
 }
 
-impl<'c> Iterator for FeatureTimeSpanIter<'c> {
+impl Iterator for FeatureTimeSpanIter<'_> {
     type Item = FeatureTimeSpan;
 
     fn next(&mut self) -> Option<Self::Item> {
