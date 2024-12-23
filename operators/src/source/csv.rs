@@ -159,11 +159,12 @@ impl OperatorData for CsvSourceParameters {
 impl VectorOperator for CsvSource {
     async fn _initialize(
         self: Box<Self>,
-        _path: WorkflowOperatorPath,
+        path: WorkflowOperatorPath,
         _context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let initialized_source = InitializedCsvSource {
             name: CanonicOperatorName::from(&self),
+            path,
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint, // TODO: get as user input
                 spatial_reference: SpatialReference::epsg_4326().into(), // TODO: get as user input
@@ -182,6 +183,7 @@ impl VectorOperator for CsvSource {
 
 pub struct InitializedCsvSource {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: VectorResultDescriptor,
     state: CsvSourceParameters,
 }
@@ -203,6 +205,14 @@ impl InitializedVectorOperator for InitializedCsvSource {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        CsvSource::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 

@@ -98,7 +98,10 @@ impl VectorOperator for VectorJoin {
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let initialized_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
 
         match &self.params.join_type {
             VectorJoinType::EquiGeoToData {
@@ -182,6 +185,7 @@ impl VectorOperator for VectorJoin {
 
         let initialized_operator = InitializedVectorJoin {
             name,
+            path,
             result_descriptor,
             left: initialized_sources.left,
             right: initialized_sources.right,
@@ -206,6 +210,7 @@ pub struct InitializedVectorJoinParams {
 
 pub struct InitializedVectorJoin {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: VectorResultDescriptor,
     left: Box<dyn InitializedVectorOperator>,
     right: Box<dyn InitializedVectorOperator>,
@@ -280,6 +285,14 @@ impl InitializedVectorOperator for InitializedVectorJoin {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        VectorJoin::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 

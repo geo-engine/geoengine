@@ -16,11 +16,9 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
-use geoengine_operators::engine::{CanonicOperatorName, ExecutionContext, WorkflowOperatorPath};
+use geoengine_operators::engine::{ExecutionContext, RasterOperator, WorkflowOperatorPath};
 use geoengine_operators::engine::{ResultDescriptor, SingleRasterOrVectorSource};
-use geoengine_operators::processing::{
-    InitializedRasterReprojection, Reprojection, ReprojectionParams,
-};
+use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use geoengine_operators::util::raster_stream_to_geotiff::{
     raster_stream_to_multiband_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
@@ -30,6 +28,7 @@ use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 use url::Url;
+use uuid::Uuid;
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -396,15 +395,25 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Raster(operator),
             },
-        };
+        }
+        .boxed();
 
-        // create the inititalized operator directly, to avoid re-initializing everything
-        let irp = InitializedRasterReprojection::try_new_with_input(
-            CanonicOperatorName::from(&reprojected_workflow),
-            reprojection_params,
-            initialized,
-            execution_context.tiling_specification(),
-        )?;
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        // TODO: avoid re-initialization and re-use unprojected workflow. However, this requires updating all operator paths
+
+        // In order to check whether we need to inject a reprojection, we first need to initialize the
+        // original workflow. Then we can check the result projection. Previously, we then just wrapped
+        // the initialized workflow with an initialized reprojection. IMHO this is wrong because
+        // initialization propagates the workflow path down the children and appends a new segment for
+        // each level. So we can't re-use an already initialized workflow, because all the workflow path/
+        // operator names will be wrong. That's why I now build a new workflow with a reprojection and
+        // perform a full initialization. I only added the TODO because we did some optimization here
+        // which broke at some point when the workflow operator paths were introduced but no one noticed.
+
+        let irp = reprojected_workflow
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
 
         Box::new(irp)
     };
@@ -429,7 +438,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         attributes: BandSelection::first(), // TODO: support multi bands in API and set the selection here
     };
 
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(identifier.0, Uuid::new_v4())?;
 
     let (bytes, cache_hint) = call_on_generic_raster_processor_gdal_types!(processor, p =>
         raster_stream_to_multiband_geotiff_bytes(
