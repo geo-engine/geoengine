@@ -117,7 +117,7 @@ impl DateTime {
             (true, true) => {
                 let datetime = chrono::DateTime::<chrono::FixedOffset>::parse_from_str(
                     input,
-                    format._to_parse_format(),
+                    format.parse_format(),
                 )
                 .map_err(|e| DateTimeError::DateParse {
                     source: Box::new(e),
@@ -128,11 +128,10 @@ impl DateTime {
                 })
             }
             (true, false) => {
-                let datetime =
-                    chrono::NaiveDateTime::parse_from_str(input, format._to_parse_format())
-                        .map_err(|e| DateTimeError::DateParse {
-                            source: Box::new(e),
-                        })?;
+                let datetime = chrono::NaiveDateTime::parse_from_str(input, format.parse_format())
+                    .map_err(|e| DateTimeError::DateParse {
+                        source: Box::new(e),
+                    })?;
 
                 Ok(Self {
                     datetime: chrono::DateTime::from_naive_utc_and_offset(datetime, chrono::Utc),
@@ -140,7 +139,7 @@ impl DateTime {
             }
             (false, true) => Err(DateTimeError::CannotParseOnlyDateWithTimeZone),
             (false, false) => {
-                let datetime = chrono::NaiveDate::parse_from_str(input, format._to_parse_format())
+                let datetime = chrono::NaiveDate::parse_from_str(input, format.parse_format())
                     .map_err(|e| DateTimeError::DateParse {
                         source: Box::new(e),
                     })?
@@ -165,7 +164,7 @@ impl DateTime {
 
     pub fn format(&self, format: &DateTimeParseFormat) -> String {
         let chrono_date_time: chrono::DateTime<chrono::FixedOffset> = self.into();
-        let parse_format = format._to_parse_format();
+        let parse_format = format.parse_format();
 
         chrono_date_time.format(parse_format).to_string()
     }
@@ -335,6 +334,18 @@ impl From<&DateTime> for chrono::DateTime<chrono::FixedOffset> {
     }
 }
 
+impl From<DateTime> for chrono::DateTime<chrono::Utc> {
+    fn from(datetime: DateTime) -> Self {
+        Self::from(&datetime)
+    }
+}
+
+impl From<&DateTime> for chrono::DateTime<chrono::Utc> {
+    fn from(datetime: &DateTime) -> Self {
+        datetime.datetime
+    }
+}
+
 /// We allow C's strftime parameters:
 ///
 /// | Specifier |                               Replaced By                              |          Example         |
@@ -468,7 +479,7 @@ impl DateTimeParseFormat {
         self.fmt.is_empty()
     }
 
-    pub fn _to_parse_format(&self) -> &str {
+    pub fn parse_format(&self) -> &str {
         &self.fmt
     }
 }
