@@ -78,22 +78,24 @@ fn open_telemetry_layer<S>(
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
-    use opentelemetry::trace::TracerProvider;
+    use opentelemetry::trace::TracerProvider as _;
     use opentelemetry_otlp::WithExportConfig;
-    let exporter = opentelemetry_otlp::new_exporter()
-        .tonic()
-        .with_endpoint(open_telemetry_config.endpoint.to_string());
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(exporter)
-        .with_trace_config(opentelemetry_sdk::trace::Config::default().with_resource(
-            opentelemetry_sdk::Resource::new(vec![opentelemetry::KeyValue::new(
-                "service.name",
-                "Geo Engine",
-            )]),
-        ))
-        .install_simple()?
-        .tracer("Geo Engine");
+    use opentelemetry_sdk::trace::Sampler;
+    use opentelemetry_sdk::trace::TracerProvider;
+    let exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .with_endpoint(open_telemetry_config.endpoint.to_string())
+        .build()?;
+    let provider = TracerProvider::builder()
+        .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+        .with_sampler(Sampler::AlwaysOn)
+        .with_resource(opentelemetry_sdk::Resource::new(vec![
+            opentelemetry::KeyValue::new("service.name", "Geo Engine"),
+        ]))
+        .build();
+
+    let tracer = provider.tracer("Geo Engine");
+
     let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
     Ok(opentelemetry)
 }

@@ -46,7 +46,7 @@ pub trait AsGeoOption {
     fn as_geo_option(&self) -> Option<Self::GeoGeometryType>;
 }
 
-impl<'g> AsGeo for MultiPointRef<'g> {
+impl AsGeo for MultiPointRef<'_> {
     type GeoGeometryType = geo::MultiPoint<f64>;
 
     fn as_geo(&self) -> Self::GeoGeometryType {
@@ -62,7 +62,7 @@ impl AsGeo for MultiPoint {
     }
 }
 
-impl<'g> AsGeo for MultiLineStringRef<'g> {
+impl AsGeo for MultiLineStringRef<'_> {
     type GeoGeometryType = geo::MultiLineString<f64>;
 
     fn as_geo(&self) -> Self::GeoGeometryType {
@@ -78,7 +78,7 @@ impl AsGeo for MultiLineString {
     }
 }
 
-impl<'g> AsGeo for MultiPolygonRef<'g> {
+impl AsGeo for MultiPolygonRef<'_> {
     type GeoGeometryType = geo::MultiPolygon<f64>;
 
     fn as_geo(&self) -> Self::GeoGeometryType {

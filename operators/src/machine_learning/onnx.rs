@@ -15,7 +15,7 @@ use geoengine_datatypes::raster::{
     Grid, GridIdx2D, GridIndexAccess, GridSize, Pixel, RasterTile2D,
 };
 use ndarray::Array2;
-use ort::{IntoTensorElementType, PrimitiveTensorElementType};
+use ort::tensor::{IntoTensorElementType, PrimitiveTensorElementType};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::path::PathBuf;
@@ -167,11 +167,11 @@ impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
 where
     TIn: Pixel + NoDataValue,
     TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
-    ort::Value: std::convert::TryFrom<
+    ort::value::Value: std::convert::TryFrom<
         ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
     >,
     ort::Error: std::convert::From<
-        <ort::Value as std::convert::TryFrom<
+        <ort::value::Value as std::convert::TryFrom<
             ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
         >>::Error,
     >,
@@ -189,7 +189,7 @@ where
         source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
 
         // TODO: re-use session accross queries?
-        let session = ort::Session::builder()
+        let session = ort::session::Session::builder()
             .context(Ort)?
             .commit_from_file(&self.model_path)
             .context(Ort)
@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     fn ort() {
-        let session = ort::Session::builder()
+        let session = ort::session::Session::builder()
             .unwrap()
             .commit_from_file(test_data!("pro/ml/onnx/test_classification.onnx"))
             .unwrap();
@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn ort_dynamic() {
-        let session = ort::Session::builder()
+        let session = ort::session::Session::builder()
             .unwrap()
             .commit_from_file(test_data!("pro/ml/onnx/test_classification.onnx"))
             .unwrap();
@@ -416,7 +416,7 @@ mod tests {
 
     #[test]
     fn regression() {
-        let session = ort::Session::builder()
+        let session = ort::session::Session::builder()
             .unwrap()
             .commit_from_file(test_data!("pro/ml/onnx/test_regression.onnx"))
             .unwrap();

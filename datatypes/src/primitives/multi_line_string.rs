@@ -372,7 +372,7 @@ pub struct MultiLineStringRef<'g> {
     point_coordinates: Vec<&'g [Coordinate2D]>,
 }
 
-impl<'r> GeometryRef for MultiLineStringRef<'r> {
+impl GeometryRef for MultiLineStringRef<'_> {
     type GeometryType = MultiLineString;
 
     fn as_geometry(&self) -> Self::GeometryType {
@@ -416,7 +416,7 @@ impl<'g> MultiLineStringAccess for MultiLineStringRef<'g> {
     }
 }
 
-impl<'r> ToWkt<f64> for MultiLineStringRef<'r> {
+impl ToWkt<f64> for MultiLineStringRef<'_> {
     fn to_wkt(&self) -> Wkt<f64> {
         let line_strings = self.lines();
         let mut multi_line_string =

@@ -160,7 +160,7 @@ impl Serialize for SpatialReference {
 /// Helper struct for deserializing a `SpatialReferencce`
 struct SpatialReferenceDeserializeVisitor;
 
-impl<'de> Visitor<'de> for SpatialReferenceDeserializeVisitor {
+impl Visitor<'_> for SpatialReferenceDeserializeVisitor {
     type Value = SpatialReference;
 
     fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
@@ -355,7 +355,7 @@ impl From<SpatialReferenceOption> for Option<SpatialReference> {
 /// Helper struct for deserializing a `SpatialReferenceOption`
 struct SpatialReferenceOptionDeserializeVisitor;
 
-impl<'de> Visitor<'de> for SpatialReferenceOptionDeserializeVisitor {
+impl Visitor<'_> for SpatialReferenceOptionDeserializeVisitor {
     type Value = SpatialReferenceOption;
 
     fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {

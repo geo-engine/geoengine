@@ -831,7 +831,7 @@ pub struct FeatureCollectionRow<'a, GeometryRef> {
     row_num: usize,
 }
 
-impl<'a, GeometryRef> FeatureCollectionRow<'a, GeometryRef> {
+impl<GeometryRef> FeatureCollectionRow<'_, GeometryRef> {
     pub fn get(&self, column_name: &str) -> Option<FeatureDataValue> {
         self.data
             .get(column_name)

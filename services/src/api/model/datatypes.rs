@@ -447,7 +447,7 @@ impl Serialize for SpatialReference {
 /// Helper struct for deserializing a `SpatialReferencce`
 struct SpatialReferenceDeserializeVisitor;
 
-impl<'de> Visitor<'de> for SpatialReferenceDeserializeVisitor {
+impl Visitor<'_> for SpatialReferenceDeserializeVisitor {
     type Value = SpatialReference;
 
     fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
@@ -530,7 +530,7 @@ impl Serialize for SpatialReferenceOption {
 /// Helper struct for deserializing a `SpatialReferenceOption`
 struct SpatialReferenceOptionDeserializeVisitor;
 
-impl<'de> Visitor<'de> for SpatialReferenceOptionDeserializeVisitor {
+impl Visitor<'_> for SpatialReferenceOptionDeserializeVisitor {
     type Value = SpatialReferenceOption;
 
     fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
@@ -1108,7 +1108,7 @@ impl<'de> Deserialize<'de> for TimeInstance {
     {
         struct IsoStringOrUnixTimestamp;
 
-        impl<'de> serde::de::Visitor<'de> for IsoStringOrUnixTimestamp {
+        impl serde::de::Visitor<'_> for IsoStringOrUnixTimestamp {
             type Value = TimeInstance;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -1886,7 +1886,7 @@ impl Serialize for DateTimeParseFormat {
 impl From<geoengine_datatypes::primitives::DateTimeParseFormat> for DateTimeParseFormat {
     fn from(value: geoengine_datatypes::primitives::DateTimeParseFormat) -> Self {
         Self {
-            fmt: value._to_parse_format().to_string(),
+            fmt: value.parse_format().to_string(),
             has_tz: value.has_tz(),
             has_time: value.has_time(),
         }

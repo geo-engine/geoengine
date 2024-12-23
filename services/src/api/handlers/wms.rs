@@ -499,6 +499,8 @@ mod tests {
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::raster::{GridShape2D, RasterDataType, TilingSpecification};
+    use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::assert_image_equals;
     use geoengine_operators::engine::{
         ExecutionContext, RasterQueryProcessor, RasterResultDescriptor,
     };
@@ -664,12 +666,9 @@ mod tests {
         .await
         .unwrap();
 
-        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small.png");
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, test_data!("wms/raster_small.png"));
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/raster_small.png") as &[u8],
-            image_bytes.as_slice()
-        );
+        assert_image_equals(test_data!("wms/raster_small.png"), &image_bytes);
     }
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
@@ -721,10 +720,7 @@ mod tests {
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/get_map.png") as &[u8],
-            image_bytes
-        );
+        assert_image_equals(test_data!("wms/get_map.png"), &image_bytes);
     }
 
     #[ge_context::test]
@@ -748,10 +744,7 @@ mod tests {
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/get_map_ndvi.png") as &[u8],
-            image_bytes
-        );
+        assert_image_equals(test_data!("wms/get_map_ndvi.png"), &image_bytes);
     }
 
     ///Actix uses serde_urlencoded inside web::Query which does not support this
@@ -772,10 +765,7 @@ mod tests {
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/get_map.png") as &[u8],
-            image_bytes
-        );
+        assert_image_equals(test_data!("wms/get_map.png"), &image_bytes);
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
@@ -863,10 +853,7 @@ mod tests {
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_colorizer.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/get_map_colorizer.png") as &[u8],
-            image_bytes
-        );
+        assert_image_equals(test_data!("wms/get_map_colorizer.png"), &image_bytes);
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
@@ -928,10 +915,7 @@ mod tests {
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "ne2_rgb_colorizer.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/ne2_rgb_colorizer.png") as &[u8],
-            image_bytes
-        );
+        assert_image_equals(test_data!("wms/ne2_rgb_colorizer.png"), &image_bytes);
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
@@ -1000,10 +984,7 @@ mod tests {
         //         .unwrap(),
         // );
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/ne2_rgb_colorizer_gray.png") as &[u8],
-            image_bytes
-        );
+        assert_image_equals(test_data!("wms/ne2_rgb_colorizer_gray.png"), &image_bytes);
     }
 
     #[ge_context::test]

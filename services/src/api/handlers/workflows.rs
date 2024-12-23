@@ -11,6 +11,7 @@ use crate::util::config::get_config_element;
 use crate::util::parsing::{
     parse_band_selection, parse_spatial_partition, parse_spatial_resolution,
 };
+use crate::util::workflows::validate_workflow;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::workflows::{RasterWebsocketStreamHandler, VectorWebsocketStreamHandler};
@@ -23,7 +24,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
-    ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
+    ExecutionContext, OperatorData, TypedResultDescriptor, WorkflowOperatorPath,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -126,24 +127,7 @@ async fn register_workflow_handler<C: ApplicationContext>(
 
     let workflow = workflow.into_inner();
 
-    // ensure the workflow is valid by initializing it
-    let execution_context = ctx.execution_context()?;
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
-
-    match workflow.clone().operator {
-        TypedOperator::Vector(o) => {
-            o.initialize(workflow_operator_path_root, &execution_context)
-                .await?;
-        }
-        TypedOperator::Raster(o) => {
-            o.initialize(workflow_operator_path_root, &execution_context)
-                .await?;
-        }
-        TypedOperator::Plot(o) => {
-            o.initialize(workflow_operator_path_root, &execution_context)
-                .await?;
-        }
-    }
+    validate_workflow(&workflow, &ctx.execution_context()?).await?;
 
     let id = ctx.db().register_workflow(workflow).await?;
     Ok(web::Json(IdResponse::from(id)))

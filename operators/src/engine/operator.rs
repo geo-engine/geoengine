@@ -48,6 +48,7 @@ pub trait RasterOperator:
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let span = self.span();
         debug!("Initialize {}, path: {}", self.typetag_name(), &path);
+        #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
         let op = self._initialize(path.clone(), context).await?;
 
         Ok(context.wrap_initialized_raster_operator(op, span))
@@ -76,6 +77,7 @@ pub trait VectorOperator:
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>>;
 
+    #[allow(clippy::used_underscore_items)]
     async fn initialize(
         self: Box<Self>,
         path: WorkflowOperatorPath,
@@ -117,6 +119,7 @@ pub trait PlotOperator:
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let span = self.span();
         debug!("Initialize {}, path: {}", self.typetag_name(), &path);
+        #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
         let op = self._initialize(path.clone(), context).await?;
         Ok(context.wrap_initialized_plot_operator(op, span))
     }

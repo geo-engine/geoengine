@@ -981,6 +981,7 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
     None
 }
 
+#[allow(clippy::ref_option)]
 fn select_layer_from_dataset<'a>(
     dataset: &'a Dataset,
     layer_name: &Option<String>,
@@ -998,6 +999,7 @@ fn select_layer_from_dataset<'a>(
     }
 }
 
+#[allow(clippy::ref_option)]
 fn auto_detect_vector_meta_data_definition(
     main_file_path: &Path,
     layer_name: &Option<String>,
@@ -1007,6 +1009,7 @@ fn auto_detect_vector_meta_data_definition(
     auto_detect_vector_meta_data_definition_from_dataset(&dataset, main_file_path, layer_name)
 }
 
+#[allow(clippy::ref_option)]
 fn auto_detect_vector_meta_data_definition_from_dataset(
     dataset: &Dataset,
     main_file_path: &Path,

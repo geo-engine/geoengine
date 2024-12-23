@@ -112,6 +112,7 @@ pub struct OgrSourceDataset {
 }
 
 impl OgrSourceDataset {
+    #[allow(clippy::ref_option)]
     pub fn project_columns(&mut self, attribute_projection: &Option<Vec<String>>) {
         if let Some(columns) = self.columns.as_mut() {
             columns.project_columns(attribute_projection);
@@ -245,6 +246,7 @@ pub struct OgrSourceColumnSpec {
 }
 
 impl OgrSourceColumnSpec {
+    #[allow(clippy::ref_option)]
     pub fn project_columns(&mut self, attribute_projection: &Option<Vec<String>>) {
         let attributes: HashSet<&String> =
             if let Some(attribute_projection) = attribute_projection.as_ref() {
@@ -1249,6 +1251,7 @@ where
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::ref_option)]
     fn add_feature_to_batch(
         error_spec: OgrSourceErrorSpec,
         default_geometry: &Option<G>,
