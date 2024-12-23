@@ -17,6 +17,7 @@ pub struct StreamStatisticsAdapter<S> {
     quota: QuotaTracking,
     path: WorkflowOperatorPath,
     operator_name: &'static str,
+    /// If the wrapped stream is a source, pass the value of the `data` parameter to the quota tracking
     data: Option<String>,
 }
 

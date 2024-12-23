@@ -401,6 +401,16 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
         // TODO: avoid re-initialization and re-use unprojected workflow. However, this requires updating all operator paths
+
+        // In order to check whether we need to inject a reprojection, we first need to initialize the
+        // original workflow. Then we can check the result projection. Previously, we then just wrapped
+        // the initialized workflow with an initialized reprojection. IMHO this is wrong because
+        // initialization propagates the workflow path down the children and appends a new segment for
+        // each level. So we can't re-use an already initialized workflow, because all the workflow path/
+        // operator names will be wrong. That's why I now build a new workflow with a reprojection and
+        // perform a full initialization. I only added the TODO because we did some optimization here
+        // which broke at some point when the workflow operator paths were introduced but no one noticed.
+
         let irp = reprojected_workflow
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;

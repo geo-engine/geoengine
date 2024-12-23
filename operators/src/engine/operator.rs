@@ -132,6 +132,7 @@ pub trait PlotOperator:
     fn span(&self) -> CreateSpan;
 }
 
+// TODO: implement a derive macro for common fields of operators: name, path, data, result_descriptor and automatically implement common trait functions
 pub trait InitializedRasterOperator: Send + Sync {
     /// Get the result descriptor of the `Operator`
     fn result_descriptor(&self) -> &RasterResultDescriptor;

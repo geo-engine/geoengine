@@ -69,7 +69,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the session is invalid.
-    ///
     async fn logout(&self) -> Result<()>;
 
     /// Sets the session project
@@ -77,7 +76,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the session is invalid
-    ///
     async fn set_session_project(&self, project: ProjectId) -> Result<()>;
 
     /// Sets the session view
@@ -85,7 +83,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the session is invalid
-    ///
     async fn set_session_view(&self, view: STRectangle) -> Result<()>;
 
     /// Gets the current users total used quota. `session` is used to identify the user.
@@ -93,7 +90,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the session is invalid
-    ///
     async fn quota_used(&self) -> Result<u64>;
 
     /// Gets the current users available quota. `session` is used to identify the user.
@@ -101,7 +97,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the session is invalid
-    ///
     async fn quota_available(&self) -> Result<i64>;
 
     /// Increments a users quota by the given amount
@@ -109,8 +104,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the user is unknown
-    ///
-    // TODO: move this method to some AdminDb?
     async fn increment_quota_used(&self, user: &UserId, quota_used: u64) -> Result<()>;
 
     /// Increments multiple users quota by the given amount
@@ -118,8 +111,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if database cannot be accessed
-    ///
-    // TODO: move this method to some AdminDb?
     async fn bulk_increment_quota_used<I: IntoIterator<Item = (UserId, u64)> + Send>(
         &self,
         quota_used_updates: I,
@@ -130,8 +121,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if database cannot be accessed
-    ///
-    // TODO: move this method to some AdminDb?
     async fn log_quota_used<I: IntoIterator<Item = ComputationUnit> + Send>(
         &self,
         log: I,
@@ -180,8 +169,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the user is unknown
-    ///
-    /// // TODO: move this method to some AdminDb?
     async fn quota_used_by_user(&self, user: &UserId) -> Result<u64>;
 
     /// Gets a specific users available quota
@@ -189,8 +176,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the user is unknown
-    ///
-    /// // TODO: move this method to some AdminDb?
     async fn quota_available_by_user(&self, user: &UserId) -> Result<i64>;
 
     /// Updates a specific users available quota
@@ -198,8 +183,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the user is unknown
-    ///
-    /// // TODO: move this method to some AdminDb?
     async fn update_quota_available_by_user(
         &self,
         user: &UserId,
