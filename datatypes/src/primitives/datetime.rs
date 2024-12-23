@@ -340,12 +340,6 @@ impl From<&DateTime> for chrono::DateTime<chrono::FixedOffset> {
     }
 }
 
-impl From<DateTime> for chrono::DateTime<chrono::Utc> {
-    fn from(datetime: DateTime) -> Self {
-        Self::from(&datetime)
-    }
-}
-
 impl From<&DateTime> for chrono::DateTime<chrono::Utc> {
     fn from(datetime: &DateTime) -> Self {
         datetime.datetime
