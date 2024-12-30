@@ -221,7 +221,9 @@ where
                 user_permitted_datasets p JOIN datasets d
                     ON(p.dataset_id = d.id)
             WHERE 
-                p.user_id = $1 AND d.id = $2",
+                p.user_id = $1 AND d.id = $2
+            LIMIT 
+                1",
             )
             .await?;
 
@@ -249,7 +251,9 @@ where
                 user_permitted_datasets p JOIN datasets d
                     ON(p.dataset_id = d.id)
             WHERE 
-                p.user_id = $1 AND d.id = $2",
+                p.user_id = $1 AND d.id = $2
+            LIMIT 
+                1",
             )
             .await?;
 
@@ -386,13 +390,15 @@ where
         let stmt = tx
             .prepare(
                 "
-        SELECT
-            d.meta_data
-        FROM
-            user_permitted_datasets p JOIN datasets d
-                ON (p.dataset_id = d.id)
-        WHERE
-            d.id = $1 AND p.user_id = $2",
+            SELECT
+                d.meta_data
+            FROM
+                user_permitted_datasets p JOIN datasets d
+                    ON (p.dataset_id = d.id)
+            WHERE
+                d.id = $1 AND p.user_id = $2
+            LIMIT 
+                1",
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
@@ -476,7 +482,9 @@ where
                 user_permitted_datasets p JOIN datasets d
                     ON (p.dataset_id = d.id)
             WHERE
-                d.id = $1 AND p.user_id = $2",
+                d.id = $1 AND p.user_id = $2
+            LIMIT 
+                1",
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
