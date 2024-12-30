@@ -546,6 +546,7 @@ async fn create_subdataset_tiff(
     conversion: ConversionMetadataEntityPart,
 ) -> Result<(CreateSubdatasetTiffResult, Dataset)> {
     crate::util::spawn_blocking(move || {
+        #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
         _create_subdataset_tiff(&subdataset, &conversion).map(|result| (result, subdataset))
     })
     .await
@@ -659,7 +660,7 @@ impl CogRasterCreationOptionss {
     fn options(&self) -> Result<RasterCreationOptions> {
         const COG_BLOCK_SIZE: &str = "512";
 
-        fn _options(this: &CogRasterCreationOptionss) -> Result<RasterCreationOptions, GdalError> {
+        fn inner(this: &CogRasterCreationOptionss) -> Result<RasterCreationOptions, GdalError> {
             let mut options = RasterCreationOptions::new();
             options.add_name_value("COMPRESS", &this.compression_format)?;
             options.add_name_value("TILED", "YES")?;
@@ -672,7 +673,7 @@ impl CogRasterCreationOptionss {
             Ok(options)
         }
 
-        _options(self).context(error::OpeningDatasetForWriting)
+        inner(self).context(error::OpeningDatasetForWriting)
     }
 }
 

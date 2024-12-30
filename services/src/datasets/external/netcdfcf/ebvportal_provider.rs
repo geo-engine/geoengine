@@ -66,6 +66,7 @@ pub struct EbvPortalDataProvider<D: GeoEngineDb> {
 impl<D: GeoEngineDb> DataProviderDefinition<D> for EbvPortalDataProviderDefinition {
     async fn initialize(self: Box<Self>, db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         let id = DataProviderDefinition::<D>::id(&*self);
+        #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
         Ok(Box::new(EbvPortalDataProvider {
             name: self.name.clone(),
             description: self.description.clone(),
@@ -469,6 +470,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for EbvPortalDataProvider<D> {
 
                 let layer_collection_id = LayerCollectionId(path_to_string(&dataset_path));
 
+                #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
                 let layer_collection = self
                     .netcdf_cf_provider
                     ._load_layer_collection(
@@ -496,6 +498,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for EbvPortalDataProvider<D> {
                 let layer_collection_id =
                     netcdf_group_to_layer_collection_id(&dataset_path, &groups);
 
+                #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
                 let mut layer_collection = self
                     .netcdf_cf_provider
                     ._load_layer_collection(

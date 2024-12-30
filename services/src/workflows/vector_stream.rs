@@ -196,6 +196,7 @@ mod tests {
     use super::*;
     use crate::contexts::{PostgresContext, PostgresSessionContext};
     use crate::ge_context;
+    use crate::util::tests::MockQueryContext;
     use crate::{contexts::SimpleApplicationContext, workflows::workflow::Workflow};
     use actix_http::error::PayloadError;
     use actix_web_actors::ws::WebsocketContext;
@@ -290,7 +291,7 @@ mod tests {
             workflow.operator.get_vector().unwrap(),
             query_rectangle,
             ctx.execution_context().unwrap(),
-            ctx.query_context().unwrap(),
+            ctx.mock_query_context().unwrap(),
         )
         .await
         .unwrap();

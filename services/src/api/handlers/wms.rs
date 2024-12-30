@@ -21,12 +21,9 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_operators::engine::{
-    CanonicOperatorName, ExecutionContext, ResultDescriptor, SingleRasterOrVectorSource,
-    WorkflowOperatorPath,
+    RasterOperator, ResultDescriptor, SingleRasterOrVectorSource, WorkflowOperatorPath,
 };
-use geoengine_operators::processing::{
-    InitializedRasterReprojection, Reprojection, ReprojectionParams,
-};
+use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
@@ -35,6 +32,7 @@ use reqwest::Url;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
+use uuid::Uuid;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -279,10 +277,8 @@ async fn wms_map_handler<C: ApplicationContext>(
 
         let ctx = app_ctx.session_context(session);
 
-        let workflow = ctx
-            .db()
-            .load_workflow(&WorkflowId::from_str(&request.layers)?)
-            .await?;
+        let workflow_id = WorkflowId::from_str(&request.layers)?;
+        let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
         let operator = workflow.operator.get_raster()?;
 
@@ -326,14 +322,25 @@ async fn wms_map_handler<C: ApplicationContext>(
                 sources: SingleRasterOrVectorSource {
                     source: RasterOrVectorOperator::Raster(operator),
                 },
-            };
+            }
+            .boxed();
 
-            let irp = InitializedRasterReprojection::try_new_with_input(
-                CanonicOperatorName::from(&reprojected_workflow),
-                reprojection_params,
-                initialized,
-                execution_context.tiling_specification(),
-            )?;
+            let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+            // TODO: avoid re-initialization and re-use unprojected workflow. However, this requires updating all operator paths
+
+            // In order to check whether we need to inject a reprojection, we first need to initialize the
+            // original workflow. Then we can check the result projection. Previously, we then just wrapped
+            // the initialized workflow with an initialized reprojection. IMHO this is wrong because
+            // initialization propagates the workflow path down the children and appends a new segment for
+            // each level. So we can't re-use an already initialized workflow, because all the workflow path/
+            // operator names will be wrong. That's why I now build a new workflow with a reprojection and
+            // perform a full initialization. I only added the TODO because we did some optimization here
+            // which broke at some point when the workflow operator paths were introduced but no one noticed.
+
+            let irp = reprojected_workflow
+                .initialize(workflow_operator_path_root, &execution_context)
+                .await?;
 
             Box::new(irp)
         };
@@ -365,7 +372,7 @@ async fn wms_map_handler<C: ApplicationContext>(
             attributes,
         };
 
-        let query_ctx = ctx.query_context()?;
+        let query_ctx = ctx.query_context(workflow_id.0, Uuid::new_v4())?;
 
         call_on_generic_raster_processor!(
             processor,
@@ -483,7 +490,7 @@ mod tests {
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
         register_ndvi_workflow_helper_with_cache_ttl, register_ne2_multiband_workflow,
-        send_test_request,
+        send_test_request, MockQueryContext,
     };
     use actix_http::header::{self, CONTENT_TYPE};
     use actix_web::dev::ServiceResponse;
@@ -649,7 +656,7 @@ mod tests {
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
                 attributes: BandSelection::first(),
             },
-            ctx.query_context().unwrap(),
+            ctx.mock_query_context().unwrap(),
             360,
             180,
             None,

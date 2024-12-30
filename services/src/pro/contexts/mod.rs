@@ -20,7 +20,7 @@ use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::cache::cache_operator::InitializedCacheOperator;
 use geoengine_operators::engine::{
     CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedVectorOperator, MetaData,
-    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor, WorkflowOperatorPath,
+    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::meta::quota::QuotaCheck;
 use geoengine_operators::meta::wrapper::InitializedOperatorWrapper;
@@ -91,9 +91,8 @@ where
         &self,
         op: Box<dyn geoengine_operators::engine::InitializedRasterOperator>,
         span: CreateSpan,
-        path: WorkflowOperatorPath,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
-        let wrapped = Box::new(InitializedOperatorWrapper::new(op, span, path))
+        let wrapped = Box::new(InitializedOperatorWrapper::new(op, span))
             as Box<dyn geoengine_operators::engine::InitializedRasterOperator>;
 
         if get_config_element::<Cache>()
@@ -112,9 +111,8 @@ where
         &self,
         op: Box<dyn InitializedVectorOperator>,
         span: CreateSpan,
-        path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedVectorOperator> {
-        let wrapped = Box::new(InitializedOperatorWrapper::new(op, span, path))
+        let wrapped = Box::new(InitializedOperatorWrapper::new(op, span))
             as Box<dyn InitializedVectorOperator>;
 
         if get_config_element::<Cache>()
@@ -133,7 +131,6 @@ where
         &self,
         op: Box<dyn InitializedPlotOperator>,
         _span: CreateSpan,
-        _path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedPlotOperator> {
         // as plots do not produce a stream of results, we have nothing to count for now
         op
