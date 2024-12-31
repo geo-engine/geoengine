@@ -849,6 +849,7 @@ mod tests {
         pro::{
             contexts::ProPostgresContext,
             ge_context,
+            permissions::PermissionDb,
             users::{UserAuth, UserSession},
         },
     };
@@ -908,7 +909,31 @@ mod tests {
             .is_empty());
     }
 
-    async fn add_single_dataset(db: &ProPostgresDb<NoTls>, session: &UserSession) {
+    #[ge_context::test]
+    async fn it_loads_own_datasets(app_ctx: ProPostgresContext<NoTls>) {
+        let session_a = app_ctx.create_anonymous_session().await.unwrap();
+
+        let db_a = app_ctx.session_context(session_a.clone()).db();
+
+        let DatasetIdAndName {
+            id: dataset_id,
+            name: _,
+        } = add_single_dataset(&db_a, &session_a).await;
+
+        // we are already owner, but we give the permission again to test the permission check
+        db_a.add_permission(session_a.user.id.into(), dataset_id, Permission::Read)
+            .await
+            .unwrap();
+
+        db_a.load_loading_info(&dataset_id).await.unwrap();
+        let _: Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>> =
+            db_a.meta_data(&DataId::from(dataset_id)).await.unwrap();
+    }
+
+    async fn add_single_dataset(
+        db: &ProPostgresDb<NoTls>,
+        session: &UserSession,
+    ) -> DatasetIdAndName {
         let loading_info = OgrSourceDataset {
             file_name: PathBuf::from("test.csv"),
             layer_name: "test.csv".to_owned(),
@@ -979,6 +1004,6 @@ mod tests {
             meta_data,
         )
         .await
-        .unwrap();
+        .unwrap()
     }
 }
