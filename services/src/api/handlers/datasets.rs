@@ -1278,18 +1278,6 @@ pub async fn list_volume_file_layers_handler<C: ApplicationContext>(
 
     let file_path = path_with_base_path(Path::new(volume_path), Path::new(&file_name))?;
 
-    if cfg!(test) {
-        // TODO: better way to get to the root of the project
-        if let Ok(working_dir) = std::env::current_dir().map(|mut working_dir| {
-            if working_dir.ends_with("services") {
-                working_dir.pop();
-            }
-            working_dir
-        }) {
-            let _ = std::env::set_current_dir(working_dir);
-        }
-    }
-
     let layers = crate::util::spawn_blocking(move || {
         let dataset = gdal_open_dataset(&file_path)?;
 
@@ -2851,6 +2839,15 @@ mod tests {
 
     #[ge_context::test]
     async fn it_lists_layers(app_ctx: ProPostgresContext<NoTls>) {
+        {
+            // TODO: better way to get to the root of the project
+            let mut working_dir = std::env::current_dir().unwrap();
+            if working_dir.ends_with("services") {
+                working_dir.pop();
+            }
+            std::env::set_current_dir(working_dir).unwrap();
+        }
+
         let session = admin_login(&app_ctx).await;
 
         let volume_name = "test_data";

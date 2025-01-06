@@ -2189,7 +2189,6 @@ mod tests {
         let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
 
         let session = admin_login(&app_ctx).await;
-        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
@@ -2216,7 +2215,6 @@ mod tests {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, false, true, 0);
 
         let session = admin_login(&app_ctx).await;
-        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
@@ -2247,7 +2245,6 @@ mod tests {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, false, 0);
 
         let session = admin_login(&app_ctx).await;
-        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
