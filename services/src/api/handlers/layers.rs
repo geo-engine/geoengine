@@ -1184,19 +1184,20 @@ mod tests {
 
     use super::*;
     use crate::api::model::responses::ErrorResponse;
-    use crate::contexts::{SessionId, SimpleApplicationContext, SimpleSession};
+    use crate::contexts::SessionId;
     use crate::datasets::RasterDatasetFromWorkflowResult;
-    use crate::ge_context;
     use crate::layers::layer::Layer;
     use crate::layers::storage::INTERNAL_PROVIDER_ID;
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
+    use crate::pro::users::{UserAuth, UserSession};
+    use crate::pro::util::tests::admin_login;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
     use crate::util::tests::{read_body_string, MockQueryContext, TestDataUploads};
     use crate::{
-        contexts::{PostgresContext, Session},
-        util::tests::send_test_request,
-        workflows::workflow::Workflow,
+        contexts::Session, pro::util::tests::send_pro_test_request, workflows::workflow::Workflow,
     };
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, test};
@@ -1228,10 +1229,11 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn test_add_layer_to_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_add_layer_to_collection(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1255,7 +1257,7 @@ mod tests {
                 },
                 "symbology": null,
             }));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1279,10 +1281,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_add_existing_layer_to_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_add_existing_layer_to_collection(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1328,7 +1331,7 @@ mod tests {
                 "/layerDb/collections/{collection_id}/layers/{layer_id}"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1341,10 +1344,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_add_layer_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_add_layer_collection(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1355,7 +1359,7 @@ mod tests {
                 "name": "Foo",
                 "description": "Bar",
             }));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1368,10 +1372,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_update_layer_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_update_layer_collection(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let collection_id = ctx
             .db()
@@ -1393,7 +1398,7 @@ mod tests {
                 "name": "Foo new",
                 "description": "Bar new",
             }));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1408,10 +1413,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_update_layer(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_update_layer(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let add_layer = AddLayer {
             name: "Foo".to_string(),
@@ -1462,7 +1468,7 @@ mod tests {
             .uri(&format!("/layerDb/layers/{layer_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(serde_json::json!(update_layer.clone()));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1477,10 +1483,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_checks_for_workflow_validity(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn it_checks_for_workflow_validity(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1502,7 +1509,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(invalid_workflow_layer.clone());
 
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         ErrorResponse::assert(
             response,
@@ -1543,7 +1550,7 @@ mod tests {
             .uri(&format!("/layerDb/layers/{layer_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(invalid_workflow_layer);
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         ErrorResponse::assert(
             response,
@@ -1555,10 +1562,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_layer(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_remove_layer(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let add_layer = AddLayer {
             name: "Foo".to_string(),
@@ -1591,7 +1599,7 @@ mod tests {
             .uri(&format!("/layerDb/layers/{layer_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1601,10 +1609,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_add_existing_collection_to_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_add_existing_collection_to_collection(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1639,7 +1648,7 @@ mod tests {
                 "/layerDb/collections/{collection_a_id}/collections/{collection_b_id}"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1653,10 +1662,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_layer_from_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_remove_layer_from_collection(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1702,7 +1712,7 @@ mod tests {
                 "/layerDb/collections/{collection_id}/layers/{layer_id}"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(
             response.status().is_success(),
@@ -1716,10 +1726,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_remove_collection(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1739,7 +1750,7 @@ mod tests {
         let req = test::TestRequest::delete()
             .uri(&format!("/layerDb/collections/{collection_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1753,16 +1764,17 @@ mod tests {
         let req = test::TestRequest::delete()
             .uri(&format!("/layerDb/collections/{root_collection_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_client_error(), "{response:?}");
     }
 
     #[ge_context::test]
-    async fn test_remove_collection_from_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_remove_collection_from_collection(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1784,7 +1796,7 @@ mod tests {
                 "/layerDb/collections/{root_collection_id}/collections/{collection_id}"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1804,22 +1816,25 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_search_capabilities(app_ctx: PostgresContext<NoTls>) {
-        let session_id = app_ctx.default_session_id().await;
+    async fn test_search_capabilities(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let req = test::TestRequest::get()
             .uri(&format!("/layers/{INTERNAL_PROVIDER_ID}/capabilities",))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
     }
 
     #[ge_context::test]
-    async fn test_search(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_search(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1828,16 +1843,17 @@ mod tests {
                 "/layers/collections/search/{INTERNAL_PROVIDER_ID}/{root_collection_id}?limit=5&offset=0&searchType=fulltext&searchString=x"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
     }
 
     #[ge_context::test]
-    async fn test_search_autocomplete(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_search_autocomplete(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1846,7 +1862,7 @@ mod tests {
                 "/layers/collections/search/autocomplete/{INTERNAL_PROVIDER_ID}/{root_collection_id}?limit=5&offset=0&searchType=fulltext&searchString=x"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_test_request(req, app_ctx.clone()).await;
+        let response = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
     }
@@ -1966,8 +1982,9 @@ mod tests {
             }
         }
 
-        async fn create_layer_in_context(&self, app_ctx: &PostgresContext<NoTls>) -> Layer {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+        async fn create_layer_in_context(&self, app_ctx: &ProPostgresContext<NoTls>) -> Layer {
+            let session = admin_login(app_ctx).await;
+            let ctx = app_ctx.session_context(session.clone());
 
             let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -2004,8 +2021,8 @@ mod tests {
         }
     }
 
-    async fn send_dataset_creation_test_request<C: SimpleApplicationContext>(
-        app_ctx: &C,
+    async fn send_dataset_creation_test_request(
+        app_ctx: ProPostgresContext<NoTls>,
         layer: Layer,
         session_id: SessionId,
     ) -> ServiceResponse {
@@ -2017,15 +2034,15 @@ mod tests {
             .uri(&format!("/layers/{provider_id}/{layer_id}/dataset"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON));
-        send_test_request(req, app_ctx.clone()).await
+        send_pro_test_request(req, app_ctx.clone()).await
     }
 
-    async fn create_dataset_request_with_result_success<C: SimpleApplicationContext>(
-        ctx: &C,
+    async fn create_dataset_request_with_result_success(
+        ctx: ProPostgresContext<NoTls>,
         layer: Layer,
-        session: SimpleSession,
+        session: UserSession,
     ) -> RasterDatasetFromWorkflowResult {
-        let res = send_dataset_creation_test_request(ctx, layer, session.id()).await;
+        let res = send_dataset_creation_test_request(ctx.clone(), layer, session.id()).await;
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         let task_response =
@@ -2093,15 +2110,15 @@ mod tests {
     }
 
     async fn raster_layer_to_dataset_success(
-        app_ctx: PostgresContext<NoTls>,
+        app_ctx: ProPostgresContext<NoTls>,
         mock_source: MockRasterWorkflowLayerDescription,
     ) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
         let layer = mock_source.create_layer_in_context(&app_ctx).await;
         let response =
-            create_dataset_request_with_result_success(&app_ctx, layer, ctx.session().clone())
-                .await;
+            create_dataset_request_with_result_success(app_ctx, layer, ctx.session().clone()).await;
 
         // automatically deletes uploads on drop
         let _test_uploads = TestDataUploads {
@@ -2142,7 +2159,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "test_raster_layer_to_dataset_success_tiling_spec")]
-    async fn test_raster_layer_to_dataset_success(app_ctx: PostgresContext<NoTls>) {
+    async fn test_raster_layer_to_dataset_success(app_ctx: ProPostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 0);
         raster_layer_to_dataset_success(app_ctx, mock_source).await;
     }
@@ -2155,7 +2172,9 @@ mod tests {
     #[ge_context::test(
         tiling_spec = "test_raster_layer_with_timeshift_to_dataset_success_tiling_spec"
     )]
-    async fn test_raster_layer_with_timeshift_to_dataset_success(app_ctx: PostgresContext<NoTls>) {
+    async fn test_raster_layer_with_timeshift_to_dataset_success(
+        app_ctx: ProPostgresContext<NoTls>,
+    ) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 1_000);
         raster_layer_to_dataset_success(app_ctx, mock_source).await;
     }
@@ -2166,14 +2185,17 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "test_raster_layer_to_dataset_no_time_interval_tiling_spec")]
-    async fn test_raster_layer_to_dataset_no_time_interval(app_ctx: PostgresContext<NoTls>) {
+    async fn test_raster_layer_to_dataset_no_time_interval(app_ctx: ProPostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
 
-        let session_id = app_ctx.default_session_id().await;
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
-        let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+        let res = send_dataset_creation_test_request(app_ctx, layer, session_id).await;
 
         ErrorResponse::assert(
             res,
@@ -2190,14 +2212,17 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "test_raster_layer_to_dataset_no_bounding_box_tiling_spec")]
-    async fn test_raster_layer_to_dataset_no_bounding_box(app_ctx: PostgresContext<NoTls>) {
+    async fn test_raster_layer_to_dataset_no_bounding_box(app_ctx: ProPostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, false, true, 0);
 
-        let session_id = app_ctx.default_session_id().await;
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
-        let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+        let res = send_dataset_creation_test_request(app_ctx, layer, session_id).await;
 
         ErrorResponse::assert(
             res,
@@ -2216,14 +2241,19 @@ mod tests {
     #[ge_context::test(
         tiling_spec = "test_raster_layer_to_dataset_no_spatial_resolution_tiling_spec"
     )]
-    async fn test_raster_layer_to_dataset_no_spatial_resolution(app_ctx: PostgresContext<NoTls>) {
+    async fn test_raster_layer_to_dataset_no_spatial_resolution(
+        app_ctx: ProPostgresContext<NoTls>,
+    ) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, false, 0);
 
-        let session_id = app_ctx.default_session_id().await;
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
-        let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+        let res = send_dataset_creation_test_request(app_ctx, layer, session_id).await;
 
         ErrorResponse::assert(
             res,

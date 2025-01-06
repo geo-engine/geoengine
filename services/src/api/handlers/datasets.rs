@@ -2851,7 +2851,6 @@ mod tests {
 
     #[ge_context::test]
     async fn it_lists_layers(app_ctx: ProPostgresContext<NoTls>) {
-        // let session = app_ctx.create_anonymous_session().await.unwrap();
         let session = admin_login(&app_ctx).await;
 
         let volume_name = "test_data";
