@@ -1,15 +1,11 @@
 use super::migrations::{all_migrations, CurrentSchemaMigration, MigrationResult};
 use super::{initialize_database, ExecutionContextImpl, Session, SimpleApplicationContext};
-use crate::api::cli::{add_datasets_from_directory, add_providers_from_directory};
 use crate::api::model::services::Volume;
 use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId, SimpleSession};
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
-use crate::layers::add_from_directory::{
-    add_layer_collections_from_directory, add_layers_from_directory,
-};
 use crate::projects::{ProjectId, STRectangle};
 use crate::tasks::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
 use crate::util::config;
@@ -27,7 +23,6 @@ use geoengine_operators::util::create_rayon_thread_pool;
 use log::info;
 use rayon::ThreadPool;
 use snafu::ensure;
-use std::path::PathBuf;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -93,58 +88,6 @@ where
             pool,
             volumes,
         })
-    }
-
-    // TODO: check if the datasets exist already and don't output warnings when skipping them
-    #[allow(clippy::too_many_arguments)]
-    pub async fn new_with_data(
-        config: Config,
-        tls: Tls,
-        dataset_defs_path: PathBuf,
-        provider_defs_path: PathBuf,
-        layer_defs_path: PathBuf,
-        layer_collection_defs_path: PathBuf,
-        exe_ctx_tiling_spec: TilingSpecification,
-        query_ctx_chunk_size: ChunkByteSize,
-    ) -> Result<Self> {
-        let pg_mgr = PostgresConnectionManager::new(config, tls);
-
-        let pool = Pool::builder().build(pg_mgr).await?;
-        let created_schema = Self::create_database(pool.get().await?).await?;
-
-        let session = if created_schema {
-            let session = SimpleSession::default();
-            Self::create_default_session(pool.get().await?, session.id()).await?;
-            session
-        } else {
-            Self::load_default_session(pool.get().await?).await?
-        };
-
-        let app_ctx = PostgresContext {
-            default_session_id: session.id(),
-            task_manager: Default::default(),
-            thread_pool: create_rayon_thread_pool(0),
-            exe_ctx_tiling_spec,
-            query_ctx_chunk_size,
-            pool,
-            volumes: Default::default(),
-        };
-
-        if created_schema {
-            info!("Populating database with initial data...");
-
-            let ctx = app_ctx.session_context(session);
-
-            let mut db = ctx.db();
-            add_layers_from_directory(&mut db, layer_defs_path).await;
-            add_layer_collections_from_directory(&mut db, layer_collection_defs_path).await;
-
-            add_datasets_from_directory(&mut db, dataset_defs_path).await;
-
-            add_providers_from_directory(&mut db, provider_defs_path).await;
-        }
-
-        Ok(app_ctx)
     }
 
     async fn check_schema_status(
@@ -552,6 +495,7 @@ mod tests {
     use ordered_float::NotNan;
     use serde_json::json;
     use std::marker::PhantomData;
+    use std::path::PathBuf;
     use std::str::FromStr;
     use tokio_postgres::config::Host;
 

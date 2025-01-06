@@ -7,7 +7,6 @@ use crate::{
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
         AddDataset, DatasetName,
     },
-    pro,
     pro::{
         contexts::{ProApplicationContext, ProGeoEngineDb, ProPostgresContext},
         permissions::{Permission, PermissionDb, Role},
@@ -125,14 +124,12 @@ pub async fn send_pro_test_request(
             )
             .wrap(middleware::NormalizePath::trim())
             .configure(configure_extractors)
-            .configure(pro::api::handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::layers::init_layer_routes::<ProPostgresContext<NoTls>>)
-            .configure(
-                pro::api::handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>,
-            )
+            .configure(handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::plots::init_plot_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::projects::init_project_routes::<ProPostgresContext<NoTls>>)
-            .configure(pro::api::handlers::users::init_user_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::users::init_user_routes::<ProPostgresContext<NoTls>>)
             .configure(
                 handlers::spatial_references::init_spatial_reference_routes::<
                     ProPostgresContext<NoTls>,
@@ -143,7 +140,7 @@ pub async fn send_pro_test_request(
             .configure(handlers::wfs::init_wfs_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::wms::init_wms_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::workflows::init_workflow_routes::<ProPostgresContext<NoTls>>)
-            .configure(pro::api::handlers::machine_learning::init_ml_routes::<ProPostgresContext<NoTls>>);
+            .configure(handlers::machine_learning::init_ml_routes::<ProPostgresContext<NoTls>>);
 
     let app = test::init_service(app).await;
     test::call_service(&app, req.to_request())
@@ -463,7 +460,7 @@ impl MockQuotaTracking for QuotaTracking {
 }
 
 #[cfg(test)]
-pub(in crate::pro) mod mock_oidc {
+pub(crate) mod mock_oidc {
     use crate::pro::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
     use crate::pro::util::config::Oidc;
     use chrono::{Duration, Utc};

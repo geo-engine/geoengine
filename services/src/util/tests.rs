@@ -9,6 +9,9 @@ use crate::datasets::upload::UploadRootPath;
 use crate::datasets::AddDataset;
 use crate::datasets::DatasetIdAndName;
 use crate::datasets::DatasetName;
+use crate::pro::contexts::ProGeoEngineDb;
+use crate::pro::permissions::Permission;
+use crate::pro::permissions::Role;
 use crate::projects::{
     CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
@@ -414,6 +417,52 @@ pub async fn add_file_definition_to_datasets<D: GeoEngineDb>(
         .unwrap()
 }
 
+/// Add a definition from a file to the datasets.
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_pro_file_definition_to_datasets<D: ProGeoEngineDb>(
+    db: &D,
+    definition: &Path,
+) -> DatasetIdAndName {
+    let mut def: DatasetDefinition =
+        serde_json::from_reader(BufReader::new(File::open(definition).unwrap())).unwrap();
+
+    // rewrite metadata to use the correct file path
+    def.meta_data = match def.meta_data {
+        MetaDataDefinition::GdalStatic(mut meta_data) => {
+            meta_data.params.file_path = test_data!(meta_data
+                .params
+                .file_path
+                .strip_prefix("test_data/")
+                .unwrap())
+            .into();
+            MetaDataDefinition::GdalStatic(meta_data)
+        }
+        MetaDataDefinition::GdalMetaDataRegular(mut meta_data) => {
+            meta_data.params.file_path = test_data!(meta_data
+                .params
+                .file_path
+                .strip_prefix("test_data/")
+                .unwrap())
+            .into();
+            MetaDataDefinition::GdalMetaDataRegular(meta_data)
+        }
+        _ => todo!("Implement for other meta data types when used"),
+    };
+
+    let dataset = db
+        .add_dataset(def.properties.clone(), def.meta_data.clone())
+        .await
+        .unwrap();
+
+    for role in [Role::registered_user_role_id(), Role::anonymous_role_id()] {
+        db.add_permission(role, dataset.id, Permission::Read)
+            .await
+            .unwrap();
+    }
+
+    dataset
+}
+
 pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(
     test_helper: T,
     allowed_methods: &[Method],
@@ -477,7 +526,6 @@ pub async fn send_test_request<C: SimpleApplicationContext>(
             )
             .wrap(TracingLogger::default())
             .configure(configure_extractors)
-            .configure(handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(handlers::projects::init_project_routes::<C>)

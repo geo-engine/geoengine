@@ -1,6 +1,6 @@
+use crate::api::handlers::users::UsageSummaryGranularity;
 use crate::contexts::SessionId;
 use crate::error::{Error, Result};
-use crate::pro::api::handlers::users::UsageSummaryGranularity;
 use crate::pro::contexts::{ProApplicationContext, ProPostgresDb};
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Role, RoleDescription, RoleId};
