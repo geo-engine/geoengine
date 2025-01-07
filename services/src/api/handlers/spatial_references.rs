@@ -267,10 +267,11 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, Session};
-    use crate::contexts::{SessionContext, SimpleApplicationContext};
-    use crate::ge_context;
-    use crate::util::tests::send_test_request;
+    use crate::contexts::Session;
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
+    use crate::pro::users::UserAuth;
+    use crate::pro::util::tests::send_pro_test_request;
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -280,15 +281,16 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn get_spatial_reference(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    async fn get_spatial_reference(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let req = actix_web::test::TestRequest::get()
             .uri("/spatialReferenceSpecification/EPSG:4326")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 

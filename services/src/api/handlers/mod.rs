@@ -12,7 +12,6 @@ pub mod machine_learning;
 pub mod permissions;
 pub mod plots;
 pub mod projects;
-pub mod session;
 pub mod spatial_references;
 pub mod tasks;
 pub mod upload;
