@@ -1,4 +1,5 @@
 use crate::api::model::responses::ErrorResponse;
+use crate::contexts::ApplicationContext;
 use crate::contexts::GeoEngineDb;
 use crate::contexts::PostgresContext;
 use crate::contexts::SimpleApplicationContext;
@@ -10,6 +11,7 @@ use crate::datasets::AddDataset;
 use crate::datasets::DatasetIdAndName;
 use crate::datasets::DatasetName;
 use crate::pro::contexts::ProGeoEngineDb;
+use crate::pro::contexts::ProPostgresContext;
 use crate::pro::permissions::Permission;
 use crate::pro::permissions::Role;
 use crate::projects::{
@@ -84,12 +86,10 @@ use super::config::get_config_element;
 use super::config::Postgres;
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_project_helper<C: SimpleApplicationContext>(app_ctx: &C) -> ProjectId {
-    app_ctx
-        .default_session_context()
-        .await
-        .unwrap()
-        .db()
+pub async fn create_project_helper(
+    ctx: &<ProPostgresContext<NoTls> as ApplicationContext>::SessionContext,
+) -> ProjectId {
+    ctx.db()
         .create_project(CreateProject {
             name: "Test".to_string(),
             description: "Foo".to_string(),
@@ -529,7 +529,6 @@ pub async fn send_test_request<C: SimpleApplicationContext>(
             .configure(handlers::layers::init_layer_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(handlers::projects::init_project_routes::<C>)
-            .configure(handlers::session::init_session_routes::<C>)
             .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
             .configure(handlers::upload::init_upload_routes::<C>)
             .configure(handlers::tasks::init_task_routes::<C>)
