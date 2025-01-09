@@ -225,7 +225,6 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
         .resolution
         .unwrap_or(SpatialResolution::zero_point_one());
 
-    // TODO: swap depending on axis order?
     let pixel_size_x = resolution.x;
     let pixel_size_y = -resolution.y;
 
@@ -255,20 +254,10 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
         ),
     };
 
-    // TODO: swap depending on axis order?
-    // let raster_size_x = (bbox.size_x() / pixel_size_x.abs()).ceil() as usize;
-    // let raster_size_y = (bbox.size_y() / pixel_size_y.abs()).ceil() as usize;
-
     let geo_transform = GeoTransform::new(bbox.upper_left(), pixel_size_x, pixel_size_y);
 
     let [raster_size_x, raster_size_y] =
         *(geo_transform.lower_right_pixel_idx(&bbox) + [1, 1]).inner();
-
-    // TODO: swap order of GridOffsets ix axis is swapped? Currently, GDAL seems to take the rotation as pixel size. WCS spec says
-    // "When the GridType is “urn:ogc:def:method:WCS:1.1:2dGridIn2dCrs”, there shall be four values in this GridOffsets. The center two of these offsets will be zero when the GridCRS is not rotated or skewed in the GridBaseCRS."
-    // though.
-
-    // TODO: output all available bands
 
     let mock = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -664,7 +653,7 @@ mod tests {
         xmlns:ogc="http://www.opengis.net/ogc"
         xmlns:ows="http://www.opengis.net/ows/1.1"
         xmlns:gml="http://www.opengis.net/gml"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/api/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/api/wcs/1625f9b9-7408-58ab-9482-4d5fb0e3c6e4/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
         <wcs:CoverageDescription>
             <ows:Title>Workflow {workflow_id}</ows:Title>
             <wcs:Identifier>{workflow_id}</wcs:Identifier>
@@ -674,15 +663,29 @@ mod tests {
                         <ows:LowerCorner>-90 -180</ows:LowerCorner>
                         <ows:UpperCorner>90 180</ows:UpperCorner>
                     </ows:BoundingBox>
+                    <ows:BoundingBox crs="urn:ogc:def:crs:OGC:1.3:CRS:imageCRS" dimensions="2">
+                        <ows:LowerCorner>0 0</ows:LowerCorner>
+                        <ows:UpperCorner>3600 1800</ows:UpperCorner>
+                    </ows:BoundingBox>
                     <wcs:GridCRS>
                         <wcs:GridBaseCRS>urn:ogc:def:crs:EPSG::4326</wcs:GridBaseCRS>
                         <wcs:GridType>urn:ogc:def:method:WCS:1.1:2dGridIn2dCrs</wcs:GridType>
                         <wcs:GridOrigin>-180 90</wcs:GridOrigin>
-                        <wcs:GridOffsets>0 0.0 0.0 -0</wcs:GridOffsets>
+                        <wcs:GridOffsets>0.1 0.0 0.0 -0.1</wcs:GridOffsets>
                         <wcs:GridCS>urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS</wcs:GridCS>
                     </wcs:GridCRS>
                 </wcs:SpatialDomain>
             </wcs:Domain>
+            <wcs:Range>
+                <wcs:Field>
+                    <wcs:Identifier>contents</wcs:Identifier>
+                    <wcs:Axis identifier="Bands">
+                        <wcs:AvailableKeys>
+                            <wcs:Key>ndvi</wcs:Key>
+                        </wcs:AvailableKeys>
+                    </wcs:Axis>
+                </wcs:Field>
+            </wcs:Range>
             <wcs:SupportedCRS>EPSG:4326</wcs:SupportedCRS>
             <wcs:SupportedFormat>image/tiff</wcs:SupportedFormat>
         </wcs:CoverageDescription>
