@@ -493,23 +493,42 @@ fn default_time_from_config() -> TimeInterval {
 
 #[cfg(test)]
 mod tests {
-    use crate::contexts::{Session, SessionContext, SimpleApplicationContext};
-    use crate::util::tests::with_temp_context;
-    use crate::util::tests::with_temp_context_from_spec;
-    use crate::util::tests::{read_body_string, register_ndvi_workflow_helper, send_test_request};
+    use crate::contexts::{ApplicationContext, Session, SessionContext};
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
+    use crate::pro::users::UserAuth;
+    use crate::pro::util::tests::{add_ndvi_to_datasets, send_pro_test_request};
+    use crate::util::tests::read_body_string;
+    use crate::workflows::registry::WorkflowRegistry;
+    use crate::workflows::workflow::Workflow;
     use actix_web::http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
-    use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_operators::engine::{RasterOperator, TypedOperator};
+    use geoengine_operators::source::{GdalSource, GdalSourceParameters};
+    use tokio_postgres::NoTls;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn get_capabilities() {
-        with_temp_context(|app_ctx, _| async move {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    #[ge_context::test]
+    async fn get_capabilities(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let session_id = session.id();
+
+        let (_gdal_dataset_id, gdal_dataset_name) =
+            add_ndvi_to_datasets(&app_ctx, true, true).await;
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: gdal_dataset_name,
+                    },
+                }
+                .boxed(),
+            ),
+        };
+        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
 
         let params = &[
             ("service", "WCS"),
@@ -524,9 +543,9 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
-        assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200, "{:?}", res.response());
         let body = read_body_string(res).await;
         assert_eq!(
             format!(
@@ -585,18 +604,28 @@ mod tests {
             ),
             body
         );
-
-        })
-        .await;
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn describe_coverage() {
-        with_temp_context(|app_ctx, _| async move {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    #[ge_context::test]
+    async fn describe_coverage(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let session_id = session.id();
+
+        let (_gdal_dataset_id, gdal_dataset_name) =
+            add_ndvi_to_datasets(&app_ctx, true, true).await;
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: gdal_dataset_name,
+                    },
+                }
+                .boxed(),
+            ),
+        };
+        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
 
         let params = &[
             ("service", "WCS"),
@@ -612,9 +641,9 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
-        assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200, "{:?}", res.response());
         let body = read_body_string(res).await;
         assert_eq!(
             format!(
@@ -650,118 +679,125 @@ mod tests {
             ),
             body
         );
-
-        })
-        .await;
     }
 
     // TODO: add get_coverage with masked band
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn get_coverage_with_nodatavalue() {
-        let exe_ctx_tiling_spec = TilingSpecification {
+    fn tiling_spec() -> TilingSpecification {
+        TilingSpecification {
             origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
-        };
-
-        // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        with_temp_context_from_spec(
-            exe_ctx_tiling_spec,
-            TestDefault::test_default(),
-            |app_ctx, _| async move {
-                let ctx = app_ctx.default_session_context().await.unwrap();
-                let session_id = ctx.session().id();
-
-                let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
-
-                let params = &[
-                    ("service", "WCS"),
-                    ("request", "GetCoverage"),
-                    ("version", "1.1.1"),
-                    ("identifier", &id.to_string()),
-                    ("boundingbox", "20,-10,80,50,urn:ogc:def:crs:EPSG::4326"),
-                    ("format", "image/tiff"),
-                    ("gridbasecrs", "urn:ogc:def:crs:EPSG::4326"),
-                    ("gridcs", "urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS"),
-                    ("gridtype", "urn:ogc:def:method:WCS:1.1:2dSimpleGrid"),
-                    ("gridorigin", "80,-10"),
-                    ("gridoffsets", "0.1,0.1"),
-                    ("time", "2014-01-01T00:00:00.0Z"),
-                    ("nodatavalue", "0.0"),
-                ];
-
-                let req = test::TestRequest::get()
-                    .uri(&format!(
-                        "/wcs/{}?{}",
-                        &id.to_string(),
-                        serde_urlencoded::to_string(params).unwrap()
-                    ))
-                    .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-
-                let res = send_test_request(req, app_ctx).await;
-
-                assert_eq!(res.status(), 200);
-                assert_eq!(
-                    include_bytes!(
-                        "../../../../test_data/raster/geotiff_from_stream_compressed.tiff"
-                    ) as &[u8],
-                    test::read_body(res).await.as_ref()
-                );
-            },
-        )
-        .await;
+        }
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_sets_cache_control_header() {
-        let exe_ctx_tiling_spec = TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
-            tile_size_in_pixels: GridShape2D::new([600, 600]),
-        };
-
+    #[ge_context::test(tiling_spec = "tiling_spec")]
+    async fn get_coverage_with_nodatavalue(app_ctx: ProPostgresContext<NoTls>) {
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
-        with_temp_context_from_spec(
-            exe_ctx_tiling_spec,
-            TestDefault::test_default(),
-            |app_ctx, _| async move {
-                let ctx = app_ctx.default_session_context().await.unwrap();
-                let session_id = ctx.session().id();
 
-                let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-                let params = &[
-                    ("service", "WCS"),
-                    ("request", "GetCoverage"),
-                    ("version", "1.1.1"),
-                    ("identifier", &id.to_string()),
-                    ("boundingbox", "20,-10,80,50,urn:ogc:def:crs:EPSG::4326"),
-                    ("format", "image/tiff"),
-                    ("gridbasecrs", "urn:ogc:def:crs:EPSG::4326"),
-                    ("gridcs", "urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS"),
-                    ("gridtype", "urn:ogc:def:method:WCS:1.1:2dSimpleGrid"),
-                    ("gridorigin", "80,-10"),
-                    ("gridoffsets", "0.1,0.1"),
-                    ("time", "2014-01-01T00:00:00.0Z"),
-                    ("nodatavalue", "0.0"),
-                ];
+        let session_id = session.id();
 
-                let req = test::TestRequest::get()
-                    .uri(&format!(
-                        "/wcs/{}?{}",
-                        &id.to_string(),
-                        serde_urlencoded::to_string(params).unwrap()
-                    ))
-                    .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let (_gdal_dataset_id, gdal_dataset_name) =
+            add_ndvi_to_datasets(&app_ctx, true, true).await;
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: gdal_dataset_name,
+                    },
+                }
+                .boxed(),
+            ),
+        };
+        let id = ctx.db().register_workflow(workflow).await.unwrap();
 
-                let res = send_test_request(req, app_ctx).await;
+        let params = &[
+            ("service", "WCS"),
+            ("request", "GetCoverage"),
+            ("version", "1.1.1"),
+            ("identifier", &id.to_string()),
+            ("boundingbox", "20,-10,80,50,urn:ogc:def:crs:EPSG::4326"),
+            ("format", "image/tiff"),
+            ("gridbasecrs", "urn:ogc:def:crs:EPSG::4326"),
+            ("gridcs", "urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS"),
+            ("gridtype", "urn:ogc:def:method:WCS:1.1:2dSimpleGrid"),
+            ("gridorigin", "80,-10"),
+            ("gridoffsets", "0.1,0.1"),
+            ("time", "2014-01-01T00:00:00.0Z"),
+            ("nodatavalue", "0.0"),
+        ];
 
-                assert_eq!(res.status(), 200);
-                assert_eq!(
-                    res.headers().get(header::CACHE_CONTROL).unwrap(),
-                    "no-cache"
-                );
-            },
-        )
-        .await;
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/wcs/{}?{}",
+                &id.to_string(),
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_pro_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+        assert_eq!(
+            include_bytes!("../../../../test_data/raster/geotiff_from_stream_compressed.tiff")
+                as &[u8],
+            test::read_body(res).await.as_ref()
+        );
+    }
+
+    #[ge_context::test(tiling_spec = "tiling_spec")]
+    async fn it_sets_cache_control_header(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
+
+        let (_gdal_dataset_id, gdal_dataset_name) =
+            add_ndvi_to_datasets(&app_ctx, true, true).await;
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: gdal_dataset_name,
+                    },
+                }
+                .boxed(),
+            ),
+        };
+        let id = ctx.db().register_workflow(workflow).await.unwrap();
+
+        let params = &[
+            ("service", "WCS"),
+            ("request", "GetCoverage"),
+            ("version", "1.1.1"),
+            ("identifier", &id.to_string()),
+            ("boundingbox", "20,-10,80,50,urn:ogc:def:crs:EPSG::4326"),
+            ("format", "image/tiff"),
+            ("gridbasecrs", "urn:ogc:def:crs:EPSG::4326"),
+            ("gridcs", "urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS"),
+            ("gridtype", "urn:ogc:def:method:WCS:1.1:2dSimpleGrid"),
+            ("gridorigin", "80,-10"),
+            ("gridoffsets", "0.1,0.1"),
+            ("time", "2014-01-01T00:00:00.0Z"),
+            ("nodatavalue", "0.0"),
+        ];
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/wcs/{}?{}",
+                &id.to_string(),
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_pro_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+        assert_eq!(
+            res.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-cache"
+        );
     }
 }
