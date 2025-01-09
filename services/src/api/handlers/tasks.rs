@@ -168,16 +168,15 @@ async fn abort_handler<C: ApplicationContext>(
 mod tests {
 
     use super::*;
-    use crate::contexts::PostgresContext;
-    use crate::ge_context;
-    use crate::util::tests::read_body_json;
-    use crate::{
-        contexts::SimpleApplicationContext,
-        tasks::{
-            util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
-        },
-        util::tests::send_test_request,
+    use crate::contexts::Session;
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
+    use crate::pro::users::UserAuth;
+    use crate::pro::util::tests::send_pro_test_request;
+    use crate::tasks::{
+        util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
     };
+    use crate::util::tests::read_body_json;
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::{channel::oneshot, lock::Mutex};
@@ -358,9 +357,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_get_status(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+    async fn test_get_status(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let (task, complete_tx) = NopTask::new_with_sender();
 
@@ -374,7 +375,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         let res_status = res.status();
         let res_body = read_body_json(res).await;
@@ -401,7 +402,7 @@ mod tests {
 
         let app_ctx_clone = app_ctx.clone();
 
-        let res = send_test_request(req, app_ctx_clone).await;
+        let res = send_pro_test_request(req, app_ctx_clone).await;
 
         let res_status = res.status();
         let res_body = read_body_json(res).await;
@@ -414,9 +415,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_get_status_with_admin_session(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+    async fn test_get_status_with_admin_session(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let (task, _complete_tx) = NopTask::new_with_sender();
         let task_id = ctx.tasks().schedule_task(task.boxed(), None).await.unwrap();
@@ -428,7 +431,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         let res_status = res.status();
         let res_body = read_body_json(res).await;
@@ -442,9 +445,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_get_list(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+    async fn test_get_list(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let tasks = Arc::new(ctx.tasks());
 
@@ -460,7 +465,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         let res_status = res.status();
         let res_body = read_body_json(res).await;
@@ -475,9 +480,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_abort_task(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+    async fn test_abort_task(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let tasks = Arc::new(ctx.tasks());
 
@@ -493,7 +500,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
@@ -510,7 +517,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -529,9 +536,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_force_abort_task(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+    async fn test_force_abort_task(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let tasks = Arc::new(ctx.tasks());
 
@@ -547,7 +556,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
@@ -562,7 +571,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -580,9 +589,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_abort_after_abort(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+    async fn test_abort_after_abort(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let tasks = Arc::new(ctx.tasks());
 
@@ -598,7 +609,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
@@ -611,7 +622,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 400, "{:?}", res.response().error());
 
@@ -632,7 +643,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 202, "{:?}", res.response().error());
 
@@ -643,7 +654,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response().error());
 
@@ -661,10 +672,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_duplicate(app_ctx: PostgresContext<NoTls>) {
+    async fn test_duplicate(app_ctx: ProPostgresContext<NoTls>) {
         let unique_id = "highlander".to_string();
 
-        let session = app_ctx.default_session().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let tasks = app_ctx.session_context(session).tasks();
 
@@ -678,10 +689,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_duplicate_after_finish(app_ctx: PostgresContext<NoTls>) {
+    async fn test_duplicate_after_finish(app_ctx: ProPostgresContext<NoTls>) {
         let unique_id = "highlander".to_string();
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let tasks = Arc::new(ctx.tasks());
 
@@ -705,8 +717,8 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_notify(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+    async fn test_notify(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let tasks = app_ctx.session_context(session).tasks();
 
@@ -732,8 +744,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn abort_subtasks(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn abort_subtasks(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let tasks = Arc::new(ctx.tasks());
 
@@ -822,8 +835,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_failing_task_with_failing_cleanup(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn test_failing_task_with_failing_cleanup(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let tasks = Arc::new(ctx.tasks());
 

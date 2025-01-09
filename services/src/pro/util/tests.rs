@@ -136,6 +136,7 @@ pub async fn send_pro_test_request(
                 >,
             )
             .configure(handlers::upload::init_upload_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::tasks::init_task_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::wcs::init_wcs_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::wfs::init_wfs_routes::<ProPostgresContext<NoTls>>)
             .configure(handlers::wms::init_wms_routes::<ProPostgresContext<NoTls>>)
