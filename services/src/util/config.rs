@@ -9,12 +9,11 @@ use snafu::ResultExt;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::{OnceLock, RwLock};
+use std::sync::{LazyLock, RwLock};
 use url::Url;
 
-static SETTINGS: OnceLock<RwLock<Config>> = OnceLock::new();
+static SETTINGS: LazyLock<RwLock<Config>> = LazyLock::new(init_settings);
 
-// TODO: change to `LazyLock' once stable
 fn init_settings() -> RwLock<Config> {
     let mut settings = Config::builder();
 
@@ -35,10 +34,10 @@ fn init_settings() -> RwLock<Config> {
 
     settings = settings.add_source(files);
 
-    // Override config with environment variables that start with `GEOENGINE_`,
-    // e.g. `GEOENGINE_WEB__EXTERNAL_ADDRESS=https://path.to.geoengine.io`
+    // Override config with environment variables that start with `GEOENGINE__`,
+    // e.g. `GEOENGINE__LOGGING__LOG_SPEC=debug`
     // Note: Since variables contain underscores, we need to use something different
-    // for seperating groups, for instance double underscores `__`
+    // for separating groups, for instance double underscores `__`
     settings = settings.add_source(Environment::with_prefix("geoengine").separator("__"));
 
     RwLock::new(
@@ -82,7 +81,6 @@ where
     T: Into<config::Value>,
 {
     let mut settings = SETTINGS
-        .get_or_init(init_settings)
         .write()
         .map_err(|_error| error::Error::ConfigLockFailed)?;
 
@@ -100,7 +98,6 @@ where
     T: Deserialize<'a>,
 {
     SETTINGS
-        .get_or_init(init_settings)
         .read()
         .map_err(|_error| error::Error::ConfigLockFailed)?
         .get::<T>(key)
