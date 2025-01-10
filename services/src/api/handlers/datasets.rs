@@ -1387,12 +1387,12 @@ mod tests {
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::ge_context;
     use crate::pro::users::UserAuth;
-    use crate::pro::util::tests::{admin_login, send_pro_test_request};
+    use crate::pro::util::tests::admin_login;
     use crate::projects::{PointSymbology, RasterSymbology, Symbology};
     use crate::test_data;
     use crate::util::tests::{
-        add_pro_file_definition_to_datasets, read_body_json, read_body_string, MockQueryContext,
-        SetMultipartBody, TestDataUploads,
+        add_pro_file_definition_to_datasets, read_body_json, read_body_string, send_test_request,
+        MockQueryContext, SetMultipartBody, TestDataUploads,
     };
     use actix_web;
     use actix_web::http::header;
@@ -1505,7 +1505,7 @@ mod tests {
             ))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1584,7 +1584,7 @@ mod tests {
             .uri("/upload")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_multipart_files(&files);
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200);
 
         let upload: IdResponse<UploadId> = actix_web::test::read_body_json(res).await;
@@ -1681,7 +1681,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(s);
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200, "response: {res:?}");
 
         let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
@@ -1739,7 +1739,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
         let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
@@ -1752,7 +1752,7 @@ mod tests {
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
 
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
         Ok(())
@@ -2299,7 +2299,7 @@ mod tests {
             .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
@@ -2379,7 +2379,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_multipart(body.clone());
 
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -2400,7 +2400,7 @@ mod tests {
                 layer_name: None,
                 main_file: None,
             });
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -2504,7 +2504,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
 
@@ -2522,7 +2522,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));
 
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -2583,7 +2583,7 @@ mod tests {
             .uri(&format!("/dataset/{dataset_name}/loadingInfo"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
@@ -2695,7 +2695,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(update.clone());
 
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200);
 
         let loading_info = db.load_loading_info(&id).await.unwrap();
@@ -2742,7 +2742,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(symbology.clone());
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         assert_eq!(res_status, 200);
@@ -2777,7 +2777,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(update.clone());
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         assert_eq!(res_status, 200);
@@ -2816,7 +2816,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(provenances.clone());
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         assert_eq!(res_status, 200);
@@ -2859,7 +2859,7 @@ mod tests {
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
 
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200, "{res:?}");
 
@@ -2980,7 +2980,7 @@ mod tests {
             ))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_json(create);
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
         let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
@@ -2990,7 +2990,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
 
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 200);
 
         Ok(())
@@ -3025,7 +3025,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));
 
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "response: {res:?}");
 
@@ -3070,7 +3070,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
         let dataset_id = db
@@ -3087,7 +3087,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));
 
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 

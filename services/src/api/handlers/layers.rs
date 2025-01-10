@@ -1195,10 +1195,10 @@ mod tests {
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
-    use crate::util::tests::{read_body_string, MockQueryContext, TestDataUploads};
-    use crate::{
-        contexts::Session, pro::util::tests::send_pro_test_request, workflows::workflow::Workflow,
+    use crate::util::tests::{
+        read_body_string, send_test_request, MockQueryContext, TestDataUploads,
     };
+    use crate::{contexts::Session, workflows::workflow::Workflow};
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -1257,7 +1257,7 @@ mod tests {
                 },
                 "symbology": null,
             }));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1331,7 +1331,7 @@ mod tests {
                 "/layerDb/collections/{collection_id}/layers/{layer_id}"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1359,7 +1359,7 @@ mod tests {
                 "name": "Foo",
                 "description": "Bar",
             }));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1398,7 +1398,7 @@ mod tests {
                 "name": "Foo new",
                 "description": "Bar new",
             }));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1468,7 +1468,7 @@ mod tests {
             .uri(&format!("/layerDb/layers/{layer_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(serde_json::json!(update_layer.clone()));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1509,7 +1509,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(invalid_workflow_layer.clone());
 
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         ErrorResponse::assert(
             response,
@@ -1550,7 +1550,7 @@ mod tests {
             .uri(&format!("/layerDb/layers/{layer_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(invalid_workflow_layer);
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         ErrorResponse::assert(
             response,
@@ -1599,7 +1599,7 @@ mod tests {
             .uri(&format!("/layerDb/layers/{layer_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1648,7 +1648,7 @@ mod tests {
                 "/layerDb/collections/{collection_a_id}/collections/{collection_b_id}"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1712,7 +1712,7 @@ mod tests {
                 "/layerDb/collections/{collection_id}/layers/{layer_id}"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(
             response.status().is_success(),
@@ -1750,7 +1750,7 @@ mod tests {
         let req = test::TestRequest::delete()
             .uri(&format!("/layerDb/collections/{collection_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1764,7 +1764,7 @@ mod tests {
         let req = test::TestRequest::delete()
             .uri(&format!("/layerDb/collections/{root_collection_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_client_error(), "{response:?}");
     }
@@ -1796,7 +1796,7 @@ mod tests {
                 "/layerDb/collections/{root_collection_id}/collections/{collection_id}"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
@@ -1824,7 +1824,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/layers/{INTERNAL_PROVIDER_ID}/capabilities",))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
     }
@@ -1843,7 +1843,7 @@ mod tests {
                 "/layers/collections/search/{INTERNAL_PROVIDER_ID}/{root_collection_id}?limit=5&offset=0&searchType=fulltext&searchString=x"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
     }
@@ -1862,7 +1862,7 @@ mod tests {
                 "/layers/collections/search/autocomplete/{INTERNAL_PROVIDER_ID}/{root_collection_id}?limit=5&offset=0&searchType=fulltext&searchString=x"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx.clone()).await;
+        let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
     }
@@ -2034,7 +2034,7 @@ mod tests {
             .uri(&format!("/layers/{provider_id}/{layer_id}/dataset"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON));
-        send_pro_test_request(req, app_ctx.clone()).await
+        send_test_request(req, app_ctx.clone()).await
     }
 
     async fn create_dataset_request_with_result_success(

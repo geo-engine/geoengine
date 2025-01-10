@@ -212,8 +212,9 @@ mod tests {
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::ge_context;
     use crate::pro::users::UserAuth;
-    use crate::pro::util::tests::send_pro_test_request;
-    use crate::util::tests::{check_allowed_http_methods, read_body_json, read_body_string};
+    use crate::util::tests::{
+        check_allowed_http_methods, read_body_json, read_body_string, send_test_request,
+    };
     use crate::workflows::workflow::Workflow;
     use actix_web;
     use actix_web::dev::ServiceResponse;
@@ -307,7 +308,7 @@ mod tests {
                 &serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -378,7 +379,7 @@ mod tests {
                 &serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -502,7 +503,7 @@ mod tests {
                     &serde_urlencoded::to_string(params).unwrap()
                 ))
                 .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-            send_pro_test_request(req, app_ctx).await
+            send_test_request(req, app_ctx).await
         }
 
         check_allowed_http_methods(

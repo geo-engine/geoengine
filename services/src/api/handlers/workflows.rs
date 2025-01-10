@@ -662,13 +662,13 @@ mod tests {
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::ge_context;
     use crate::pro::users::UserAuth;
-    use crate::pro::util::tests::{admin_login, send_pro_test_request};
+    use crate::pro::util::tests::admin_login;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
     use crate::util::tests::{
         add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
-        read_body_string, register_ndvi_workflow_helper, TestDataUploads,
+        read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
     };
     use crate::workflows::registry::WorkflowRegistry;
     use actix_web::dev::ServiceResponse;
@@ -730,7 +730,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&workflow);
-        send_pro_test_request(req, app_ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
@@ -768,7 +768,7 @@ mod tests {
             .uri("/workflow")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&workflow);
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -792,7 +792,7 @@ mod tests {
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_payload("no json");
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -817,7 +817,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&workflow);
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -843,7 +843,7 @@ mod tests {
             .method(method)
             .uri(&format!("/workflow/{id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         // remove NDVI to allow calling this method again
         ctx.db()
@@ -886,7 +886,7 @@ mod tests {
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = test::TestRequest::get().uri(&format!("/workflow/{id}"));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -906,7 +906,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri("/workflow/1")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 404, "NotFound", "Not Found").await;
     }
@@ -946,7 +946,7 @@ mod tests {
             .method(method)
             .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_pro_test_request(req, app_ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
@@ -1020,7 +1020,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -1084,7 +1084,7 @@ mod tests {
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
         let req = test::TestRequest::get().uri(&format!("/workflow/{id}/metadata"));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1121,7 +1121,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -1160,7 +1160,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/workflow/{id}/provenance"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -1215,7 +1215,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(workflow.to_string());
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 400);
 
@@ -1267,7 +1267,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/workflow/{workflow_id}/allMetadata/zip"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1405,7 +1405,7 @@ mod tests {
                 }
             }"#,
             );
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
 

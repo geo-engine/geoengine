@@ -401,13 +401,12 @@ mod tests {
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::ge_context;
     use crate::pro::users::{UserAuth, UserSession};
-    use crate::pro::util::tests::send_pro_test_request;
     use crate::projects::{
         LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId, ProjectLayer,
         ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
     };
     use crate::util::tests::{
-        check_allowed_http_methods, create_project_helper, update_project_helper,
+        check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,
     };
     use crate::util::Identifier;
     use crate::workflows::workflow::WorkflowId;
@@ -445,7 +444,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&create);
-        send_pro_test_request(req, app_ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
@@ -477,7 +476,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_payload("no json");
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -503,7 +502,7 @@ mod tests {
             .uri("/project")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&create);
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -522,7 +521,7 @@ mod tests {
         });
 
         let req = test::TestRequest::post().uri("/project").set_json(&create);
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -564,7 +563,7 @@ mod tests {
             ))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_pro_test_request(req, app_ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
@@ -611,7 +610,7 @@ mod tests {
                 .unwrap()
             ))
             .append_header((header::CONTENT_LENGTH, 0));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -637,7 +636,7 @@ mod tests {
             .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        send_pro_test_request(req, app_ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
@@ -667,7 +666,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -688,7 +687,7 @@ mod tests {
             .uri("/project")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 405, "MethodNotAllowed", "HTTP method not allowed.").await;
     }
@@ -711,7 +710,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(&update);
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         (session, project, res)
     }
@@ -746,7 +745,7 @@ mod tests {
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_payload("no json");
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -788,7 +787,7 @@ mod tests {
             .uri(&format!("/project/{project}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(&update);
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -812,7 +811,7 @@ mod tests {
                 .uri(&format!("/project/{project_id}"))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
                 .set_json(&update);
-            let res = send_pro_test_request(req, app_ctx.clone()).await;
+            let res = send_test_request(req, app_ctx.clone()).await;
 
             assert_eq!(res.status(), 200);
 
@@ -964,7 +963,7 @@ mod tests {
                 .uri(&format!("/project/{project_id}"))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
                 .set_json(&update);
-            let res = send_pro_test_request(req, app_ctx.clone()).await;
+            let res = send_test_request(req, app_ctx.clone()).await;
 
             assert_eq!(res.status(), 200);
 
@@ -1094,7 +1093,7 @@ mod tests {
             .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1104,7 +1103,7 @@ mod tests {
             .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1133,7 +1132,7 @@ mod tests {
             .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1148,7 +1147,7 @@ mod tests {
             .uri(&format!("/project/{project}/{version_id}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1168,7 +1167,7 @@ mod tests {
             ))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 400);
     }
@@ -1192,6 +1191,6 @@ mod tests {
             .uri(&format!("/project/{project}/versions"))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        send_pro_test_request(req, app_ctx).await;
+        send_test_request(req, app_ctx).await;
     }
 }

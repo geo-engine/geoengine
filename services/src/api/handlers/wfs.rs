@@ -675,9 +675,9 @@ mod tests {
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::ge_context;
     use crate::pro::users::UserAuth;
-    use crate::pro::util::tests::send_pro_test_request;
     use crate::util::tests::{
         add_pro_file_definition_to_datasets_as_admin, check_allowed_http_methods, read_body_string,
+        send_test_request,
     };
     use crate::workflows::workflow::Workflow;
     use actix_web::dev::ServiceResponse;
@@ -703,7 +703,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri("/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?request=GetFeature&service=WFS&version=2.0.0&typeNames=93d6785e-5eea-4e0e-8074-e7f78733d988&bbox=1,2,3,4")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200);
         assert_eq!(
             read_body_string(res).await,
@@ -830,7 +830,7 @@ x;y
         ))
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_pro_test_request(req, app_ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
@@ -896,7 +896,7 @@ x;y
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
         let req = test::TestRequest::with_uri(&format!("/wfs/{id}?request=GetFeature&service=WFS&version=2.0.0&typeNames={id}&bbox=-90,-180,90,180&srsName=EPSG:4326", id = id.to_string())).method(method).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_pro_test_request(req, app_ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
@@ -968,7 +968,7 @@ x;y
         let req = test::TestRequest::get().uri(
             "/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?request=GetFeature&service=WFS&version=2.0.0&bbox=-90,-180,90,180&crs=EPSG:4326",
         ).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1032,7 +1032,7 @@ x;y
         ))
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_pro_test_request(req, app_ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
@@ -1114,7 +1114,7 @@ x;y
                 &serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1210,7 +1210,7 @@ x;y
                 &serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let body: serde_json::Value = test::read_body_json(res).await;
 

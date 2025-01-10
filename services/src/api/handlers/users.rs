@@ -951,10 +951,9 @@ mod tests {
     };
     use crate::pro::util::tests::{
         admin_login, create_project_helper, create_session_helper, register_ndvi_workflow_helper,
-        send_pro_test_request,
     };
     use crate::pro::{contexts::ProPostgresContext, users::UserId};
-    use crate::util::tests::{check_allowed_http_methods, read_body_string};
+    use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
     use actix_http::header::CONTENT_TYPE;
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, http::Method, test};
@@ -988,7 +987,7 @@ mod tests {
             .uri("/user")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&user);
-        send_pro_test_request(req, app_ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
@@ -1039,7 +1038,7 @@ mod tests {
             .uri("/user")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_payload("no json");
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1062,7 +1061,7 @@ mod tests {
             .uri("/user")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&user);
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1080,7 +1079,7 @@ mod tests {
             .uri("/user")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::CONTENT_TYPE, "text/html"));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1118,7 +1117,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&credentials);
 
-        send_pro_test_request(req, app_ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
@@ -1159,7 +1158,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload("no json");
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1189,7 +1188,7 @@ mod tests {
             .uri("/login")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&credentials);
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1225,7 +1224,7 @@ mod tests {
             .uri("/logout")
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_payload("no json");
-        send_pro_test_request(req, app_ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
@@ -1239,7 +1238,7 @@ mod tests {
     #[ge_context::test]
     async fn logout_missing_header(app_ctx: ProPostgresContext<NoTls>) {
         let req = test::TestRequest::post().uri("/logout");
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1256,7 +1255,7 @@ mod tests {
             header::AUTHORIZATION,
             Bearer::new("6ecff667-258e-4108-9dc9-93cb8c64793c"),
         ));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1272,7 +1271,7 @@ mod tests {
         let req = test::TestRequest::post()
             .uri("/logout")
             .append_header((header::AUTHORIZATION, "7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5"));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1288,7 +1287,7 @@ mod tests {
         let req = test::TestRequest::post()
             .uri("/logout")
             .append_header((header::AUTHORIZATION, format!("Bearer {}", "no uuid")));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1316,7 +1315,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri("/session")
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let session: UserSession = test::read_body_json(res).await;
         let db = ctx.db();
@@ -1326,7 +1325,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri("/session")
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1344,7 +1343,7 @@ mod tests {
         let req = test::TestRequest::post()
             .uri(&format!("/session/project/{project}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1364,7 +1363,7 @@ mod tests {
             .uri("/session/view")
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(&rect);
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1381,14 +1380,14 @@ mod tests {
     #[ge_context::test(test_execution = "serial")]
     async fn it_disables_anonymous_access(app_ctx: ProPostgresContext<NoTls>) {
         let req = test::TestRequest::post().uri("/anonymous");
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
         config::set_config("session.anonymous_access", false).unwrap();
 
         let req = test::TestRequest::post().uri("/anonymous");
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         // required to not corrupt other tests
         config::set_config("session.anonymous_access", true).unwrap();
@@ -1414,7 +1413,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .uri("/user")
             .set_json(&user_reg);
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1430,7 +1429,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .uri("/user")
             .set_json(&user_reg);
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         config::set_config("user.registration", true).unwrap();
 
@@ -1467,7 +1466,7 @@ mod tests {
             .method(method)
             .uri("/oidcInit")
             .append_header((header::CONTENT_LENGTH, 0));
-        send_pro_test_request(req, ctx).await
+        send_test_request(req, ctx).await
     }
 
     async fn oidc_login_test_helper(
@@ -1480,7 +1479,7 @@ mod tests {
             .uri("/oidcLogin")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&auth_code_response);
-        send_pro_test_request(req, ctx).await
+        send_test_request(req, ctx).await
     }
 
     fn oidc_attr_for_test() -> (Server, impl Fn() -> OidcManager) {
@@ -1690,7 +1689,7 @@ mod tests {
             .uri("/oidcLogin")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_payload("no json");
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1713,7 +1712,7 @@ mod tests {
             .uri("/oidcLogin")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&auth_code_response);
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1731,7 +1730,7 @@ mod tests {
             .uri("/oidcLogin")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::CONTENT_TYPE, "text/html"));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1794,7 +1793,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(original_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1859,7 +1858,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(original_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 401);
     }
@@ -1893,7 +1892,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri("/quota")
             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(quota.used, 111);
 
@@ -1901,7 +1900,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/quotas/{}", session.user.id))
             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(quota.used, 111);
 
@@ -1909,7 +1908,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/quotas/{}", uuid::Uuid::new_v4()))
             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
         assert_eq!(res.status(), 401);
 
         // specific user quota as admin
@@ -1919,7 +1918,7 @@ mod tests {
                 header::AUTHORIZATION,
                 format!("Bearer {}", admin_session.id()),
             ));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(quota.used, 111);
     }
@@ -1942,7 +1941,7 @@ mod tests {
                 header::AUTHORIZATION,
                 format!("Bearer {}", admin_session.id),
             ));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(
             quota.available,
@@ -1960,7 +1959,7 @@ mod tests {
                 format!("Bearer {}", admin_session.id),
             ))
             .set_json(update);
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1970,7 +1969,7 @@ mod tests {
                 header::AUTHORIZATION,
                 format!("Bearer {}", admin_session.id),
             ));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(quota.available, 123);
     }
@@ -2035,7 +2034,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         ErrorResponse::assert(
             res,
@@ -2057,7 +2056,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(
@@ -2081,7 +2080,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(admin_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
         let role_id: IdResponse<RoleId> = test::read_body_json(res).await;
@@ -2092,7 +2091,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(admin_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
     }
@@ -2121,7 +2120,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(admin_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
         let role_id: IdResponse<RoleId> = test::read_body_json(res).await;
@@ -2133,7 +2132,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(admin_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -2144,7 +2143,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(admin_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
     }
@@ -2201,7 +2200,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(user_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
         let role_descriptions: Vec<RoleDescription> = test::read_body_json(res).await;
@@ -2252,7 +2251,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri("/quota/computations?offset=0&limit=10")
             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let quota: Vec<ComputationQuota> = test::read_body_json(res).await;
         assert_eq!(quota.len(), 1);
@@ -2260,7 +2259,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/quota/computations/{}", quota[0].computation_id))
             .append_header((header::AUTHORIZATION, format!("Bearer {}", session.id)));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         // let json: serde_json::Value = test::read_body_json(res).await;
         // dbg!(json);
@@ -2355,7 +2354,7 @@ mod tests {
                 header::AUTHORIZATION,
                 format!("Bearer {}", admin_session.id),
             ));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let usage: Vec<DataUsage> = test::read_body_json(res).await;
 
@@ -2373,7 +2372,7 @@ mod tests {
                 header::AUTHORIZATION,
                 format!("Bearer {}", admin_session.id),
             ));
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         let usage: Vec<DataUsageSummary> = test::read_body_json(res).await;
 

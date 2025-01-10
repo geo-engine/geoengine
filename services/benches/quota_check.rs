@@ -19,10 +19,10 @@ use geoengine_services::{
         users::{UserAuth, UserDb},
         util::{
             config::QuotaTrackingMode,
-            tests::{add_ndvi_to_datasets, send_pro_test_request, with_pro_temp_context},
+            tests::{add_ndvi_to_datasets, with_pro_temp_context},
         },
     },
-    util::config,
+    util::{config, tests::send_test_request},
     workflows::{registry::WorkflowRegistry, workflow::Workflow},
 };
 
@@ -100,7 +100,7 @@ async fn bench() {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(

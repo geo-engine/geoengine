@@ -497,8 +497,8 @@ mod tests {
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::ge_context;
     use crate::pro::users::UserAuth;
-    use crate::pro::util::tests::{add_ndvi_to_datasets, send_pro_test_request};
-    use crate::util::tests::read_body_string;
+    use crate::pro::util::tests::add_ndvi_to_datasets;
+    use crate::util::tests::{read_body_string, send_test_request};
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
     use actix_web::http::header;
@@ -543,7 +543,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
         let body = read_body_string(res).await;
@@ -641,7 +641,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
         let body = read_body_string(res).await;
@@ -737,7 +737,7 @@ mod tests {
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
         assert_eq!(
@@ -792,7 +792,7 @@ mod tests {
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
         assert_eq!(

@@ -139,11 +139,8 @@ mod tests {
         contexts::Session,
         datasets::upload::UploadId,
         machine_learning::MlModelMetadata,
-        pro::{
-            contexts::ProPostgresContext, ge_context, users::UserAuth,
-            util::tests::send_pro_test_request,
-        },
-        util::tests::{SetMultipartBody, TestDataUploads},
+        pro::{contexts::ProPostgresContext, ge_context, users::UserAuth},
+        util::tests::{send_test_request, SetMultipartBody, TestDataUploads},
     };
 
     use super::*;
@@ -165,7 +162,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_multipart(body);
 
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -190,7 +187,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&model);
 
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -198,7 +195,7 @@ mod tests {
             .uri("/ml/models?offset=0&limit=10")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -212,7 +209,7 @@ mod tests {
             .uri(&format!("/ml/models/{}", model.name))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 

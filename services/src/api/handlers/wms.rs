@@ -489,10 +489,10 @@ mod tests {
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::ge_context;
     use crate::pro::users::UserAuth;
-    use crate::pro::util::tests::{add_ndvi_to_datasets, admin_login, send_pro_test_request};
+    use crate::pro::util::tests::{add_ndvi_to_datasets, admin_login};
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper_with_cache_ttl,
-        register_ne2_multiband_workflow, MockQueryContext,
+        register_ne2_multiband_workflow, send_test_request, MockQueryContext,
     };
     use crate::workflows::workflow::Workflow;
     use actix_http::header::{self, CONTENT_TYPE};
@@ -528,7 +528,7 @@ mod tests {
             .method(method)
             .uri(&path.unwrap_or("/wms/df756642-c5a3-4d72-8ad7-629d312ae993?request=GetMap&service=WMS&version=1.3.0&layers=df756642-c5a3-4d72-8ad7-629d312ae993&bbox=1,2,3,4&width=100&height=100&crs=EPSG:4326&styles=ssss&format=image/png".to_string()))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_pro_test_request(req, app_ctx).await
+        send_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
@@ -602,7 +602,7 @@ mod tests {
         ))
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx).await;
+        let response = send_test_request(req, app_ctx).await;
 
         // remove NDVI to allow calling this method again
         ctx.db()
@@ -725,7 +725,7 @@ mod tests {
         let req = actix_web::test::TestRequest::with_uri(path.unwrap_or(&format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id = id.to_string())))
                 .method(method)
                 .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx).await;
+        let response = send_test_request(req, app_ctx).await;
 
         // remove NDVI to allow calling this method again
         ctx.db()
@@ -777,7 +777,7 @@ mod tests {
         let id = ctx.db().register_workflow(workflow).await.unwrap();
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx).await;
+        let response = send_test_request(req, app_ctx).await;
 
         assert_eq!(
             response.status(),
@@ -816,7 +816,7 @@ mod tests {
         let id = ctx.db().register_workflow(workflow).await.unwrap();
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={id}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -917,7 +917,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -980,7 +980,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1045,7 +1045,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1128,7 +1128,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(res.headers().get(CONTENT_TYPE).unwrap(), "image/png");
@@ -1201,7 +1201,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
         let body = read_body_string(res).await;
@@ -1286,7 +1286,7 @@ mod tests {
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 200, "NoCoordinateProjector", "No CoordinateProjector available for: SpatialReference { authority: Epsg, code: 4326 } --> SpatialReference { authority: Epsg, code: 432 }").await;
     }
@@ -1313,7 +1313,7 @@ mod tests {
         let id = ctx.db().register_workflow(workflow).await.unwrap();
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx).await;
+        let response = send_test_request(req, app_ctx).await;
 
         assert_eq!(
             response.status(),
@@ -1338,7 +1338,7 @@ mod tests {
             register_ndvi_workflow_helper_with_cache_ttl(&app_ctx, CacheTtlSeconds::new(60)).await;
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let response = send_pro_test_request(req, app_ctx).await;
+        let response = send_test_request(req, app_ctx).await;
 
         assert_eq!(
             response.status(),
