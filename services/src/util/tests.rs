@@ -473,6 +473,15 @@ pub async fn add_pro_file_definition_to_datasets<D: ProGeoEngineDb>(
             .into();
             MetaDataDefinition::GdalMetaDataRegular(meta_data)
         }
+        MetaDataDefinition::OgrMetaData(mut meta_data) => {
+            meta_data.loading_info.file_name = test_data!(meta_data
+                .loading_info
+                .file_name
+                .strip_prefix("test_data/")
+                .unwrap())
+            .into();
+            MetaDataDefinition::OgrMetaData(meta_data)
+        }
         _ => todo!("Implement for other meta data types when used"),
     };
 
@@ -488,6 +497,18 @@ pub async fn add_pro_file_definition_to_datasets<D: ProGeoEngineDb>(
     }
 
     dataset
+}
+
+/// Add a definition from a file to the datasets as admin.
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_pro_file_definition_to_datasets_as_admin(
+    app_ctx: &ProPostgresContext<NoTls>,
+    definition: &Path,
+) -> DatasetIdAndName {
+    let session = admin_login(app_ctx).await;
+    let ctx = app_ctx.session_context(session);
+
+    add_pro_file_definition_to_datasets(&ctx.db(), definition).await
 }
 
 pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(
