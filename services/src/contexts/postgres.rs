@@ -440,6 +440,8 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::users::UserAuth;
     use crate::projects::{
         ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LineSymbology,
         LoadVersion, NumberParam, OrderBy, Plot, PlotUpdate, PointSymbology, PolygonSymbology,
@@ -2553,9 +2555,9 @@ mod tests {
     }
 
     #[allow(clippy::too_many_lines)]
-    #[ge_context::test]
-    async fn it_updates_project_layer_symbology(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+    #[crate::pro::ge_context::test]
+    async fn it_updates_project_layer_symbology(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 

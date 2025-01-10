@@ -656,16 +656,19 @@ mod tests {
 
     use super::*;
     use crate::api::model::responses::ErrorResponse;
-    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
+    use crate::contexts::Session;
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::{DatasetName, RasterDatasetFromWorkflowResult};
-    use crate::ge_context;
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
+    use crate::pro::users::UserAuth;
+    use crate::pro::util::tests::{admin_login, send_pro_test_request};
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::util::config::get_config_element;
     use crate::util::tests::{
         add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
-        read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
+        read_body_string, register_ndvi_workflow_helper, TestDataUploads,
     };
     use crate::workflows::registry::WorkflowRegistry;
     use actix_web::dev::ServiceResponse;
@@ -703,12 +706,12 @@ mod tests {
     use zip::ZipArchive;
 
     async fn register_test_helper(
-        app_ctx: PostgresContext<NoTls>,
+        app_ctx: ProPostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -727,11 +730,11 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&workflow);
-        send_test_request(req, app_ctx).await
+        send_pro_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
-    async fn register(app_ctx: PostgresContext<NoTls>) {
+    async fn register(app_ctx: ProPostgresContext<NoTls>) {
         let res = register_test_helper(app_ctx, Method::POST).await;
 
         assert_eq!(res.status(), 200);
@@ -740,7 +743,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_invalid_method(app_ctx: PostgresContext<NoTls>) {
+    async fn register_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| register_test_helper(app_ctx.clone(), method),
             &[Method::POST],
@@ -749,7 +752,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_missing_header(app_ctx: PostgresContext<NoTls>) {
+    async fn register_missing_header(app_ctx: ProPostgresContext<NoTls>) {
         let workflow = Workflow {
             operator: MockPointSource {
                 params: MockPointSourceParams {
@@ -765,7 +768,7 @@ mod tests {
             .uri("/workflow")
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&workflow);
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -777,10 +780,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_invalid_body(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn register_invalid_body(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         // insert workflow
         let req = test::TestRequest::post()
@@ -789,7 +792,7 @@ mod tests {
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_payload("no json");
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -801,10 +804,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_missing_fields(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn register_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         let workflow = json!({});
 
@@ -814,7 +817,7 @@ mod tests {
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&workflow);
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -826,12 +829,13 @@ mod tests {
     }
 
     async fn load_test_helper(
-        app_ctx: PostgresContext<NoTls>,
+        app_ctx: ProPostgresContext<NoTls>,
         method: Method,
     ) -> (Workflow, ServiceResponse) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         let (workflow, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -839,7 +843,7 @@ mod tests {
             .method(method)
             .uri(&format!("/workflow/{id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         // remove NDVI to allow calling this method again
         ctx.db()
@@ -857,7 +861,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load(app_ctx: PostgresContext<NoTls>) {
+    async fn load(app_ctx: ProPostgresContext<NoTls>) {
         let (workflow, res) = load_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
@@ -868,7 +872,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load_invalid_method(app_ctx: PostgresContext<NoTls>) {
+    async fn load_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
         check_allowed_http_methods2(
             |method| load_test_helper(app_ctx.clone(), method),
             &[Method::GET],
@@ -878,11 +882,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load_missing_header(app_ctx: PostgresContext<NoTls>) {
+    async fn load_missing_header(app_ctx: ProPostgresContext<NoTls>) {
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = test::TestRequest::get().uri(&format!("/workflow/{id}"));
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -894,26 +898,27 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load_not_exist(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn load_not_exist(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         let req = test::TestRequest::get()
             .uri("/workflow/1")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(res, 404, "NotFound", "Not Found").await;
     }
 
     async fn vector_metadata_test_helper(
-        app_ctx: PostgresContext<NoTls>,
+        app_ctx: ProPostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -941,11 +946,11 @@ mod tests {
             .method(method)
             .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        send_test_request(req, app_ctx).await
+        send_pro_test_request(req, app_ctx).await
     }
 
     #[ge_context::test]
-    async fn vector_metadata(app_ctx: PostgresContext<NoTls>) {
+    async fn vector_metadata(app_ctx: ProPostgresContext<NoTls>) {
         let res = vector_metadata_test_helper(app_ctx, Method::GET).await;
 
         let res_status = res.status();
@@ -979,10 +984,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn raster_metadata(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn raster_metadata(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: MockRasterSource::<u8> {
@@ -1014,7 +1020,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -1042,7 +1048,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn metadata_invalid_method(app_ctx: PostgresContext<NoTls>) {
+    async fn metadata_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| vector_metadata_test_helper(app_ctx.clone(), method),
             &[Method::GET],
@@ -1051,8 +1057,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn metadata_missing_header(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn metadata_missing_header(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -1077,7 +1084,7 @@ mod tests {
         let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
         let req = test::TestRequest::get().uri(&format!("/workflow/{id}/metadata"));
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
@@ -1089,10 +1096,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn plot_metadata(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn plot_metadata(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: Statistics {
@@ -1113,7 +1121,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/workflow/{id}/metadata"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -1131,10 +1139,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn provenance(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn provenance(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
         let (dataset_id, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
@@ -1151,7 +1160,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!("/workflow/{id}/provenance"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx).await;
+        let res = send_pro_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = read_body_string(res).await;
@@ -1178,8 +1187,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_does_not_register_invalid_workflow(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn it_does_not_register_invalid_workflow(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
         let session_id = ctx.session().id();
 
         let workflow = json!({
@@ -1205,7 +1215,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(workflow.to_string());
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 400);
 
@@ -1225,7 +1235,7 @@ mod tests {
 
     #[ge_context::test(tiling_spec = "test_download_all_metadata_zip_tiling_spec")]
     #[allow(clippy::too_many_lines)]
-    async fn test_download_all_metadata_zip(app_ctx: PostgresContext<NoTls>) {
+    async fn test_download_all_metadata_zip(app_ctx: ProPostgresContext<NoTls>) {
         fn zip_file_to_json(mut zip_file: ZipFile) -> serde_json::Value {
             let mut bytes = Vec::new();
             zip_file.read_to_end(&mut bytes).unwrap();
@@ -1233,7 +1243,10 @@ mod tests {
             serde_json::from_slice(&bytes).unwrap()
         }
 
-        let session_id = app_ctx.default_session_id().await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
 
@@ -1248,20 +1261,13 @@ mod tests {
             ),
         };
 
-        let workflow_id = app_ctx
-            .default_session_context()
-            .await
-            .unwrap()
-            .db()
-            .register_workflow(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
 
         // create dataset from workflow
         let req = test::TestRequest::get()
             .uri(&format!("/workflow/{workflow_id}/allMetadata/zip"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -1349,10 +1355,11 @@ mod tests {
 
     #[ge_context::test(tiling_spec = "dataset_from_workflow_task_success_tiling_spec")]
     #[allow(clippy::too_many_lines)]
-    async fn dataset_from_workflow_task_success(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn dataset_from_workflow_task_success(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
@@ -1398,7 +1405,7 @@ mod tests {
                 }
             }"#,
             );
-        let res = send_test_request(req, app_ctx.clone()).await;
+        let res = send_pro_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
 

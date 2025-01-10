@@ -13,7 +13,9 @@ use crate::datasets::DatasetName;
 use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::contexts::ProPostgresContext;
 use crate::pro::permissions::Permission;
+use crate::pro::permissions::PermissionDb;
 use crate::pro::permissions::Role;
+use crate::pro::util::tests::admin_login;
 use crate::projects::{
     CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
@@ -125,15 +127,15 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper<A: SimpleApplicationContext>(
-    app_ctx: &A,
+pub async fn register_ndvi_workflow_helper(
+    app_ctx: &ProPostgresContext<NoTls>,
 ) -> (Workflow, WorkflowId) {
     register_ndvi_workflow_helper_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper_with_cache_ttl<A: SimpleApplicationContext>(
-    app_ctx: &A,
+pub async fn register_ndvi_workflow_helper_with_cache_ttl(
+    app_ctx: &ProPostgresContext<NoTls>,
     cache_ttl: CacheTtlSeconds,
 ) -> (Workflow, WorkflowId) {
     let (_, dataset) = add_ndvi_to_datasets_with_cache_ttl(app_ctx, cache_ttl).await;
@@ -147,7 +149,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl<A: SimpleApplicationCo
         ),
     };
 
-    let session = app_ctx.default_session().await.unwrap();
+    let session = admin_login(app_ctx).await;
 
     let id = app_ctx
         .session_context(session)
@@ -159,9 +161,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl<A: SimpleApplicationCo
     (workflow, id)
 }
 
-pub async fn add_ndvi_to_datasets<A: SimpleApplicationContext>(
-    app_ctx: &A,
-) -> (DatasetId, NamedData) {
+pub async fn add_ndvi_to_datasets(app_ctx: &ProPostgresContext<NoTls>) -> (DatasetId, NamedData) {
     add_ndvi_to_datasets_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
 }
 
@@ -170,8 +170,8 @@ pub async fn add_ndvi_to_datasets<A: SimpleApplicationContext>(
 /// # Panics
 ///
 /// Panics if the default session context could not be created.
-pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
-    app_ctx: &A,
+pub async fn add_ndvi_to_datasets_with_cache_ttl(
+    app_ctx: &ProPostgresContext<NoTls>,
     cache_ttl: CacheTtlSeconds,
 ) -> (DatasetId, NamedData) {
     let dataset_name = DatasetName {
@@ -198,12 +198,28 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
         )),
     };
 
-    let db = &app_ctx.default_session_context().await.unwrap().db();
-    let dataset_id = db
+    let session = admin_login(app_ctx).await;
+    let ctx = app_ctx.session_context(session);
+    let dataset_id = ctx
+        .db()
         .add_dataset(ndvi.properties, ndvi.meta_data)
         .await
         .expect("dataset db access")
         .id;
+
+    ctx.db()
+        .add_permission(
+            Role::registered_user_role_id(),
+            dataset_id,
+            Permission::Read,
+        )
+        .await
+        .unwrap();
+
+    ctx.db()
+        .add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+        .await
+        .unwrap();
 
     let named_data = NamedData {
         namespace: dataset_name.namespace,
@@ -320,10 +336,12 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ne2_multiband_workflow<A: SimpleApplicationContext>(
-    app_ctx: &A,
+pub async fn register_ne2_multiband_workflow(
+    app_ctx: &ProPostgresContext<NoTls>,
 ) -> (Workflow, WorkflowId) {
-    let ctx = app_ctx.default_session_context().await.unwrap();
+    let session = admin_login(app_ctx).await;
+    let ctx = app_ctx.session_context(session);
+
     let red = add_file_definition_to_datasets(
         &ctx.db(),
         test_data!("dataset_defs/natural_earth_2_red.json"),
@@ -377,14 +395,23 @@ pub async fn register_ne2_multiband_workflow<A: SimpleApplicationContext>(
         ),
     };
 
-    let session = app_ctx.default_session().await.unwrap();
+    let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
-    let id = app_ctx
-        .session_context(session)
-        .db()
-        .register_workflow(workflow.clone())
-        .await
-        .unwrap();
+    for dataset_id in [red.id, green.id, blue.id] {
+        ctx.db()
+            .add_permission(
+                Role::registered_user_role_id(),
+                dataset_id,
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        ctx.db()
+            .add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+            .await
+            .unwrap();
+    }
 
     (workflow, id)
 }
