@@ -558,39 +558,6 @@ async fn dummy_handler() -> impl Responder {
     HttpResponse::Ok().body("Hey there!")
 }
 
-// pub async fn send_test_request<C: SimpleApplicationContext>(
-//     req: test::TestRequest,
-//     app_ctx: C,
-// ) -> ServiceResponse {
-//     let app = test::init_service(
-//         App::new()
-//             .app_data(web::Data::new(app_ctx))
-//             .wrap(OutputRequestId)
-//             .wrap(
-//                 middleware::ErrorHandlers::default()
-//                     .handler(http::StatusCode::NOT_FOUND, render_404)
-//                     .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
-//             )
-//             .wrap(TracingLogger::default())
-//             .configure(configure_extractors)
-//             .configure(handlers::layers::init_layer_routes::<C>)
-//             .configure(handlers::plots::init_plot_routes::<C>)
-//             .configure(handlers::projects::init_project_routes::<C>)
-//             .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
-//             .configure(handlers::upload::init_upload_routes::<C>)
-//             .configure(handlers::tasks::init_task_routes::<C>)
-//             .configure(handlers::wcs::init_wcs_routes::<C>)
-//             .configure(handlers::wfs::init_wfs_routes::<C>)
-//             .configure(handlers::wms::init_wms_routes::<C>)
-//             .configure(handlers::workflows::init_workflow_routes::<C>)
-//             .service(dummy_handler),
-//     )
-//     .await;
-//     test::call_service(&app, req.to_request())
-//         .await
-//         .map_into_boxed_body()
-// }
-
 pub async fn send_test_request(
     req: test::TestRequest,
     app_ctx: ProPostgresContext<NoTls>,
