@@ -195,7 +195,7 @@ macro_rules! span_fn {
                 tracing::Level::TRACE,
                 <$op>::TYPE_NAME,
                 path = %path,
-                query_counter = %query_counter
+                query_counter = %query_counter,
             )
         }
     };

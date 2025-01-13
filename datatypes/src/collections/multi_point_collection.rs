@@ -109,7 +109,7 @@ impl<'l> Iterator for MultiPointIterator<'l> {
     }
 }
 
-impl<'l> DoubleEndedIterator for MultiPointIterator<'l> {
+impl DoubleEndedIterator for MultiPointIterator<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.index >= self.length {
             return None;
@@ -136,7 +136,7 @@ impl<'l> DoubleEndedIterator for MultiPointIterator<'l> {
     }
 }
 
-impl<'l> ExactSizeIterator for MultiPointIterator<'l> {}
+impl ExactSizeIterator for MultiPointIterator<'_> {}
 
 impl<'l> IntoParallelIterator for MultiPointIterator<'l> {
     type Item = MultiPointRef<'l>;
@@ -202,7 +202,7 @@ impl<'l> Producer for MultiPointParIterator<'l> {
     }
 }
 
-impl<'l> IndexedParallelIterator for MultiPointParIterator<'l> {
+impl IndexedParallelIterator for MultiPointParIterator<'_> {
     fn len(&self) -> usize {
         self.0.len()
     }

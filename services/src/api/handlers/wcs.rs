@@ -14,13 +14,12 @@ use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialPartition2D,
 };
+use geoengine_datatypes::raster::GeoTransform;
 use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
-use geoengine_operators::engine::{CanonicOperatorName, ExecutionContext, WorkflowOperatorPath};
+use geoengine_operators::engine::{ExecutionContext, RasterOperator, WorkflowOperatorPath};
 use geoengine_operators::engine::{ResultDescriptor, SingleRasterOrVectorSource};
-use geoengine_operators::processing::{
-    InitializedRasterReprojection, Reprojection, ReprojectionParams,
-};
+use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use geoengine_operators::util::raster_stream_to_geotiff::{
     raster_stream_to_multiband_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
@@ -30,6 +29,7 @@ use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 use url::Url;
+use uuid::Uuid;
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -176,6 +176,7 @@ async fn wcs_capabilities_handler<C: ApplicationContext>(
         ("session_token" = [])
     )
 )]
+#[allow(clippy::too_many_lines)]
 async fn wcs_describe_coverage_handler<C: ApplicationContext>(
     workflow: web::Path<WorkflowId>,
     request: web::Query<DescribeCoverage>,
@@ -219,28 +220,43 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
     let spatial_reference: Option<SpatialReference> = result_descriptor.spatial_reference.into();
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
 
-    // TODO: give tighter bounds if possible
-    let area_of_use: SpatialPartition2D = spatial_reference.area_of_use_projected()?;
+    let resolution = result_descriptor
+        .resolution
+        .unwrap_or(SpatialResolution::zero_point_one());
 
-    let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) =
-        match spatial_reference_specification(&spatial_reference.proj_string()?)?
-            .axis_order
-            .ok_or(Error::AxisOrderingNotKnownForSrs {
-                srs_string: spatial_reference.srs_string(),
-            })? {
-            AxisOrder::EastNorth => (
-                area_of_use.lower_left().x,
-                area_of_use.lower_left().y,
-                area_of_use.upper_right().x,
-                area_of_use.upper_right().y,
-            ),
-            AxisOrder::NorthEast => (
-                area_of_use.lower_left().y,
-                area_of_use.lower_left().x,
-                area_of_use.upper_right().y,
-                area_of_use.upper_right().x,
-            ),
-        };
+    let pixel_size_x = resolution.x;
+    let pixel_size_y = -resolution.y;
+
+    let bbox = if let Some(bbox) = result_descriptor.bbox {
+        bbox
+    } else {
+        spatial_reference.area_of_use_projected()?
+    };
+
+    let axis_order = spatial_reference_specification(&spatial_reference.proj_string()?)?
+        .axis_order
+        .ok_or(Error::AxisOrderingNotKnownForSrs {
+            srs_string: spatial_reference.srs_string(),
+        })?;
+    let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) = match axis_order {
+        AxisOrder::EastNorth => (
+            bbox.lower_left().x,
+            bbox.lower_left().y,
+            bbox.upper_right().x,
+            bbox.upper_right().y,
+        ),
+        AxisOrder::NorthEast => (
+            bbox.lower_left().y,
+            bbox.lower_left().x,
+            bbox.upper_right().y,
+            bbox.upper_right().x,
+        ),
+    };
+
+    let geo_transform = GeoTransform::new(bbox.upper_left(), pixel_size_x, pixel_size_y);
+
+    let [raster_size_x, raster_size_y] =
+        *(geo_transform.lower_right_pixel_idx(&bbox) + [1, 1]).inner();
 
     let mock = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -259,15 +275,29 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
                         <ows:LowerCorner>{bbox_ll_0} {bbox_ll_1}</ows:LowerCorner>
                         <ows:UpperCorner>{bbox_ur_0} {bbox_ur_1}</ows:UpperCorner>
                     </ows:BoundingBox>
+                    <ows:BoundingBox crs="urn:ogc:def:crs:OGC:1.3:CRS:imageCRS" dimensions="2">
+                        <ows:LowerCorner>0 0</ows:LowerCorner>
+                        <ows:UpperCorner>{raster_size_y} {raster_size_x}</ows:UpperCorner>
+                    </ows:BoundingBox>
                     <wcs:GridCRS>
                         <wcs:GridBaseCRS>urn:ogc:def:crs:{srs_authority}::{srs_code}</wcs:GridBaseCRS>
                         <wcs:GridType>urn:ogc:def:method:WCS:1.1:2dGridIn2dCrs</wcs:GridType>
                         <wcs:GridOrigin>{origin_x} {origin_y}</wcs:GridOrigin>
-                        <wcs:GridOffsets>0 0.0 0.0 -0</wcs:GridOffsets>
+                        <wcs:GridOffsets>{pixel_size_x} 0.0 0.0 {pixel_size_y}</wcs:GridOffsets>
                         <wcs:GridCS>urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS</wcs:GridCS>
                     </wcs:GridCRS>
                 </wcs:SpatialDomain>
             </wcs:Domain>
+            <wcs:Range>
+                <wcs:Field>
+                    <wcs:Identifier>contents</wcs:Identifier>
+                    <wcs:Axis identifier="Bands">
+                        <wcs:AvailableKeys>
+                            <wcs:Key>{band_name}</wcs:Key>
+                        </wcs:AvailableKeys>
+                    </wcs:Axis>
+                </wcs:Field>
+            </wcs:Range>
             <wcs:SupportedCRS>{srs_authority}:{srs_code}</wcs:SupportedCRS>
             <wcs:SupportedFormat>image/tiff</wcs:SupportedFormat>
         </wcs:CoverageDescription>
@@ -276,12 +306,9 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
         workflow_id = identifiers,
         srs_authority = spatial_reference.authority(),
         srs_code = spatial_reference.code(),
-        origin_x = area_of_use.upper_left().x,
-        origin_y = area_of_use.upper_left().y,
-        bbox_ll_0 = bbox_ll_0,
-        bbox_ll_1 = bbox_ll_1,
-        bbox_ur_0 = bbox_ur_0,
-        bbox_ur_1 = bbox_ur_1,
+        origin_x = bbox.upper_left().x,
+        origin_y = bbox.upper_left().y,
+        band_name = result_descriptor.bands[0].name,
     );
 
     Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
@@ -396,15 +423,25 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Raster(operator),
             },
-        };
+        }
+        .boxed();
 
-        // create the inititalized operator directly, to avoid re-initializing everything
-        let irp = InitializedRasterReprojection::try_new_with_input(
-            CanonicOperatorName::from(&reprojected_workflow),
-            reprojection_params,
-            initialized,
-            execution_context.tiling_specification(),
-        )?;
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        // TODO: avoid re-initialization and re-use unprojected workflow. However, this requires updating all operator paths
+
+        // In order to check whether we need to inject a reprojection, we first need to initialize the
+        // original workflow. Then we can check the result projection. Previously, we then just wrapped
+        // the initialized workflow with an initialized reprojection. IMHO this is wrong because
+        // initialization propagates the workflow path down the children and appends a new segment for
+        // each level. So we can't re-use an already initialized workflow, because all the workflow path/
+        // operator names will be wrong. That's why I now build a new workflow with a reprojection and
+        // perform a full initialization. I only added the TODO because we did some optimization here
+        // which broke at some point when the workflow operator paths were introduced but no one noticed.
+
+        let irp = reprojected_workflow
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
 
         Box::new(irp)
     };
@@ -422,14 +459,24 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
             }
         };
 
+    // snap bbox to grid
+    let geo_transform = GeoTransform::new(
+        request_partition.upper_left(),
+        spatial_resolution.x,
+        -spatial_resolution.y,
+    );
+    let idx = geo_transform.lower_right_pixel_idx(&request_partition) + [1, 1];
+    let lower_right = geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(idx);
+    let snapped_partition = SpatialPartition2D::new(request_partition.upper_left(), lower_right)?;
+
     let query_rect = RasterQueryRectangle {
-        spatial_bounds: request_partition,
+        spatial_bounds: snapped_partition,
         time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
         spatial_resolution,
         attributes: BandSelection::first(), // TODO: support multi bands in API and set the selection here
     };
 
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(identifier.0, Uuid::new_v4())?;
 
     let (bytes, cache_hint) = call_on_generic_raster_processor_gdal_types!(processor, p =>
         raster_stream_to_multiband_geotiff_bytes(
@@ -615,7 +662,7 @@ mod tests {
         xmlns:ogc="http://www.opengis.net/ogc"
         xmlns:ows="http://www.opengis.net/ows/1.1"
         xmlns:gml="http://www.opengis.net/gml"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/api/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/api/wcs/1625f9b9-7408-58ab-9482-4d5fb0e3c6e4/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
         <wcs:CoverageDescription>
             <ows:Title>Workflow {workflow_id}</ows:Title>
             <wcs:Identifier>{workflow_id}</wcs:Identifier>
@@ -625,15 +672,29 @@ mod tests {
                         <ows:LowerCorner>-90 -180</ows:LowerCorner>
                         <ows:UpperCorner>90 180</ows:UpperCorner>
                     </ows:BoundingBox>
+                    <ows:BoundingBox crs="urn:ogc:def:crs:OGC:1.3:CRS:imageCRS" dimensions="2">
+                        <ows:LowerCorner>0 0</ows:LowerCorner>
+                        <ows:UpperCorner>3600 1800</ows:UpperCorner>
+                    </ows:BoundingBox>
                     <wcs:GridCRS>
                         <wcs:GridBaseCRS>urn:ogc:def:crs:EPSG::4326</wcs:GridBaseCRS>
                         <wcs:GridType>urn:ogc:def:method:WCS:1.1:2dGridIn2dCrs</wcs:GridType>
                         <wcs:GridOrigin>-180 90</wcs:GridOrigin>
-                        <wcs:GridOffsets>0 0.0 0.0 -0</wcs:GridOffsets>
+                        <wcs:GridOffsets>0.1 0.0 0.0 -0.1</wcs:GridOffsets>
                         <wcs:GridCS>urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS</wcs:GridCS>
                     </wcs:GridCRS>
                 </wcs:SpatialDomain>
             </wcs:Domain>
+            <wcs:Range>
+                <wcs:Field>
+                    <wcs:Identifier>contents</wcs:Identifier>
+                    <wcs:Axis identifier="Bands">
+                        <wcs:AvailableKeys>
+                            <wcs:Key>ndvi</wcs:Key>
+                        </wcs:AvailableKeys>
+                    </wcs:Axis>
+                </wcs:Field>
+            </wcs:Range>
             <wcs:SupportedCRS>EPSG:4326</wcs:SupportedCRS>
             <wcs:SupportedFormat>image/tiff</wcs:SupportedFormat>
         </wcs:CoverageDescription>

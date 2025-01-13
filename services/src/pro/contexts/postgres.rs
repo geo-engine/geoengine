@@ -32,16 +32,16 @@ use bb8_postgres::{
 };
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
-use geoengine_datatypes::util::Identifier;
 use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::ChunkByteSize;
-use geoengine_operators::meta::quota::{ComputationContext, QuotaChecker};
+use geoengine_operators::meta::quota::QuotaChecker;
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::info;
 use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use uuid::Uuid;
 
 // TODO: do not report postgres error details to user
 
@@ -299,7 +299,7 @@ where
         ProTaskManager::new(self.context.task_manager.clone(), self.session.clone())
     }
 
-    fn query_context(&self) -> Result<Self::QueryContext> {
+    fn query_context(&self, workflow: Uuid, computation: Uuid) -> Result<Self::QueryContext> {
         // TODO: load config only once
 
         Ok(QueryContextImpl::new_with_extensions(
@@ -309,7 +309,7 @@ where
             Some(
                 self.context
                     .quota
-                    .create_quota_tracking(&self.session, ComputationContext::new()),
+                    .create_quota_tracking(&self.session, workflow, computation),
             ),
             Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
         ))
@@ -448,7 +448,7 @@ mod tests {
     };
     use crate::pro::util::config::QuotaTrackingMode;
     use crate::pro::util::tests::mock_oidc::{mock_refresh_server, MockRefreshServerConfig};
-    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
+    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper, MockQuotaTracking};
     use crate::projects::{
         CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
         ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
@@ -3320,10 +3320,10 @@ mod tests {
             60,
         );
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
-        tracking.work_unit_done();
-        tracking.work_unit_done();
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
 
         let db = app_ctx.session_context(session).db();
 
@@ -3377,10 +3377,10 @@ mod tests {
             60,
         );
 
-        let tracking = quota.create_quota_tracking(&session, ComputationContext::new());
+        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
 
-        tracking.work_unit_done();
-        tracking.work_unit_done();
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
 
         let db = app_ctx.session_context(session).db();
 

@@ -72,7 +72,7 @@ impl<'de> Deserialize<'de> for DatasetName {
 
 struct DatasetNameDeserializeVisitor;
 
-impl<'de> Visitor<'de> for DatasetNameDeserializeVisitor {
+impl Visitor<'_> for DatasetNameDeserializeVisitor {
     type Value = DatasetName;
 
     /// always keep in sync with [`is_allowed_name_char`]

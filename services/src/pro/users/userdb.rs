@@ -1,14 +1,18 @@
 use crate::contexts::SessionId;
 use crate::error::Result;
+use crate::pro::api::handlers::users::UsageSummaryGranularity;
 use crate::pro::permissions::{RoleDescription, RoleId};
+use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
 use crate::pro::users::oidc::{OidcTokens, UserClaims};
 use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use crate::projects::{ProjectId, STRectangle};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::DateTime;
+use geoengine_operators::meta::quota::ComputationUnit;
 use oauth2::AccessToken;
 use snafu::Snafu;
 use tokio_postgres::Transaction;
+use uuid::Uuid;
 
 #[async_trait]
 pub trait UserAuth {
@@ -65,7 +69,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the session is invalid.
-    ///
     async fn logout(&self) -> Result<()>;
 
     /// Sets the session project
@@ -73,7 +76,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the session is invalid
-    ///
     async fn set_session_project(&self, project: ProjectId) -> Result<()>;
 
     /// Sets the session view
@@ -81,7 +83,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the session is invalid
-    ///
     async fn set_session_view(&self, view: STRectangle) -> Result<()>;
 
     /// Gets the current users total used quota. `session` is used to identify the user.
@@ -89,7 +90,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the session is invalid
-    ///
     async fn quota_used(&self) -> Result<u64>;
 
     /// Gets the current users available quota. `session` is used to identify the user.
@@ -97,7 +97,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the session is invalid
-    ///
     async fn quota_available(&self) -> Result<i64>;
 
     /// Increments a users quota by the given amount
@@ -105,8 +104,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the user is unknown
-    ///
-    // TODO: move this method to some AdminDb?
     async fn increment_quota_used(&self, user: &UserId, quota_used: u64) -> Result<()>;
 
     /// Increments multiple users quota by the given amount
@@ -114,20 +111,64 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if database cannot be accessed
-    ///
-    // TODO: move this method to some AdminDb?
     async fn bulk_increment_quota_used<I: IntoIterator<Item = (UserId, u64)> + Send>(
         &self,
         quota_used_updates: I,
     ) -> Result<()>;
+
+    /// Log quota usage (computation units)
+    ///
+    /// # Errors
+    ///
+    /// This call fails if database cannot be accessed
+    async fn log_quota_used<I: IntoIterator<Item = ComputationUnit> + Send>(
+        &self,
+        log: I,
+    ) -> Result<()>;
+
+    /// Retrieve the quota log for the current user
+    ///
+    /// # Errors
+    ///
+    /// This call
+    async fn quota_used_by_computations(
+        &self,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<ComputationQuota>>;
+
+    /// Retrieve the quota log details for a computation
+    ///
+    /// # Errors
+    ///
+    /// This call
+    async fn quota_used_by_computation(&self, computation_id: Uuid) -> Result<Vec<OperatorQuota>>;
+
+    /// Retrieve the quota log for data
+    ///
+    /// # Errors
+    ///
+    /// This call
+    async fn quota_used_on_data(&self, offset: u64, limit: u64) -> Result<Vec<DataUsage>>;
+
+    /// Retrieve the quota log for data (summary)
+    ///
+    /// # Errors
+    ///
+    /// This call
+    async fn quota_used_on_data_summary(
+        &self,
+        dataset: Option<String>,
+        granularity: UsageSummaryGranularity,
+        offset: u64,
+        limit: u64,
+    ) -> Result<Vec<DataUsageSummary>>;
 
     /// Gets a specific users used quota
     ///
     /// # Errors
     ///
     /// This call fails if the user is unknown
-    ///
-    /// // TODO: move this method to some AdminDb?
     async fn quota_used_by_user(&self, user: &UserId) -> Result<u64>;
 
     /// Gets a specific users available quota
@@ -135,8 +176,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the user is unknown
-    ///
-    /// // TODO: move this method to some AdminDb?
     async fn quota_available_by_user(&self, user: &UserId) -> Result<i64>;
 
     /// Updates a specific users available quota
@@ -144,8 +183,6 @@ pub trait UserDb: Send + Sync {
     /// # Errors
     ///
     /// This call fails if the user is unknown
-    ///
-    /// // TODO: move this method to some AdminDb?
     async fn update_quota_available_by_user(
         &self,
         user: &UserId,

@@ -64,7 +64,7 @@ impl<'de> Deserialize<'de> for MlModelName {
 
 struct MlModelNameDeserializeVisitor;
 
-impl<'de> Visitor<'de> for MlModelNameDeserializeVisitor {
+impl Visitor<'_> for MlModelNameDeserializeVisitor {
     type Value = MlModelName;
 
     /// always keep in sync with [`is_allowed_name_char`]

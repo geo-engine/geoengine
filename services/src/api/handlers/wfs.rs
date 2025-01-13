@@ -24,13 +24,11 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 use geoengine_operators::engine::{
-    CanonicOperatorName, QueryContext, ResultDescriptor, SingleRasterOrVectorSource,
-    TypedVectorQueryProcessor, VectorQueryProcessor,
+    QueryContext, ResultDescriptor, SingleRasterOrVectorSource, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor,
 };
 use geoengine_operators::engine::{QueryProcessor, WorkflowOperatorPath};
-use geoengine_operators::processing::{
-    InitializedVectorReprojection, Reprojection, ReprojectionParams,
-};
+use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::util::abortable_query_execution;
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use reqwest::Url;
@@ -40,6 +38,7 @@ use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 pub(crate) fn init_wfs_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -499,14 +498,23 @@ async fn wfs_feature_handler<C: ApplicationContext>(
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Vector(operator),
             },
-        };
+        }
+        .boxed();
 
-        // create the inititalized operator directly, to avoid re-initializing everything
-        let ivp = InitializedVectorReprojection::try_new_with_input(
-            CanonicOperatorName::from(&reprojected_workflow),
-            reprojection_params,
-            initialized,
-        )?;
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        // TODO: avoid re-initialization and re-use unprojected workflow.
+        // In order to check whether we need to inject a reprojection, we first need to initialize the
+        // original workflow. Then we can check the result projection. Previously, we then just wrapped
+        // the initialized workflow with an initialized reprojection. IMHO this is wrong because
+        // initialization propagates the workflow path down the children and appends a new segment for
+        // each level. So we can't re-use an already initialized workflow, because all the workflow path/
+        // operator names will be wrong. That's why I now build a new workflow with a reprojection and
+        // perform a full initialization. I only added the TODO because we did some optimization here
+        // which broke at some point when the workflow operator paths were introduced but no one noticed.
+        let ivp = reprojected_workflow
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
 
         Box::new(ivp)
     };
@@ -522,7 +530,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
             .map_or_else(SpatialResolution::zero_point_one, |r| r.0),
         attributes: ColumnSelection::all(),
     };
-    let query_ctx = ctx.query_context()?;
+    let query_ctx = ctx.query_context(type_names.0, Uuid::new_v4())?;
 
     let (json, cache_hint) = match processor {
         TypedVectorQueryProcessor::Data(p) => {

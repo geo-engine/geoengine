@@ -68,7 +68,7 @@ CREATE TABLE pro_layer_providers (
     priority smallint NOT NULL DEFAULT 0
 );
 
--- TODO: distinguish between roles that are (correspond to) users 
+-- TODO: distinguish between roles that are (correspond to) users
 --       and roles that are not
 
 -- TODO: integrity constraint for roles that correspond to users
@@ -261,3 +261,15 @@ FROM user_roles AS r
 INNER JOIN permissions AS p ON (
     r.role_id = p.role_id AND p.ml_model_id IS NOT NULL
 );
+
+CREATE TABLE quota_log (
+    timestamp timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_id uuid NOT NULL,
+    workflow_id uuid NOT NULL,
+    computation_id uuid NOT NULL,
+    operator_name text NOT NULL,
+    operator_path text NOT NULL,
+    data text
+);
+
+CREATE INDEX ON quota_log (user_id, timestamp, computation_id);
