@@ -2837,16 +2837,49 @@ mod tests {
         Ok(())
     }
 
-    #[ge_context::test]
-    async fn it_lists_layers(app_ctx: ProPostgresContext<NoTls>) {
-        {
-            // TODO: better way to get to the root of the project
+    // TODO: better way to get to the root of the project
+    struct TestWorkdirChanger {
+        package_dir: &'static str,
+        modified: bool,
+    }
+
+    impl TestWorkdirChanger {
+        fn go_to_workspace(package_dir: &'static str) -> Self {
             let mut working_dir = std::env::current_dir().unwrap();
-            if working_dir.ends_with("services") {
-                working_dir.pop();
+
+            if !working_dir.ends_with(package_dir) {
+                return Self {
+                    package_dir,
+                    modified: false,
+                };
             }
+
+            working_dir.pop();
+
+            std::env::set_current_dir(working_dir).unwrap();
+
+            Self {
+                package_dir,
+                modified: true,
+            }
+        }
+    }
+
+    impl Drop for TestWorkdirChanger {
+        fn drop(&mut self) {
+            if !self.modified {
+                return;
+            }
+
+            let mut working_dir = std::env::current_dir().unwrap();
+            working_dir.push(self.package_dir);
             std::env::set_current_dir(working_dir).unwrap();
         }
+    }
+
+    #[ge_context::test(test_execution = "serial")]
+    async fn it_lists_layers(app_ctx: ProPostgresContext<NoTls>) {
+        let changed_workdir = TestWorkdirChanger::go_to_workspace("services");
 
         let session = admin_login(&app_ctx).await;
 
@@ -2873,6 +2906,8 @@ mod tests {
                 "layer_styles".to_string() // TOOO: remove once internal/system layers are hidden
             ]
         );
+
+        drop(changed_workdir);
     }
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
