@@ -493,42 +493,25 @@ fn default_time_from_config() -> TimeInterval {
 
 #[cfg(test)]
 mod tests {
-    use crate::contexts::{ApplicationContext, Session, SessionContext};
+    use crate::contexts::Session;
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::ge_context;
     use crate::pro::users::UserAuth;
-    use crate::pro::util::tests::add_ndvi_to_datasets;
+    use crate::pro::util::tests::register_ndvi_workflow_helper;
     use crate::util::tests::{read_body_string, send_test_request};
-    use crate::workflows::registry::WorkflowRegistry;
-    use crate::workflows::workflow::Workflow;
     use actix_web::http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
-    use geoengine_operators::engine::{RasterOperator, TypedOperator};
-    use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
     async fn get_capabilities(app_ctx: ProPostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
-        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let params = &[
             ("service", "WCS"),
@@ -609,23 +592,10 @@ mod tests {
     #[ge_context::test]
     async fn describe_coverage(app_ctx: ProPostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
-        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let params = &[
             ("service", "WCS"),
@@ -695,23 +665,10 @@ mod tests {
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
-        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let params = &[
             ("service", "WCS"),
@@ -750,23 +707,10 @@ mod tests {
     #[ge_context::test(tiling_spec = "tiling_spec")]
     async fn it_sets_cache_control_header(app_ctx: ProPostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
-        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let params = &[
             ("service", "WCS"),
