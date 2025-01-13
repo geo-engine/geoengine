@@ -79,10 +79,12 @@ impl Resource {
             }
             Resource::MlModel(model_name) => {
                 let actual_name = model_name.into();
-                let model_id_option = db
-                    .resolve_model_name_to_id(&actual_name)
-                    .await
-                    .map_err(|_| error::Error::RoleNotAssigned)?; // TODO: use a matching error here!
+                let model_id_option =
+                    db.resolve_model_name_to_id(&actual_name)
+                        .await
+                        .map_err(|e| error::Error::MachineLearning {
+                            source: Box::new(e),
+                        })?; // should prob. also map to UnknownResource oder something like that
                 model_id_option
                     .ok_or(error::Error::UnknownResource {
                         kind: "MlModel".to_owned(),

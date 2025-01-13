@@ -516,6 +516,12 @@ pub enum Error {
         kind: String,
         name: String,
     },
+
+    #[snafu(display("MachineLearning error: {}", source))]
+    MachineLearning {
+        // TODO: make `source: MachineLearningError`, once pro features is removed
+        source: Box<dyn ErrorSource>,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
