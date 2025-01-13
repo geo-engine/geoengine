@@ -1295,7 +1295,7 @@ pub async fn list_volume_file_layers_handler<C: ApplicationContext>(
 #[utoipa::path(
     tag = "Datasets",
     post,
-    path = "/dataset/public", 
+    path = "/dataset", 
     request_body = CreateDataset,
     responses(
         (status = 200, response = DatasetNameResponse),
