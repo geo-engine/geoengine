@@ -489,12 +489,11 @@ mod tests {
     use crate::pro::contexts::ProPostgresContext;
     use crate::pro::ge_context;
     use crate::pro::users::UserAuth;
-    use crate::pro::util::tests::{add_ndvi_to_datasets, admin_login};
+    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper_with_cache_ttl,
         register_ne2_multiband_workflow, send_test_request, MockQueryContext,
     };
-    use crate::workflows::workflow::Workflow;
     use actix_http::header::{self, CONTENT_TYPE};
     use actix_web::dev::ServiceResponse;
     use actix_web::http::Method;
@@ -505,9 +504,9 @@ mod tests {
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::assert_image_equals;
     use geoengine_operators::engine::{
-        ExecutionContext, RasterQueryProcessor, RasterResultDescriptor, TypedOperator,
+        ExecutionContext, RasterQueryProcessor, RasterResultDescriptor,
     };
-    use geoengine_operators::source::{GdalSource, GdalSourceParameters, GdalSourceProcessor};
+    use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
     use std::marker::PhantomData;
@@ -583,19 +582,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::with_uri(&format!(
             "/wms/{id}?request=GetCapabilities&service=WMS"
@@ -708,19 +695,7 @@ mod tests {
 
         let session_id = ctx.session().id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::with_uri(path.unwrap_or(&format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id = id.to_string())))
                 .method(method)
@@ -758,23 +733,10 @@ mod tests {
     #[ge_context::test]
     async fn get_map_ndvi(app_ctx: ProPostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
-        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx).await;
@@ -801,19 +763,7 @@ mod tests {
 
         let session_id = ctx.session().id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={id}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
@@ -860,19 +810,7 @@ mod tests {
 
         let session_id = ctx.session().id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -1064,23 +1002,10 @@ mod tests {
     #[ge_context::test]
     async fn it_zoomes_very_far(app_ctx: ProPostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
-        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -1137,23 +1062,10 @@ mod tests {
     #[ge_context::test]
     async fn default_error(app_ctx: ProPostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
-        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -1221,23 +1133,10 @@ mod tests {
     #[ge_context::test]
     async fn json_error(app_ctx: ProPostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
-        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -1294,23 +1193,10 @@ mod tests {
     #[ge_context::test]
     async fn it_sets_cache_control_header_no_cache(app_ctx: ProPostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
-        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
-        let (_gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, true, true).await;
-        let workflow = Workflow {
-            operator: TypedOperator::Raster(
-                GdalSource {
-                    params: GdalSourceParameters {
-                        data: gdal_dataset_name,
-                    },
-                }
-                .boxed(),
-            ),
-        };
-        let id = ctx.db().register_workflow(workflow).await.unwrap();
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx).await;
