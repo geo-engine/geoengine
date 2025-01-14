@@ -669,12 +669,16 @@ fn default_time_from_config() -> TimeInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::{DataId, DatasetId};
     use crate::api::model::responses::ErrorResponse;
-    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
-    use crate::datasets::storage::{DatasetDefinition, DatasetStore};
-    use crate::ge_context;
-    use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
+    use crate::contexts::Session;
+    use crate::datasets::DatasetIdAndName;
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
+    use crate::pro::users::UserAuth;
+    use crate::util::tests::{
+        add_pro_file_definition_to_datasets_as_admin, check_allowed_http_methods, read_body_string,
+        send_test_request,
+    };
     use crate::workflows::workflow::Workflow;
     use actix_web::dev::ServiceResponse;
     use actix_web::http::header;
@@ -686,17 +690,15 @@ mod tests {
     use geoengine_operators::source::CsvSourceParameters;
     use geoengine_operators::source::{CsvGeometrySpecification, CsvSource, CsvTimeSpecification};
     use serde_json::json;
-    use std::fs;
     use std::io::{Seek, SeekFrom, Write};
-    use std::path::Path;
-    use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
-    use tokio_postgres::{NoTls, Socket};
+    use tokio_postgres::NoTls;
     use xml::ParserConfig;
 
     #[ge_context::test]
-    async fn mock_test(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    async fn mock_test(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let req = test::TestRequest::get()
             .uri("/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?request=GetFeature&service=WFS&version=2.0.0&typeNames=93d6785e-5eea-4e0e-8074-e7f78733d988&bbox=1,2,3,4")
@@ -786,7 +788,7 @@ mod tests {
     }
 
     async fn get_capabilities_test_helper(
-        app_ctx: PostgresContext<NoTls>,
+        app_ctx: ProPostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
@@ -802,7 +804,10 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let session_id = app_ctx.default_session_id().await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -818,14 +823,7 @@ x;y
             })),
         };
 
-        let workflow_id = app_ctx
-            .default_session_context()
-            .await
-            .unwrap()
-            .db()
-            .register_workflow(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
 
         let req = test::TestRequest::with_uri(&format!(
             "/wfs/{workflow_id}?request=GetCapabilities&service=WFS"
@@ -836,7 +834,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_capabilities(app_ctx: PostgresContext<NoTls>) {
+    async fn get_capabilities(app_ctx: ProPostgresContext<NoTls>) {
         let res = get_capabilities_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
@@ -851,7 +849,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_capabilities_invalid_method(app_ctx: PostgresContext<NoTls>) {
+    async fn get_capabilities_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| get_capabilities_test_helper(app_ctx.clone(), method),
             &[Method::GET],
@@ -860,7 +858,7 @@ x;y
     }
 
     async fn get_feature_registry_test_helper(
-        app_ctx: PostgresContext<NoTls>,
+        app_ctx: ProPostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
@@ -876,8 +874,10 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -900,7 +900,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_feature_registry(app_ctx: PostgresContext<NoTls>) {
+    async fn get_feature_registry(app_ctx: ProPostgresContext<NoTls>) {
         let res = get_feature_registry_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
@@ -951,7 +951,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_feature_registry_invalid_method(app_ctx: PostgresContext<NoTls>) {
+    async fn get_feature_registry_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| get_feature_registry_test_helper(app_ctx.clone(), method),
             &[Method::GET],
@@ -960,9 +960,10 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_feature_registry_missing_fields(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    async fn get_feature_registry_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let req = test::TestRequest::get().uri(
             "/wfs/93d6785e-5eea-4e0e-8074-e7f78733d988?request=GetFeature&service=WFS&version=2.0.0&bbox=-90,-180,90,180&crs=EPSG:4326",
@@ -979,7 +980,7 @@ x;y
     }
 
     async fn get_feature_json_test_helper(
-        app_ctx: PostgresContext<NoTls>,
+        app_ctx: ProPostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
@@ -995,7 +996,10 @@ x;y
         .unwrap();
         temp_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let session_id = app_ctx.default_session_id().await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(Box::new(CsvSource {
@@ -1011,14 +1015,7 @@ x;y
             })),
         };
 
-        let workflow_id = app_ctx
-            .default_session_context()
-            .await
-            .unwrap()
-            .db()
-            .register_workflow(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
 
         let params = &[
             ("request", "GetFeature"),
@@ -1039,7 +1036,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_feature_json(app_ctx: PostgresContext<NoTls>) {
+    async fn get_feature_json(app_ctx: ProPostgresContext<NoTls>) {
         let res = get_feature_json_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
@@ -1090,7 +1087,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_feature_json_invalid_method(app_ctx: PostgresContext<NoTls>) {
+    async fn get_feature_json_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| get_feature_json_test_helper(app_ctx.clone(), method),
             &[Method::GET],
@@ -1099,9 +1096,10 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_feature_json_missing_fields(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    async fn get_feature_json_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let params = &[
             ("request", "GetFeature"),
@@ -1127,29 +1125,6 @@ x;y
         .await;
     }
 
-    async fn add_dataset_definition_to_datasets<Tls>(
-        app_ctx: &PostgresContext<Tls>,
-        dataset_definition_path: &Path,
-    ) -> DatasetId
-    where
-        Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + std::fmt::Debug + 'static,
-        <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-        <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-        <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-    {
-        let data = fs::read_to_string(dataset_definition_path).unwrap();
-        let data = data.replace("test_data/", test_data!("./").to_str().unwrap());
-        let def: DatasetDefinition = serde_json::from_str(&data).unwrap();
-
-        let db = app_ctx.default_session_context().await.unwrap().db();
-
-        db.add_dataset(def.properties, def.meta_data)
-            .await
-            .unwrap()
-            .id
-            .into()
-    }
-
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn raster_vector_join_tiling_spec() -> TilingSpecification {
         TilingSpecification {
@@ -1160,19 +1135,28 @@ x;y
 
     #[ge_context::test(tiling_spec = "raster_vector_join_tiling_spec")]
     #[allow(clippy::too_many_lines)]
-    async fn raster_vector_join(app_ctx: PostgresContext<NoTls>) {
-        let session_id = app_ctx.default_session_id().await;
+    async fn raster_vector_join(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let _ndvi_id: DataId =
-            add_dataset_definition_to_datasets(&app_ctx, test_data!("dataset_defs/ndvi.json"))
-                .await
-                .into();
-        let _points_with_time_id: DataId = add_dataset_definition_to_datasets(
+        let session_id = session.id();
+
+        let DatasetIdAndName {
+            id: _,
+            name: ndvi_name,
+        } = add_pro_file_definition_to_datasets_as_admin(
+            &app_ctx,
+            test_data!("dataset_defs/ndvi.json"),
+        )
+        .await;
+        let DatasetIdAndName {
+            id: _,
+            name: points_with_time_name,
+        } = add_pro_file_definition_to_datasets_as_admin(
             &app_ctx,
             test_data!("dataset_defs/points_with_time.json"),
         )
-        .await
-        .into();
+        .await;
 
         let workflow = serde_json::json!({
             "type": "Vector",
@@ -1190,14 +1174,14 @@ x;y
                     "vector": {
                         "type": "OgrSource",
                         "params": {
-                            "data": "points_with_time",
+                            "data": points_with_time_name,
                             "attributeProjection": null
                         }
                     },
                     "rasters": [{
                         "type": "GdalSource",
                         "params": {
-                            "data": "ndvi",
+                            "data": ndvi_name,
                         }
                     }],
                 }
@@ -1208,14 +1192,7 @@ x;y
 
         let workflow = serde_json::from_str(&json).unwrap();
 
-        let workflow_id = app_ctx
-            .default_session_context()
-            .await
-            .unwrap()
-            .db()
-            .register_workflow(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
 
         let params = &[
             ("request", "GetFeature"),
@@ -1261,7 +1238,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn it_sets_cache_control_header(app_ctx: PostgresContext<NoTls>) {
+    async fn it_sets_cache_control_header(app_ctx: ProPostgresContext<NoTls>) {
         let res = get_feature_json_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);

@@ -1,5 +1,6 @@
 use super::migrations::{pro_migrations, ProMigrationImpl};
 use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
+use crate::api::cli::add_datasets_from_directory;
 use crate::api::cli::add_providers_from_directory;
 use crate::api::model::services::Volume;
 use crate::contexts::{
@@ -12,7 +13,6 @@ use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
 use crate::machine_learning::error::MachineLearningError;
 use crate::machine_learning::name::MlModelName;
-use crate::pro::api::cli::add_datasets_from_directory;
 use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
     add_pro_providers_from_directory,

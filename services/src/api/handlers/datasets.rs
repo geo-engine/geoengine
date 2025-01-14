@@ -17,6 +17,10 @@ use crate::{
         DatasetName,
     },
     error::{self, Error, Result},
+    pro::{
+        contexts::{ProApplicationContext, ProGeoEngineDb},
+        permissions::{Permission, PermissionDb, Role},
+    },
     projects::Symbology,
     util::{
         config::{get_config_element, Data},
@@ -31,6 +35,7 @@ use gdal::{
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
+    error::BoxedResultExt,
     primitives::{
         CacheTtlSeconds, FeatureDataType, Measurement, TimeInterval, VectorQueryRectangle,
     },
@@ -58,7 +63,8 @@ use utoipa::{ToResponse, ToSchema};
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ApplicationContext,
+    C: ProApplicationContext,
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
     C::Session: FromRequest,
 {
     cfg.service(
@@ -472,166 +478,6 @@ pub async fn update_dataset_provenance_handler<C: ApplicationContext>(
     Ok(HttpResponse::Ok())
 }
 
-/// Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume.
-#[utoipa::path(
-    tag = "Datasets",
-    post,
-    path = "/dataset",
-    request_body(content = CreateDataset, examples(
-        ("Germany Border" = (value = json!({
-            "dataPath": {
-                "upload": "420b06de-0a7e-45cb-9c1c-ea901b46ab69",
-            },
-            "definition": {
-                "properties": {
-                    "name": "germany_border",
-                    "displayName": "Germany Border",
-                    "description": "The Outline of Germany",
-                    "sourceOperator": "OgrSource"
-                },
-                "metaData": {
-                    "type": "OgrMetaData",
-                    "loadingInfo": {
-                        "fileName": "germany_polygon.gpkg",
-                        "layerName": "test_germany",
-                        "dataType": "MultiPolygon",
-                        "time": {
-                            "type": "none"
-                        },
-                        "columns": {
-                            "x": "",
-                            "y": null,
-                            "text": [],
-                            "float": [],
-                            "int": [],
-                            "bool": [],
-                            "datetime": [],
-                        },
-                        "forceOgrTimeFilter": false,
-                        "onError": "ignore"
-                    },
-                    "resultDescriptor": {
-                        "dataType": "MultiPolygon",
-                        "spatialReference": "EPSG:4326",
-                        "columns": {}
-                    }
-                }
-            }
-        }))),
-        ("Plain Data" = (value = json!({
-            "dataPath": {
-                "upload": "f3bd61ef-d9ce-471c-89a1-46b5f7295886"
-            },
-            "definition": {
-                "properties": {
-                    "name": "plain_data",
-                    "displayName": "Plain Data",
-                    "description": "Demo Dataset",
-                    "sourceOperator": "OgrSource"
-                },
-                "metaData": {
-                    "type": "OgrMetaData",
-                    "loadingInfo": {
-                        "fileName": "plain_data.csv",
-                        "layerName": "plain_data",
-                        "dataType": "Data",
-                        "time": {
-                            "type": "none"
-                        },
-                        "columns": {
-                            "x": "",
-                            "y": null,
-                            "text": [],
-                            "float": [],
-                            "int": ["a"]
-                        },
-                        "forceOgrTimeFilter": false,
-                        "onError": "abort"
-                    },
-                    "resultDescriptor": {
-                        "dataType": "Data",
-                        "spatialReference": "EPSG:4326",
-                        "columns": {
-                            "a": {
-                                "dataType": "int",
-                                "measurement": {
-                                    "type": "unitless"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }))))
-    ),
-    responses(
-        (status = 200, response = DatasetNameResponse),
-        (status = 400, description = "Bad request", body = ErrorResponse, examples(
-            ("Body is invalid json" = (value = json!({
-                "error": "BodyDeserializeError",
-                "message": "expected `,` or `}` at line 13 column 7"
-            }))),
-            ("Failed to read body" = (value = json!({
-                "error": "Payload",
-                "message": "Error that occur during reading payload: Can not decode content-encoding."
-            }))),
-            ("Referenced an unknown upload" = (value = json!({
-                "error": "UploadNotFound",
-                "message": "UploadNotFound: UnknownUploadId"
-            }))),
-            ("Normal user tried to create dataset from a volume" = (value = json!({
-                "error": "OnlyAdminsCanCreateDatasetFromVolume",
-                "message": "Only admins can create dataset from volume"
-            }))),
-            ("Admin tried to create dataset from an upload" = (value = json!({
-                "error": "AdminsCannotCreateDatasetFromUpload",
-                "message": "Admins cannot create dataset from upload"
-            }))),
-            ("Filepath in metadata is invalid" = (value = json!({
-                "error": "CannotResolveUploadFilePath",
-                "message": "CannotResolveUploadFilePath: PathIsNotAFile"
-            }))),
-            ("Referenced an unknown volume" = (value = json!({
-                "error": "UnknownVolume",
-                "message": "Unknown volume"
-            })))
-        )),
-        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse),
-        (status = 413, response = crate::api::model::responses::PayloadTooLargeResponse),
-        (status = 415, response = crate::api::model::responses::UnsupportedMediaTypeForJsonResponse),
-        (status = 500, description = "Internal server error", body = ErrorResponse, examples(
-            ("Failed to access database" = (value = json!({
-                "error": "DatabaseAccessError",
-                "message": "DatabaseAccessError: connection closed"
-            }))),
-            ("Cannot access config" = (value = json!({
-                "error": "CannotAccessConfig",
-                "message": "CannotAccessConfig: ConfigLockFailed"
-            })))
-        ))
-    ),
-    security(
-        ("session_token" = [])
-    )
-)]
-pub async fn create_dataset_handler<C: ApplicationContext>(
-    session: C::Session,
-    app_ctx: web::Data<C>,
-    create: web::Json<CreateDataset>,
-) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError> {
-    let create = create.into_inner();
-    match create {
-        CreateDataset {
-            data_path: DataPath::Upload(upload),
-            definition,
-        } => create_upload_dataset(session, app_ctx, upload, definition).await,
-        CreateDataset {
-            data_path: DataPath::Volume(volume),
-            definition,
-        } => create_volume_dataset(session, app_ctx, volume, definition).await,
-    }
-}
-
 pub async fn create_upload_dataset<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
@@ -650,36 +496,6 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
         .add_dataset(definition.properties.into(), definition.meta_data.into())
         .await
         .context(CannotCreateDataset)?;
-
-    Ok(web::Json(result.name.into()))
-}
-
-async fn create_volume_dataset<C: ApplicationContext>(
-    session: C::Session,
-    app_ctx: web::Data<C>,
-    volume_name: VolumeName,
-    mut definition: DatasetDefinition,
-) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError> {
-    let volumes = get_config_element::<Data>()
-        .context(CannotAccessConfig)?
-        .volumes;
-    let volume_path = volumes
-        .get(&volume_name)
-        .ok_or(CreateDatasetError::UnknownVolume)?;
-    let volume = Volume {
-        name: volume_name,
-        path: volume_path.clone(),
-    };
-
-    adjust_meta_data_path(&mut definition.meta_data, &volume)
-        .context(CannotResolveUploadFilePath)?;
-
-    let db = app_ctx.session_context(session).db();
-
-    let result = db
-        .add_dataset(definition.properties.into(), definition.meta_data.into())
-        .await
-        .context(DatabaseAccess)?;
 
     Ok(web::Json(result.name.into()))
 }
@@ -1473,6 +1289,89 @@ pub async fn list_volume_file_layers_handler<C: ApplicationContext>(
     Ok(web::Json(VolumeFileLayersResponse { layers }))
 }
 
+/// Creates a new dataset referencing files.
+/// Users can reference previously uploaded files.
+/// Admins can reference files from a volume.
+#[utoipa::path(
+    tag = "Datasets",
+    post,
+    path = "/dataset", 
+    request_body = CreateDataset,
+    responses(
+        (status = 200, response = DatasetNameResponse),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn create_dataset_handler<C: ProApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    create: web::Json<CreateDataset>,
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let create = create.into_inner();
+    match create {
+        CreateDataset {
+            data_path: DataPath::Volume(upload),
+            definition,
+        } => create_system_dataset(session, app_ctx, upload, definition).await,
+        CreateDataset {
+            data_path: DataPath::Upload(volume),
+            definition,
+        } => create_upload_dataset(session, app_ctx, volume, definition).await,
+    }
+}
+
+async fn create_system_dataset<C: ProApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    volume_name: VolumeName,
+    mut definition: DatasetDefinition,
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError>
+where
+    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+{
+    let volumes = get_config_element::<Data>()
+        .context(CannotAccessConfig)?
+        .volumes;
+    let volume_path = volumes
+        .get(&volume_name)
+        .ok_or(CreateDatasetError::UnknownVolume)?;
+    let volume = Volume {
+        name: volume_name,
+        path: volume_path.clone(),
+    };
+
+    adjust_meta_data_path(&mut definition.meta_data, &volume)
+        .context(CannotResolveUploadFilePath)?;
+
+    let db = app_ctx.session_context(session).db();
+
+    let dataset = db
+        .add_dataset(definition.properties.into(), definition.meta_data.into())
+        .await
+        .context(CannotCreateDataset)?;
+
+    db.add_permission(
+        Role::registered_user_role_id(),
+        dataset.id,
+        Permission::Read,
+    )
+    .await
+    .boxed_context(crate::error::PermissionDb)
+    .context(DatabaseAccess)?;
+
+    db.add_permission(Role::anonymous_role_id(), dataset.id, Permission::Read)
+        .await
+        .boxed_context(crate::error::PermissionDb)
+        .context(DatabaseAccess)?;
+
+    Ok(web::Json(dataset.name.into()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1480,17 +1379,21 @@ mod tests {
     use crate::api::model::responses::datasets::DatasetNameResponse;
     use crate::api::model::responses::IdResponse;
     use crate::api::model::services::{DatasetDefinition, Provenance};
-    use crate::contexts::{PostgresContext, Session, SessionId, SimpleApplicationContext};
+    use crate::contexts::{Session, SessionId};
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::{UploadId, VolumeName};
     use crate::datasets::DatasetIdAndName;
     use crate::error::Result;
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
+    use crate::pro::users::UserAuth;
+    use crate::pro::util::tests::admin_login;
     use crate::projects::{PointSymbology, RasterSymbology, Symbology};
+    use crate::test_data;
     use crate::util::tests::{
-        add_ndvi_to_datasets, read_body_json, read_body_string, send_test_request,
+        add_pro_file_definition_to_datasets, read_body_json, read_body_string, send_test_request,
         MockQueryContext, SetMultipartBody, TestDataUploads,
     };
-    use crate::{ge_context, test_data};
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -1515,10 +1418,9 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_list_datasets(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-
-        let session_id = app_ctx.default_session_id().await;
+    async fn test_list_datasets(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::MultiPoint,
@@ -1602,7 +1504,7 @@ mod tests {
                 .unwrap()
             ))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
@@ -1666,8 +1568,8 @@ mod tests {
         );
     }
 
-    async fn upload_ne_10m_ports_files<C: SimpleApplicationContext>(
-        app_ctx: C,
+    async fn upload_ne_10m_ports_files(
+        app_ctx: ProPostgresContext<NoTls>,
         session_id: SessionId,
     ) -> Result<UploadId> {
         let files = vec![
@@ -1696,8 +1598,8 @@ mod tests {
         Ok(upload.id)
     }
 
-    async fn construct_dataset_from_upload<C: SimpleApplicationContext>(
-        app_ctx: C,
+    pub async fn construct_dataset_from_upload(
+        app_ctx: ProPostgresContext<NoTls>,
         upload_id: UploadId,
         session_id: SessionId,
     ) -> DatasetName {
@@ -1707,7 +1609,7 @@ mod tests {
             },
             "definition": {
                 "properties": {
-                    "name": "uploaded_ne_10m_ports",
+                    "name": null,
                     "displayName": "Uploaded Natural Earth 10m Ports",
                     "description": "Ports from Natural Earth",
                     "sourceOperator": "OgrSource"
@@ -1778,10 +1680,9 @@ mod tests {
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .append_header((header::CONTENT_TYPE, "application/json"))
             .set_json(s);
         let res = send_test_request(req, app_ctx).await;
-        assert_eq!(res.status(), 200, "{res:?}");
+        assert_eq!(res.status(), 200, "response: {res:?}");
 
         let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
         dataset_name
@@ -1804,81 +1705,9 @@ mod tests {
         .map_err(Into::into)
     }
 
-    fn ctx_tiling_spec_600x600() -> TilingSpecification {
-        TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
-            tile_size_in_pixels: GridShape2D::new([600, 600]),
-        }
-    }
-
-    #[ge_context::test(tiling_spec = "ctx_tiling_spec_600x600")]
-    async fn create_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
-
-        let session_id = app_ctx.default_session_id().await;
-
-        let ctx = app_ctx.default_session_context().await?;
-
-        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
-        test_data.uploads.push(upload_id);
-
-        let _dataset_id =
-            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
-        let exe_ctx = ctx.execution_context()?;
-
-        let source = make_ogr_source(
-            &exe_ctx,
-            NamedData {
-                namespace: None,
-                provider: None,
-                name: "uploaded_ne_10m_ports".to_string(),
-            },
-        )
-        .await?;
-
-        let query_processor = source.query_processor()?.multi_point().unwrap();
-        let query_ctx = ctx.mock_query_context()?;
-
-        let query = query_processor
-            .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
-                &query_ctx,
-            )
-            .await?;
-
-        let result: Vec<MultiPointCollection> = query.try_collect().await?;
-
-        let coords = result[0].coordinates();
-        assert_eq!(coords.len(), 10);
-        assert_eq!(
-            coords,
-            &[
-                [2.933_686_69, 51.23].into(),
-                [3.204_593_64_f64, 51.336_388_89].into(),
-                [4.651_413_428, 51.805_833_33].into(),
-                [4.11, 51.95].into(),
-                [4.386_160_188, 50.886_111_11].into(),
-                [3.767_373_38, 51.114_444_44].into(),
-                [4.293_757_362, 51.297_777_78].into(),
-                [1.850_176_678, 50.965_833_33].into(),
-                [2.170_906_949, 51.021_666_67].into(),
-                [4.292_873_969, 51.927_222_22].into(),
-            ]
-        );
-
-        Ok(())
-    }
-
     #[ge_context::test]
-    async fn it_creates_system_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-
-        let session_id = ctx.session().id();
+    async fn it_creates_system_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let volume = VolumeName("test_data".to_string());
 
@@ -1907,7 +1736,7 @@ mod tests {
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
         let res = send_test_request(req, app_ctx.clone()).await;
@@ -1919,7 +1748,7 @@ mod tests {
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
 
@@ -2419,10 +2248,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn get_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-
-        let session_id = ctx.session().id();
+    async fn get_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -2468,9 +2296,9 @@ mod tests {
         } = db.add_dataset(ds.into(), meta).await?;
 
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/{id}"))
+            .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
@@ -2504,11 +2332,10 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_suggests_metadata(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+    async fn it_suggests_metadata(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let body = vec![(
             "test.json",
@@ -2549,7 +2376,7 @@ mod tests {
 
         let req = actix_web::test::TestRequest::post()
             .uri("/upload")
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_multipart(body.clone());
 
         let res = send_test_request(req, app_ctx.clone()).await;
@@ -2567,7 +2394,7 @@ mod tests {
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset/suggest")
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(SuggestMetaData {
                 data_path: DataPath::Upload(upload.id),
                 layer_name: None,
@@ -2644,45 +2471,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_deletes_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
-
-        let ctx = app_ctx.default_session_context().await.unwrap();
-
-        let session_id = app_ctx.default_session_id().await;
-
-        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
-        test_data.uploads.push(upload_id);
-
-        let dataset_name =
-            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
-
-        let db = ctx.db();
-        let dataset_id = db
-            .resolve_dataset_name_to_id(&dataset_name)
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(db.load_dataset(&dataset_id).await.is_ok());
-
-        let req = actix_web::test::TestRequest::delete()
-            .uri(&format!("/dataset/{dataset_name}"))
-            .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .append_header((header::CONTENT_TYPE, "application/json"));
-
-        let res = send_test_request(req, app_ctx.clone()).await;
-
-        assert_eq!(res.status(), 200);
-
-        assert!(db.load_dataset(&dataset_id).await.is_err());
-
-        Ok(())
-    }
-
-    #[ge_context::test]
-    async fn it_deletes_system_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn it_deletes_system_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let volume = VolumeName("test_data".to_string());
 
@@ -2707,12 +2498,10 @@ mod tests {
             },
         };
 
-        let session_id = app_ctx.default_session_id().await;
-
         let req = actix_web::test::TestRequest::post()
             .uri("/dataset")
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"))
             .set_payload(serde_json::to_string(&create)?);
         let res = send_test_request(req, app_ctx.clone()).await;
@@ -2730,7 +2519,7 @@ mod tests {
         let req = actix_web::test::TestRequest::delete()
             .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .append_header((header::CONTENT_TYPE, "application/json"));
 
         let res = send_test_request(req, app_ctx.clone()).await;
@@ -2743,10 +2532,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_gets_loading_info(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-
-        let session_id = ctx.session().id();
+    async fn it_gets_loading_info(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -2786,12 +2574,15 @@ mod tests {
         });
 
         let db = ctx.db();
-        let DatasetIdAndName { id, name: _ } = db.add_dataset(ds.into(), meta).await?;
+        let DatasetIdAndName {
+            id: _,
+            name: dataset_name,
+        } = db.add_dataset(ds.into(), meta).await?;
 
         let req = actix_web::test::TestRequest::get()
-            .uri(&format!("/dataset/{id}/loadingInfo"))
+            .uri(&format!("/dataset/{dataset_name}/loadingInfo"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
@@ -2832,10 +2623,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_updates_loading_info(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-
-        let session_id = ctx.session().id();
+    async fn it_updates_loading_info(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -2875,7 +2665,10 @@ mod tests {
         });
 
         let db = ctx.db();
-        let DatasetIdAndName { id, name: _ } = db.add_dataset(ds.into(), meta).await?;
+        let DatasetIdAndName {
+            id,
+            name: dataset_name,
+        } = db.add_dataset(ds.into(), meta).await?;
 
         let update = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
             loading_info: OgrSourceDataset {
@@ -2897,9 +2690,9 @@ mod tests {
         });
 
         let req = actix_web::test::TestRequest::put()
-            .uri(&format!("/dataset/{id}/loadingInfo"))
+            .uri(&format!("/dataset/{dataset_name}/loadingInfo"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(update.clone());
 
         let res = send_test_request(req, app_ctx).await;
@@ -2913,12 +2706,15 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_gets_updates_symbology(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn it_gets_updates_symbology(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
-
-        let session_id = ctx.session().id();
+        let DatasetIdAndName {
+            id: dataset_id,
+            name: dataset_name,
+        } = add_pro_file_definition_to_datasets(&ctx.db(), test_data!("dataset_defs/ndvi.json"))
+            .await;
 
         let symbology = Symbology::Raster(RasterSymbology {
             opacity: 1.0,
@@ -2944,7 +2740,7 @@ mod tests {
         let req = actix_web::test::TestRequest::put()
             .uri(&format!("/dataset/{dataset_name}/symbology"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(symbology.clone());
         let res = send_test_request(req, app_ctx).await;
 
@@ -2959,12 +2755,15 @@ mod tests {
     }
 
     #[ge_context::test()]
-    async fn it_updates_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let session_id = app_ctx.default_session_id().await;
+    async fn it_updates_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let ctx = app_ctx.default_session_context().await?;
-
-        let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
+        let DatasetIdAndName {
+            id: dataset_id,
+            name: dataset_name,
+        } = add_pro_file_definition_to_datasets(&ctx.db(), test_data!("dataset_defs/ndvi.json"))
+            .await;
 
         let update: UpdateDataset = UpdateDataset {
             name: DatasetName::new(None, "new_name"),
@@ -2976,7 +2775,7 @@ mod tests {
         let req = actix_web::test::TestRequest::post()
             .uri(&format!("/dataset/{dataset_name}"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(update.clone());
         let res = send_test_request(req, app_ctx).await;
 
@@ -2994,12 +2793,15 @@ mod tests {
     }
 
     #[ge_context::test()]
-    async fn it_updates_provenance(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let session_id = app_ctx.default_session_id().await;
+    async fn it_updates_provenance(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let ctx = app_ctx.default_session_context().await?;
-
-        let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
+        let DatasetIdAndName {
+            id: dataset_id,
+            name: dataset_name,
+        } = add_pro_file_definition_to_datasets(&ctx.db(), test_data!("dataset_defs/ndvi.json"))
+            .await;
 
         let provenances: Provenances = Provenances {
             provenances: vec![Provenance {
@@ -3012,7 +2814,7 @@ mod tests {
         let req = actix_web::test::TestRequest::put()
             .uri(&format!("/dataset/{dataset_name}/provenance"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
             .set_json(provenances.clone());
         let res = send_test_request(req, app_ctx).await;
 
@@ -3035,10 +2837,51 @@ mod tests {
         Ok(())
     }
 
-    #[ge_context::test]
-    async fn it_lists_layers(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    // TODO: better way to get to the root of the project
+    struct TestWorkdirChanger {
+        package_dir: &'static str,
+        modified: bool,
+    }
+
+    impl TestWorkdirChanger {
+        fn go_to_workspace(package_dir: &'static str) -> Self {
+            let mut working_dir = std::env::current_dir().unwrap();
+
+            if !working_dir.ends_with(package_dir) {
+                return Self {
+                    package_dir,
+                    modified: false,
+                };
+            }
+
+            working_dir.pop();
+
+            std::env::set_current_dir(working_dir).unwrap();
+
+            Self {
+                package_dir,
+                modified: true,
+            }
+        }
+    }
+
+    impl Drop for TestWorkdirChanger {
+        fn drop(&mut self) {
+            if !self.modified {
+                return;
+            }
+
+            let mut working_dir = std::env::current_dir().unwrap();
+            working_dir.push(self.package_dir);
+            std::env::set_current_dir(working_dir).unwrap();
+        }
+    }
+
+    #[ge_context::test(test_execution = "serial")]
+    async fn it_lists_layers(app_ctx: ProPostgresContext<NoTls>) {
+        let changed_workdir = TestWorkdirChanger::go_to_workspace("services");
+
+        let session = admin_login(&app_ctx).await;
 
         let volume_name = "test_data";
         let file_name = "vector%2Fdata%2Ftwo_layers.gpkg";
@@ -3047,11 +2890,11 @@ mod tests {
             .uri(&format!(
                 "/dataset/volumes/{volume_name}/files/{file_name}/layers"
             ))
-            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
 
         let res = send_test_request(req, app_ctx).await;
 
-        assert_eq!(res.status(), 200);
+        assert_eq!(res.status(), 200, "{res:?}");
 
         let layers: VolumeFileLayersResponse = actix_web::test::read_body_json(res).await;
 
@@ -3063,5 +2906,228 @@ mod tests {
                 "layer_styles".to_string() // TOOO: remove once internal/system layers are hidden
             ]
         );
+
+        drop(changed_workdir);
+    }
+
+    /// override the pixel size since this test was designed for 600 x 600 pixel tiles
+    fn create_dataset_tiling_specification() -> TilingSpecification {
+        TilingSpecification {
+            origin_coordinate: (0., 0.).into(),
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        }
+    }
+
+    #[ge_context::test(tiling_spec = "create_dataset_tiling_specification")]
+    async fn create_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session.id()).await?;
+        test_data.uploads.push(upload_id);
+
+        let dataset_name =
+            construct_dataset_from_upload(app_ctx.clone(), upload_id, session.id()).await;
+        let exe_ctx = ctx.execution_context()?;
+
+        let source = make_ogr_source(
+            &exe_ctx,
+            geoengine_datatypes::dataset::NamedData::from(dataset_name).into(),
+        )
+        .await?;
+
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+        let query_ctx = ctx.mock_query_context()?;
+
+        let query = query_processor
+            .query(
+                VectorQueryRectangle {
+                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    time_interval: Default::default(),
+                    spatial_resolution: SpatialResolution::new(1., 1.)?,
+                    attributes: ColumnSelection::all(),
+                },
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        let coords = result[0].coordinates();
+        assert_eq!(coords.len(), 10);
+        assert_eq!(
+            coords,
+            &[
+                [2.933_686_69, 51.23].into(),
+                [3.204_593_64_f64, 51.336_388_89].into(),
+                [4.651_413_428, 51.805_833_33].into(),
+                [4.11, 51.95].into(),
+                [4.386_160_188, 50.886_111_11].into(),
+                [3.767_373_38, 51.114_444_44].into(),
+                [4.293_757_362, 51.297_777_78].into(),
+                [1.850_176_678, 50.965_833_33].into(),
+                [2.170_906_949, 51.021_666_67].into(),
+                [4.292_873_969, 51.927_222_22].into(),
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_creates_volume_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let volume = VolumeName("test_data".to_string());
+
+        let mut meta_data = create_ndvi_meta_data();
+
+        // make path relative to volume
+        meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "GdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+            },
+        };
+
+        // create via admin session
+        let admin_session = admin_login(&app_ctx).await;
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id().to_string()),
+            ))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_json(create);
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200);
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200);
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_deletes_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let session_id = session.id();
+        let ctx = app_ctx.session_context(session);
+
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
+
+        let dataset_name =
+            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
+
+        let db = ctx.db();
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_name}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        assert!(db.load_dataset(&dataset_id).await.is_err());
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_deletes_volume_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+        let volume = VolumeName("test_data".to_string());
+
+        let mut meta_data = create_ndvi_meta_data();
+
+        // make path relative to volume
+        meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "GdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+            },
+        };
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_name}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200);
+
+        assert!(db.load_dataset(&dataset_id).await.is_err());
+
+        Ok(())
     }
 }

@@ -208,11 +208,9 @@ mod tests {
             contexts::ProPostgresContext,
             ge_context,
             users::{UserAuth, UserCredentials, UserRegistration},
-            util::tests::{
-                add_ndvi_to_datasets, add_ports_to_datasets, admin_login, send_pro_test_request,
-            },
+            util::tests::{add_ndvi_to_datasets, add_ports_to_datasets, admin_login},
         },
-        util::tests::read_body_string,
+        util::tests::{read_body_string, send_test_request},
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -335,7 +333,7 @@ mod tests {
                 header::AUTHORIZATION,
                 Bearer::new(admin_session.id.to_string()),
             ));
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         let res_status = res.status();
         let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();

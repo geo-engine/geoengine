@@ -1,13 +1,11 @@
 use crate::pro::users::OidcManager;
 use crate::{
-    api::handlers,
     contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
     datasets::{
         listing::Provenance,
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
         AddDataset, DatasetName,
     },
-    pro,
     pro::{
         contexts::{ProApplicationContext, ProGeoEngineDb, ProPostgresContext},
         permissions::{Permission, PermissionDb, Role},
@@ -15,17 +13,12 @@ use crate::{
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
     util::config::get_config_element,
-    util::{
-        server::{configure_extractors, render_404, render_405},
-        tests::{setup_db, tear_down_db},
-    },
+    util::tests::{setup_db, tear_down_db},
     workflows::{
         registry::WorkflowRegistry,
         workflow::{Workflow, WorkflowId},
     },
 };
-use actix_web::dev::ServiceResponse;
-use actix_web::{http, middleware, test, web, App};
 use futures_util::Future;
 use geoengine_datatypes::{
     dataset::{DatasetId, NamedData},
@@ -108,47 +101,6 @@ where
         .unwrap();
 
     (session, project)
-}
-
-pub async fn send_pro_test_request(
-    req: test::TestRequest,
-    app_ctx: ProPostgresContext<NoTls>,
-) -> ServiceResponse {
-    #[allow(unused_mut)]
-    let mut app =
-        App::new()
-            .app_data(web::Data::new(app_ctx))
-            .wrap(
-                middleware::ErrorHandlers::default()
-                    .handler(http::StatusCode::NOT_FOUND, render_404)
-                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
-            )
-            .wrap(middleware::NormalizePath::trim())
-            .configure(configure_extractors)
-            .configure(pro::api::handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::layers::init_layer_routes::<ProPostgresContext<NoTls>>)
-            .configure(
-                pro::api::handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>,
-            )
-            .configure(handlers::plots::init_plot_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::projects::init_project_routes::<ProPostgresContext<NoTls>>)
-            .configure(pro::api::handlers::users::init_user_routes::<ProPostgresContext<NoTls>>)
-            .configure(
-                handlers::spatial_references::init_spatial_reference_routes::<
-                    ProPostgresContext<NoTls>,
-                >,
-            )
-            .configure(handlers::upload::init_upload_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::wcs::init_wcs_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::wfs::init_wfs_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::wms::init_wms_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::workflows::init_workflow_routes::<ProPostgresContext<NoTls>>)
-            .configure(pro::api::handlers::machine_learning::init_ml_routes::<ProPostgresContext<NoTls>>);
-
-    let app = test::init_service(app).await;
-    test::call_service(&app, req.to_request())
-        .await
-        .map_into_boxed_body()
 }
 
 #[allow(clippy::missing_panics_doc)]
@@ -463,7 +415,7 @@ impl MockQuotaTracking for QuotaTracking {
 }
 
 #[cfg(test)]
-pub(in crate::pro) mod mock_oidc {
+pub(crate) mod mock_oidc {
     use crate::pro::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
     use crate::pro::util::config::Oidc;
     use chrono::{Duration, Utc};

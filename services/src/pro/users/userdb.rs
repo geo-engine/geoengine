@@ -1,6 +1,6 @@
+use crate::api::handlers::users::UsageSummaryGranularity;
 use crate::contexts::SessionId;
 use crate::error::Result;
-use crate::pro::api::handlers::users::UsageSummaryGranularity;
 use crate::pro::permissions::{RoleDescription, RoleId};
 use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
 use crate::pro::users::oidc::{OidcTokens, UserClaims};

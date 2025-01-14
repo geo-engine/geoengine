@@ -663,11 +663,12 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvRemoveOverviewTask<C> {
 mod tests {
 
     use super::*;
-    use crate::contexts::PostgresContext;
+    use crate::contexts::Session;
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
-    use crate::ge_context;
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
+    use crate::pro::util::tests::admin_login;
     use crate::{
-        contexts::SimpleApplicationContext,
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
         tasks::util::test::wait_for_task_to_finish,
         util::server::{configure_extractors, render_404, render_405},
@@ -681,9 +682,9 @@ mod tests {
     use std::path::Path;
     use tokio_postgres::NoTls;
 
-    async fn send_test_request<C: SimpleApplicationContext>(
+    async fn send_test_request(
         req: test::TestRequest,
-        app_ctx: C,
+        app_ctx: ProPostgresContext<NoTls>,
     ) -> ServiceResponse {
         let app = test::init_service({
             let app = App::new()
@@ -695,7 +696,9 @@ mod tests {
                 )
                 .wrap(middleware::NormalizePath::trim())
                 .configure(configure_extractors)
-                .service(web::scope("/ebv").configure(init_ebv_routes::<C>()));
+                .service(
+                    web::scope("/ebv").configure(init_ebv_routes::<ProPostgresContext<NoTls>>()),
+                );
 
             app
         })
@@ -706,16 +709,17 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_overviews(app_ctx: PostgresContext<NoTls>) {
+    async fn test_remove_overviews(app_ctx: ProPostgresContext<NoTls>) {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
         }
 
         hide_gdal_errors();
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let session_id = session.id();
 
-        let session_id = app_ctx.default_session_id().await;
+        let ctx = app_ctx.session_context(session);
 
         let overview_folder = tempfile::tempdir().unwrap();
 
@@ -797,9 +801,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_overviews_non_existing(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+    async fn test_remove_overviews_non_existing(app_ctx: ProPostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let session_id = session.id();
+
+        let ctx = app_ctx.session_context(session);
 
         let overview_folder = tempfile::tempdir().unwrap();
 
@@ -845,15 +851,17 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_create_non_existing_overview(app_ctx: PostgresContext<NoTls>) {
+    async fn test_create_non_existing_overview(app_ctx: ProPostgresContext<NoTls>) {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
         }
 
         hide_gdal_errors();
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+        let session = admin_login(&app_ctx).await;
+        let session_id = session.id();
+
+        let ctx = app_ctx.session_context(session);
 
         let overview_folder = tempfile::tempdir().unwrap();
 
@@ -911,11 +919,13 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_refresh_overview(app_ctx: PostgresContext<NoTls>) {
+    async fn test_refresh_overview(app_ctx: ProPostgresContext<NoTls>) {
         hide_gdal_errors();
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = app_ctx.default_session_id().await;
+        let session = admin_login(&app_ctx).await;
+        let session_id = session.id();
+
+        let ctx = app_ctx.session_context(session);
 
         let overview_folder = tempfile::tempdir().unwrap();
 

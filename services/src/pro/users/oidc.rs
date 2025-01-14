@@ -128,7 +128,7 @@ impl OidcManager {
         Ok(RefreshToken::new(token_secret))
     }
     #[cfg(test)]
-    pub(in crate::pro) fn from_oidc_with_static_tokens(value: Oidc) -> Self {
+    pub(crate) fn from_oidc_with_static_tokens(value: Oidc) -> Self {
         let request_db = OidcRequestDb {
             issuer: value.issuer.to_string(),
             client_id: value.client_id.to_string(),

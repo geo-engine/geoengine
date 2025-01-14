@@ -199,19 +199,22 @@ async fn list_upload_file_layers_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
-    use crate::ge_context;
+    use crate::contexts::Session;
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
+    use crate::pro::users::UserAuth;
     use crate::util::tests::{send_test_request, SetMultipartBody, TestDataUploads};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn upload(app_ctx: PostgresContext<NoTls>) {
+    async fn upload(app_ctx: ProPostgresContext<NoTls>) {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let body = vec![("bar.txt", "bar"), ("foo.txt", "foo")];
 
@@ -248,11 +251,12 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_lists_layers(app_ctx: PostgresContext<NoTls>) {
+    async fn it_lists_layers(app_ctx: ProPostgresContext<NoTls>) {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let files =
             vec![geoengine_datatypes::test_data!("vector/data/two_layers.gpkg").to_path_buf()];

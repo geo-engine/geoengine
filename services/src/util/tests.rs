@@ -1,7 +1,7 @@
 use crate::api::model::responses::ErrorResponse;
+use crate::contexts::ApplicationContext;
 use crate::contexts::GeoEngineDb;
 use crate::contexts::PostgresContext;
-use crate::contexts::SimpleApplicationContext;
 use crate::datasets::listing::Provenance;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
@@ -9,6 +9,12 @@ use crate::datasets::upload::UploadRootPath;
 use crate::datasets::AddDataset;
 use crate::datasets::DatasetIdAndName;
 use crate::datasets::DatasetName;
+use crate::pro::contexts::ProGeoEngineDb;
+use crate::pro::contexts::ProPostgresContext;
+use crate::pro::permissions::Permission;
+use crate::pro::permissions::PermissionDb;
+use crate::pro::permissions::Role;
+use crate::pro::util::tests::admin_login;
 use crate::projects::{
     CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
@@ -81,12 +87,10 @@ use super::config::get_config_element;
 use super::config::Postgres;
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn create_project_helper<C: SimpleApplicationContext>(app_ctx: &C) -> ProjectId {
-    app_ctx
-        .default_session_context()
-        .await
-        .unwrap()
-        .db()
+pub async fn create_project_helper(
+    ctx: &<ProPostgresContext<NoTls> as ApplicationContext>::SessionContext,
+) -> ProjectId {
+    ctx.db()
         .create_project(CreateProject {
             name: "Test".to_string(),
             description: "Foo".to_string(),
@@ -122,15 +126,15 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper<A: SimpleApplicationContext>(
-    app_ctx: &A,
+pub async fn register_ndvi_workflow_helper(
+    app_ctx: &ProPostgresContext<NoTls>,
 ) -> (Workflow, WorkflowId) {
     register_ndvi_workflow_helper_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper_with_cache_ttl<A: SimpleApplicationContext>(
-    app_ctx: &A,
+pub async fn register_ndvi_workflow_helper_with_cache_ttl(
+    app_ctx: &ProPostgresContext<NoTls>,
     cache_ttl: CacheTtlSeconds,
 ) -> (Workflow, WorkflowId) {
     let (_, dataset) = add_ndvi_to_datasets_with_cache_ttl(app_ctx, cache_ttl).await;
@@ -144,7 +148,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl<A: SimpleApplicationCo
         ),
     };
 
-    let session = app_ctx.default_session().await.unwrap();
+    let session = admin_login(app_ctx).await;
 
     let id = app_ctx
         .session_context(session)
@@ -156,9 +160,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl<A: SimpleApplicationCo
     (workflow, id)
 }
 
-pub async fn add_ndvi_to_datasets<A: SimpleApplicationContext>(
-    app_ctx: &A,
-) -> (DatasetId, NamedData) {
+pub async fn add_ndvi_to_datasets(app_ctx: &ProPostgresContext<NoTls>) -> (DatasetId, NamedData) {
     add_ndvi_to_datasets_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
 }
 
@@ -167,8 +169,8 @@ pub async fn add_ndvi_to_datasets<A: SimpleApplicationContext>(
 /// # Panics
 ///
 /// Panics if the default session context could not be created.
-pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
-    app_ctx: &A,
+pub async fn add_ndvi_to_datasets_with_cache_ttl(
+    app_ctx: &ProPostgresContext<NoTls>,
     cache_ttl: CacheTtlSeconds,
 ) -> (DatasetId, NamedData) {
     let dataset_name = DatasetName {
@@ -195,12 +197,28 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl<A: SimpleApplicationContext>(
         )),
     };
 
-    let db = &app_ctx.default_session_context().await.unwrap().db();
-    let dataset_id = db
+    let session = admin_login(app_ctx).await;
+    let ctx = app_ctx.session_context(session);
+    let dataset_id = ctx
+        .db()
         .add_dataset(ndvi.properties, ndvi.meta_data)
         .await
         .expect("dataset db access")
         .id;
+
+    ctx.db()
+        .add_permission(
+            Role::registered_user_role_id(),
+            dataset_id,
+            Permission::Read,
+        )
+        .await
+        .unwrap();
+
+    ctx.db()
+        .add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+        .await
+        .unwrap();
 
     let named_data = NamedData {
         namespace: dataset_name.namespace,
@@ -317,10 +335,12 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ne2_multiband_workflow<A: SimpleApplicationContext>(
-    app_ctx: &A,
+pub async fn register_ne2_multiband_workflow(
+    app_ctx: &ProPostgresContext<NoTls>,
 ) -> (Workflow, WorkflowId) {
-    let ctx = app_ctx.default_session_context().await.unwrap();
+    let session = admin_login(app_ctx).await;
+    let ctx = app_ctx.session_context(session);
+
     let red = add_file_definition_to_datasets(
         &ctx.db(),
         test_data!("dataset_defs/natural_earth_2_red.json"),
@@ -374,14 +394,23 @@ pub async fn register_ne2_multiband_workflow<A: SimpleApplicationContext>(
         ),
     };
 
-    let session = app_ctx.default_session().await.unwrap();
+    let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
 
-    let id = app_ctx
-        .session_context(session)
-        .db()
-        .register_workflow(workflow.clone())
-        .await
-        .unwrap();
+    for dataset_id in [red.id, green.id, blue.id] {
+        ctx.db()
+            .add_permission(
+                Role::registered_user_role_id(),
+                dataset_id,
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        ctx.db()
+            .add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+            .await
+            .unwrap();
+    }
 
     (workflow, id)
 }
@@ -412,6 +441,73 @@ pub async fn add_file_definition_to_datasets<D: GeoEngineDb>(
     db.add_dataset(def.properties.clone(), def.meta_data.clone())
         .await
         .unwrap()
+}
+
+/// Add a definition from a file to the datasets.
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_pro_file_definition_to_datasets<D: ProGeoEngineDb>(
+    db: &D,
+    definition: &Path,
+) -> DatasetIdAndName {
+    let mut def: DatasetDefinition =
+        serde_json::from_reader(BufReader::new(File::open(definition).unwrap())).unwrap();
+
+    // rewrite metadata to use the correct file path
+    def.meta_data = match def.meta_data {
+        MetaDataDefinition::GdalStatic(mut meta_data) => {
+            meta_data.params.file_path = test_data!(meta_data
+                .params
+                .file_path
+                .strip_prefix("test_data/")
+                .unwrap())
+            .into();
+            MetaDataDefinition::GdalStatic(meta_data)
+        }
+        MetaDataDefinition::GdalMetaDataRegular(mut meta_data) => {
+            meta_data.params.file_path = test_data!(meta_data
+                .params
+                .file_path
+                .strip_prefix("test_data/")
+                .unwrap())
+            .into();
+            MetaDataDefinition::GdalMetaDataRegular(meta_data)
+        }
+        MetaDataDefinition::OgrMetaData(mut meta_data) => {
+            meta_data.loading_info.file_name = test_data!(meta_data
+                .loading_info
+                .file_name
+                .strip_prefix("test_data/")
+                .unwrap())
+            .into();
+            MetaDataDefinition::OgrMetaData(meta_data)
+        }
+        _ => todo!("Implement for other meta data types when used"),
+    };
+
+    let dataset = db
+        .add_dataset(def.properties.clone(), def.meta_data.clone())
+        .await
+        .unwrap();
+
+    for role in [Role::registered_user_role_id(), Role::anonymous_role_id()] {
+        db.add_permission(role, dataset.id, Permission::Read)
+            .await
+            .unwrap();
+    }
+
+    dataset
+}
+
+/// Add a definition from a file to the datasets as admin.
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_pro_file_definition_to_datasets_as_admin(
+    app_ctx: &ProPostgresContext<NoTls>,
+    definition: &Path,
+) -> DatasetIdAndName {
+    let session = admin_login(app_ctx).await;
+    let ctx = app_ctx.session_context(session);
+
+    add_pro_file_definition_to_datasets(&ctx.db(), definition).await
 }
 
 pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(
@@ -462,11 +558,12 @@ async fn dummy_handler() -> impl Responder {
     HttpResponse::Ok().body("Hey there!")
 }
 
-pub async fn send_test_request<C: SimpleApplicationContext>(
+pub async fn send_test_request(
     req: test::TestRequest,
-    app_ctx: C,
+    app_ctx: ProPostgresContext<NoTls>,
 ) -> ServiceResponse {
-    let app = test::init_service(
+    #[allow(unused_mut)]
+    let mut app =
         App::new()
             .app_data(web::Data::new(app_ctx))
             .wrap(OutputRequestId)
@@ -475,23 +572,30 @@ pub async fn send_test_request<C: SimpleApplicationContext>(
                     .handler(http::StatusCode::NOT_FOUND, render_404)
                     .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
             )
+            .wrap(middleware::NormalizePath::trim())
             .wrap(TracingLogger::default())
             .configure(configure_extractors)
-            .configure(handlers::datasets::init_dataset_routes::<C>)
-            .configure(handlers::layers::init_layer_routes::<C>)
-            .configure(handlers::plots::init_plot_routes::<C>)
-            .configure(handlers::projects::init_project_routes::<C>)
-            .configure(handlers::session::init_session_routes::<C>)
-            .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
-            .configure(handlers::upload::init_upload_routes::<C>)
-            .configure(handlers::tasks::init_task_routes::<C>)
-            .configure(handlers::wcs::init_wcs_routes::<C>)
-            .configure(handlers::wfs::init_wfs_routes::<C>)
-            .configure(handlers::wms::init_wms_routes::<C>)
-            .configure(handlers::workflows::init_workflow_routes::<C>)
-            .service(dummy_handler),
-    )
-    .await;
+            .configure(handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::layers::init_layer_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::plots::init_plot_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::projects::init_project_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::users::init_user_routes::<ProPostgresContext<NoTls>>)
+            .configure(
+                handlers::spatial_references::init_spatial_reference_routes::<
+                    ProPostgresContext<NoTls>,
+                >,
+            )
+            .configure(handlers::upload::init_upload_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::tasks::init_task_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::wcs::init_wcs_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::wfs::init_wfs_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::wms::init_wms_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::workflows::init_workflow_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::machine_learning::init_ml_routes::<ProPostgresContext<NoTls>>)
+            .service(dummy_handler);
+
+    let app = test::init_service(app).await;
     test::call_service(&app, req.to_request())
         .await
         .map_into_boxed_body()

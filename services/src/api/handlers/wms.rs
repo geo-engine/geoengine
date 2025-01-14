@@ -482,15 +482,17 @@ mod tests {
 
     use super::*;
     use crate::api::model::responses::ErrorResponse;
-    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
+    use crate::contexts::Session;
     use crate::datasets::listing::DatasetProvider;
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::DatasetName;
-    use crate::ge_context;
+    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::ge_context;
+    use crate::pro::users::UserAuth;
+    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::util::tests::{
-        check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
-        register_ndvi_workflow_helper_with_cache_ttl, register_ne2_multiband_workflow,
-        send_test_request, MockQueryContext,
+        check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper_with_cache_ttl,
+        register_ne2_multiband_workflow, send_test_request, MockQueryContext,
     };
     use actix_http::header::{self, CONTENT_TYPE};
     use actix_web::dev::ServiceResponse;
@@ -512,13 +514,14 @@ mod tests {
     use xml::ParserConfig;
 
     async fn test_test_helper(
-        app_ctx: PostgresContext<NoTls>,
+        app_ctx: ProPostgresContext<NoTls>,
         method: Method,
         path: Option<&str>,
     ) -> ServiceResponse {
         let path = path.map(ToString::to_string);
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let session_id = session.id();
 
         let req = actix_web::test::TestRequest::default()
             .method(method)
@@ -528,7 +531,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_invalid_method(app_ctx: PostgresContext<NoTls>) {
+    async fn test_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| test_test_helper(app_ctx.clone(), method, None),
             &[Method::GET],
@@ -537,7 +540,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_missing_fields(app_ctx: PostgresContext<NoTls>) {
+    async fn test_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
         let res = test_test_helper(
             app_ctx,
             Method::GET,
@@ -554,7 +557,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_invalid_fields(app_ctx: PostgresContext<NoTls>) {
+    async fn test_invalid_fields(app_ctx: ProPostgresContext<NoTls>) {
         let res = test_test_helper(
             app_ctx,
             Method::GET,
@@ -571,11 +574,13 @@ mod tests {
     }
 
     async fn get_capabilities_test_helper(
-        app_ctx: PostgresContext<NoTls>,
+        app_ctx: ProPostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -602,7 +607,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_get_capabilities(app_ctx: PostgresContext<NoTls>) {
+    async fn test_get_capabilities(app_ctx: ProPostgresContext<NoTls>) {
         let res = get_capabilities_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
@@ -617,7 +622,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn get_capabilities_invalid_method(app_ctx: PostgresContext<NoTls>) {
+    async fn get_capabilities_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| get_capabilities_test_helper(app_ctx.clone(), method),
             &[Method::GET],
@@ -627,8 +632,9 @@ mod tests {
 
     // The result should be similar to the GDAL output of this command: gdalwarp -tr 1 1 -r near -srcnodata 0 -dstnodata 0  MOD13A2_M_NDVI_2014-01-01.TIFF MOD13A2_M_NDVI_2014-01-01_360_180_near_0.TIFF
     #[ge_context::test]
-    async fn png_from_stream_non_full(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn png_from_stream_non_full(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
         let exe_ctx = ctx.execution_context().unwrap();
 
         let gdal_source = GdalSourceProcessor::<u8> {
@@ -680,11 +686,12 @@ mod tests {
     }
 
     async fn get_map_test_helper(
-        app_ctx: PostgresContext<NoTls>,
+        app_ctx: ProPostgresContext<NoTls>,
         method: Method,
         path: Option<&str>,
     ) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -711,7 +718,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
-    async fn get_map(app_ctx: PostgresContext<NoTls>) {
+    async fn get_map(app_ctx: ProPostgresContext<NoTls>) {
         let res = get_map_test_helper(app_ctx, Method::GET, None).await;
 
         assert_eq!(res.status(), 200);
@@ -724,9 +731,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn get_map_ndvi(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    async fn get_map_ndvi(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -749,8 +757,9 @@ mod tests {
 
     ///Actix uses serde_urlencoded inside web::Query which does not support this
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
-    async fn get_map_uppercase(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn get_map_uppercase(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -769,7 +778,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
-    async fn get_map_invalid_method(app_ctx: PostgresContext<NoTls>) {
+    async fn get_map_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| get_map_test_helper(app_ctx.clone(), method, None),
             &[Method::GET],
@@ -778,7 +787,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
-    async fn get_map_missing_fields(app_ctx: PostgresContext<NoTls>) {
+    async fn get_map_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
         let res = get_map_test_helper(
             app_ctx,
             Method::GET,
@@ -795,8 +804,9 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
-    async fn get_map_colorizer(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn get_map_colorizer(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -857,8 +867,9 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
-    async fn it_supports_multiband_colorizer(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    async fn it_supports_multiband_colorizer(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -920,9 +931,10 @@ mod tests {
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
     async fn it_supports_multiband_colorizer_with_less_then_3_bands(
-        app_ctx: PostgresContext<NoTls>,
+        app_ctx: ProPostgresContext<NoTls>,
     ) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -988,9 +1000,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_zoomes_very_far(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    async fn it_zoomes_very_far(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -1047,9 +1060,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn default_error(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    async fn default_error(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -1117,9 +1131,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn json_error(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    async fn json_error(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -1176,9 +1191,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_sets_cache_control_header_no_cache(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    async fn it_sets_cache_control_header_no_cache(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -1199,9 +1215,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_sets_cache_control_header_with_cache(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+    async fn it_sets_cache_control_header_with_cache(app_ctx: ProPostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) =
             register_ndvi_workflow_helper_with_cache_ttl(&app_ctx, CacheTtlSeconds::new(60)).await;

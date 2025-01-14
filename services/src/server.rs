@@ -1,8 +1,8 @@
+use crate::api::apidoc::ApiDoc;
 use crate::api::handlers;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::{Error, Result};
 use crate::pro;
-use crate::pro::api::ApiDoc;
 use crate::pro::contexts::ProPostgresContext;
 use crate::util::config::{self, get_config_element};
 use crate::util::middleware::OutputRequestId;
@@ -43,12 +43,12 @@ where
     HttpServer::new(move || {
         let mut api = web::scope(&api_prefix)
             .configure(configure_extractors)
-            .configure(pro::api::handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
-            .configure(pro::api::handlers::permissions::init_permissions_routes::<C>)
+            .configure(handlers::permissions::init_permissions_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(handlers::projects::init_project_routes::<C>)
-            .configure(pro::api::handlers::users::init_user_routes::<C>)
+            .configure(handlers::users::init_user_routes::<C>)
             .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
             .configure(handlers::upload::init_upload_routes::<C>)
             .configure(handlers::tasks::init_task_routes::<C>)
@@ -56,7 +56,7 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>)
-            .configure(pro::api::handlers::machine_learning::init_ml_routes::<C>)
+            .configure(handlers::machine_learning::init_ml_routes::<C>)
             .route(
                 "/available",
                 web::get().to(crate::util::server::available_handler),
