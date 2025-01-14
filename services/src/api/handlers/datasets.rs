@@ -1289,9 +1289,9 @@ pub async fn list_volume_file_layers_handler<C: ApplicationContext>(
     Ok(web::Json(VolumeFileLayersResponse { layers }))
 }
 
-/// Creates a new dataset using files available on the volumes.
-/// The created dataset will be visible to all users.
-/// Requires an admin session.
+/// Creates a new dataset referencing files.
+/// Users can reference previously uploaded files.
+/// Admins can reference files from a volume.
 #[utoipa::path(
     tag = "Datasets",
     post,
