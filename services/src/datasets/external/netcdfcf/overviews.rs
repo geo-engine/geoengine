@@ -765,7 +765,7 @@ mod tests {
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::datasets::external::netcdfcf::NETCDF_CF_PROVIDER_ID;
     use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext, ProPostgresDb};
-    use crate::{contexts::SessionContext, pro::ge_context, tasks::util::NopTaskContext};
+    use crate::{contexts::SessionContext, ge_context, tasks::util::NopTaskContext};
     use gdal::{DatasetOptions, GdalOpenFlags};
     use geoengine_datatypes::{
         primitives::{DateTime, SpatialResolution, TimeInterval},

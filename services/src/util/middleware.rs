@@ -87,10 +87,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        pro::{contexts::ProPostgresContext, ge_context},
-        util::tests::send_test_request,
-    };
+    use crate::{ge_context, pro::contexts::ProPostgresContext, util::tests::send_test_request};
     use actix_web::test;
     use tokio_postgres::NoTls;
 

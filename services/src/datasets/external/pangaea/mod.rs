@@ -265,7 +265,7 @@ mod tests {
     use crate::error::Error;
     use crate::layers::external::{DataProvider, DataProviderDefinition};
     use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext};
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{
         DataCollection, FeatureCollectionInfos, IntoGeometryIterator, MultiPointCollection,

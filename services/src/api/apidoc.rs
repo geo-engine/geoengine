@@ -479,7 +479,7 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::util::tests::send_test_request;
     use crate::{pro::contexts::ProPostgresContext, util::openapi_examples::can_run_examples};
     use tokio_postgres::NoTls;

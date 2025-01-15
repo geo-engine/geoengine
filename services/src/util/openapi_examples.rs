@@ -276,7 +276,7 @@ pub async fn can_run_examples<F, Fut>(
 mod tests {
     use super::*;
     use crate::api::model::services::Volume;
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::util::server::{configure_extractors, render_404, render_405};
     use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
     use serde::Deserialize;

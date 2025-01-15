@@ -666,7 +666,7 @@ mod tests {
     use crate::contexts::Session;
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::pro::util::tests::admin_login;
     use crate::{
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,

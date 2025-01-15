@@ -426,6 +426,7 @@ mod tests {
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::datasets::{AddDataset, DatasetIdAndName};
+    use crate::ge_context;
     use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
     use crate::layers::external::TypedDataProviderDefinition;
     use crate::layers::layer::{
@@ -441,7 +442,6 @@ mod tests {
     };
     use crate::pro::contexts::PostgresSessionContext;
     use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
     use crate::pro::users::UserSession;
     use crate::projects::{
         ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LineSymbology,
@@ -2571,7 +2571,7 @@ mod tests {
     }
 
     #[allow(clippy::too_many_lines)]
-    #[crate::pro::ge_context::test]
+    #[ge_context::test]
     async fn it_updates_project_layer_symbology(
         app_ctx: ProPostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,

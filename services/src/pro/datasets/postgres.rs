@@ -846,9 +846,9 @@ mod tests {
     use super::*;
     use crate::{
         contexts::{ApplicationContext, SessionContext},
+        ge_context,
         pro::{
             contexts::ProPostgresContext,
-            ge_context,
             permissions::PermissionDb,
             users::{UserAuth, UserSession},
         },

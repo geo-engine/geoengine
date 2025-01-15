@@ -210,7 +210,7 @@ mod tests {
     use super::*;
     use crate::contexts::Session;
     use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::pro::users::UserAuth;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_json, read_body_string, send_test_request,

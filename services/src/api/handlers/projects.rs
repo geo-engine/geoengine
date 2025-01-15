@@ -399,7 +399,7 @@ mod tests {
     use super::*;
     use crate::contexts::Session;
     use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::pro::users::{UserAuth, UserSession};
     use crate::projects::{
         LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId, ProjectLayer,

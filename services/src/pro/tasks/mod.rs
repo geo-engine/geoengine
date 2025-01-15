@@ -151,7 +151,8 @@ mod tests {
     use super::*;
     use crate::{
         contexts::{ApplicationContext, SessionContext},
-        pro::{contexts::ProPostgresContext, ge_context, users::UserAuth},
+        ge_context,
+        pro::{contexts::ProPostgresContext, users::UserAuth},
     };
     use tokio_postgres::NoTls;
 

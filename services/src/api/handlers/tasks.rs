@@ -170,7 +170,7 @@ mod tests {
     use super::*;
     use crate::contexts::Session;
     use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::pro::users::UserAuth;
     use crate::tasks::{
         util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,

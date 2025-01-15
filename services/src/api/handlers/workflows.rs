@@ -660,7 +660,7 @@ mod tests {
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::{DatasetName, RasterDatasetFromWorkflowResult};
     use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::pro::users::UserAuth;
     use crate::pro::util::tests::admin_login;
     use crate::tasks::util::test::wait_for_task_to_finish;

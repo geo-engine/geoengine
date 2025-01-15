@@ -1180,10 +1180,8 @@ mod tests {
     use crate::{
         contexts::SessionContext,
         datasets::external::netcdfcf::{EBV_PROVIDER_ID, NETCDF_CF_PROVIDER_ID},
-        pro::{
-            contexts::{PostgresSessionContext, ProPostgresContext},
-            ge_context,
-        },
+        ge_context,
+        pro::contexts::{PostgresSessionContext, ProPostgresContext},
     };
     use tokio_postgres::NoTls;
 

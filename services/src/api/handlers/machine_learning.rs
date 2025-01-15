@@ -138,8 +138,9 @@ mod tests {
         api::model::{datatypes::RasterDataType, responses::IdResponse},
         contexts::Session,
         datasets::upload::UploadId,
+        ge_context,
         machine_learning::MlModelMetadata,
-        pro::{contexts::ProPostgresContext, ge_context, users::UserAuth},
+        pro::{contexts::ProPostgresContext, users::UserAuth},
         util::tests::{send_test_request, SetMultipartBody, TestDataUploads},
     };
 

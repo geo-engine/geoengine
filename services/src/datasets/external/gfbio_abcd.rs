@@ -646,7 +646,7 @@ mod tests {
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext};
     use crate::util::config;
-    use crate::{pro::ge_context, test_data};
+    use crate::{ge_context, test_data};
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};

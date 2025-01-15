@@ -1576,7 +1576,7 @@ mod tests {
     use crate::layers::layer::LayerListing;
     use crate::layers::storage::LayerProviderDb;
     use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext, ProPostgresDb};
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};

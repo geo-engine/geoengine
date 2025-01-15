@@ -196,7 +196,7 @@ mod tests {
     use super::*;
     use crate::pro::contexts::PostgresSessionContext;
     use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::util::tests::MockQueryContext;
     use crate::workflows::workflow::Workflow;
     use actix_http::error::PayloadError;

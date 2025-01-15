@@ -941,7 +941,7 @@ mod tests {
     use crate::api::model::datatypes::RasterColorizer;
     use crate::api::model::responses::ErrorResponse;
     use crate::contexts::{Session, SessionContext};
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::pro::permissions::Role;
     use crate::pro::users::{AuthCodeRequestURL, OidcManager, UserAuth};
     use crate::pro::util::config::Oidc;

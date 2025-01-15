@@ -673,7 +673,7 @@ mod tests {
     use crate::contexts::Session;
     use crate::datasets::DatasetIdAndName;
     use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::pro::users::UserAuth;
     use crate::util::tests::{
         add_pro_file_definition_to_datasets_as_admin, check_allowed_http_methods, read_body_string,

@@ -204,9 +204,9 @@ mod tests {
 
     use super::*;
     use crate::{
+        ge_context,
         pro::{
             contexts::ProPostgresContext,
-            ge_context,
             users::{UserAuth, UserCredentials, UserRegistration},
             util::tests::{add_ndvi_to_datasets, add_ports_to_datasets, admin_login},
         },

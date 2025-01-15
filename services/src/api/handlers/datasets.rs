@@ -1384,8 +1384,8 @@ mod tests {
     use crate::datasets::upload::{UploadId, VolumeName};
     use crate::datasets::DatasetIdAndName;
     use crate::error::Result;
+    use crate::ge_context;
     use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
     use crate::pro::users::UserAuth;
     use crate::pro::util::tests::admin_login;
     use crate::projects::{PointSymbology, RasterSymbology, Symbology};
