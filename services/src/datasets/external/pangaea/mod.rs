@@ -260,11 +260,12 @@ impl
 
 #[cfg(test)]
 mod tests {
-    use crate::contexts::{GeoEngineDb, PostgresContext, SessionContext, SimpleApplicationContext};
+    use crate::contexts::{GeoEngineDb, SessionContext};
     use crate::datasets::external::pangaea::{PangaeaDataProviderDefinition, PANGAEA_PROVIDER_ID};
     use crate::error::Error;
-    use crate::ge_context;
     use crate::layers::external::{DataProvider, DataProviderDefinition};
+    use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext};
+    use crate::pro::ge_context;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{
         DataCollection, FeatureCollectionInfos, IntoGeometryIterator, MultiPointCollection,
@@ -444,19 +445,17 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_creates_meta_data(app_ctx: PostgresContext<NoTls>) {
+    async fn it_creates_meta_data(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let doi = "10.1594/PANGAEA.909550";
 
         let mut server = Server::run();
         setup_metadata(&mut server, doi, "pangaea_geo_none_meta.json").await;
         setup_data(&mut server, doi, "pangaea_geo_none.tsv").await;
 
-        let provider = create_provider(
-            &server,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await
-        .unwrap();
+        let provider = create_provider(&server, ctx.db()).await.unwrap();
         let id = create_id(doi);
 
         let meta: Result<
@@ -475,7 +474,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_no_geometry(app_ctx: PostgresContext<NoTls>) {
+    async fn it_loads_no_geometry(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let doi = "10.1594/PANGAEA.909550";
 
         let mut server = Server::run();
@@ -483,12 +485,7 @@ mod tests {
         setup_metadata(&mut server, doi, "pangaea_geo_none_meta.json").await;
         setup_data(&mut server, doi, "pangaea_geo_none.tsv").await;
 
-        let provider = create_provider(
-            &server,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await
-        .unwrap();
+        let provider = create_provider(&server, ctx.db()).await.unwrap();
         let id = create_id(doi);
 
         let meta: Box<
@@ -544,7 +541,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_default_point(app_ctx: PostgresContext<NoTls>) {
+    async fn it_loads_default_point(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let doi = "10.1594/PANGAEA.933024";
 
         let mut server = Server::run();
@@ -552,12 +552,7 @@ mod tests {
         setup_metadata(&mut server, doi, "pangaea_geo_point_meta.json").await;
         setup_data(&mut server, doi, "pangaea_geo_point.tsv").await;
 
-        let provider = create_provider(
-            &server,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await
-        .unwrap();
+        let provider = create_provider(&server, ctx.db()).await.unwrap();
         let id = create_id(doi);
 
         let meta: Box<
@@ -625,7 +620,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_default_polygon(app_ctx: PostgresContext<NoTls>) {
+    async fn it_loads_default_polygon(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let doi = "10.1594/PANGAEA.913417";
 
         let mut server = Server::run();
@@ -633,12 +631,7 @@ mod tests {
         setup_metadata(&mut server, doi, "pangaea_geo_box_meta.json").await;
         setup_data(&mut server, doi, "pangaea_geo_box.tsv").await;
 
-        let provider = create_provider(
-            &server,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await
-        .unwrap();
+        let provider = create_provider(&server, ctx.db()).await.unwrap();
         let id = create_id(doi);
 
         let meta: Box<
@@ -702,7 +695,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_points(app_ctx: PostgresContext<NoTls>) {
+    async fn it_loads_points(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let doi = "10.1594/PANGAEA.921338";
 
         let mut server = Server::run();
@@ -710,12 +706,7 @@ mod tests {
         setup_metadata(&mut server, doi, "pangaea_geo_lat_lon_meta.json").await;
         setup_data(&mut server, doi, "pangaea_geo_lat_lon.tsv").await;
 
-        let provider = create_provider(
-            &server,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await
-        .unwrap();
+        let provider = create_provider(&server, ctx.db()).await.unwrap();
         let id = create_id(doi);
 
         let meta: Box<
@@ -775,7 +766,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_creates_provenance(app_ctx: PostgresContext<NoTls>) {
+    async fn it_creates_provenance(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let doi = "10.1594/PANGAEA.921338";
 
         let mut server = Server::run();
@@ -783,12 +777,7 @@ mod tests {
         setup_metadata(&mut server, doi, "pangaea_geo_lat_lon_meta.json").await;
         setup_citation(&mut server, doi, "pangaea_geo_lat_lon_citation.txt").await;
 
-        let provider = create_provider(
-            &server,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await
-        .unwrap();
+        let provider = create_provider(&server, ctx.db()).await.unwrap();
         let id = create_id(doi);
 
         let result = provider.provenance(&id).await;

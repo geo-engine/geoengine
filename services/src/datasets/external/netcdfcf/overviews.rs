@@ -764,11 +764,8 @@ mod tests {
     use super::*;
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::datasets::external::netcdfcf::NETCDF_CF_PROVIDER_ID;
-    use crate::{
-        contexts::{PostgresContext, SessionContext, SimpleApplicationContext},
-        ge_context,
-        tasks::util::NopTaskContext,
-    };
+    use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext, ProPostgresDb};
+    use crate::{contexts::SessionContext, pro::ge_context, tasks::util::NopTaskContext};
     use gdal::{DatasetOptions, GdalOpenFlags};
     use geoengine_datatypes::{
         primitives::{DateTime, SpatialResolution, TimeInterval},
@@ -891,12 +888,15 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_create_overviews(app_ctx: PostgresContext<NoTls>) {
+    async fn test_create_overviews(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        let db = Arc::new(app_ctx.default_session_context().await.unwrap().db());
+        let db = Arc::new(ctx.db());
 
         create_overviews(
             NopTaskContext,
@@ -934,13 +934,15 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_create_overviews_irregular(app_ctx: PostgresContext<NoTls>) {
+    async fn test_create_overviews_irregular(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        let session_context = app_ctx.default_session_context().await.unwrap();
-        let db: Arc<crate::contexts::PostgresDb<NoTls>> = Arc::new(session_context.db());
+        let db: Arc<ProPostgresDb<NoTls>> = Arc::new(ctx.db());
 
         create_overviews(
             NopTaskContext,
@@ -1084,7 +1086,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_overviews(app_ctx: PostgresContext<NoTls>) {
+    async fn test_remove_overviews(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
         }
@@ -1095,7 +1100,7 @@ mod tests {
 
         let dataset_path = Path::new("dataset_m.nc");
 
-        let db = Arc::new(app_ctx.default_session_context().await.unwrap().db());
+        let db = Arc::new(ctx.db());
 
         assert!(!db
             .overviews_exist(
