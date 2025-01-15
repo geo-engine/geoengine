@@ -42,13 +42,22 @@ pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::E
             let app_ctx_var = param_name(app_ctx);
             (
                 quote!(#app_ctx),
-                quote! {
-                    let #ctx = {
-                        use crate::contexts::ApplicationContext;
-                        use crate::pro::users::UserAuth;
-                        let session = #app_ctx_var.create_anonymous_session().await.unwrap();
-                        #app_ctx_var.session_context(session)
-                    };
+                match test_config.user {
+                    UserConfig::Anonymous => quote! {
+                        let #ctx = {
+                            use crate::contexts::ApplicationContext;
+                            use crate::pro::users::UserAuth;
+                            let session = #app_ctx_var.create_anonymous_session().await.unwrap();
+                            #app_ctx_var.session_context(session)
+                        };
+                    },
+                    UserConfig::Admin => quote! {
+                        let #ctx = {
+                            use crate::contexts::ApplicationContext;
+                            let session = crate::pro::util::tests::admin_login(&#app_ctx_var).await;
+                            #app_ctx_var.session_context(session)
+                        };
+                    },
                 },
             )
         }
@@ -116,6 +125,24 @@ struct ProTestConfig {
     test_config: TestConfig,
     quota_config: Option<TokenStream>,
     oidc_db: Option<TokenStream>,
+    user: UserConfig,
+}
+
+enum UserConfig {
+    Anonymous,
+    // Registered, TODO: impl
+    Admin,
+}
+
+impl From<&str> for UserConfig {
+    fn from(value: &str) -> Self {
+        match value {
+            "\"admin\"" => Self::Admin,
+            // "registered" => Self::Registered,
+            "\"anonymous\"" => Self::Anonymous,
+            other => panic!("Unknown UserConfig variant: {other}"),
+        }
+    }
 }
 
 impl ProTestConfig {
@@ -124,7 +151,15 @@ impl ProTestConfig {
             test_config: TestConfig::from_args(args)?,
             quota_config: None,
             oidc_db: None,
+            user: UserConfig::Anonymous,
         };
+
+        if let Some(lit) = args.remove("user") {
+            let syn::Lit::Str(user_str) = lit else {
+                panic!("`user` argument must be a string");
+            };
+            this.user = UserConfig::from(user_str.token().to_string().as_str());
+        }
 
         if let Some(lit) = args.remove("quota_config") {
             this.quota_config = Some(literal_to_fn(&lit)?);

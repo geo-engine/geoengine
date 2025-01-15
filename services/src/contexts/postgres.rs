@@ -426,7 +426,6 @@ mod tests {
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::datasets::{AddDataset, DatasetIdAndName};
-    use crate::ge_context;
     use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
     use crate::layers::external::TypedDataProviderDefinition;
     use crate::layers::layer::{
@@ -440,8 +439,10 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
+    use crate::pro::contexts::PostgresSessionContext;
     use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::users::UserAuth;
+    use crate::pro::ge_context;
+    use crate::pro::users::UserSession;
     use crate::projects::{
         ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LineSymbology,
         LoadVersion, NumberParam, OrderBy, Plot, PlotUpdate, PointSymbology, PolygonSymbology,
@@ -502,23 +503,21 @@ mod tests {
     use tokio_postgres::config::Host;
 
     #[ge_context::test]
-    async fn test(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+    async fn test(app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+        create_projects(&app_ctx, ctx.session()).await;
 
-        create_projects(&app_ctx, &session).await;
-
-        let projects = list_projects(&app_ctx, &session).await;
+        let projects = list_projects(&app_ctx, ctx.session()).await;
 
         let project_id = projects[0].id;
 
-        update_projects(&app_ctx, &session, project_id).await;
+        update_projects(&app_ctx, ctx.session(), project_id).await;
 
-        delete_project(&app_ctx, &session, project_id).await;
+        delete_project(&app_ctx, ctx.session(), project_id).await;
     }
 
     async fn delete_project(
-        app_ctx: &PostgresContext<NoTls>,
-        session: &SimpleSession,
+        app_ctx: &ProPostgresContext<NoTls>,
+        session: &UserSession,
         project_id: ProjectId,
     ) {
         let db = app_ctx.session_context(session.clone()).db();
@@ -530,8 +529,8 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     async fn update_projects(
-        app_ctx: &PostgresContext<NoTls>,
-        session: &SimpleSession,
+        app_ctx: &ProPostgresContext<NoTls>,
+        session: &UserSession,
         project_id: ProjectId,
     ) {
         let db = app_ctx.session_context(session.clone()).db();
@@ -645,8 +644,8 @@ mod tests {
     }
 
     async fn list_projects(
-        app_ctx: &PostgresContext<NoTls>,
-        session: &SimpleSession,
+        app_ctx: &ProPostgresContext<NoTls>,
+        session: &UserSession,
     ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
             order: OrderBy::NameDesc,
@@ -664,7 +663,7 @@ mod tests {
         projects
     }
 
-    async fn create_projects(app_ctx: &PostgresContext<NoTls>, session: &SimpleSession) {
+    async fn create_projects(app_ctx: &ProPostgresContext<NoTls>, session: &UserSession) {
         let db = app_ctx.session_context(session.clone()).db();
 
         for i in 0..10 {
@@ -688,7 +687,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_persists_workflows(app_ctx: PostgresContext<NoTls>) {
+    async fn it_persists_workflows(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
@@ -699,9 +701,6 @@ mod tests {
                 .boxed(),
             ),
         };
-
-        let session = app_ctx.default_session().await.unwrap();
-        let ctx = app_ctx.session_context(session);
 
         let db = ctx.db();
         let id = db.register_workflow(workflow).await.unwrap();
@@ -719,7 +718,10 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_persists_datasets(app_ctx: PostgresContext<NoTls>) {
+    async fn it_persists_datasets(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let loading_info = OgrSourceDataset {
             file_name: PathBuf::from("test.csv"),
             layer_name: "test.csv".to_owned(),
@@ -775,11 +777,9 @@ mod tests {
             phantom: Default::default(),
         });
 
-        let session = app_ctx.default_session().await.unwrap();
+        let dataset_name = DatasetName::new(Some(ctx.session().user.id.to_string()), "my_dataset");
 
-        let dataset_name = DatasetName::new(None, "my_dataset");
-
-        let db = app_ctx.session_context(session.clone()).db();
+        let db = ctx.db();
         let DatasetIdAndName {
             id: dataset_id,
             name: dataset_name,
@@ -879,7 +879,10 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_persists_uploads(app_ctx: PostgresContext<NoTls>) {
+    async fn it_persists_uploads(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let id = UploadId::from_str("2de18cd8-4a38-4111-a445-e3734bc18a80").unwrap();
         let input = Upload {
             id,
@@ -890,9 +893,7 @@ mod tests {
             }],
         };
 
-        let session = app_ctx.default_session().await.unwrap();
-
-        let db = app_ctx.session_context(session.clone()).db();
+        let db = ctx.db();
 
         db.create_upload(input.clone()).await.unwrap();
 
@@ -902,9 +903,12 @@ mod tests {
     }
 
     #[allow(clippy::too_many_lines)]
-    #[ge_context::test]
-    async fn it_persists_layer_providers(app_ctx: PostgresContext<NoTls>) {
-        let db = app_ctx.default_session_context().await.unwrap().db();
+    #[ge_context::test(user = "admin")]
+    async fn it_persists_layer_providers(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let db = ctx.db();
 
         let provider = NetCdfCfDataProviderDefinition {
             name: "netcdfcf".to_string(),
@@ -954,10 +958,11 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_loads_all_meta_data_types(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
-
-        let db = app_ctx.session_context(session.clone()).db();
+    async fn it_loads_all_meta_data_types(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let db = ctx.db();
 
         let vector_descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
@@ -1129,11 +1134,12 @@ mod tests {
     }
 
     #[allow(clippy::too_many_lines)]
-    #[ge_context::test]
-    async fn it_collects_layers(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
-
-        let layer_db = app_ctx.session_context(session).db();
+    #[ge_context::test(user = "admin")]
+    async fn it_collects_layers(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let layer_db = ctx.db();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(
@@ -1324,11 +1330,12 @@ mod tests {
     }
 
     #[allow(clippy::too_many_lines)]
-    #[ge_context::test]
-    async fn it_searches_layers(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
-
-        let layer_db = app_ctx.session_context(session).db();
+    #[ge_context::test(user = "admin")]
+    async fn it_searches_layers(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let layer_db = ctx.db();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(
@@ -1669,11 +1676,12 @@ mod tests {
     }
 
     #[allow(clippy::too_many_lines)]
-    #[ge_context::test]
-    async fn it_autocompletes_layers(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
-
-        let layer_db = app_ctx.session_context(session).db();
+    #[ge_context::test(user = "admin")]
+    async fn it_autocompletes_layers(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let layer_db = ctx.db();
 
         let workflow = Workflow {
             operator: TypedOperator::Vector(
@@ -1850,10 +1858,11 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_reports_search_capabilities(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
-
-        let layer_db = app_ctx.session_context(session).db();
+    async fn it_reports_search_capabilities(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let layer_db = ctx.db();
 
         let capabilities = layer_db.capabilities().search;
 
@@ -1946,11 +1955,12 @@ mod tests {
     }
 
     #[allow(clippy::too_many_lines)]
-    #[ge_context::test]
-    async fn it_removes_layer_collections(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
-
-        let layer_db = app_ctx.session_context(session).db();
+    #[ge_context::test(user = "admin")]
+    async fn it_removes_layer_collections(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let layer_db = ctx.db();
 
         let layer = AddLayer {
             name: "layer".to_string(),
@@ -2112,12 +2122,13 @@ mod tests {
             .unwrap();
     }
 
-    #[ge_context::test]
+    #[ge_context::test(user = "admin")]
     #[allow(clippy::too_many_lines)]
-    async fn it_removes_collections_from_collections(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
-
-        let db = app_ctx.session_context(session).db();
+    async fn it_removes_collections_from_collections(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let db = ctx.db();
 
         let root_collection_id = &db.get_root_layer_collection_id().await.unwrap();
 
@@ -2193,12 +2204,13 @@ mod tests {
             .unwrap();
     }
 
-    #[ge_context::test]
+    #[ge_context::test(user = "admin")]
     #[allow(clippy::too_many_lines)]
-    async fn it_removes_layers_from_collections(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
-
-        let db = app_ctx.session_context(session).db();
+    async fn it_removes_layers_from_collections(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let db = ctx.db();
 
         let root_collection = &db.get_root_layer_collection_id().await.unwrap();
 
@@ -2319,7 +2331,10 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_deletes_dataset(app_ctx: PostgresContext<NoTls>) {
+    async fn it_deletes_dataset(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let loading_info = OgrSourceDataset {
             file_name: PathBuf::from("test.csv"),
             layer_name: "test.csv".to_owned(),
@@ -2375,11 +2390,9 @@ mod tests {
             phantom: Default::default(),
         });
 
-        let session = app_ctx.default_session().await.unwrap();
+        let dataset_name = DatasetName::new(Some(ctx.session().user.id.to_string()), "my_dataset");
 
-        let dataset_name = DatasetName::new(None, "my_dataset");
-
-        let db = app_ctx.session_context(session.clone()).db();
+        let db = ctx.db();
         let dataset_id = db
             .add_dataset(
                 AddDataset {
@@ -2408,9 +2421,12 @@ mod tests {
         assert!(db.load_dataset(&dataset_id).await.is_err());
     }
 
-    #[ge_context::test]
+    #[ge_context::test(user = "admin")]
     #[allow(clippy::too_many_lines)]
-    async fn it_deletes_admin_dataset(app_ctx: PostgresContext<NoTls>) {
+    async fn it_deletes_admin_dataset(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let dataset_name = DatasetName::new(None, "my_dataset");
 
         let loading_info = OgrSourceDataset {
@@ -2468,9 +2484,7 @@ mod tests {
             phantom: Default::default(),
         });
 
-        let session = app_ctx.default_session().await.unwrap();
-
-        let db = app_ctx.session_context(session).db();
+        let db = ctx.db();
         let dataset_id = db
             .add_dataset(
                 AddDataset {
@@ -2499,10 +2513,12 @@ mod tests {
         assert!(db.load_dataset(&dataset_id).await.is_err());
     }
 
-    #[ge_context::test]
-    async fn test_missing_layer_dataset_in_collection_listing(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
-        let db = app_ctx.session_context(session).db();
+    #[ge_context::test(user = "admin")]
+    async fn test_missing_layer_dataset_in_collection_listing(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let db = ctx.db();
 
         let root_collection_id = &db.get_root_layer_collection_id().await.unwrap();
 
@@ -2556,12 +2572,13 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[crate::pro::ge_context::test]
-    async fn it_updates_project_layer_symbology(app_ctx: ProPostgresContext<NoTls>) {
-        let session = app_ctx.create_anonymous_session().await.unwrap();
-
+    async fn it_updates_project_layer_symbology(
+        app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
-        let db = app_ctx.session_context(session.clone()).db();
+        let db = ctx.db();
 
         let create_project: CreateProject = serde_json::from_value(json!({
             "name": "Default",
@@ -2869,9 +2886,11 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_resolves_dataset_names_to_ids(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
-        let db = app_ctx.session_context(session.clone()).db();
+    async fn it_resolves_dataset_names_to_ids(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let db = ctx.db();
 
         let loading_info = OgrSourceDataset {
             file_name: PathBuf::from("test.csv"),
@@ -2934,7 +2953,10 @@ mod tests {
         } = db
             .add_dataset(
                 AddDataset {
-                    name: Some(DatasetName::new(None, "my_dataset".to_owned())),
+                    name: Some(DatasetName::new(
+                        Some(ctx.session().user.id.to_string()),
+                        "my_dataset".to_owned(),
+                    )),
                     display_name: "Ogr Test".to_owned(),
                     description: "desc".to_owned(),
                     source_operator: "OgrSource".to_owned(),
@@ -2962,7 +2984,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_postgres_type_serialization(app_ctx: PostgresContext<NoTls>) {
+    async fn test_postgres_type_serialization(app_ctx: ProPostgresContext<NoTls>) {
         let pool = app_ctx.pool.get().await.unwrap();
 
         assert_sql_type(&pool, "RgbaColor", [RgbaColor::new(0, 1, 2, 3)]).await;

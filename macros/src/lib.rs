@@ -36,6 +36,7 @@ pub fn test(
 /// - `test_execution` - `parallel` (default) or `serial`, which isolates this test from other tests
 /// - `before` - a function that is called before the context is created and the test is executed
 /// - `expect_panic` - if the test is expected to panic
+/// - `user` - `"admin"` if created session should be admin session
 ///
 /// ## Pro Parameters
 ///
