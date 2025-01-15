@@ -1,7 +1,9 @@
+use core::panic;
+
 use crate::testing::{literal_to_fn, parse_config_args, ConfigArgs, Result, TestConfig};
 use proc_macro2::TokenStream;
-use quote::quote;
-use syn::ItemFn;
+use quote::{quote, ToTokens};
+use syn::{FnArg, Ident, ItemFn, Pat};
 
 pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::Error> {
     let input: ItemFn = syn::parse2(item.clone())?;
@@ -32,10 +34,31 @@ pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::E
         })
         .collect::<Result<Vec<Box<syn::Pat>>>>()?;
 
-    let (app_ctx, app_config) = match inputs.as_slice() {
-        [] => (quote!(_), quote!(_)),
-        [app_ctx] => (quote!(#app_ctx), quote!(_)),
-        [app_ctx, app_config, ..] => (quote!(#app_ctx), quote!(#app_config)),
+    let (app_ctx, user_ctx) = match inputs.as_slice() {
+        [] => (quote!(), quote!()),
+        [app_ctx] => (quote!(#app_ctx), quote!()),
+        // TODO: make configurable for registered users and admins
+        [app_ctx, ctx] => {
+            let app_ctx_var = param_name(app_ctx);
+            (
+                quote!(#app_ctx),
+                quote! {
+                    let #ctx = {
+                        use crate::contexts::ApplicationContext;
+                        use crate::pro::users::UserAuth;
+                        let session = #app_ctx_var.create_anonymous_session().await.unwrap();
+                        #app_ctx_var.session_context(session)
+                    };
+                },
+            )
+        }
+        [_app_ctx, _ctx, rest @ ..] => {
+            let additional_names: Vec<String> = rest
+                .iter()
+                .map(|p| p.to_token_stream().to_string())
+                .collect();
+            panic!("Too many input params: {additional_names:?}")
+        }
     };
 
     let tiling_spec = test_config.tiling_spec();
@@ -65,12 +88,28 @@ pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::E
                 query_ctx_chunk_size,
                 quota_config,
                 oidc_db,
-                |#app_ctx, #app_config| #test_name ( #(#input_params),* ),
+                #[allow(clippy::used_underscore_binding)]
+                |#app_ctx, _| async {
+                    #user_ctx
+                    #[warn(clippy::used_underscore_binding)]
+                    #test_name ( #(#input_params),* ).await
+                },
             ).await
         }
     };
 
     Ok(output)
+}
+
+fn param_name(arg: &FnArg) -> Ident {
+    let FnArg::Typed(arg) = arg else {
+        panic!("Param name must be typed");
+    };
+    let Pat::Ident(ref ident) = *arg.pat else {
+        panic!("Param name must be identifier");
+    };
+
+    ident.ident.clone()
 }
 
 struct ProTestConfig {
@@ -138,6 +177,18 @@ impl ProTestConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_str_eq;
+
+    // This macro is used to compare the pretty printed output of the expression parser.
+    // We will use a macro instead of a function to get errors in the places where they occur.
+    macro_rules! assert_eq_pretty {
+        ( $left:expr, $right:expr ) => {{
+            assert_str_eq!(
+                prettyplease::unparse(&syn::parse_file(&$left).unwrap()),
+                prettyplease::unparse(&syn::parse_file(&$right).unwrap()),
+            );
+        }};
+    }
 
     #[test]
     fn test_codegen_no_attrs() {
@@ -169,14 +220,68 @@ mod tests {
                     query_ctx_chunk_size,
                     quota_config,
                     oidc_db,
-                    |app_ctx: ProPostgresContext<NoTls>, _| it_works(app_ctx),
+                    #[allow(clippy::used_underscore_binding)]
+                    |app_ctx: ProPostgresContext<NoTls>, _| async {
+                        #[warn(clippy::used_underscore_binding)]
+                        it_works(app_ctx).await
+                    },
                 ).await
             }
         };
 
         let actual = test(attributes, &input).unwrap();
 
-        assert_eq!(expected.to_string(), actual.to_string());
+        assert_eq_pretty!(expected.to_string(), actual.to_string());
+    }
+
+    #[test]
+    fn test_codegen_with_user() {
+        let input = quote! {
+            async fn it_works(app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+                assert_eq!(1, 1);
+            }
+        };
+        let attributes = quote! {};
+
+        let expected = quote! {
+            #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+            #[serial_test::parallel]
+            async fn it_works() {
+                async fn it_works(app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+                    assert_eq!(1, 1);
+                }
+
+                let tiling_spec = geoengine_datatypes::util::test::TestDefault::test_default();
+                let query_ctx_chunk_size = geoengine_datatypes::util::test::TestDefault::test_default();
+                let quota_config = crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
+                    .unwrap();
+                let (server, oidc_db) = ((), crate::pro::users::OidcManager::default);
+
+                (|| {})();
+
+                crate::pro::util::tests::with_pro_temp_context_from_spec(
+                    tiling_spec,
+                    query_ctx_chunk_size,
+                    quota_config,
+                    oidc_db,
+                    #[allow(clippy::used_underscore_binding)]
+                    |app_ctx: ProPostgresContext<NoTls>, _| async {
+                        let ctx: PostgresSessionContext<NoTls> = {
+                            use crate::contexts::ApplicationContext;
+                            use crate::pro::users::UserAuth;
+                            let session = app_ctx.create_anonymous_session().await.unwrap();
+                            app_ctx.session_context(session)
+                        };
+                        #[warn(clippy::used_underscore_binding)]
+                        it_works(app_ctx, ctx).await
+                    },
+                ).await
+            }
+        };
+
+        let actual = test(attributes, &input).unwrap();
+
+        assert_eq_pretty!(expected.to_string(), actual.to_string());
     }
 
     #[test]
@@ -217,13 +322,17 @@ mod tests {
                     query_ctx_chunk_size,
                     quota_config,
                     oidc_db,
-                    |app_ctx: ProPostgresContext<NoTls>, _| it_works(app_ctx),
+                    #[allow(clippy::used_underscore_binding)]
+                    |app_ctx: ProPostgresContext<NoTls>, _| async {
+                        #[warn(clippy::used_underscore_binding)]
+                        it_works(app_ctx).await
+                    },
                 ).await
             }
         };
 
         let actual = test(attributes, &input).unwrap();
 
-        assert_eq!(expected.to_string(), actual.to_string());
+        assert_eq_pretty!(expected.to_string(), actual.to_string());
     }
 }

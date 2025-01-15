@@ -109,7 +109,7 @@ log = "0.4"
 lru = "0.12"
 lz4_flex = "0.11"
 mime = "0.3"
-ndarray = { version = "0.16", features = ["approx"] }  # has to match with `ort`
+ndarray = { version = "0.16", features = ["approx"] }                      # has to match with `ort`
 num = "0.4"
 num-traits = "0.2"
 oauth2 = "4.4.2"
@@ -162,7 +162,7 @@ stac = "0.10"
 stream-cancel = "0.8"
 strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
-syn = { version = "2.0", features = ["full"] }
+syn = { version = "2.0", features = ["full", "extra-traits"] }
 tempfile = "3.10"
 time = "0.3"
 tokio = { version = "1.36", features = [
