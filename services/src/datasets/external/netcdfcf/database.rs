@@ -1178,15 +1178,18 @@ impl<D: NetCdfCfProviderDb + 'static + std::fmt::Debug> Drop for InProgressFlag<
 mod tests {
     use super::*;
     use crate::{
-        contexts::{PostgresContext, SessionContext, SimpleApplicationContext},
+        contexts::SessionContext,
         datasets::external::netcdfcf::{EBV_PROVIDER_ID, NETCDF_CF_PROVIDER_ID},
-        ge_context,
+        pro::{
+            contexts::{PostgresSessionContext, ProPostgresContext},
+            ge_context,
+        },
     };
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn it_locks(app_ctx: PostgresContext<NoTls>) {
-        let db = Arc::new(app_ctx.default_session_context().await.unwrap().db());
+    async fn it_locks(_app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+        let db = Arc::new(ctx.db());
 
         // lock the overview
         let flag = InProgressFlag::create(db.clone(), NETCDF_CF_PROVIDER_ID, "file_name".into())

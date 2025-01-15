@@ -230,7 +230,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl(
 }
 
 #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
-pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
+pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
     let ndvi = DatasetDefinition {
         properties: AddDataset {
             name: None,
@@ -331,7 +331,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetId {
     db.add_dataset(ndvi.properties, ndvi.meta_data)
         .await
         .expect("dataset db access")
-        .id
+        .name
 }
 
 #[allow(clippy::missing_panics_doc)]

@@ -697,19 +697,19 @@ impl<D: GeoEngineDb>
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
+    use super::*;
+    use crate::{
+        contexts::SessionContext,
+        layers::layer::{LayerListing, ProviderLayerId},
+        pro::{
+            contexts::{PostgresSessionContext, ProPostgresContext},
+            ge_context,
+        },
+    };
     use geoengine_datatypes::test_data;
     use httptest::{matchers::request, responders::status_code, Expectation};
+    use std::str::FromStr;
     use tokio_postgres::NoTls;
-
-    use crate::{
-        contexts::{PostgresContext, SessionContext, SimpleApplicationContext},
-        ge_context,
-        layers::layer::{LayerListing, ProviderLayerId},
-    };
-
-    use super::*;
 
     #[test]
     fn it_parses_layer_collection_ids() {
@@ -812,7 +812,10 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn test_get_classes(app_ctx: PostgresContext<NoTls>) {
+    async fn test_get_classes(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let mock_server = httptest::Server::run();
         mock_server.expect(
             Expectation::matching(request::method_path("GET", "/api/v1/ebv-map")).respond_with(
@@ -864,7 +867,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -952,7 +955,10 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_get_class(app_ctx: PostgresContext<NoTls>) {
+    async fn test_get_class(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let mock_server = httptest::Server::run();
         mock_server.expect(
             Expectation::matching(request::method_path("GET", "/api/v1/ebv-map")).respond_with(
@@ -1004,7 +1010,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -1067,7 +1073,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_get_ebv(app_ctx: PostgresContext<NoTls>) {
+    async fn test_get_ebv(_app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         let mock_server = httptest::Server::run();
 
         mock_server.expect(
@@ -1172,7 +1178,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -1213,7 +1219,10 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_get_dataset(app_ctx: PostgresContext<NoTls>) {
+    async fn test_get_dataset(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         let mock_server = httptest::Server::run();
 
         mock_server.expect(
@@ -1411,7 +1420,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -1467,7 +1476,10 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_get_groups(app_ctx: PostgresContext<NoTls>) {
+    async fn test_get_groups(
+        _app_ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
         // crate::util::tests::initialize_debugging_in_test(); // TODO: remove
 
         let mock_server = httptest::Server::run();
@@ -1574,7 +1586,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
