@@ -85,6 +85,7 @@ use uuid::Uuid;
 
 use super::config::get_config_element;
 use super::config::Postgres;
+use super::postgres::DatabaseConnectionConfig;
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper(
@@ -700,7 +701,7 @@ const CONCURRENT_DB_TESTS: usize = 10;
 static DB: OnceLock<RwLock<Arc<Semaphore>>> = OnceLock::new();
 
 /// Setup database schema and return its name.
-pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, tokio_postgres::Config, String) {
+pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, DatabaseConnectionConfig) {
     // acquire a permit from the semaphore that limits the number of concurrently running tests that use the database
     let permit = DB
         .get_or_init(|| RwLock::new(Arc::new(Semaphore::new(CONCURRENT_DB_TESTS))))
@@ -714,15 +715,17 @@ pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, tokio_postgres::Config,
     let mut db_config = get_config_element::<Postgres>().unwrap();
     db_config.schema = format!("geoengine_test_{}", rand::thread_rng().next_u64()); // generate random temp schema
 
-    let mut pg_config = tokio_postgres::Config::new();
-    pg_config
-        .user(&db_config.user)
-        .password(&db_config.password)
-        .host(&db_config.host)
-        .dbname(&db_config.database);
+    let db_config = DatabaseConnectionConfig {
+        host: db_config.host,
+        port: db_config.port,
+        user: db_config.user,
+        password: db_config.password,
+        database: db_config.database,
+        schema: db_config.schema,
+    };
 
     // generate schema with prior connection
-    PostgresConnectionManager::new(pg_config.clone(), NoTls)
+    PostgresConnectionManager::new(db_config.pg_config(), NoTls)
         .connect()
         .await
         .unwrap()
@@ -730,10 +733,7 @@ pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, tokio_postgres::Config,
         .await
         .unwrap();
 
-    // fix schema by providing `search_path` option
-    pg_config.options(format!("-c search_path={}", db_config.schema));
-
-    (permit, pg_config, db_config.schema)
+    (permit, db_config)
 }
 
 /// Tear down database schema.
@@ -755,45 +755,28 @@ pub(crate) async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str
 ///
 /// Panics if the `PostgresContext` could not be created.
 ///
-pub async fn with_temp_context<F, Fut, R>(f: F) -> R
-where
-    F: FnOnce(PostgresContext<NoTls>, tokio_postgres::Config) -> Fut
-        + std::panic::UnwindSafe
-        + Send
-        + 'static,
-    Fut: Future<Output = R>,
-{
-    with_temp_context_from_spec(TestDefault::test_default(), TestDefault::test_default(), f).await
-}
-
-/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
-///
-/// # Panics
-///
-/// Panics if the `PostgresContext` could not be created.
-///
 pub async fn with_temp_context_from_spec<F, Fut, R>(
     tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
     f: F,
 ) -> R
 where
-    F: FnOnce(PostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+    F: FnOnce(PostgresContext<NoTls>, DatabaseConnectionConfig) -> Fut
         + std::panic::UnwindSafe
         + Send
         + 'static,
     Fut: Future<Output = R>,
 {
-    let (_permit, pg_config, schema) = setup_db().await;
+    let (_permit, db_config) = setup_db().await;
 
     // catch all panics and clean up first…
     let executed_fn = {
-        let pg_config = pg_config.clone();
+        let db_config = db_config.clone();
         std::panic::catch_unwind(move || {
             tokio::task::block_in_place(move || {
                 Handle::current().block_on(async move {
                     let ctx = PostgresContext::new_with_context_spec(
-                        pg_config.clone(),
+                        db_config.pg_config(),
                         tokio_postgres::NoTls,
                         tiling_spec,
                         query_ctx_chunk_size,
@@ -801,13 +784,13 @@ where
                     )
                     .await
                     .unwrap();
-                    f(ctx, pg_config.clone()).await
+                    f(ctx, db_config.clone()).await
                 })
             })
         })
     };
 
-    tear_down_db(pg_config, &schema).await;
+    tear_down_db(db_config.pg_config(), &db_config.schema).await;
 
     // then throw errors afterwards
     match executed_fn {

@@ -129,11 +129,7 @@ pub(crate) async fn get_ml_model<C: ApplicationContext>(
 
 #[cfg(test)]
 mod tests {
-    use actix_http::header;
-    use actix_web::test;
-    use actix_web_httpauth::headers::authorization::Bearer;
-    use tokio_postgres::NoTls;
-
+    use super::*;
     use crate::{
         api::model::{datatypes::RasterDataType, responses::IdResponse},
         contexts::Session,
@@ -143,8 +139,10 @@ mod tests {
         pro::{contexts::ProPostgresContext, users::UserAuth},
         util::tests::{send_test_request, SetMultipartBody, TestDataUploads},
     };
-
-    use super::*;
+    use actix_http::header;
+    use actix_web::test;
+    use actix_web_httpauth::headers::authorization::Bearer;
+    use tokio_postgres::NoTls;
 
     #[ge_context::test]
     async fn it_stores_ml_models_for_application(app_ctx: ProPostgresContext<NoTls>) {

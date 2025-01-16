@@ -1,4 +1,6 @@
+use super::config::Quota;
 use crate::pro::users::OidcManager;
+use crate::util::postgres::DatabaseConnectionConfig;
 use crate::{
     contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
     datasets::{
@@ -37,8 +39,6 @@ use geoengine_operators::{
 };
 use tokio::runtime::Handle;
 use tokio_postgres::NoTls;
-
-use super::config::{Cache, Quota};
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_session_helper<C: UserAuth>(app_ctx: &C) -> UserSession {
@@ -285,7 +285,7 @@ pub async fn load_mock_model_from_disk() -> Result<String, std::io::Error> {
 ///
 pub async fn with_pro_temp_context<F, Fut, R>(f: F) -> R
 where
-    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+    F: FnOnce(ProPostgresContext<NoTls>, DatabaseConnectionConfig) -> Fut
         + std::panic::UnwindSafe
         + Send
         + 'static,
@@ -315,22 +315,22 @@ pub async fn with_pro_temp_context_from_spec<F, Fut, R>(
     f: F,
 ) -> R
 where
-    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
+    F: FnOnce(ProPostgresContext<NoTls>, DatabaseConnectionConfig) -> Fut
         + std::panic::UnwindSafe
         + Send
         + 'static,
     Fut: Future<Output = R>,
 {
-    let (_permit, pg_config, schema) = setup_db().await;
+    let (_permit, db_config) = setup_db().await;
 
     // catch all panics and clean up first…
     let executed_fn = {
-        let pg_config = pg_config.clone();
+        let db_config = db_config.clone();
         std::panic::catch_unwind(move || {
             tokio::task::block_in_place(move || {
                 Handle::current().block_on(async move {
                     let ctx = ProPostgresContext::new_with_context_spec(
-                        pg_config.clone(),
+                        db_config.pg_config(),
                         tokio_postgres::NoTls,
                         exe_ctx_tiling_spec,
                         query_ctx_chunk_size,
@@ -339,64 +339,13 @@ where
                     )
                     .await
                     .unwrap();
-                    f(ctx, pg_config.clone()).await
+                    f(ctx, db_config.clone()).await
                 })
             })
         })
     };
 
-    tear_down_db(pg_config, &schema).await;
-
-    match executed_fn {
-        Ok(res) => res,
-        Err(err) => std::panic::resume_unwind(err),
-    }
-}
-
-/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
-///
-/// # Panics
-///
-/// Panics if the `PostgresContext` could not be created.
-///
-pub async fn with_pro_temp_context_and_oidc<O, F, Fut, R>(
-    oidc_db: O,
-    cache_config: Cache,
-    quota_config: Quota,
-    f: F,
-) -> R
-where
-    O: FnOnce() -> OidcManager + std::panic::UnwindSafe + Send + 'static,
-    F: FnOnce(ProPostgresContext<NoTls>, tokio_postgres::Config) -> Fut
-        + std::panic::UnwindSafe
-        + Send
-        + 'static,
-    Fut: Future<Output = R>,
-{
-    let (_permit, pg_config, schema) = setup_db().await;
-
-    // catch all panics and clean up first…
-    let executed_fn = {
-        let pg_config = pg_config.clone();
-        std::panic::catch_unwind(move || {
-            tokio::task::block_in_place(move || {
-                Handle::current().block_on(async move {
-                    let ctx = ProPostgresContext::new_with_oidc(
-                        pg_config.clone(),
-                        tokio_postgres::NoTls,
-                        oidc_db(),
-                        cache_config,
-                        quota_config,
-                    )
-                    .await
-                    .unwrap();
-                    f(ctx, pg_config.clone()).await
-                })
-            })
-        })
-    };
-
-    tear_down_db(pg_config, &schema).await;
+    tear_down_db(db_config.pg_config(), &db_config.schema).await;
 
     match executed_fn {
         Ok(res) => res,
