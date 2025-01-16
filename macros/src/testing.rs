@@ -11,7 +11,7 @@ pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::E
     let input: ItemFn = syn::parse2(item.clone())?;
 
     let mut config_args = parse_config_args(attr)?;
-    let test_config = ProTestConfig::from_args(&mut config_args)?;
+    let test_config = TestConfig::from_args(&mut config_args)?;
 
     let test_name = input.sig.ident.clone();
     let test_output = input.sig.output.clone();
@@ -41,26 +41,10 @@ pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::E
         [app_ctx] => (quote!(#app_ctx), quote!()),
         // TODO: make configurable for registered users and admins
         [app_ctx, ctx] => {
-            let app_ctx_var = param_name(app_ctx);
+            let app_ctx_var = param_name(app_ctx)?;
             (
                 quote!(#app_ctx),
-                match test_config.user {
-                    UserConfig::Anonymous => quote! {
-                        let #ctx = {
-                            use crate::contexts::ApplicationContext;
-                            use crate::pro::users::UserAuth;
-                            let session = #app_ctx_var.create_anonymous_session().await.unwrap();
-                            #app_ctx_var.session_context(session)
-                        };
-                    },
-                    UserConfig::Admin => quote! {
-                        let #ctx = {
-                            use crate::contexts::ApplicationContext;
-                            let session = crate::pro::util::tests::admin_login(&#app_ctx_var).await;
-                            #app_ctx_var.session_context(session)
-                        };
-                    },
-                },
+                test_config.user_context(ctx, &app_ctx_var),
             )
         }
         [_app_ctx, _ctx, rest @ ..] => {
@@ -68,7 +52,11 @@ pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::E
                 .iter()
                 .map(|p| p.to_token_stream().to_string())
                 .collect();
-            panic!("Too many input params: {additional_names:?}")
+
+            Err(syn::Error::new_spanned(
+                &input.sig.inputs,
+                format!("Too many input params: {additional_names:?}"),
+            ))?
         }
     };
 
@@ -112,23 +100,18 @@ pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::E
     Ok(output)
 }
 
-fn param_name(arg: &FnArg) -> Ident {
+fn param_name(arg: &FnArg) -> Result<Ident> {
     let FnArg::Typed(arg) = arg else {
-        panic!("Param name must be typed");
+        return Err(syn::Error::new_spanned(arg, "Param name must be typed"));
     };
     let Pat::Ident(ref ident) = *arg.pat else {
-        panic!("Param name must be identifier");
+        return Err(syn::Error::new_spanned(
+            arg,
+            "Param name must be identifier",
+        ));
     };
 
-    ident.ident.clone()
-}
-
-// TODO: merge with other config
-struct ProTestConfig {
-    test_config: TestConfig,
-    quota_config: Option<TokenStream>,
-    oidc_db: Option<TokenStream>,
-    user: UserConfig,
+    Ok(ident.ident.clone())
 }
 
 enum UserConfig {
@@ -137,78 +120,25 @@ enum UserConfig {
     Admin,
 }
 
-impl From<&str> for UserConfig {
-    fn from(value: &str) -> Self {
-        match value {
-            "\"admin\"" => Self::Admin,
-            // "registered" => Self::Registered,
-            "\"anonymous\"" => Self::Anonymous,
-            other => panic!("Unknown UserConfig variant: {other}"),
-        }
-    }
-}
+impl TryFrom<Lit> for UserConfig {
+    type Error = syn::Error;
 
-impl ProTestConfig {
-    pub fn from_args(args: &mut ConfigArgs) -> Result<Self> {
-        let mut this = Self {
-            test_config: TestConfig::from_args(args)?,
-            quota_config: None,
-            oidc_db: None,
-            user: UserConfig::Anonymous,
+    fn try_from(value: Lit) -> std::result::Result<Self, Self::Error> {
+        let syn::Lit::Str(user_str) = &value else {
+            return Err(syn::Error::new_spanned(
+                value,
+                "`user` argument must be a string",
+            ));
         };
-
-        if let Some(lit) = args.remove("user") {
-            let syn::Lit::Str(user_str) = lit else {
-                panic!("`user` argument must be a string");
-            };
-            this.user = UserConfig::from(user_str.token().to_string().as_str());
+        match user_str.value().as_str() {
+            "admin" => Ok(Self::Admin),
+            // "registered" => Self::Registered,
+            "anonymous" => Ok(Self::Anonymous),
+            other => Err(syn::Error::new_spanned(
+                value,
+                format!("Unknown UserConfig variant: {other}"),
+            )),
         }
-
-        if let Some(lit) = args.remove("quota_config") {
-            this.quota_config = Some(literal_to_fn(&lit)?);
-        }
-
-        if let Some(lit) = args.remove("oidc_db") {
-            let oidc_db_fn = literal_to_fn(&lit)?;
-            this.oidc_db = Some(quote!(#oidc_db_fn));
-        }
-
-        Ok(this)
-    }
-
-    pub fn tiling_spec(&self) -> TokenStream {
-        self.test_config.tiling_spec()
-    }
-
-    pub fn query_ctx_chunk_size(&self) -> TokenStream {
-        self.test_config.query_ctx_chunk_size()
-    }
-
-    pub fn test_execution(&self) -> TokenStream {
-        self.test_config.test_execution()
-    }
-
-    pub fn before(&self) -> TokenStream {
-        self.test_config.before()
-    }
-
-    pub fn expect_panic(&self) -> TokenStream {
-        self.test_config.expect_panic()
-    }
-
-    pub fn quota_config(&self) -> TokenStream {
-        self.quota_config.clone().unwrap_or_else(|| {
-            quote!(
-                crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
-                    .unwrap()
-            )
-        })
-    }
-
-    pub fn oidc_db(&self) -> TokenStream {
-        self.oidc_db
-            .clone()
-            .unwrap_or_else(|| quote!(((), crate::pro::users::OidcManager::default)))
     }
 }
 
@@ -218,6 +148,9 @@ pub struct TestConfig {
     test_execution: Option<TokenStream>,
     before: Option<TokenStream>,
     expect_panic: Option<TokenStream>,
+    quota_config: Option<TokenStream>,
+    oidc_db: Option<TokenStream>,
+    user: UserConfig,
 }
 
 impl TestConfig {
@@ -228,6 +161,9 @@ impl TestConfig {
             test_execution: None,
             before: None,
             expect_panic: None,
+            quota_config: None,
+            oidc_db: None,
+            user: UserConfig::Anonymous,
         };
 
         if let Some(lit) = args.remove("tiling_spec") {
@@ -277,6 +213,19 @@ impl TestConfig {
             ));
         }
 
+        if let Some(lit) = args.remove("user") {
+            this.user = lit.try_into()?;
+        }
+
+        if let Some(lit) = args.remove("quota_config") {
+            this.quota_config = Some(literal_to_fn(&lit)?);
+        }
+
+        if let Some(lit) = args.remove("oidc_db") {
+            let oidc_db_fn = literal_to_fn(&lit)?;
+            this.oidc_db = Some(quote!(#oidc_db_fn));
+        }
+
         Ok(this)
     }
 
@@ -304,6 +253,41 @@ impl TestConfig {
 
     pub fn expect_panic(&self) -> TokenStream {
         self.expect_panic.clone().unwrap_or_default()
+    }
+
+    pub fn quota_config(&self) -> TokenStream {
+        self.quota_config.clone().unwrap_or_else(|| {
+            quote!(
+                crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
+                    .unwrap()
+            )
+        })
+    }
+
+    pub fn oidc_db(&self) -> TokenStream {
+        self.oidc_db
+            .clone()
+            .unwrap_or_else(|| quote!(((), crate::pro::users::OidcManager::default)))
+    }
+
+    pub fn user_context(&self, user_ctx_def: &FnArg, app_ctx_var: &Ident) -> TokenStream {
+        match self.user {
+            UserConfig::Anonymous => quote! {
+                let #user_ctx_def = {
+                    use crate::contexts::ApplicationContext;
+                    use crate::pro::users::UserAuth;
+                    let session = #app_ctx_var.create_anonymous_session().await.unwrap();
+                    #app_ctx_var.session_context(session)
+                };
+            },
+            UserConfig::Admin => quote! {
+                let #user_ctx_def = {
+                    use crate::contexts::ApplicationContext;
+                    let session = crate::pro::util::tests::admin_login(&#app_ctx_var).await;
+                    #app_ctx_var.session_context(session)
+                };
+            },
+        }
     }
 }
 
@@ -443,6 +427,57 @@ mod tests {
                             use crate::contexts::ApplicationContext;
                             use crate::pro::users::UserAuth;
                             let session = app_ctx.create_anonymous_session().await.unwrap();
+                            app_ctx.session_context(session)
+                        };
+                        #[warn(clippy::used_underscore_binding)]
+                        it_works(app_ctx, ctx).await
+                    },
+                ).await
+            }
+        };
+
+        let actual = test(attributes, &input).unwrap();
+
+        assert_eq_pretty!(expected.to_string(), actual.to_string());
+    }
+
+    #[test]
+    fn test_codegen_with_admin_user() {
+        let input = quote! {
+            async fn it_works(app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+                assert_eq!(1, 1);
+            }
+        };
+        let attributes = quote! {
+            user = "admin"
+        };
+
+        let expected = quote! {
+            #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+            #[serial_test::parallel]
+            async fn it_works() {
+                async fn it_works(app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+                    assert_eq!(1, 1);
+                }
+
+                let tiling_spec = geoengine_datatypes::util::test::TestDefault::test_default();
+                let query_ctx_chunk_size = geoengine_datatypes::util::test::TestDefault::test_default();
+                let quota_config = crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
+                    .unwrap();
+                let (server, oidc_db) = ((), crate::pro::users::OidcManager::default);
+
+                (|| {})();
+
+                crate::pro::util::tests::with_pro_temp_context_from_spec(
+                    tiling_spec,
+                    query_ctx_chunk_size,
+                    quota_config,
+                    oidc_db,
+                    #[allow(clippy::used_underscore_binding)]
+                    |app_ctx: ProPostgresContext<NoTls>, _| async {
+                        let ctx: PostgresSessionContext<NoTls> = {
+                            use crate::contexts::ApplicationContext;
+                            let session = crate::pro::util::tests::admin_login(&app_ctx).await;
                             app_ctx.session_context(session)
                         };
                         #[warn(clippy::used_underscore_binding)]

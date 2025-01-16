@@ -428,6 +428,7 @@ mod tests {
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::datasets::{AddDataset, DatasetIdAndName};
+    use crate::ge_context;
     use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
@@ -440,7 +441,6 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
-    use crate::ge_context;
     use crate::pro::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
     use crate::pro::users::{OidcTokens, SessionTokenStore};
     use crate::pro::users::{

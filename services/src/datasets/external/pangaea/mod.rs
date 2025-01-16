@@ -263,9 +263,9 @@ mod tests {
     use crate::contexts::{GeoEngineDb, SessionContext};
     use crate::datasets::external::pangaea::{PangaeaDataProviderDefinition, PANGAEA_PROVIDER_ID};
     use crate::error::Error;
+    use crate::ge_context;
     use crate::layers::external::{DataProvider, DataProviderDefinition};
     use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext};
-    use crate::ge_context;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{
         DataCollection, FeatureCollectionInfos, IntoGeometryIterator, MultiPointCollection,

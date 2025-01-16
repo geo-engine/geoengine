@@ -171,8 +171,8 @@ fn send_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pro::contexts::ProPostgresContext;
     use crate::ge_context;
+    use crate::pro::contexts::ProPostgresContext;
     use crate::pro::users::UserAuth;
     use crate::util::tests::register_ndvi_workflow_helper;
     use crate::{contexts::ApplicationContext, pro::contexts::PostgresSessionContext};
