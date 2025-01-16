@@ -32,6 +32,7 @@ mod tests {
     use crate::contexts::migrations::all_migrations;
     use crate::contexts::Migration0000Initial;
     use crate::error::Result;
+    use crate::util::postgres::DatabaseConnectionConfig;
     use crate::{contexts::migrate_database, util::config::get_config_element};
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
     use geoengine_datatypes::test_data;
@@ -40,7 +41,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_replaces_rgba_with_lineargradient() -> Result<()> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().max_size(1).build(pg_mgr).await?;
 

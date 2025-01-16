@@ -33,6 +33,19 @@ impl DatabaseConnectionConfig {
     }
 }
 
+impl From<crate::util::config::Postgres> for DatabaseConnectionConfig {
+    fn from(config: crate::util::config::Postgres) -> Self {
+        Self {
+            host: config.host,
+            port: config.port,
+            database: config.database,
+            schema: config.schema,
+            user: config.user,
+            password: config.password,
+        }
+    }
+}
+
 /// test `FromSql`/`ToSql` for a type and its postgres type
 ///
 /// # Panics

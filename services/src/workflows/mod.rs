@@ -1,4 +1,3 @@
-mod postgres_workflow_registry;
 mod raster_stream;
 pub mod registry;
 mod vector_stream;

@@ -102,6 +102,7 @@ mod tests {
     use crate::pro::permissions::RoleId;
     use crate::pro::users::UserDb;
     use crate::projects::{ProjectDb, ProjectListOptions};
+    use crate::util::postgres::DatabaseConnectionConfig;
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::WorkflowId;
     use crate::{
@@ -123,7 +124,8 @@ mod tests {
     #[tokio::test]
     async fn it_performs_all_pro_migrations() -> Result<()> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -137,7 +139,8 @@ mod tests {
     #[tokio::test]
     async fn it_uses_the_current_schema_if_the_database_is_empty() -> Result<()> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -160,7 +163,8 @@ mod tests {
         // Finally, it tries to load the test data again via the Db implementations.
 
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().max_size(1).build(pg_mgr).await?;
 

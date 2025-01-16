@@ -48,6 +48,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     use crate::contexts::{Migration0001RasterStacks, Migration0002DatasetListingProvider};
+    use crate::util::postgres::DatabaseConnectionConfig;
     use crate::{
         contexts::{migrate_database, migrations::migration_0000_initial::Migration0000Initial},
         util::config::get_config_element,
@@ -58,7 +59,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_adds_the_field_and_sets_the_default_value() -> Result<()> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().max_size(1).build(pg_mgr).await?;
 

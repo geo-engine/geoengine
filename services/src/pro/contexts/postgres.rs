@@ -5,7 +5,7 @@ use crate::api::cli::add_providers_from_directory;
 use crate::api::model::services::Volume;
 use crate::contexts::{
     initialize_database, ApplicationContext, CurrentSchemaMigration, MigrationResult,
-    PostgresContext, QueryContextImpl, SessionId,
+    QueryContextImpl, SessionId,
 };
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::upload::Volumes;
@@ -23,6 +23,7 @@ use crate::pro::users::OidcManager;
 use crate::pro::users::{UserAuth, UserSession};
 use crate::pro::util::config::{Cache, Oidc, Quota};
 use crate::tasks::SimpleTaskManagerContext;
+use crate::util::config::get_config_element;
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -41,6 +42,7 @@ use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio_postgres::error::SqlState;
 use uuid::Uuid;
 
 // TODO: do not report postgres error details to user
@@ -212,7 +214,7 @@ where
     pub(crate) async fn create_pro_database(
         mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
     ) -> Result<bool> {
-        PostgresContext::maybe_clear_database(&conn).await?;
+        Self::maybe_clear_database(&conn).await?;
 
         let migration = initialize_database(
             &mut conn,
@@ -223,6 +225,67 @@ where
 
         Ok(migration == MigrationResult::CreatedDatabase)
     }
+
+    /// Clears the database if the Settings demand and the database properties allows it.
+    pub(crate) async fn maybe_clear_database(
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<()> {
+        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let database_status = Self::check_schema_status(conn).await?;
+        let schema_name = postgres_config.schema;
+
+        match database_status {
+            DatabaseStatus::InitializedClearDatabase
+                if postgres_config.clear_database_on_start && schema_name != "pg_temp" =>
+            {
+                info!("Clearing schema {}.", schema_name);
+                conn.batch_execute(&format!("DROP SCHEMA {schema_name} CASCADE;"))
+                    .await?;
+            }
+            DatabaseStatus::InitializedKeepDatabase if postgres_config.clear_database_on_start => {
+                return Err(Error::ClearDatabaseOnStartupNotAllowed)
+            }
+            DatabaseStatus::InitializedClearDatabase
+            | DatabaseStatus::InitializedKeepDatabase
+            | DatabaseStatus::Unitialized => (),
+        };
+
+        Ok(())
+    }
+
+    async fn check_schema_status(
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<DatabaseStatus> {
+        let stmt = match conn
+            .prepare("SELECT clear_database_on_start from geoengine;")
+            .await
+        {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                if let Some(code) = e.code() {
+                    if *code == SqlState::UNDEFINED_TABLE {
+                        info!("Initializing schema.");
+                        return Ok(DatabaseStatus::Unitialized);
+                    }
+                }
+                return Err(error::Error::TokioPostgres { source: e });
+            }
+        };
+
+        let row = conn.query_one(&stmt, &[]).await?;
+
+        if row.get(0) {
+            Ok(DatabaseStatus::InitializedClearDatabase)
+        } else {
+            Ok(DatabaseStatus::InitializedKeepDatabase)
+        }
+    }
+}
+
+enum DatabaseStatus {
+    Unitialized,
+    InitializedClearDatabase,
+    InitializedKeepDatabase,
 }
 
 #[async_trait]

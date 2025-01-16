@@ -1,7 +1,6 @@
 use crate::api::model::responses::ErrorResponse;
 use crate::contexts::ApplicationContext;
 use crate::contexts::GeoEngineDb;
-use crate::contexts::PostgresContext;
 use crate::datasets::listing::Provenance;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
@@ -36,7 +35,6 @@ use actix_web::{
 use bb8_postgres::bb8::ManageConnection;
 use bb8_postgres::PostgresConnectionManager;
 use flexi_logger::Logger;
-use futures_util::Future;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::operations::image::Colorizer;
@@ -47,12 +45,10 @@ use geoengine_datatypes::primitives::Coordinate2D;
 use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::raster::RenameBands;
-use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::test_data;
 use geoengine_datatypes::util::test::TestDefault;
-use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::engine::MultipleRasterSources;
 use geoengine_operators::engine::QueryContext;
 use geoengine_operators::engine::RasterBandDescriptor;
@@ -75,7 +71,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::OnceLock;
-use tokio::runtime::Handle;
 use tokio::sync::OwnedSemaphorePermit;
 use tokio::sync::RwLock;
 use tokio::sync::Semaphore;
@@ -747,56 +742,6 @@ pub(crate) async fn tear_down_db(pg_config: tokio_postgres::Config, schema: &str
         .batch_execute(&format!("DROP SCHEMA {schema} CASCADE;"))
         .await
         .unwrap();
-}
-
-/// Execute a test function with a temporary database schema. It will be cleaned up afterwards.
-///
-/// # Panics
-///
-/// Panics if the `PostgresContext` could not be created.
-///
-pub async fn with_temp_context_from_spec<F, Fut, R>(
-    tiling_spec: TilingSpecification,
-    query_ctx_chunk_size: ChunkByteSize,
-    f: F,
-) -> R
-where
-    F: FnOnce(PostgresContext<NoTls>, DatabaseConnectionConfig) -> Fut
-        + std::panic::UnwindSafe
-        + Send
-        + 'static,
-    Fut: Future<Output = R>,
-{
-    let (_permit, db_config) = setup_db().await;
-
-    // catch all panics and clean up first…
-    let executed_fn = {
-        let db_config = db_config.clone();
-        std::panic::catch_unwind(move || {
-            tokio::task::block_in_place(move || {
-                Handle::current().block_on(async move {
-                    let ctx = PostgresContext::new_with_context_spec(
-                        db_config.pg_config(),
-                        tokio_postgres::NoTls,
-                        tiling_spec,
-                        query_ctx_chunk_size,
-                        TestDefault::test_default(),
-                    )
-                    .await
-                    .unwrap();
-                    f(ctx, db_config.clone()).await
-                })
-            })
-        })
-    };
-
-    tear_down_db(db_config.pg_config(), &db_config.schema).await;
-
-    // then throw errors afterwards
-    match executed_fn {
-        Ok(res) => res,
-        Err(err) => std::panic::resume_unwind(err),
-    }
 }
 
 #[cfg(test)]

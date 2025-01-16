@@ -192,20 +192,12 @@ where
 mod tests {
     use super::*;
     use crate::{
-        contexts::{
-            migrations::{
-                all_migrations, migration_0000_initial::Migration0000Initial,
-                CurrentSchemaMigration,
-            },
-            PostgresDb,
+        contexts::migrations::{
+            all_migrations, migration_0000_initial::Migration0000Initial, CurrentSchemaMigration,
         },
-        projects::{ProjectDb, ProjectListOptions},
-        util::config::get_config_element,
-        workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
+        util::{config::get_config_element, postgres::DatabaseConnectionConfig},
     };
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
-    use geoengine_datatypes::test_data;
-    use std::str::FromStr;
     use tokio_postgres::NoTls;
 
     #[tokio::test]
@@ -262,7 +254,8 @@ mod tests {
         ];
 
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -286,7 +279,8 @@ mod tests {
     #[tokio::test]
     async fn it_performs_all_migrations() -> Result<()> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -300,7 +294,8 @@ mod tests {
     #[tokio::test]
     async fn it_uses_the_current_schema_if_the_database_is_empty() -> Result<()> {
         let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -312,55 +307,6 @@ mod tests {
             &all_migrations(),
         )
         .await?;
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_migrates_data() -> Result<()> {
-        // This test creates the initial schema and fills it with test data.
-        // Then, it migrates the database to the newest version.
-        // Finally, it tries to load the test data again via the Db implementations.
-
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
-
-        let pool = Pool::builder().max_size(1).build(pg_mgr).await?;
-
-        let mut conn = pool.get().await?;
-
-        // initial schema
-        migrate_database(&mut conn, &[Box::new(Migration0000Initial)]).await?;
-
-        // insert test data on initial schema
-        let test_data_sql = std::fs::read_to_string(test_data!("migrations/test_data.sql"))?;
-        conn.batch_execute(&test_data_sql).await?;
-
-        // migrate to latest schema
-        migrate_database(&mut conn, &all_migrations()).await?;
-
-        // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
-        drop(conn);
-
-        // create `PostgresDb` on migrated database and test methods
-        let db = PostgresDb::new(pool.clone());
-
-        let projects = db
-            .list_projects(ProjectListOptions {
-                order: crate::projects::OrderBy::NameAsc,
-                offset: 0,
-                limit: 10,
-            })
-            .await
-            .unwrap();
-
-        assert!(!projects.is_empty());
-
-        db.load_workflow(&WorkflowId::from_str("38ddfc17-016e-4910-8adf-b1af36a8590c").unwrap())
-            .await
-            .unwrap();
-
-        // TODO: test more methods and more Dbs
 
         Ok(())
     }

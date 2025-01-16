@@ -6,6 +6,7 @@ use crate::pro;
 use crate::pro::contexts::ProPostgresContext;
 use crate::util::config::{self, get_config_element};
 use crate::util::middleware::OutputRequestId;
+use crate::util::postgres::DatabaseConnectionConfig;
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
     log_server_info, render_404, render_405, serve_openapi_json, CustomRootSpanBuilder,
@@ -197,10 +198,11 @@ async fn start_postgres(
     quota_config: crate::pro::util::config::Quota,
 ) -> Result<()> {
     {
-        let db_config = config::get_config_element::<config::Postgres>()?;
+        let db_config: DatabaseConnectionConfig =
+            config::get_config_element::<config::Postgres>()?.into();
 
         let ctx = ProPostgresContext::new_with_data(
-            bb8_postgres::tokio_postgres::Config::try_from(db_config)?,
+            db_config.pg_config(),
             NoTls,
             data_path_config.dataset_defs_path,
             data_path_config.provider_defs_path,
