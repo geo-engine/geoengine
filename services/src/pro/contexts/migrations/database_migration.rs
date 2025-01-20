@@ -108,7 +108,7 @@ mod tests {
     use crate::{
         contexts::{migrate_database, SessionId},
         pro::{
-            contexts::{migrations::pro_migrations, ProPostgresDb},
+            contexts::{migrations::pro_migrations, PostgresDb},
             users::{UserId, UserInfo, UserSession},
         },
         util::config::get_config_element,
@@ -191,7 +191,7 @@ mod tests {
         drop(conn);
 
         // create `ProPostgresDb` on migrated database and test methods
-        let db = ProPostgresDb::new(
+        let db = PostgresDb::new(
             pool.clone(),
             UserSession {
                 id: SessionId::from_str("e11c7674-7ca5-4e07-840c-260835d3fc8d").unwrap(),

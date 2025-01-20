@@ -456,7 +456,7 @@ mod tests {
         datasets::{storage::DatasetStore, AddDataset},
         ge_context,
         layers::storage::LayerProviderDb,
-        pro::contexts::{PostgresSessionContext, ProPostgresContext, ProPostgresDb},
+        pro::contexts::{PostgresSessionContext, ProPostgresContext, PostgresDb},
     };
     use geoengine_datatypes::{
         collections::VectorDataType,
@@ -695,7 +695,7 @@ mod tests {
             .is_err());
     }
 
-    async fn add_two_datasets(db: &ProPostgresDb<NoTls>) {
+    async fn add_two_datasets(db: &PostgresDb<NoTls>) {
         let vector_descriptor = VectorResultDescriptor {
             data_type: VectorDataType::Data,
             spatial_reference: SpatialReferenceOption::Unreferenced,

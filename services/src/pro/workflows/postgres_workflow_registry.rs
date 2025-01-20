@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::pro::contexts::ProPostgresDb;
+use crate::pro::contexts::PostgresDb;
 use crate::workflows::registry::TxWorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{error, workflows::registry::WorkflowRegistry};
@@ -10,7 +10,7 @@ use bb8_postgres::{
 use snafu::ResultExt;
 
 #[async_trait]
-impl<Tls> TxWorkflowRegistry for ProPostgresDb<Tls>
+impl<Tls> TxWorkflowRegistry for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -39,7 +39,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> WorkflowRegistry for ProPostgresDb<Tls>
+impl<Tls> WorkflowRegistry for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

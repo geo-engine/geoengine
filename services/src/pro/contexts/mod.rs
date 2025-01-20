@@ -30,7 +30,7 @@ use rayon::ThreadPool;
 use std::str::FromStr;
 use std::sync::Arc;
 
-pub use postgres::ProPostgresDb;
+pub use postgres::PostgresDb;
 pub use postgres::{PostgresSessionContext, ProPostgresContext};
 
 /// A pro application contexts that extends the default context.

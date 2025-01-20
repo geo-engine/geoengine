@@ -88,7 +88,7 @@ where
 
         Self::create_pro_database(pool.get().await?).await?;
 
-        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(
             quota_config.mode,
             db,
@@ -123,7 +123,7 @@ where
 
         Self::create_pro_database(pool.get().await?).await?;
 
-        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(
             quota_config.mode,
             db,
@@ -168,7 +168,7 @@ where
 
         let created_schema = Self::create_pro_database(pool.get().await?).await?;
 
-        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(
             quota_config.mode,
             db,
@@ -347,7 +347,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     type Session = UserSession;
-    type GeoEngineDB = ProPostgresDb<Tls>;
+    type GeoEngineDB = PostgresDb<Tls>;
 
     type TaskContext = SimpleTaskManagerContext;
     type TaskManager = ProTaskManager; // this does not persist across restarts
@@ -355,7 +355,7 @@ where
     type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
 
     fn db(&self) -> Self::GeoEngineDB {
-        ProPostgresDb::new(self.context.pool.clone(), self.session.clone())
+        PostgresDb::new(self.context.pool.clone(), self.session.clone())
     }
 
     fn tasks(&self) -> Self::TaskManager {
@@ -379,7 +379,7 @@ where
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<ProPostgresDb<Tls>>::new(
+        Ok(ExecutionContextImpl::<PostgresDb<Tls>>::new(
             self.db(),
             self.context.thread_pool.clone(),
             self.context.exe_ctx_tiling_spec,
@@ -409,7 +409,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct ProPostgresDb<Tls>
+pub struct PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -420,7 +420,7 @@ where
     pub(crate) session: UserSession,
 }
 
-impl<Tls> ProPostgresDb<Tls>
+impl<Tls> PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -463,7 +463,7 @@ where
     }
 }
 
-impl<Tls> GeoEngineDb for ProPostgresDb<Tls>
+impl<Tls> GeoEngineDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -472,7 +472,7 @@ where
 {
 }
 
-impl<Tls> ProGeoEngineDb for ProPostgresDb<Tls>
+impl<Tls> ProGeoEngineDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

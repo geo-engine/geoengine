@@ -1576,7 +1576,7 @@ mod tests {
     use crate::ge_context;
     use crate::layers::layer::LayerListing;
     use crate::layers::storage::LayerProviderDb;
-    use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext, ProPostgresDb};
+    use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext, PostgresDb};
     use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
@@ -2187,7 +2187,7 @@ mod tests {
 
         provider
             .as_any()
-            .downcast_ref::<NetCdfCfDataProvider<ProPostgresDb<NoTls>>>()
+            .downcast_ref::<NetCdfCfDataProvider<PostgresDb<NoTls>>>()
             .unwrap()
             .create_overviews(Path::new("dataset_sm.nc"), None, NopTaskContext)
             .await
@@ -2459,7 +2459,7 @@ mod tests {
 
             provider
                 .as_any()
-                .downcast_ref::<NetCdfCfDataProvider<ProPostgresDb<NoTls>>>()
+                .downcast_ref::<NetCdfCfDataProvider<PostgresDb<NoTls>>>()
                 .unwrap()
                 .create_overviews(Path::new(file_name), None, NopTaskContext)
                 .await
@@ -2507,7 +2507,7 @@ mod tests {
 
         provider
             .as_any()
-            .downcast_ref::<NetCdfCfDataProvider<ProPostgresDb<NoTls>>>()
+            .downcast_ref::<NetCdfCfDataProvider<PostgresDb<NoTls>>>()
             .unwrap()
             .create_overviews(Path::new(file_name), None, NopTaskContext)
             .await
@@ -2543,7 +2543,7 @@ mod tests {
         ctx: PostgresSessionContext<NoTls>,
     ) {
         async fn query_collection_name(
-            provider: &NetCdfCfDataProvider<ProPostgresDb<NoTls>>,
+            provider: &NetCdfCfDataProvider<PostgresDb<NoTls>>,
             id: &LayerCollectionId,
         ) -> String {
             let collection = provider
@@ -2580,7 +2580,7 @@ mod tests {
 
         let provider = provider
             .as_any()
-            .downcast_ref::<NetCdfCfDataProvider<ProPostgresDb<NoTls>>>()
+            .downcast_ref::<NetCdfCfDataProvider<PostgresDb<NoTls>>>()
             .unwrap();
 
         provider
@@ -2670,7 +2670,7 @@ mod tests {
         ctx: PostgresSessionContext<NoTls>,
     ) {
         async fn query_collection_name(
-            provider: &NetCdfCfDataProvider<ProPostgresDb<NoTls>>,
+            provider: &NetCdfCfDataProvider<PostgresDb<NoTls>>,
             id: &LayerCollectionId,
         ) -> String {
             let collection = provider
@@ -2707,7 +2707,7 @@ mod tests {
 
         let provider = provider
             .as_any()
-            .downcast_ref::<NetCdfCfDataProvider<ProPostgresDb<NoTls>>>()
+            .downcast_ref::<NetCdfCfDataProvider<PostgresDb<NoTls>>>()
             .unwrap();
 
         provider

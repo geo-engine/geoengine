@@ -764,7 +764,7 @@ mod tests {
     use super::*;
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::datasets::external::netcdfcf::NETCDF_CF_PROVIDER_ID;
-    use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext, ProPostgresDb};
+    use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext, PostgresDb};
     use crate::{contexts::SessionContext, ge_context, tasks::util::NopTaskContext};
     use gdal::{DatasetOptions, GdalOpenFlags};
     use geoengine_datatypes::{
@@ -942,7 +942,7 @@ mod tests {
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        let db: Arc<ProPostgresDb<NoTls>> = Arc::new(ctx.db());
+        let db: Arc<PostgresDb<NoTls>> = Arc::new(ctx.db());
 
         create_overviews(
             NopTaskContext,

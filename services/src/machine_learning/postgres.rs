@@ -7,7 +7,7 @@ use crate::{
         name::MlModelName,
         MlModel, MlModelDb, MlModelId, MlModelListOptions, MlModelMetadata,
     },
-    pro::{contexts::ProPostgresDb, permissions::Permission},
+    pro::{contexts::PostgresDb, permissions::Permission},
     util::postgres::PostgresErrorExt,
 };
 use async_trait::async_trait;
@@ -19,7 +19,7 @@ use tokio_postgres::{
 };
 
 #[async_trait]
-impl<Tls> MlModelDb for ProPostgresDb<Tls>
+impl<Tls> MlModelDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

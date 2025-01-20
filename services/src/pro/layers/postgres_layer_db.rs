@@ -8,7 +8,7 @@ use crate::layers::postgres_layer_db::{
     delete_layer_collection, delete_layer_collection_from_parent, delete_layer_from_collection,
     insert_collection_parent, insert_layer, insert_layer_collection_with_id,
 };
-use crate::pro::contexts::ProPostgresDb;
+use crate::pro::contexts::PostgresDb;
 use crate::pro::datasets::TypedProDataProviderDefinition;
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Permission, RoleId};
@@ -43,7 +43,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 #[async_trait]
-impl<Tls> LayerDb for ProPostgresDb<Tls>
+impl<Tls> LayerDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -387,7 +387,7 @@ fn create_search_query(full_info: bool) -> String {
 }
 
 #[async_trait]
-impl<Tls> LayerCollectionProvider for ProPostgresDb<Tls>
+impl<Tls> LayerCollectionProvider for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -760,7 +760,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> LayerProviderDb for ProPostgresDb<Tls>
+impl<Tls> LayerProviderDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -895,7 +895,7 @@ where
 
         if let Some(definition) = row.get::<_, Option<TypedDataProviderDefinition>>(0) {
             return Box::new(definition)
-                .initialize(ProPostgresDb {
+                .initialize(PostgresDb {
                     conn_pool: self.conn_pool.clone(),
                     session: self.session.clone(),
                 })
@@ -904,7 +904,7 @@ where
 
         let pro_definition: TypedProDataProviderDefinition = row.get(1);
         Box::new(pro_definition)
-            .initialize(ProPostgresDb {
+            .initialize(PostgresDb {
                 conn_pool: self.conn_pool.clone(),
                 session: self.session.clone(),
             })
@@ -921,7 +921,7 @@ pub trait ProLayerProviderDb: Send + Sync + 'static {
 }
 
 #[async_trait]
-impl<Tls> ProLayerProviderDb for ProPostgresDb<Tls>
+impl<Tls> ProLayerProviderDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

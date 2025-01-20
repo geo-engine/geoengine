@@ -1,7 +1,7 @@
 use crate::api::handlers::users::UsageSummaryGranularity;
 use crate::contexts::SessionId;
 use crate::error::{Error, Result};
-use crate::pro::contexts::{ProApplicationContext, ProPostgresDb};
+use crate::pro::contexts::{ProApplicationContext, PostgresDb};
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Role, RoleDescription, RoleId};
 use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
@@ -679,7 +679,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> UserDb for ProPostgresDb<Tls>
+impl<Tls> UserDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -1111,7 +1111,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> RoleDb for ProPostgresDb<Tls>
+impl<Tls> RoleDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

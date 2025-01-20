@@ -1214,7 +1214,7 @@ mod tests {
     use crate::{
         contexts::SessionContext,
         ge_context,
-        pro::contexts::{PostgresSessionContext, ProPostgresContext, ProPostgresDb},
+        pro::contexts::{PostgresSessionContext, ProPostgresContext, PostgresDb},
     };
     use geoengine_datatypes::{
         dataset::ExternalDataId,
@@ -1625,7 +1625,7 @@ mod tests {
             OgrSourceDataset,
             VectorResultDescriptor,
             VectorQueryRectangle,
-            ProPostgresDb<NoTls>,
+            PostgresDb<NoTls>,
         >(&mut server, "PointsInGermany", ctx.db())
         .await;
         let loading_info = meta
@@ -1731,7 +1731,7 @@ mod tests {
             GdalLoadingInfo,
             RasterResultDescriptor,
             RasterQueryRectangle,
-            ProPostgresDb<NoTls>,
+            PostgresDb<NoTls>,
         >(&mut server, "GFS_isobaric!temperature!1000", ctx.db())
         .await;
 

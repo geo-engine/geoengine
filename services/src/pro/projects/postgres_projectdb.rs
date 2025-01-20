@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::pro::contexts::ProPostgresDb;
+use crate::pro::contexts::PostgresDb;
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::Permission;
 use crate::pro::users::UserId;
@@ -25,7 +25,7 @@ use geoengine_datatypes::error::BoxedResultExt;
 use snafu::{ensure, ResultExt};
 
 #[async_trait]
-impl<Tls> ProjectDb for ProPostgresDb<Tls>
+impl<Tls> ProjectDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

@@ -3,7 +3,7 @@ use super::{
     PostgresPermissionDbError, ResourceId, RoleId,
 };
 use crate::error::Result;
-use crate::pro::contexts::ProPostgresDb;
+use crate::pro::contexts::PostgresDb;
 use crate::pro::permissions::{
     CannotGrantOwnerPermissionPermissionDbError, CannotRevokeOwnPermissionPermissionDbError,
     MustBeAdminPermissionDbError, PermissionDeniedPermissionDbError, Role,
@@ -128,7 +128,7 @@ pub trait TxPermissionDb {
 }
 
 #[async_trait]
-impl<Tls> TxPermissionDb for ProPostgresDb<Tls>
+impl<Tls> TxPermissionDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -375,7 +375,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> PermissionDb for ProPostgresDb<Tls>
+impl<Tls> PermissionDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

@@ -8,7 +8,7 @@ use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::error::{self, Error, Result};
-use crate::pro::contexts::ProPostgresDb;
+use crate::pro::contexts::PostgresDb;
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Permission, RoleId};
 use crate::projects::Symbology;
@@ -28,7 +28,7 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use postgres_types::{FromSql, ToSql};
 
-impl<Tls> DatasetDb for ProPostgresDb<Tls>
+impl<Tls> DatasetDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -39,7 +39,7 @@ where
 
 #[allow(clippy::too_many_lines)]
 #[async_trait]
-impl<Tls> DatasetProvider for ProPostgresDb<Tls>
+impl<Tls> DatasetProvider for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -324,7 +324,7 @@ where
 #[async_trait]
 impl<Tls>
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for ProPostgresDb<Tls>
+    for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -349,7 +349,7 @@ where
 
 #[async_trait]
 impl<Tls> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for ProPostgresDb<Tls>
+    for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -435,7 +435,7 @@ where
 
 #[async_trait]
 impl<Tls> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for ProPostgresDb<Tls>
+    for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -511,7 +511,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> DatasetStore for ProPostgresDb<Tls>
+impl<Tls> DatasetStore for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -735,7 +735,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> UploadDb for ProPostgresDb<Tls>
+impl<Tls> UploadDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -930,10 +930,7 @@ mod tests {
             db_a.meta_data(&DataId::from(dataset_id)).await.unwrap();
     }
 
-    async fn add_single_dataset(
-        db: &ProPostgresDb<NoTls>,
-        session: &UserSession,
-    ) -> DatasetIdAndName {
+    async fn add_single_dataset(db: &PostgresDb<NoTls>, session: &UserSession) -> DatasetIdAndName {
         let loading_info = OgrSourceDataset {
             file_name: PathBuf::from("test.csv"),
             layer_name: "test.csv".to_owned(),

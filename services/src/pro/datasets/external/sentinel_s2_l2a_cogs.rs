@@ -895,7 +895,7 @@ mod tests {
         ge_context,
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
         pro::{
-            contexts::{ProPostgresContext, ProPostgresDb},
+            contexts::{ProPostgresContext, PostgresDb},
             layers::ProLayerProviderDb,
             users::UserAuth,
             util::tests::admin_login,
@@ -1305,7 +1305,7 @@ mod tests {
 
         let provider_id: DataProviderId = "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".parse().unwrap();
 
-        let provider_def: Box<dyn DataProviderDefinition<ProPostgresDb<NoTls>>> =
+        let provider_def: Box<dyn DataProviderDefinition<PostgresDb<NoTls>>> =
             Box::new(SentinelS2L2ACogsProviderDefinition {
                 name: "Element 84 AWS STAC".into(),
                 id: provider_id,
