@@ -1,7 +1,7 @@
 use crate::error::Result;
+use crate::permissions::Permission;
+use crate::permissions::TxPermissionDb;
 use crate::pro::contexts::PostgresDb;
-use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
-use crate::pro::permissions::Permission;
 use crate::pro::users::UserId;
 use crate::projects::error::ProjectNotFoundProjectDbError;
 use crate::projects::error::{

@@ -2,7 +2,7 @@ use crate::datasets::storage::{DatasetDb, DatasetDefinition};
 use crate::error::Result;
 use crate::layers::external::TypedDataProviderDefinition;
 use crate::layers::storage::LayerProviderDb;
-use crate::pro::permissions::{Permission, PermissionDb, Role};
+use crate::permissions::{Permission, PermissionDb, Role};
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::util::helpers::ge_report;

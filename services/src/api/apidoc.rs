@@ -56,7 +56,7 @@ use crate::layers::listing::{
 };
 use crate::machine_learning::name::MlModelName;
 use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
-use crate::pro::permissions::{
+use crate::permissions::{
     Permission, PermissionListing, ResourceId, Role, RoleDescription, RoleId,
 };
 use crate::pro::users::{

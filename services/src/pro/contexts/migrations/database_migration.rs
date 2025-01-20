@@ -99,7 +99,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::contexts::{initialize_database, CurrentSchemaMigration, Migration0000Initial};
-    use crate::pro::permissions::RoleId;
+    use crate::permissions::RoleId;
     use crate::pro::users::UserDb;
     use crate::projects::{ProjectDb, ProjectListOptions};
     use crate::util::postgres::DatabaseConnectionConfig;

@@ -1,8 +1,8 @@
-use super::users::UserId;
 use crate::error::{self, Error, Result};
 use crate::identifier;
 use crate::layers::listing::LayerCollectionId;
 use crate::machine_learning::MlModelId;
+use crate::pro::users::UserId;
 use crate::projects::ProjectId;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, LayerId};
@@ -14,7 +14,9 @@ use std::str::FromStr;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-pub mod postgres_permissiondb;
+mod postgres_permissiondb;
+
+pub use postgres_permissiondb::TxPermissionDb;
 
 identifier!(RoleId);
 

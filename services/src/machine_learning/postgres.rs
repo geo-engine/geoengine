@@ -7,7 +7,8 @@ use crate::{
         name::MlModelName,
         MlModel, MlModelDb, MlModelId, MlModelListOptions, MlModelMetadata,
     },
-    pro::{contexts::PostgresDb, permissions::Permission},
+    permissions::Permission,
+    pro::contexts::PostgresDb,
     util::postgres::PostgresErrorExt,
 };
 use async_trait::async_trait;

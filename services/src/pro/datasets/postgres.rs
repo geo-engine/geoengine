@@ -8,9 +8,9 @@ use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::error::{self, Error, Result};
+use crate::permissions::TxPermissionDb;
+use crate::permissions::{Permission, RoleId};
 use crate::pro::contexts::PostgresDb;
-use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
-use crate::pro::permissions::{Permission, RoleId};
 use crate::projects::Symbology;
 use crate::util::postgres::PostgresErrorExt;
 use async_trait::async_trait;
@@ -847,9 +847,9 @@ mod tests {
     use crate::{
         contexts::{ApplicationContext, SessionContext},
         ge_context,
+        permissions::PermissionDb,
         pro::{
             contexts::PostgresContext,
-            permissions::PermissionDb,
             users::{UserAuth, UserSession},
         },
     };

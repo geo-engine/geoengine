@@ -504,7 +504,7 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
-    use crate::pro::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
+    use crate::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
     use crate::pro::users::{OidcTokens, SessionTokenStore};
     use crate::pro::users::{
         RoleDb, UserClaims, UserCredentials, UserDb, UserId, UserRegistration,

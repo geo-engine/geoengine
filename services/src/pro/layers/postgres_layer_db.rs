@@ -8,10 +8,10 @@ use crate::layers::postgres_layer_db::{
     delete_layer_collection, delete_layer_collection_from_parent, delete_layer_from_collection,
     insert_collection_parent, insert_layer, insert_layer_collection_with_id,
 };
+use crate::permissions::TxPermissionDb;
+use crate::permissions::{Permission, RoleId};
 use crate::pro::contexts::PostgresDb;
 use crate::pro::datasets::TypedProDataProviderDefinition;
-use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
-use crate::pro::permissions::{Permission, RoleId};
 use crate::workflows::registry::TxWorkflowRegistry;
 use crate::{
     error::Result,

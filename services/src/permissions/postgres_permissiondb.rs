@@ -3,11 +3,11 @@ use super::{
     PostgresPermissionDbError, ResourceId, RoleId,
 };
 use crate::error::Result;
-use crate::pro::contexts::PostgresDb;
-use crate::pro::permissions::{
+use crate::permissions::{
     CannotGrantOwnerPermissionPermissionDbError, CannotRevokeOwnPermissionPermissionDbError,
     MustBeAdminPermissionDbError, PermissionDeniedPermissionDbError, Role,
 };
+use crate::pro::contexts::PostgresDb;
 use async_trait::async_trait;
 use snafu::{ensure, ResultExt};
 use tokio_postgres::{

@@ -7,7 +7,7 @@ use crate::{
         layer::{AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerDefinition},
         listing::LayerCollectionProvider,
     },
-    pro::permissions::{Permission, PermissionDb, Role},
+    permissions::{Permission, PermissionDb, Role},
 };
 use geoengine_datatypes::error::BoxedResultExt;
 use log::{debug, error, info, warn};

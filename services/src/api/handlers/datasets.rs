@@ -18,10 +18,8 @@ use crate::{
         DatasetName,
     },
     error::{self, Error, Result},
-    pro::{
-        contexts::{ProApplicationContext, ProGeoEngineDb},
-        permissions::{Permission, PermissionDb, Role},
-    },
+    permissions::{Permission, PermissionDb, Role},
+    pro::contexts::{ProApplicationContext, ProGeoEngineDb},
     projects::Symbology,
     util::{
         extractors::{ValidatedJson, ValidatedQuery},

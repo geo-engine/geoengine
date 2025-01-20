@@ -6,6 +6,7 @@ pub mod datasets;
 pub mod error;
 pub mod layers;
 pub mod machine_learning;
+pub mod permissions;
 pub mod projects;
 pub mod quota;
 pub mod server;

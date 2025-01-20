@@ -1,9 +1,9 @@
 use crate::api::handlers::users::UsageSummaryGranularity;
 use crate::contexts::SessionId;
 use crate::error::{Error, Result};
+use crate::permissions::TxPermissionDb;
+use crate::permissions::{Role, RoleDescription, RoleId};
 use crate::pro::contexts::{PostgresDb, ProApplicationContext};
-use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
-use crate::pro::permissions::{Role, RoleDescription, RoleId};
 use crate::pro::users::oidc::{FlatMaybeEncryptedOidcTokens, OidcTokens, UserClaims};
 use crate::pro::users::userdb::{
     CannotRevokeRoleThatIsNotAssignedRoleDbError, RoleIdDoesNotExistRoleDbError,

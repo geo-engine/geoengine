@@ -5,7 +5,7 @@ use validator::Validate;
 
 use crate::error::Result;
 use crate::identifier;
-use crate::pro::permissions::{Role, RoleId};
+use crate::permissions::{Role, RoleId};
 use geoengine_datatypes::util::Identifier;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema, Validate)]

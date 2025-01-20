@@ -8,9 +8,9 @@ use crate::{
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
         AddDataset, DatasetName,
     },
+    permissions::{Permission, PermissionDb, Role},
     pro::{
         contexts::{PostgresContext, ProApplicationContext, ProGeoEngineDb},
-        permissions::{Permission, PermissionDb, Role},
         users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},

@@ -4,9 +4,9 @@ use crate::contexts::ApplicationContext;
 use crate::contexts::SessionContext;
 use crate::error;
 use crate::error::Result;
+use crate::permissions::{RoleDescription, RoleId};
 use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
-use crate::pro::permissions::{RoleDescription, RoleId};
 use crate::pro::users::UserAuth;
 use crate::pro::users::UserDb;
 use crate::pro::users::UserId;
@@ -943,7 +943,7 @@ mod tests {
     use crate::config::Oidc;
     use crate::contexts::{Session, SessionContext};
     use crate::ge_context;
-    use crate::pro::permissions::Role;
+    use crate::permissions::Role;
     use crate::pro::users::{AuthCodeRequestURL, OidcManager, UserAuth};
     use crate::pro::util::tests::mock_oidc::{
         mock_refresh_server, mock_token_response, mock_valid_provider_discovery,

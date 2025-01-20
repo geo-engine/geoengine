@@ -10,11 +10,11 @@ use crate::datasets::upload::UploadRootPath;
 use crate::datasets::AddDataset;
 use crate::datasets::DatasetIdAndName;
 use crate::datasets::DatasetName;
+use crate::permissions::Permission;
+use crate::permissions::PermissionDb;
+use crate::permissions::Role;
 use crate::pro::contexts::PostgresContext;
 use crate::pro::contexts::ProGeoEngineDb;
-use crate::pro::permissions::Permission;
-use crate::pro::permissions::PermissionDb;
-use crate::pro::permissions::Role;
 use crate::pro::util::tests::admin_login;
 use crate::projects::{
     CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,

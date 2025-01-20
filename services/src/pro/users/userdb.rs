@@ -1,7 +1,7 @@
 use crate::api::handlers::users::UsageSummaryGranularity;
 use crate::contexts::SessionId;
 use crate::error::Result;
-use crate::pro::permissions::{RoleDescription, RoleId};
+use crate::permissions::{RoleDescription, RoleId};
 use crate::pro::users::oidc::{OidcTokens, UserClaims};
 use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use crate::projects::{ProjectId, STRectangle};
@@ -195,7 +195,7 @@ pub trait UserDb: Send + Sync {
 pub enum RoleDbError {
     #[snafu(display("Permission error: {source}"))]
     PermissionDb {
-        source: crate::pro::permissions::PermissionDbError,
+        source: crate::permissions::PermissionDbError,
     },
     #[snafu(display("Role with id {role_id} does not exist."))]
     RoleIdDoesNotExist { role_id: RoleId },
