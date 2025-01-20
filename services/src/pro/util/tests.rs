@@ -2,7 +2,7 @@ use super::config::Quota;
 use crate::pro::users::OidcManager;
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::{
-    contexts::{ApplicationContext, MockableSession, SessionContext, SessionId},
+    contexts::{ApplicationContext, SessionContext, SessionId},
     datasets::{
         listing::Provenance,
         storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
@@ -121,7 +121,7 @@ where
         ),
     };
 
-    let session = UserSession::mock();
+    let session = UserSession::admin_session();
 
     let id = app_ctx
         .session_context(session)

@@ -13,7 +13,3 @@ pub trait Session: Send + Sync + Serialize {
     fn project(&self) -> Option<ProjectId>;
     fn view(&self) -> Option<&STRectangle>;
 }
-
-pub trait MockableSession: Session {
-    fn mock() -> Self;
-}

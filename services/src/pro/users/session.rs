@@ -1,5 +1,5 @@
 use crate::api::handlers::get_token;
-use crate::contexts::{ApplicationContext, MockableSession, Session, SessionId};
+use crate::contexts::{ApplicationContext, Session, SessionId};
 use crate::error;
 use crate::pro::contexts::ProPostgresContext;
 use crate::pro::permissions::{Role, RoleId};
@@ -57,25 +57,6 @@ impl UserSession {
 
     pub fn is_admin(&self) -> bool {
         self.roles.contains(&Role::admin_role_id())
-    }
-}
-
-impl MockableSession for UserSession {
-    fn mock() -> Self {
-        let user_id = UserId::new();
-        Self {
-            id: SessionId::new(),
-            user: UserInfo {
-                id: user_id,
-                email: None,
-                real_name: None,
-            },
-            created: DateTime::now(),
-            valid_until: DateTime::now(),
-            project: None,
-            view: None,
-            roles: vec![user_id.into(), Role::registered_user_role_id()],
-        }
     }
 }
 

@@ -1,11 +1,3 @@
-use async_trait::async_trait;
-use geoengine_datatypes::util::Identifier;
-use snafu::ResultExt;
-use tokio_postgres::{
-    tls::{MakeTlsConnect, TlsConnect},
-    Socket,
-};
-
 use crate::{
     machine_learning::{
         error::{
@@ -15,10 +7,16 @@ use crate::{
         name::MlModelName,
         MlModel, MlModelDb, MlModelId, MlModelListOptions, MlModelMetadata,
     },
+    pro::{contexts::ProPostgresDb, permissions::Permission},
     util::postgres::PostgresErrorExt,
 };
-
-use super::{contexts::ProPostgresDb, permissions::Permission};
+use async_trait::async_trait;
+use geoengine_datatypes::util::Identifier;
+use snafu::ResultExt;
+use tokio_postgres::{
+    tls::{MakeTlsConnect, TlsConnect},
+    Socket,
+};
 
 #[async_trait]
 impl<Tls> MlModelDb for ProPostgresDb<Tls>

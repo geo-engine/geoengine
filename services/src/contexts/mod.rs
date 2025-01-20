@@ -37,7 +37,7 @@ pub use migrations::{
     Migration0012MlModelDb, Migration0013CopernicusProvider, Migration0014MultibandColorizer,
     Migration0015LogQuota, MigrationResult,
 };
-pub use session::{MockableSession, Session, SessionId};
+pub use session::{Session, SessionId};
 
 mod db_types;
 pub(crate) mod migrations;

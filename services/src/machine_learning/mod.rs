@@ -19,6 +19,7 @@ use validator::{Validate, ValidationError};
 
 pub mod error;
 pub mod name;
+mod postgres;
 
 identifier!(MlModelId);
 
