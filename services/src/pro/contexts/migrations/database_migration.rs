@@ -190,7 +190,7 @@ mod tests {
         // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
         drop(conn);
 
-        // create `ProPostgresDb` on migrated database and test methods
+        // create `PostgresDb` on migrated database and test methods
         let db = PostgresDb::new(
             pool.clone(),
             UserSession {

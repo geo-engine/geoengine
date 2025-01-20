@@ -425,7 +425,7 @@ mod tests {
     #[test]
     fn test_codegen_no_attrs() {
         let input = quote! {
-            async fn it_works(app_ctx: ProPostgresContext<NoTls>) {
+            async fn it_works(app_ctx: PostgresContext<NoTls>) {
                 assert_eq!(1, 1);
             }
         };
@@ -435,7 +435,7 @@ mod tests {
             #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
             #[serial_test::parallel]
             async fn it_works() {
-                async fn it_works(app_ctx: ProPostgresContext<NoTls>) {
+                async fn it_works(app_ctx: PostgresContext<NoTls>) {
                     assert_eq!(1, 1);
                 }
 
@@ -469,7 +469,7 @@ mod tests {
     #[test]
     fn test_codegen_with_user() {
         let input = quote! {
-            async fn it_works(app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+            async fn it_works(app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
                 assert_eq!(1, 1);
             }
         };
@@ -479,7 +479,7 @@ mod tests {
             #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
             #[serial_test::parallel]
             async fn it_works() {
-                async fn it_works(app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+                async fn it_works(app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
                     assert_eq!(1, 1);
                 }
 
@@ -570,7 +570,7 @@ mod tests {
     #[test]
     fn test_codegen_with_attrs() {
         let input = quote! {
-            async fn it_works(app_ctx: ProPostgresContext<NoTls>) {
+            async fn it_works(app_ctx: PostgresContext<NoTls>) {
                 assert_eq!(1, 1);
             }
         };
@@ -589,7 +589,7 @@ mod tests {
             #[should_panic(expected = "panic!!!")]
             #[serial_test::serial]
             async fn it_works() {
-                async fn it_works(app_ctx: ProPostgresContext<NoTls>) {
+                async fn it_works(app_ctx: PostgresContext<NoTls>) {
                     assert_eq!(1, 1);
                 }
 

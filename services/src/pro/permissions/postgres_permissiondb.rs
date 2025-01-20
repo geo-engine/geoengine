@@ -56,7 +56,7 @@ impl ResourceTypeName for ResourceId {
 
 /// internal functionality for transactional permission db
 ///
-/// In contrast to the `PermissionDb` this is not to be used by services but only by the `ProPostgresDb` internally.
+/// In contrast to the `PermissionDb` this is not to be used by services but only by the `PostgresDb` internally.
 /// This is because services do not know about database transactions.
 #[async_trait]
 pub trait TxPermissionDb {
