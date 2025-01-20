@@ -815,7 +815,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{datasets::listing::Provenance, util::config};
+    use crate::{datasets::listing::Provenance, config};
     use bb8_postgres::bb8::ManageConnection;
     use geoengine_datatypes::{
         dataset::ExternalDataId,

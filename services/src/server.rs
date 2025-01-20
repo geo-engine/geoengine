@@ -1,10 +1,10 @@
 use crate::api::apidoc::ApiDoc;
 use crate::api::handlers;
+use crate::config::{self, get_config_element};
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::{Error, Result};
 use crate::pro;
 use crate::pro::contexts::PostgresContext;
-use crate::util::config::{self, get_config_element};
 use crate::util::middleware::OutputRequestId;
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::util::server::{
@@ -126,12 +126,12 @@ where
 pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     log_server_info()?;
 
-    let user_config: crate::pro::util::config::User = get_config_element()?;
-    let oidc_config: crate::pro::util::config::Oidc = get_config_element()?;
-    let web_config: crate::util::config::Web = get_config_element()?;
-    let open_telemetry: crate::pro::util::config::OpenTelemetry = get_config_element()?;
-    let cache_config: crate::pro::util::config::Cache = get_config_element()?;
-    let quota_config: crate::pro::util::config::Quota = get_config_element()?;
+    let user_config: crate::config::User = get_config_element()?;
+    let oidc_config: crate::config::Oidc = get_config_element()?;
+    let web_config: crate::config::Web = get_config_element()?;
+    let open_telemetry: crate::config::OpenTelemetry = get_config_element()?;
+    let cache_config: crate::config::Cache = get_config_element()?;
+    let quota_config: crate::config::Quota = get_config_element()?;
 
     if user_config.registration {
         info!("User Registration: enabled");
@@ -190,12 +190,12 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 async fn start_postgres(
     data_path_config: config::DataProvider,
     tiling_spec: TilingSpecification,
-    oidc_config: crate::pro::util::config::Oidc,
+    oidc_config: crate::config::Oidc,
     chunk_byte_size: ChunkByteSize,
     static_files_dir: Option<PathBuf>,
     web_config: config::Web,
-    cache_config: crate::pro::util::config::Cache,
-    quota_config: crate::pro::util::config::Quota,
+    cache_config: crate::config::Cache,
+    quota_config: crate::config::Quota,
 ) -> Result<()> {
     {
         let db_config: DatabaseConnectionConfig =

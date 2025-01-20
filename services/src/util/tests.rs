@@ -1,4 +1,6 @@
+use super::postgres::DatabaseConnectionConfig;
 use crate::api::model::responses::ErrorResponse;
+use crate::config::{get_config_element, Postgres};
 use crate::contexts::ApplicationContext;
 use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::Provenance;
@@ -8,8 +10,8 @@ use crate::datasets::upload::UploadRootPath;
 use crate::datasets::AddDataset;
 use crate::datasets::DatasetIdAndName;
 use crate::datasets::DatasetName;
-use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::contexts::PostgresContext;
+use crate::pro::contexts::ProGeoEngineDb;
 use crate::pro::permissions::Permission;
 use crate::pro::permissions::PermissionDb;
 use crate::pro::permissions::Role;
@@ -77,10 +79,6 @@ use tokio::sync::Semaphore;
 use tokio_postgres::NoTls;
 use tracing_actix_web::TracingLogger;
 use uuid::Uuid;
-
-use super::config::get_config_element;
-use super::config::Postgres;
-use super::postgres::DatabaseConnectionConfig;
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper(
@@ -559,37 +557,34 @@ pub async fn send_test_request(
     app_ctx: PostgresContext<NoTls>,
 ) -> ServiceResponse {
     #[allow(unused_mut)]
-    let mut app =
-        App::new()
-            .app_data(web::Data::new(app_ctx))
-            .wrap(OutputRequestId)
-            .wrap(
-                middleware::ErrorHandlers::default()
-                    .handler(http::StatusCode::NOT_FOUND, render_404)
-                    .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
-            )
-            .wrap(middleware::NormalizePath::trim())
-            .wrap(TracingLogger::default())
-            .configure(configure_extractors)
-            .configure(handlers::datasets::init_dataset_routes::<PostgresContext<NoTls>>)
-            .configure(handlers::layers::init_layer_routes::<PostgresContext<NoTls>>)
-            .configure(handlers::permissions::init_permissions_routes::<PostgresContext<NoTls>>)
-            .configure(handlers::plots::init_plot_routes::<PostgresContext<NoTls>>)
-            .configure(handlers::projects::init_project_routes::<PostgresContext<NoTls>>)
-            .configure(handlers::users::init_user_routes::<PostgresContext<NoTls>>)
-            .configure(
-                handlers::spatial_references::init_spatial_reference_routes::<
-                    PostgresContext<NoTls>,
-                >,
-            )
-            .configure(handlers::upload::init_upload_routes::<PostgresContext<NoTls>>)
-            .configure(handlers::tasks::init_task_routes::<PostgresContext<NoTls>>)
-            .configure(handlers::wcs::init_wcs_routes::<PostgresContext<NoTls>>)
-            .configure(handlers::wfs::init_wfs_routes::<PostgresContext<NoTls>>)
-            .configure(handlers::wms::init_wms_routes::<PostgresContext<NoTls>>)
-            .configure(handlers::workflows::init_workflow_routes::<PostgresContext<NoTls>>)
-            .configure(handlers::machine_learning::init_ml_routes::<PostgresContext<NoTls>>)
-            .service(dummy_handler);
+    let mut app = App::new()
+        .app_data(web::Data::new(app_ctx))
+        .wrap(OutputRequestId)
+        .wrap(
+            middleware::ErrorHandlers::default()
+                .handler(http::StatusCode::NOT_FOUND, render_404)
+                .handler(http::StatusCode::METHOD_NOT_ALLOWED, render_405),
+        )
+        .wrap(middleware::NormalizePath::trim())
+        .wrap(TracingLogger::default())
+        .configure(configure_extractors)
+        .configure(handlers::datasets::init_dataset_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::layers::init_layer_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::permissions::init_permissions_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::plots::init_plot_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::projects::init_project_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::users::init_user_routes::<PostgresContext<NoTls>>)
+        .configure(
+            handlers::spatial_references::init_spatial_reference_routes::<PostgresContext<NoTls>>,
+        )
+        .configure(handlers::upload::init_upload_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::tasks::init_task_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::wcs::init_wcs_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::wfs::init_wfs_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::wms::init_wms_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::workflows::init_workflow_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::machine_learning::init_ml_routes::<PostgresContext<NoTls>>)
+        .service(dummy_handler);
 
     let app = test::init_service(app).await;
     test::call_service(&app, req.to_request())

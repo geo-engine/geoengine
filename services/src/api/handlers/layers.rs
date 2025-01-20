@@ -12,7 +12,7 @@ use crate::layers::listing::{
     LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchParameters,
 };
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
-use crate::util::config::get_config_element;
+use crate::config::get_config_element;
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use crate::util::workflows::validate_workflow;
 use crate::workflows::registry::WorkflowRegistry;
@@ -828,7 +828,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
     };
 
     let compression_num_threads =
-        get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
+        get_config_element::<crate::config::Gdal>()?.compression_num_threads;
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("layer {item}"),
@@ -1194,7 +1194,7 @@ mod tests {
     use crate::pro::util::tests::admin_login;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
-    use crate::util::config::get_config_element;
+    use crate::config::get_config_element;
     use crate::util::tests::{
         read_body_string, send_test_request, MockQueryContext, TestDataUploads,
     };
@@ -2096,7 +2096,7 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326(),
             },
             GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
+                compression_num_threads: get_config_element::<crate::config::Gdal>()
                     .unwrap()
                     .compression_num_threads,
                 as_cog: true,

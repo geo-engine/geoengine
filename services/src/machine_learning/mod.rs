@@ -1,11 +1,9 @@
 use crate::{
     api::model::datatypes::RasterDataType,
+    config::{get_config_element, MachineLearning},
     datasets::upload::{UploadId, UploadRootPath},
     identifier,
-    util::{
-        config::{get_config_element, MachineLearning},
-        path_with_base_path,
-    },
+    util::path_with_base_path,
 };
 use async_trait::async_trait;
 use error::{error::CouldNotFindMlModelFileMachineLearningError, MachineLearningError};

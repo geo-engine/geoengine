@@ -110,7 +110,7 @@ mod tests {
     use super::*;
     use crate::contexts::migrations::all_migrations;
     use crate::contexts::{migrate_database, Migration0000Initial};
-    use crate::util::config::get_config_element;
+    use crate::config::get_config_element;
     use crate::util::postgres::DatabaseConnectionConfig;
     use bb8_postgres::bb8::Pool;
     use bb8_postgres::PostgresConnectionManager;
@@ -124,7 +124,7 @@ mod tests {
     async fn it_does_not_get_stuck() -> Result<()> {
         let workflow = json!({});
 
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 

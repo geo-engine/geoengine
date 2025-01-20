@@ -185,10 +185,7 @@ impl TestConfig {
 
     pub fn quota_config(&self) -> TokenStream {
         self.quota_config.clone().unwrap_or_else(|| {
-            quote!(
-                crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
-                    .unwrap()
-            )
+            quote!(crate::config::get_config_element::<crate::config::Quota>().unwrap())
         })
     }
 
@@ -441,7 +438,7 @@ mod tests {
 
                 let tiling_spec = geoengine_datatypes::util::test::TestDefault::test_default();
                 let query_ctx_chunk_size = geoengine_datatypes::util::test::TestDefault::test_default();
-                let quota_config = crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
+                let quota_config = crate::config::get_config_element::<crate::config::Quota>()
                     .unwrap();
                 let (server, oidc_db) = ((), crate::pro::users::OidcManager::default);
 
@@ -485,7 +482,7 @@ mod tests {
 
                 let tiling_spec = geoengine_datatypes::util::test::TestDefault::test_default();
                 let query_ctx_chunk_size = geoengine_datatypes::util::test::TestDefault::test_default();
-                let quota_config = crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
+                let quota_config = crate::config::get_config_element::<crate::config::Quota>()
                     .unwrap();
                 let (server, oidc_db) = ((), crate::pro::users::OidcManager::default);
 
@@ -537,7 +534,7 @@ mod tests {
 
                 let tiling_spec = geoengine_datatypes::util::test::TestDefault::test_default();
                 let query_ctx_chunk_size = geoengine_datatypes::util::test::TestDefault::test_default();
-                let quota_config = crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
+                let quota_config = crate::config::get_config_element::<crate::config::Quota>()
                     .unwrap();
                 let (server, oidc_db) = ((), crate::pro::users::OidcManager::default);
 

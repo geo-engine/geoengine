@@ -1,6 +1,6 @@
+use crate::config::Oidc;
 use crate::contexts::Db;
 use crate::error::Error;
-use crate::pro::util::config::Oidc;
 #[cfg(test)]
 use crate::pro::util::tests::mock_oidc::{SINGLE_NONCE, SINGLE_STATE};
 use crate::util::encryption::{

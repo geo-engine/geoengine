@@ -1,11 +1,11 @@
 use super::database_migration::{ProMigration, ProMigrationImpl};
 use crate::{
+    config::get_config_element,
     contexts::migrations::CurrentSchemaMigration,
     error::Result,
     layers::{
         add_from_directory::UNSORTED_COLLECTION_ID, storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
     },
-    util::config::get_config_element,
 };
 use async_trait::async_trait;
 use pwhash::bcrypt;
@@ -25,7 +25,7 @@ pub async fn add_to_current_schema(tx: &Transaction<'_>) -> Result<()> {
 
 pub async fn populate_current_schema(
     tx: &Transaction<'_>,
-    user_config: crate::pro::util::config::User,
+    user_config: crate::config::User,
 ) -> Result<()> {
     tx.execute(
         "
@@ -116,7 +116,7 @@ pub async fn populate_current_schema(
 /// Migration to create the current schema instead of starting by version `0000`.
 impl ProMigration for ProMigrationImpl<CurrentSchemaMigration> {
     async fn pro_migrate(&self, tx: &Transaction<'_>) -> Result<()> {
-        let user_config = get_config_element::<crate::pro::util::config::User>()?;
+        let user_config = get_config_element::<crate::config::User>()?;
 
         add_to_current_schema(tx).await?;
 

@@ -192,10 +192,11 @@ where
 mod tests {
     use super::*;
     use crate::{
+        config::get_config_element,
         contexts::migrations::{
             all_migrations, migration_0000_initial::Migration0000Initial, CurrentSchemaMigration,
         },
-        util::{config::get_config_element, postgres::DatabaseConnectionConfig},
+        util::postgres::DatabaseConnectionConfig,
     };
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
     use tokio_postgres::NoTls;
@@ -253,7 +254,7 @@ mod tests {
             Box::new(FollowUpMigration),
         ];
 
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
@@ -278,7 +279,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_performs_all_migrations() -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
@@ -293,7 +294,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_uses_the_current_schema_if_the_database_is_empty() -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 

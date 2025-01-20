@@ -6,7 +6,7 @@ use crate::identifier;
 use crate::util::path_with_base_path;
 use crate::{
     error,
-    util::config::{self, get_config_element},
+    config::{self, get_config_element},
 };
 use async_trait::async_trait;
 use geoengine_datatypes::test_data;
@@ -71,7 +71,7 @@ pub struct Volumes {
 impl Default for Volumes {
     fn default() -> Self {
         Self {
-            volumes: crate::util::config::get_config_element::<crate::util::config::Data>()
+            volumes: crate::config::get_config_element::<crate::config::Data>()
                 .expect("volumes should be defined, because they are in the default config")
                 .volumes
                 .into_iter()

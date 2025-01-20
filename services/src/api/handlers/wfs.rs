@@ -1,11 +1,11 @@
 use crate::api::model::datatypes::TimeInterval;
 use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::api::ogc::wfs::request::{GetCapabilities, GetFeature};
+use crate::config;
+use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error;
 use crate::error::Result;
-use crate::util::config;
-use crate::util::config::get_config_element;
 use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
@@ -297,7 +297,7 @@ where
 }
 
 fn wfs_url(workflow: WorkflowId) -> Result<Url> {
-    let web_config = crate::util::config::get_config_element::<crate::util::config::Web>()?;
+    let web_config = crate::config::get_config_element::<crate::config::Web>()?;
     let base = web_config.api_url()?;
 
     ogc_endpoint_url(&base, OgcProtocol::Wfs, workflow)

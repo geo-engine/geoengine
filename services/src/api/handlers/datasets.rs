@@ -7,6 +7,7 @@ use crate::{
             MetaDataSuggestion, Provenances, UpdateDataset,
         },
     },
+    config::{get_config_element, Data},
     contexts::{ApplicationContext, SessionContext},
     datasets::{
         listing::{DatasetListOptions, DatasetProvider},
@@ -23,7 +24,6 @@ use crate::{
     },
     projects::Symbology,
     util::{
-        config::{get_config_element, Data},
         extractors::{ValidatedJson, ValidatedQuery},
         path_with_base_path,
     },

@@ -33,14 +33,14 @@ mod tests {
     use crate::contexts::Migration0000Initial;
     use crate::error::Result;
     use crate::util::postgres::DatabaseConnectionConfig;
-    use crate::{contexts::migrate_database, util::config::get_config_element};
+    use crate::{contexts::migrate_database, config::get_config_element};
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
     use geoengine_datatypes::test_data;
     use tokio_postgres::NoTls;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_replaces_rgba_with_lineargradient() -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 

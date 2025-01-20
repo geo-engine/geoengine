@@ -1,7 +1,7 @@
-use super::config::Quota;
 use crate::pro::users::OidcManager;
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::{
+    config::{get_config_element, Quota},
     contexts::{ApplicationContext, SessionContext, SessionId},
     datasets::{
         listing::Provenance,
@@ -9,12 +9,11 @@ use crate::{
         AddDataset, DatasetName,
     },
     pro::{
-        contexts::{ProApplicationContext, ProGeoEngineDb, PostgresContext},
+        contexts::{PostgresContext, ProApplicationContext, ProGeoEngineDb},
         permissions::{Permission, PermissionDb, Role},
         users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     },
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
-    util::config::get_config_element,
     util::tests::{setup_db, tear_down_db},
     workflows::{
         registry::WorkflowRegistry,
@@ -258,7 +257,7 @@ pub async fn admin_login<C: ProApplicationContext>(ctx: &C) -> UserSession
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
-    let user_config = get_config_element::<super::config::User>().unwrap();
+    let user_config = get_config_element::<crate::config::User>().unwrap();
 
     ctx.login(UserCredentials {
         email: user_config.admin_email.clone(),
@@ -365,8 +364,8 @@ impl MockQuotaTracking for QuotaTracking {
 
 #[cfg(test)]
 pub(crate) mod mock_oidc {
+    use crate::config::Oidc;
     use crate::pro::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
-    use crate::pro::util::config::Oidc;
     use chrono::{Duration, Utc};
     use httptest::matchers::{matches, request};
     use httptest::responders::status_code;

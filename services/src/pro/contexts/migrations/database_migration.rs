@@ -106,12 +106,12 @@ mod tests {
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::WorkflowId;
     use crate::{
+        config::get_config_element,
         contexts::{migrate_database, SessionId},
         pro::{
             contexts::{migrations::pro_migrations, PostgresDb},
             users::{UserId, UserInfo, UserSession},
         },
-        util::config::get_config_element,
     };
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
     use geoengine_datatypes::primitives::DateTime;
@@ -123,7 +123,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_performs_all_pro_migrations() -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
@@ -138,7 +138,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_uses_the_current_schema_if_the_database_is_empty() -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
@@ -162,7 +162,7 @@ mod tests {
         // Then, it migrates the database to the newest version.
         // Finally, it tries to load the test data again via the Db implementations.
 
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 

@@ -3,9 +3,10 @@ use super::{
     NetCdfCf4DProviderError, NetCdfCfProviderDb, NetCdfOverview, TimeCoverage,
 };
 use crate::{
+    config::get_config_element,
     datasets::external::netcdfcf::loading::{create_loading_info, ParamModification},
     tasks::{TaskContext, TaskStatusInfo},
-    util::{config::get_config_element, path_with_base_path},
+    util::path_with_base_path,
 };
 use gdal::{
     cpl::CslStringList,
@@ -631,7 +632,7 @@ impl CogRasterCreationOptionss {
         const DEFAULT_COMPRESSION_LEVEL: u8 = 6; // this is the GDAL default
         const DEFAULT_RESAMPLING_METHOD: ResamplingMethod = ResamplingMethod::Nearest;
 
-        let gdal_options = get_config_element::<crate::util::config::Gdal>()
+        let gdal_options = get_config_element::<crate::config::Gdal>()
             .boxed_context(error::CannotCreateOverviews)?;
         let num_threads = gdal_options.compression_num_threads.to_string();
         let compression_format = gdal_options

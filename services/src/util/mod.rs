@@ -7,7 +7,6 @@ pub use geoengine_operators::util::{spawn, spawn_blocking, spawn_blocking_with_t
 use url::Url;
 
 pub mod apidoc;
-pub mod config;
 pub mod encryption;
 pub mod extractors;
 pub mod identifiers;

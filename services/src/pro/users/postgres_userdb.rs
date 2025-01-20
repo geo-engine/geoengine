@@ -67,8 +67,7 @@ where
             .await?;
 
         let quota_available =
-            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
-                .initial_credits;
+            crate::config::get_config_element::<crate::config::Quota>()?.initial_credits;
 
         tx.execute(
             &stmt,
@@ -113,8 +112,7 @@ where
             .await?;
 
         let quota_available =
-            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
-                .initial_credits;
+            crate::config::get_config_element::<crate::config::Quota>()?.initial_credits;
 
         let stmt = tx
             .prepare("INSERT INTO users (id, quota_available, active) VALUES ($1, $2, TRUE);")
@@ -301,8 +299,7 @@ where
                 tx.execute(&stmt, &[&user_id, &user.email]).await?;
 
                 let quota_available =
-                    crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
-                        .initial_credits;
+                    crate::config::get_config_element::<crate::config::Quota>()?.initial_credits;
 
                 //TODO: A user might be able to login without external login using this (internal) id. Would be a problem with anonymous users as well.
                 let stmt = tx

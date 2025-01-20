@@ -3,6 +3,7 @@ use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCh
 use crate::api::cli::add_datasets_from_directory;
 use crate::api::cli::add_providers_from_directory;
 use crate::api::model::services::Volume;
+use crate::config::{get_config_element, Cache, Oidc, Quota};
 use crate::contexts::{
     initialize_database, ApplicationContext, CurrentSchemaMigration, MigrationResult,
     QueryContextImpl, SessionId,
@@ -21,9 +22,7 @@ use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::OidcManager;
 use crate::pro::users::{UserAuth, UserSession};
-use crate::pro::util::config::{Cache, Oidc, Quota};
 use crate::tasks::SimpleTaskManagerContext;
-use crate::util::config::get_config_element;
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -230,7 +229,7 @@ where
     pub(crate) async fn maybe_clear_database(
         conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
     ) -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let database_status = Self::check_schema_status(conn).await?;
         let schema_name = postgres_config.schema;
 
@@ -484,6 +483,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::QuotaTrackingMode;
     use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
@@ -509,7 +509,6 @@ mod tests {
     use crate::pro::users::{
         RoleDb, UserClaims, UserCredentials, UserDb, UserId, UserRegistration,
     };
-    use crate::pro::util::config::QuotaTrackingMode;
     use crate::pro::util::tests::mock_oidc::{mock_refresh_server, MockRefreshServerConfig};
     use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper, MockQuotaTracking};
     use crate::projects::{
@@ -3483,14 +3482,14 @@ mod tests {
 
         assert_eq!(
             db.quota_available().await.unwrap(),
-            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
+            crate::config::get_config_element::<crate::config::Quota>()
                 .unwrap()
                 .initial_credits
         );
 
         assert_eq!(
             admin_db.quota_available_by_user(&user).await.unwrap(),
-            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
+            crate::config::get_config_element::<crate::config::Quota>()
                 .unwrap()
                 .initial_credits
         );

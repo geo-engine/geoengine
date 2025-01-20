@@ -1,9 +1,9 @@
 use crate::api::model::datatypes::TimeInterval;
 use crate::api::ogc::util::{parse_bbox, parse_time};
+use crate::config;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error;
 use crate::error::Result;
-use crate::util::config;
 use crate::util::parsing::parse_spatial_resolution;
 use crate::util::server::connection_closed;
 use crate::util::tests::MockQueryContext;

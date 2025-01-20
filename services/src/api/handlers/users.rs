@@ -1,4 +1,5 @@
 use crate::api::model::responses::IdResponse;
+use crate::config;
 use crate::contexts::ApplicationContext;
 use crate::contexts::SessionContext;
 use crate::error;
@@ -18,7 +19,6 @@ use crate::pro::users::UserSession;
 use crate::pro::users::{AuthCodeRequestURL, AuthCodeResponse, RoleDb, UserCredentials};
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
-use crate::util::config;
 use crate::util::extractors::ValidatedJson;
 use actix_web::FromRequest;
 use actix_web::{web, HttpResponse, Responder};
@@ -106,7 +106,7 @@ where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
-        config::get_config_element::<crate::pro::util::config::User>()?.registration,
+        config::get_config_element::<crate::config::User>()?.registration,
         error::UserRegistrationDisabled
     );
 
@@ -248,7 +248,7 @@ pub(crate) async fn anonymous_handler<C: ApplicationContext + UserAuth>(
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
-    if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
+    if !config::get_config_element::<crate::config::Session>()?.anonymous_access {
         return Err(error::Error::Unauthorized {
             source: Box::new(error::Error::AnonymousAccessDisabled),
         });
@@ -631,7 +631,7 @@ where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
-        config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
+        config::get_config_element::<crate::config::Oidc>()?.enabled,
         crate::pro::users::OidcDisabled
     );
     let auth_code_request_url = app_ctx
@@ -683,7 +683,7 @@ where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
-        config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
+        config::get_config_element::<crate::config::Oidc>()?.enabled,
         crate::pro::users::OidcDisabled
     );
     let authentication_response = app_ctx
@@ -940,11 +940,11 @@ mod tests {
     use super::*;
     use crate::api::model::datatypes::RasterColorizer;
     use crate::api::model::responses::ErrorResponse;
+    use crate::config::Oidc;
     use crate::contexts::{Session, SessionContext};
     use crate::ge_context;
     use crate::pro::permissions::Role;
     use crate::pro::users::{AuthCodeRequestURL, OidcManager, UserAuth};
-    use crate::pro::util::config::Oidc;
     use crate::pro::util::tests::mock_oidc::{
         mock_refresh_server, mock_token_response, mock_valid_provider_discovery,
         MockRefreshServerConfig, MockTokenConfig, SINGLE_STATE,
@@ -1458,10 +1458,7 @@ mod tests {
         OidcManager::from_oidc_with_static_tokens(oidc_config)
     }
 
-    async fn oidc_init_test_helper(
-        method: Method,
-        ctx: PostgresContext<NoTls>,
-    ) -> ServiceResponse {
+    async fn oidc_init_test_helper(method: Method, ctx: PostgresContext<NoTls>) -> ServiceResponse {
         let req = test::TestRequest::default()
             .method(method)
             .uri("/oidcInit")
@@ -1945,7 +1942,7 @@ mod tests {
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(
             quota.available,
-            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
+            crate::config::get_config_element::<crate::config::Quota>()
                 .unwrap()
                 .initial_credits
         );

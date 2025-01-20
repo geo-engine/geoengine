@@ -1,7 +1,5 @@
-use super::{
-    users::{UserDb, UserSession},
-    util::config::QuotaTrackingMode,
-};
+use super::users::{UserDb, UserSession};
+use crate::config::QuotaTrackingMode;
 use crate::pro::users::UserId;
 use geoengine_datatypes::{primitives::DateTime, util::test::TestDefault};
 use geoengine_operators::meta::quota::{ComputationUnit, QuotaMessage, QuotaTracking};

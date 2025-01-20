@@ -5,7 +5,7 @@ pub mod util;
 
 use self::time_estimation::TimeEstimation;
 use crate::identifier;
-use crate::{error::Result, util::config::get_config_element};
+use crate::{error::Result, config::get_config_element};
 pub use error::TaskError;
 use futures::channel::oneshot;
 use geoengine_datatypes::primitives::DateTime;
@@ -427,7 +427,7 @@ impl Default for TaskListOptions {
 }
 
 fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
-    let limit = get_config_element::<crate::util::config::TaskManager>()
+    let limit = get_config_element::<crate::config::TaskManager>()
         .expect("should exist because it is defined in the default config")
         .list_limit;
     if value <= limit {
@@ -440,7 +440,7 @@ fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
 }
 
 fn task_list_limit_default() -> u32 {
-    get_config_element::<crate::util::config::TaskManager>()
+    get_config_element::<crate::config::TaskManager>()
         .map(|config| config.list_default_limit)
         .unwrap_or(1)
 }

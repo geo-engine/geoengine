@@ -1,6 +1,6 @@
 use crate::api::model::responses::ErrorResponse;
 use crate::error::Result;
-use crate::util::config::get_config_element;
+use crate::config::get_config_element;
 
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::header::{HeaderName, HeaderValue};
@@ -278,7 +278,7 @@ pub fn serve_openapi_json<
 }
 
 pub(crate) fn log_server_info() -> Result<()> {
-    let web_config: crate::util::config::Web = get_config_element()?;
+    let web_config: crate::config::Web = get_config_element()?;
 
     let external_address = web_config.api_url()?;
 
@@ -306,14 +306,14 @@ pub(crate) fn log_server_info() -> Result<()> {
         external_address.join("swagger-ui/")?
     );
 
-    let postgres_config: crate::util::config::Postgres = get_config_element()?;
+    let postgres_config: crate::config::Postgres = get_config_element()?;
     if postgres_config.clear_database_on_start {
         info!("Clear Database on Start: enabled");
     } else {
         info!("Clear Database on Start: disabled");
     }
 
-    let session_config: crate::util::config::Session = get_config_element()?;
+    let session_config: crate::config::Session = get_config_element()?;
 
     if session_config.anonymous_access {
         info!("Anonymous Access: enabled");

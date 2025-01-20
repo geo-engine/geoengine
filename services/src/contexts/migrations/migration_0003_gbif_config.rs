@@ -51,14 +51,14 @@ mod tests {
     use crate::util::postgres::DatabaseConnectionConfig;
     use crate::{
         contexts::{migrate_database, migrations::migration_0000_initial::Migration0000Initial},
-        util::config::get_config_element,
+        config::get_config_element,
     };
 
     use super::*;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_adds_the_field_and_sets_the_default_value() -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 

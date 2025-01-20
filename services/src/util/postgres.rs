@@ -33,8 +33,8 @@ impl DatabaseConnectionConfig {
     }
 }
 
-impl From<crate::util::config::Postgres> for DatabaseConnectionConfig {
-    fn from(config: crate::util::config::Postgres) -> Self {
+impl From<crate::config::Postgres> for DatabaseConnectionConfig {
+    fn from(config: crate::config::Postgres) -> Self {
         Self {
             host: config.host,
             port: config.port,

@@ -13,7 +13,7 @@ mod testing;
 /// - `before` - a function that is called before the context is created and the test is executed
 /// - `expect_panic` - if the test is expected to panic
 /// - `user` - `"admin"` if created session should be admin session
-/// - `quota_config` - a function that returns a [`crate::pro::util::config::Quota`] to use for the test
+/// - `quota_config` - a function that returns a [`crate::config::Quota`] to use for the test
 /// - `oidc_db` - a tuple `(handle, f)` with
 ///     - `handle` being a handle of an OpenID-Connect endpoint, preventing it from dropping too early, and
 ///     - `f` begin function that returns a [`crate::pro::users::OidcManager`] to use for the test

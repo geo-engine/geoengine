@@ -1,7 +1,5 @@
 #![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
 
-use std::time::Instant;
-
 use actix_http::header::{self, CONTENT_TYPE};
 use actix_web_httpauth::headers::authorization::Bearer;
 use geoengine_datatypes::{
@@ -14,17 +12,16 @@ use geoengine_operators::{
     source::{GdalSource, GdalSourceParameters},
 };
 use geoengine_services::{
+    config::{get_config_element, Quota, QuotaTrackingMode},
     contexts::{ApplicationContext, SessionContext},
     pro::{
         users::{UserAuth, UserDb},
-        util::{
-            config::QuotaTrackingMode,
-            tests::{add_ndvi_to_datasets, with_pro_temp_context},
-        },
+        util::tests::{add_ndvi_to_datasets, with_pro_temp_context},
     },
-    util::{config, tests::send_test_request},
+    util::tests::send_test_request,
     workflows::{registry::WorkflowRegistry, workflow::Workflow},
 };
+use std::time::Instant;
 
 async fn bench() {
     with_pro_temp_context(|app_ctx, _| async move {
@@ -115,10 +112,7 @@ async fn bench() {
 async fn main() {
     eprintln!(
         "Starting benchmark, quota check enabled: {}",
-        config::get_config_element::<geoengine_services::pro::util::config::Quota>()
-            .unwrap()
-            .mode
-            == QuotaTrackingMode::Check
+        get_config_element::<Quota>().unwrap().mode == QuotaTrackingMode::Check
     );
     for i in 0..4 {
         let start = Instant::now();

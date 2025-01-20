@@ -6,8 +6,8 @@ use futures::future::BoxFuture;
 use tokio_postgres::{NoTls, Transaction};
 
 use crate::{
-    contexts::migrate_database,
-    util::{config::get_config_element, postgres::DatabaseConnectionConfig},
+    config::get_config_element, contexts::migrate_database,
+    util::postgres::DatabaseConnectionConfig,
 };
 
 use super::Migration;
@@ -491,7 +491,7 @@ async fn assert_schema_eq<'c>(
     population_config: AssertSchemaEqPopulationConfig,
 ) {
     async fn get_pool() -> Pool<PostgresConnectionManager<NoTls>> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>().unwrap();
+        let postgres_config = get_config_element::<crate::config::Postgres>().unwrap();
         let db_config = DatabaseConnectionConfig::from(postgres_config);
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
