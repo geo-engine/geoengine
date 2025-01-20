@@ -1,4 +1,4 @@
-use crate::pro::users::OidcManager;
+use crate::users::OidcManager;
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::{
     config::{get_config_element, Quota},
@@ -9,11 +9,9 @@ use crate::{
         AddDataset, DatasetName,
     },
     permissions::{Permission, PermissionDb, Role},
-    pro::{
-        contexts::{PostgresContext, ProApplicationContext, ProGeoEngineDb},
-        users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
-    },
+    pro::contexts::{PostgresContext, ProApplicationContext, ProGeoEngineDb},
     projects::{CreateProject, ProjectDb, ProjectId, STRectangle},
+    users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     util::tests::{setup_db, tear_down_db},
     workflows::{
         registry::WorkflowRegistry,
@@ -365,7 +363,7 @@ impl MockQuotaTracking for QuotaTracking {
 #[cfg(test)]
 pub(crate) mod mock_oidc {
     use crate::config::Oidc;
-    use crate::pro::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
+    use crate::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
     use chrono::{Duration, Utc};
     use httptest::matchers::{matches, request};
     use httptest::responders::status_code;

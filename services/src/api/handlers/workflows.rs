@@ -662,10 +662,10 @@ mod tests {
     use crate::datasets::{DatasetName, RasterDatasetFromWorkflowResult};
     use crate::ge_context;
     use crate::pro::contexts::PostgresContext;
-    use crate::pro::users::UserAuth;
     use crate::pro::util::tests::admin_login;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
+    use crate::users::UserAuth;
     use crate::util::tests::{
         add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
         read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,

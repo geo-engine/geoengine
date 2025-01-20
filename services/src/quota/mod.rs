@@ -1,5 +1,5 @@
 use crate::config::QuotaTrackingMode;
-use crate::pro::users::{UserDb, UserId, UserSession};
+use crate::users::{UserDb, UserId, UserSession};
 use geoengine_datatypes::{primitives::DateTime, util::test::TestDefault};
 use geoengine_operators::meta::quota::{ComputationUnit, QuotaMessage, QuotaTracking};
 use serde::{Deserialize, Serialize};
@@ -222,9 +222,9 @@ mod tests {
         ge_context,
         pro::{
             contexts::PostgresContext,
-            users::{UserAuth, UserCredentials, UserRegistration},
             util::tests::{admin_login, MockQuotaTracking},
         },
+        users::{UserAuth, UserCredentials, UserRegistration},
     };
     use tokio_postgres::NoTls;
 

@@ -897,10 +897,10 @@ mod tests {
         layers::ProLayerProviderDb,
         pro::{
             contexts::{PostgresContext, PostgresDb},
-            users::UserAuth,
             util::tests::admin_login,
         },
         test_data,
+        users::UserAuth,
     };
     use futures::StreamExt;
     use geoengine_datatypes::{

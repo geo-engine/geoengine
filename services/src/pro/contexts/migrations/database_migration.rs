@@ -100,18 +100,16 @@ where
 mod tests {
     use crate::contexts::{initialize_database, CurrentSchemaMigration, Migration0000Initial};
     use crate::permissions::RoleId;
-    use crate::pro::users::UserDb;
     use crate::projects::{ProjectDb, ProjectListOptions};
+    use crate::users::UserDb;
     use crate::util::postgres::DatabaseConnectionConfig;
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::WorkflowId;
     use crate::{
         config::get_config_element,
         contexts::{migrate_database, SessionId},
-        pro::{
-            contexts::{migrations::pro_migrations, PostgresDb},
-            users::{UserId, UserInfo, UserSession},
-        },
+        pro::contexts::{migrations::pro_migrations, PostgresDb},
+        users::{UserId, UserInfo, UserSession},
     };
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
     use geoengine_datatypes::primitives::DateTime;

@@ -4,7 +4,6 @@ use crate::error::Result;
 use crate::permissions::Permission;
 use crate::permissions::TxPermissionDb;
 use crate::pro::contexts::PostgresDb;
-use crate::pro::users::UserId;
 use crate::projects::error::{
     AccessFailedProjectDbError, Bb8ProjectDbError, ProjectNotFoundProjectDbError,
 };
@@ -15,6 +14,7 @@ use crate::projects::{
     CreateProject, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
     ProjectVersion, ProjectVersionId, UpdateProject,
 };
+use crate::users::UserId;
 use crate::util::Identifier;
 use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;

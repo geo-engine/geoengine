@@ -4,16 +4,16 @@ use crate::error::{Error, Result};
 use crate::permissions::TxPermissionDb;
 use crate::permissions::{Role, RoleDescription, RoleId};
 use crate::pro::contexts::{PostgresDb, ProApplicationContext};
-use crate::pro::users::oidc::{FlatMaybeEncryptedOidcTokens, OidcTokens, UserClaims};
-use crate::pro::users::userdb::{
+use crate::projects::{ProjectId, STRectangle};
+use crate::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
+use crate::users::oidc::{FlatMaybeEncryptedOidcTokens, OidcTokens, UserClaims};
+use crate::users::userdb::{
     CannotRevokeRoleThatIsNotAssignedRoleDbError, RoleIdDoesNotExistRoleDbError,
 };
-use crate::pro::users::{
+use crate::users::{
     SessionTokenStore, StoredOidcTokens, User, UserCredentials, UserDb, UserId, UserInfo,
     UserRegistration, UserSession,
 };
-use crate::projects::{ProjectId, STRectangle};
-use crate::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
 use crate::util::postgres::PostgresErrorExt;
 use crate::util::Identifier;
 use crate::{error, pro::contexts::PostgresContext};

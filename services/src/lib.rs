@@ -12,6 +12,7 @@ pub mod quota;
 pub mod server;
 pub mod stac;
 pub mod tasks;
+pub mod users;
 #[macro_use]
 pub mod util;
 pub mod workflows;

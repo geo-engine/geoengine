@@ -136,7 +136,8 @@ mod tests {
         datasets::upload::UploadId,
         ge_context,
         machine_learning::MlModelMetadata,
-        pro::{contexts::PostgresContext, users::UserAuth},
+        pro::contexts::PostgresContext,
+        users::UserAuth,
         util::tests::{send_test_request, SetMultipartBody, TestDataUploads},
     };
     use actix_http::header;

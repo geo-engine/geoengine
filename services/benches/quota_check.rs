@@ -14,10 +14,8 @@ use geoengine_operators::{
 use geoengine_services::{
     config::{get_config_element, Quota, QuotaTrackingMode},
     contexts::{ApplicationContext, SessionContext},
-    pro::{
-        users::{UserAuth, UserDb},
-        util::tests::{add_ndvi_to_datasets, with_pro_temp_context},
-    },
+    pro::util::tests::{add_ndvi_to_datasets, with_pro_temp_context},
+    users::{UserAuth, UserDb},
     util::tests::send_test_request,
     workflows::{registry::WorkflowRegistry, workflow::Workflow},
 };

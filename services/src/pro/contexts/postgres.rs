@@ -18,11 +18,11 @@ use crate::layers::add_from_directory::{
 };
 use crate::machine_learning::error::MachineLearningError;
 use crate::machine_learning::name::MlModelName;
-use crate::pro::users::OidcManager;
-use crate::pro::users::{UserAuth, UserSession};
 use crate::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::tasks::SimpleTaskManagerContext;
 use crate::tasks::{TypedTaskManagerBackend, UserTaskManager};
+use crate::users::OidcManager;
+use crate::users::{UserAuth, UserSession};
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -505,10 +505,6 @@ mod tests {
         INTERNAL_PROVIDER_ID,
     };
     use crate::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
-    use crate::pro::users::{OidcTokens, SessionTokenStore};
-    use crate::pro::users::{
-        RoleDb, UserClaims, UserCredentials, UserDb, UserId, UserRegistration,
-    };
     use crate::pro::util::tests::mock_oidc::{mock_refresh_server, MockRefreshServerConfig};
     use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper, MockQuotaTracking};
     use crate::projects::{
@@ -516,6 +512,8 @@ mod tests {
         ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
         UpdateProject,
     };
+    use crate::users::{OidcTokens, SessionTokenStore};
+    use crate::users::{RoleDb, UserClaims, UserCredentials, UserDb, UserId, UserRegistration};
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
     use bb8_postgres::tokio_postgres::NoTls;

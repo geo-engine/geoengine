@@ -848,10 +848,8 @@ mod tests {
         contexts::{ApplicationContext, SessionContext},
         ge_context,
         permissions::PermissionDb,
-        pro::{
-            contexts::PostgresContext,
-            users::{UserAuth, UserSession},
-        },
+        pro::contexts::PostgresContext,
+        users::{UserAuth, UserSession},
     };
     use geoengine_datatypes::{
         collections::VectorDataType,

@@ -7,18 +7,18 @@ use crate::error::Result;
 use crate::permissions::{RoleDescription, RoleId};
 use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
-use crate::pro::users::UserAuth;
-use crate::pro::users::UserDb;
-use crate::pro::users::UserId;
-use crate::pro::users::UserRegistration;
-use crate::pro::users::UserSession;
-use crate::pro::users::{AuthCodeRequestURL, AuthCodeResponse, RoleDb, UserCredentials};
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
 use crate::quota::ComputationQuota;
 use crate::quota::DataUsage;
 use crate::quota::DataUsageSummary;
 use crate::quota::OperatorQuota;
+use crate::users::UserAuth;
+use crate::users::UserDb;
+use crate::users::UserId;
+use crate::users::UserRegistration;
+use crate::users::UserSession;
+use crate::users::{AuthCodeRequestURL, AuthCodeResponse, RoleDb, UserCredentials};
 use crate::util::extractors::ValidatedJson;
 use actix_web::FromRequest;
 use actix_web::{web, HttpResponse, Responder};
@@ -632,7 +632,7 @@ where
 {
     ensure!(
         config::get_config_element::<crate::config::Oidc>()?.enabled,
-        crate::pro::users::OidcDisabled
+        crate::users::OidcDisabled
     );
     let auth_code_request_url = app_ctx
         .oidc_manager()
@@ -684,7 +684,7 @@ where
 {
     ensure!(
         config::get_config_element::<crate::config::Oidc>()?.enabled,
-        crate::pro::users::OidcDisabled
+        crate::users::OidcDisabled
     );
     let authentication_response = app_ctx
         .oidc_manager()
@@ -944,7 +944,7 @@ mod tests {
     use crate::contexts::{Session, SessionContext};
     use crate::ge_context;
     use crate::permissions::Role;
-    use crate::pro::users::{AuthCodeRequestURL, OidcManager, UserAuth};
+    use crate::pro::contexts::PostgresContext;
     use crate::pro::util::tests::mock_oidc::{
         mock_refresh_server, mock_token_response, mock_valid_provider_discovery,
         MockRefreshServerConfig, MockTokenConfig, SINGLE_STATE,
@@ -952,7 +952,7 @@ mod tests {
     use crate::pro::util::tests::{
         admin_login, create_project_helper, create_session_helper, register_ndvi_workflow_helper,
     };
-    use crate::pro::{contexts::PostgresContext, users::UserId};
+    use crate::users::{AuthCodeRequestURL, OidcManager, UserAuth, UserId};
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
     use actix_http::header::CONTENT_TYPE;
     use actix_web::dev::ServiceResponse;

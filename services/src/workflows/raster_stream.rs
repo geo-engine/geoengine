@@ -173,7 +173,7 @@ mod tests {
     use super::*;
     use crate::ge_context;
     use crate::pro::contexts::PostgresContext;
-    use crate::pro::users::UserAuth;
+    use crate::users::UserAuth;
     use crate::util::tests::register_ndvi_workflow_helper;
     use crate::{contexts::ApplicationContext, pro::contexts::PostgresSessionContext};
     use actix_http::error::PayloadError;

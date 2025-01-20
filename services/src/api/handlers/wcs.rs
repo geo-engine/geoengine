@@ -534,8 +534,8 @@ mod tests {
     use crate::contexts::Session;
     use crate::ge_context;
     use crate::pro::contexts::PostgresContext;
-    use crate::pro::users::UserAuth;
     use crate::pro::util::tests::register_ndvi_workflow_helper;
+    use crate::users::UserAuth;
     use crate::util::tests::{read_body_string, send_test_request};
     use actix_web::http::header;
     use actix_web::test;

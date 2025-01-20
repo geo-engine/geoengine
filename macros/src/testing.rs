@@ -192,7 +192,7 @@ impl TestConfig {
     pub fn oidc_db(&self) -> TokenStream {
         self.oidc_db
             .clone()
-            .unwrap_or_else(|| quote!(((), crate::pro::users::OidcManager::default)))
+            .unwrap_or_else(|| quote!(((), crate::users::OidcManager::default)))
     }
 
     pub fn user_context(
@@ -205,7 +205,7 @@ impl TestConfig {
             UserConfig::Anonymous => quote! {
                 let #user_ctx_name: #user_ctx_ty = {
                     use crate::contexts::ApplicationContext;
-                    use crate::pro::users::UserAuth;
+                    use crate::users::UserAuth;
                     let session = #app_ctx_var.create_anonymous_session().await.unwrap();
                     #app_ctx_var.session_context(session)
                 };
@@ -440,7 +440,7 @@ mod tests {
                 let query_ctx_chunk_size = geoengine_datatypes::util::test::TestDefault::test_default();
                 let quota_config = crate::config::get_config_element::<crate::config::Quota>()
                     .unwrap();
-                let (server, oidc_db) = ((), crate::pro::users::OidcManager::default);
+                let (server, oidc_db) = ((), crate::users::OidcManager::default);
 
                 (|| {})();
 
@@ -484,7 +484,7 @@ mod tests {
                 let query_ctx_chunk_size = geoengine_datatypes::util::test::TestDefault::test_default();
                 let quota_config = crate::config::get_config_element::<crate::config::Quota>()
                     .unwrap();
-                let (server, oidc_db) = ((), crate::pro::users::OidcManager::default);
+                let (server, oidc_db) = ((), crate::users::OidcManager::default);
 
                 (|| {})();
 
@@ -497,7 +497,7 @@ mod tests {
                     |app_ctx, _| async move {
                         let ctx: PostgresSessionContext<NoTls> = {
                             use crate::contexts::ApplicationContext;
-                            use crate::pro::users::UserAuth;
+                            use crate::users::UserAuth;
                             let session = app_ctx.create_anonymous_session().await.unwrap();
                             app_ctx.session_context(session)
                         };
@@ -536,7 +536,7 @@ mod tests {
                 let query_ctx_chunk_size = geoengine_datatypes::util::test::TestDefault::test_default();
                 let quota_config = crate::config::get_config_element::<crate::config::Quota>()
                     .unwrap();
-                let (server, oidc_db) = ((), crate::pro::users::OidcManager::default);
+                let (server, oidc_db) = ((), crate::users::OidcManager::default);
 
                 (|| {})();
 

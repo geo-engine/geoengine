@@ -400,11 +400,11 @@ mod tests {
     use crate::contexts::Session;
     use crate::ge_context;
     use crate::pro::contexts::PostgresContext;
-    use crate::pro::users::{UserAuth, UserSession};
     use crate::projects::{
         LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId, ProjectLayer,
         ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
     };
+    use crate::users::{UserAuth, UserSession};
     use crate::util::tests::{
         check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,
     };

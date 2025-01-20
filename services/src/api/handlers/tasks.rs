@@ -171,10 +171,10 @@ mod tests {
     use crate::contexts::Session;
     use crate::ge_context;
     use crate::pro::contexts::PostgresContext;
-    use crate::pro::users::UserAuth;
     use crate::tasks::{
         util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
     };
+    use crate::users::UserAuth;
     use crate::util::tests::{read_body_json, send_test_request};
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;

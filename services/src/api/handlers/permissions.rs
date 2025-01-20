@@ -207,9 +207,9 @@ mod tests {
         ge_context,
         pro::{
             contexts::PostgresContext,
-            users::{UserAuth, UserCredentials, UserRegistration},
             util::tests::{add_ndvi_to_datasets, add_ports_to_datasets, admin_login},
         },
+        users::{UserAuth, UserCredentials, UserRegistration},
         util::tests::{read_body_string, send_test_request},
     };
     use actix_http::header;

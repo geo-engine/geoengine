@@ -59,10 +59,6 @@ use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
 use crate::permissions::{
     Permission, PermissionListing, ResourceId, Role, RoleDescription, RoleId,
 };
-use crate::pro::users::{
-    AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
-    UserSession,
-};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
@@ -71,6 +67,10 @@ use crate::projects::{
 };
 use crate::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
+use crate::users::{
+    AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
+    UserSession,
+};
 use crate::util::{
     apidoc::{OpenApiServerInfo, TransformSchemasWithTag},
     server::ServerInfo,

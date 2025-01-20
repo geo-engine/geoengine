@@ -611,18 +611,18 @@ impl OidcRequestClient {
 #[cfg(test)]
 mod tests {
     use crate::error::Result;
-    use crate::pro::users::oidc::OidcError::{
-        IllegalProvider, LoginFailed, ProviderDiscovery, ResponseFieldError, TokenExchangeError,
-    };
-    use crate::pro::users::oidc::{
-        AuthCodeResponse, DefaultClient, DefaultJsonWebKeySet, DefaultProviderMetadata,
-        OidcRequestDb,
-    };
-    use crate::pro::users::OidcError::IllegalRequestToken;
     use crate::pro::util::tests::mock_oidc::{
         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_NONCE,
         SINGLE_STATE,
     };
+    use crate::users::oidc::OidcError::{
+        IllegalProvider, LoginFailed, ProviderDiscovery, ResponseFieldError, TokenExchangeError,
+    };
+    use crate::users::oidc::{
+        AuthCodeResponse, DefaultClient, DefaultJsonWebKeySet, DefaultProviderMetadata,
+        OidcRequestDb,
+    };
+    use crate::users::OidcError::IllegalRequestToken;
     use httptest::matchers::request;
     use httptest::responders::status_code;
     use httptest::{Expectation, Server};

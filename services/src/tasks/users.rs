@@ -1,4 +1,4 @@
-use crate::pro::users::UserSession;
+use crate::users::UserSession;
 use crate::{
     error,
     tasks::{
@@ -152,7 +152,8 @@ mod tests {
     use crate::{
         contexts::{ApplicationContext, SessionContext},
         ge_context,
-        pro::{contexts::PostgresContext, users::UserAuth},
+        pro::contexts::PostgresContext,
+        users::UserAuth,
     };
     use tokio_postgres::NoTls;
 

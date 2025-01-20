@@ -2,7 +2,6 @@ mod db_types;
 pub(crate) mod migrations;
 mod postgres;
 
-use super::users::{RoleDb, UserAuth, UserSession};
 use crate::config::get_config_element;
 use crate::config::{Cache, QuotaTrackingMode};
 use crate::contexts::{ApplicationContext, GeoEngineDb};
@@ -11,7 +10,8 @@ use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::machine_learning::MlModelDb;
 use crate::permissions::PermissionDb;
-use crate::pro::users::{OidcManager, UserDb};
+use crate::users::{OidcManager, UserDb};
+use crate::users::{RoleDb, UserAuth, UserSession};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
