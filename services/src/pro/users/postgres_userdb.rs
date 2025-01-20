@@ -1,7 +1,7 @@
 use crate::api::handlers::users::UsageSummaryGranularity;
 use crate::contexts::SessionId;
 use crate::error::{Error, Result};
-use crate::pro::contexts::{ProApplicationContext, PostgresDb};
+use crate::pro::contexts::{PostgresDb, ProApplicationContext};
 use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
 use crate::pro::permissions::{Role, RoleDescription, RoleId};
 use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
@@ -16,7 +16,7 @@ use crate::pro::users::{
 use crate::projects::{ProjectId, STRectangle};
 use crate::util::postgres::PostgresErrorExt;
 use crate::util::Identifier;
-use crate::{error, pro::contexts::ProPostgresContext};
+use crate::{error, pro::contexts::PostgresContext};
 use async_trait::async_trait;
 use geoengine_operators::meta::quota::ComputationUnit;
 
@@ -35,7 +35,7 @@ use super::userdb::{
 };
 
 #[async_trait]
-impl<Tls> UserAuth for ProPostgresContext<Tls>
+impl<Tls> UserAuth for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -491,7 +491,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> SessionTokenStore for ProPostgresContext<Tls>
+impl<Tls> SessionTokenStore for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

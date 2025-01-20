@@ -49,7 +49,7 @@ use uuid::Uuid;
 
 /// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
 #[derive(Clone)]
-pub struct ProPostgresContext<Tls>
+pub struct PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -67,7 +67,7 @@ where
     tile_cache: Arc<SharedCache>,
 }
 
-impl<Tls> ProPostgresContext<Tls>
+impl<Tls> PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -96,7 +96,7 @@ where
             quota_config.increment_quota_buffer_timeout_seconds,
         );
 
-        Ok(ProPostgresContext {
+        Ok(PostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -131,7 +131,7 @@ where
             quota_config.increment_quota_buffer_timeout_seconds,
         );
 
-        Ok(ProPostgresContext {
+        Ok(PostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
@@ -176,7 +176,7 @@ where
             quota_config.increment_quota_buffer_timeout_seconds,
         );
 
-        let app_ctx = ProPostgresContext {
+        let app_ctx = PostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -289,7 +289,7 @@ enum DatabaseStatus {
 }
 
 #[async_trait]
-impl<Tls> ApplicationContext for ProPostgresContext<Tls>
+impl<Tls> ApplicationContext for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -314,7 +314,7 @@ where
     }
 }
 
-impl<Tls> ProApplicationContext for ProPostgresContext<Tls>
+impl<Tls> ProApplicationContext for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -335,7 +335,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     session: UserSession,
-    context: ProPostgresContext<Tls>,
+    context: PostgresContext<Tls>,
 }
 
 #[async_trait]
@@ -554,7 +554,7 @@ mod tests {
     use std::str::FromStr;
 
     #[ge_context::test]
-    async fn test(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test(app_ctx: PostgresContext<NoTls>) {
         anonymous(&app_ctx).await;
 
         let _user_id = user_reg_login(&app_ctx).await;
@@ -583,7 +583,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_external(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_external(app_ctx: PostgresContext<NoTls>) {
         anonymous(&app_ctx).await;
 
         let session = external_user_login_twice(&app_ctx).await;
@@ -611,7 +611,7 @@ mod tests {
         }
     }
 
-    async fn set_session(app_ctx: &ProPostgresContext<NoTls>, projects: &[ProjectListing]) {
+    async fn set_session(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
         let credentials = UserCredentials {
             email: "foo@example.com".into(),
             password: "secret123".into(),
@@ -622,10 +622,7 @@ mod tests {
         set_session_in_database(app_ctx, projects, session).await;
     }
 
-    async fn set_session_external(
-        app_ctx: &ProPostgresContext<NoTls>,
-        projects: &[ProjectListing],
-    ) {
+    async fn set_session_external(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
         let external_user_claims = UserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
@@ -644,7 +641,7 @@ mod tests {
     }
 
     async fn set_session_in_database(
-        app_ctx: &ProPostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         projects: &[ProjectListing],
         session: UserSession,
     ) {
@@ -666,7 +663,7 @@ mod tests {
     }
 
     async fn delete_project(
-        app_ctx: &ProPostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
@@ -678,7 +675,7 @@ mod tests {
     }
 
     async fn add_permission(
-        app_ctx: &ProPostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
@@ -724,7 +721,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     async fn update_projects(
-        app_ctx: &ProPostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
@@ -839,7 +836,7 @@ mod tests {
     }
 
     async fn list_projects(
-        app_ctx: &ProPostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
     ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
@@ -858,7 +855,7 @@ mod tests {
         projects
     }
 
-    async fn create_projects(app_ctx: &ProPostgresContext<NoTls>, session: &UserSession) {
+    async fn create_projects(app_ctx: &PostgresContext<NoTls>, session: &UserSession) {
         let db = app_ctx.session_context(session.clone()).db();
 
         for i in 0..10 {
@@ -881,7 +878,7 @@ mod tests {
         }
     }
 
-    async fn user_reg_login(app_ctx: &ProPostgresContext<NoTls>) -> UserId {
+    async fn user_reg_login(app_ctx: &PostgresContext<NoTls>) -> UserId {
         let user_registration = UserRegistration {
             email: "foo@example.com".into(),
             password: "secret123".into(),
@@ -908,7 +905,7 @@ mod tests {
         user_id
     }
 
-    async fn external_user_login_twice(app_ctx: &ProPostgresContext<NoTls>) -> UserSession {
+    async fn external_user_login_twice(app_ctx: &PostgresContext<NoTls>) -> UserSession {
         let external_user_claims = UserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
@@ -963,7 +960,7 @@ mod tests {
         result
     }
 
-    async fn anonymous(app_ctx: &ProPostgresContext<NoTls>) {
+    async fn anonymous(app_ctx: &PostgresContext<NoTls>) {
         let now: DateTime = chrono::offset::Utc::now().into();
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let then: DateTime = chrono::offset::Utc::now().into();
@@ -981,7 +978,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_persists_workflows(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_persists_workflows(app_ctx: PostgresContext<NoTls>) {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
@@ -1012,7 +1009,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_persists_datasets(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_persists_datasets(app_ctx: PostgresContext<NoTls>) {
         let loading_info = OgrSourceDataset {
             file_name: PathBuf::from("test.csv"),
             layer_name: "test.csv".to_owned(),
@@ -1172,7 +1169,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_persists_uploads(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_persists_uploads(app_ctx: PostgresContext<NoTls>) {
         let id = UploadId::from_str("2de18cd8-4a38-4111-a445-e3734bc18a80").unwrap();
         let input = Upload {
             id,
@@ -1196,7 +1193,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_persists_layer_providers(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_persists_layer_providers(app_ctx: PostgresContext<NoTls>) {
         let db = app_ctx.session_context(UserSession::admin_session()).db();
 
         let provider = NetCdfCfDataProviderDefinition {
@@ -1246,7 +1243,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_lists_only_permitted_datasets(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_lists_only_permitted_datasets(app_ctx: PostgresContext<NoTls>) {
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
         let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1320,7 +1317,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_shows_only_permitted_provenance(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_shows_only_permitted_provenance(app_ctx: PostgresContext<NoTls>) {
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
         let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1372,7 +1369,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_updates_permissions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_updates_permissions(app_ctx: PostgresContext<NoTls>) {
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
         let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1430,7 +1427,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_uses_roles_for_permissions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_uses_roles_for_permissions(app_ctx: PostgresContext<NoTls>) {
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
         let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1488,7 +1485,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_secures_meta_data(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_secures_meta_data(app_ctx: PostgresContext<NoTls>) {
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
         let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1559,7 +1556,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_loads_all_meta_data_types(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_loads_all_meta_data_types(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let db = app_ctx.session_context(session.clone()).db();
@@ -1734,7 +1731,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_secures_uploads(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_secures_uploads(app_ctx: PostgresContext<NoTls>) {
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
         let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1761,7 +1758,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_collects_layers(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_collects_layers(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
@@ -1956,7 +1953,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_searches_layers(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_searches_layers(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
@@ -2301,7 +2298,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_searches_layers_with_permissions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_searches_layers_with_permissions(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
         let admin_layer_db = app_ctx.session_context(admin_session).db();
 
@@ -2807,7 +2804,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_autocompletes_layers(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_autocompletes_layers(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
@@ -2987,7 +2984,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_autocompletes_layers_with_permissions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_autocompletes_layers_with_permissions(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
         let admin_layer_db = app_ctx.session_context(admin_session).db();
 
@@ -3260,7 +3257,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_reports_search_capabilities(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_reports_search_capabilities(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
@@ -3356,7 +3353,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_tracks_used_quota_in_postgres(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_tracks_used_quota_in_postgres(app_ctx: PostgresContext<NoTls>) {
         let _user = app_ctx
             .register_user(UserRegistration {
                 email: "foo@example.com".to_string(),
@@ -3406,7 +3403,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_tracks_available_quota(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_tracks_available_quota(app_ctx: PostgresContext<NoTls>) {
         let user = app_ctx
             .register_user(UserRegistration {
                 email: "foo@example.com".to_string(),
@@ -3463,7 +3460,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_updates_quota_in_postgres(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_updates_quota_in_postgres(app_ctx: PostgresContext<NoTls>) {
         let user = app_ctx
             .register_user(UserRegistration {
                 email: "foo@example.com".to_string(),
@@ -3510,7 +3507,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_removes_layer_collections(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_removes_layer_collections(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
@@ -3677,7 +3674,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_removes_collections_from_collections(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_removes_collections_from_collections(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let db = app_ctx.session_context(session).db();
@@ -3758,7 +3755,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_removes_layers_from_collections(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_removes_layers_from_collections(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let db = app_ctx.session_context(session).db();
@@ -3884,7 +3881,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_deletes_dataset(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_deletes_dataset(app_ctx: PostgresContext<NoTls>) {
         let loading_info = OgrSourceDataset {
             file_name: PathBuf::from("test.csv"),
             layer_name: "test.csv".to_owned(),
@@ -3975,7 +3972,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_deletes_admin_dataset(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_deletes_admin_dataset(app_ctx: PostgresContext<NoTls>) {
         let dataset_name = DatasetName::new(None, "my_dataset");
 
         let loading_info = OgrSourceDataset {
@@ -4065,7 +4062,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_missing_layer_dataset_in_collection_listing(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_missing_layer_dataset_in_collection_listing(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let db = app_ctx.session_context(session).db();
 
@@ -4121,7 +4118,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_restricts_layer_permissions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_restricts_layer_permissions(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -4189,7 +4186,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_handles_user_roles(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_handles_user_roles(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
         let user_id = app_ctx
             .register_user(UserRegistration {
@@ -4350,7 +4347,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_updates_project_layer_symbology(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_updates_project_layer_symbology(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
@@ -4663,7 +4660,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_resolves_dataset_names_to_ids(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_resolves_dataset_names_to_ids(app_ctx: PostgresContext<NoTls>) {
         let admin_session = UserSession::admin_session();
         let db = app_ctx.session_context(admin_session.clone()).db();
 
@@ -4789,7 +4786,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_bulk_updates_quota(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_bulk_updates_quota(app_ctx: PostgresContext<NoTls>) {
         let admin_session = UserSession::admin_session();
         let db = app_ctx.session_context(admin_session.clone()).db();
 
@@ -4825,7 +4822,7 @@ mod tests {
         assert_eq!(db.quota_used_by_user(&user2).await.unwrap(), 3);
     }
 
-    async fn it_handles_oidc_tokens(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_handles_oidc_tokens(app_ctx: PostgresContext<NoTls>) {
         let external_user_claims = UserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
@@ -4882,7 +4879,7 @@ mod tests {
     }
 
     #[ge_context::test(oidc_db = "oidc_only_refresh")]
-    async fn it_handles_oidc_tokens_without_encryption(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_handles_oidc_tokens_without_encryption(app_ctx: PostgresContext<NoTls>) {
         it_handles_oidc_tokens(app_ctx).await;
     }
 
@@ -4906,7 +4903,7 @@ mod tests {
     }
 
     #[ge_context::test(oidc_db = "oidc_only_refresh_with_encryption")]
-    async fn it_handles_oidc_tokens_with_encryption(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_handles_oidc_tokens_with_encryption(app_ctx: PostgresContext<NoTls>) {
         it_handles_oidc_tokens(app_ctx).await;
     }
 }

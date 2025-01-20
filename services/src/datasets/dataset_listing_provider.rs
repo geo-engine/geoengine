@@ -456,7 +456,7 @@ mod tests {
         datasets::{storage::DatasetStore, AddDataset},
         ge_context,
         layers::storage::LayerProviderDb,
-        pro::contexts::{PostgresSessionContext, ProPostgresContext, PostgresDb},
+        pro::contexts::{PostgresContext, PostgresDb, PostgresSessionContext},
     };
     use geoengine_datatypes::{
         collections::VectorDataType,
@@ -475,7 +475,7 @@ mod tests {
 
     #[ge_context::test(user = "admin")]
     #[allow(clippy::too_many_lines)]
-    async fn it_searches(_app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+    async fn it_searches(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         let db = ctx.db();
 
         let provider = DatasetLayerListingProviderDefinition {
@@ -594,7 +594,7 @@ mod tests {
 
     #[ge_context::test(user = "admin")]
     async fn it_autocompletes(
-        _app_ctx: ProPostgresContext<NoTls>,
+        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) {
         let db = ctx.db();

@@ -31,7 +31,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 pub use postgres::PostgresDb;
-pub use postgres::{PostgresSessionContext, ProPostgresContext};
+pub use postgres::{PostgresSessionContext, PostgresContext};
 
 /// A pro application contexts that extends the default context.
 pub trait ProApplicationContext: ApplicationContext<Session = UserSession> + UserAuth {

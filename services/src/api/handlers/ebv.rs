@@ -666,7 +666,7 @@ mod tests {
     use crate::contexts::Session;
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::ge_context;
-    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::contexts::PostgresContext;
     use crate::pro::util::tests::admin_login;
     use crate::{
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
@@ -684,7 +684,7 @@ mod tests {
 
     async fn send_test_request(
         req: test::TestRequest,
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
     ) -> ServiceResponse {
         let app = test::init_service({
             let app = App::new()
@@ -697,7 +697,7 @@ mod tests {
                 .wrap(middleware::NormalizePath::trim())
                 .configure(configure_extractors)
                 .service(
-                    web::scope("/ebv").configure(init_ebv_routes::<ProPostgresContext<NoTls>>()),
+                    web::scope("/ebv").configure(init_ebv_routes::<PostgresContext<NoTls>>()),
                 );
 
             app
@@ -709,7 +709,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_overviews(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_remove_overviews(app_ctx: PostgresContext<NoTls>) {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
         }
@@ -801,7 +801,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_overviews_non_existing(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_remove_overviews_non_existing(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let session_id = session.id();
 
@@ -851,7 +851,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_create_non_existing_overview(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_create_non_existing_overview(app_ctx: PostgresContext<NoTls>) {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
         }
@@ -919,7 +919,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_refresh_overview(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_refresh_overview(app_ctx: PostgresContext<NoTls>) {
         hide_gdal_errors();
 
         let session = admin_login(&app_ctx).await;

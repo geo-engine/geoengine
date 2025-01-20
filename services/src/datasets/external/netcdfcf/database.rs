@@ -1064,12 +1064,12 @@ mod tests {
         contexts::SessionContext,
         datasets::external::netcdfcf::{EBV_PROVIDER_ID, NETCDF_CF_PROVIDER_ID},
         ge_context,
-        pro::contexts::{PostgresSessionContext, ProPostgresContext},
+        pro::contexts::{PostgresSessionContext, PostgresContext},
     };
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn it_locks(_app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+    async fn it_locks(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         let db = Arc::new(ctx.db());
 
         // lock the overview

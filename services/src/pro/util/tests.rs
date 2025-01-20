@@ -9,7 +9,7 @@ use crate::{
         AddDataset, DatasetName,
     },
     pro::{
-        contexts::{ProApplicationContext, ProGeoEngineDb, ProPostgresContext},
+        contexts::{ProApplicationContext, ProGeoEngineDb, PostgresContext},
         permissions::{Permission, PermissionDb, Role},
         users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
     },
@@ -285,7 +285,7 @@ pub async fn load_mock_model_from_disk() -> Result<String, std::io::Error> {
 ///
 pub async fn with_pro_temp_context<F, Fut, R>(f: F) -> R
 where
-    F: FnOnce(ProPostgresContext<NoTls>, DatabaseConnectionConfig) -> Fut
+    F: FnOnce(PostgresContext<NoTls>, DatabaseConnectionConfig) -> Fut
         + std::panic::UnwindSafe
         + Send
         + 'static,
@@ -315,7 +315,7 @@ pub async fn with_pro_temp_context_from_spec<F, Fut, R>(
     f: F,
 ) -> R
 where
-    F: FnOnce(ProPostgresContext<NoTls>, DatabaseConnectionConfig) -> Fut
+    F: FnOnce(PostgresContext<NoTls>, DatabaseConnectionConfig) -> Fut
         + std::panic::UnwindSafe
         + Send
         + 'static,
@@ -329,7 +329,7 @@ where
         std::panic::catch_unwind(move || {
             tokio::task::block_in_place(move || {
                 Handle::current().block_on(async move {
-                    let ctx = ProPostgresContext::new_with_context_spec(
+                    let ctx = PostgresContext::new_with_context_spec(
                         db_config.pg_config(),
                         tokio_postgres::NoTls,
                         exe_ctx_tiling_spec,

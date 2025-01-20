@@ -3,7 +3,7 @@ use crate::api::handlers;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::{Error, Result};
 use crate::pro;
-use crate::pro::contexts::ProPostgresContext;
+use crate::pro::contexts::PostgresContext;
 use crate::util::config::{self, get_config_element};
 use crate::util::middleware::OutputRequestId;
 use crate::util::postgres::DatabaseConnectionConfig;
@@ -201,7 +201,7 @@ async fn start_postgres(
         let db_config: DatabaseConnectionConfig =
             config::get_config_element::<config::Postgres>()?.into();
 
-        let ctx = ProPostgresContext::new_with_data(
+        let ctx = PostgresContext::new_with_data(
             db_config.pg_config(),
             NoTls,
             data_path_config.dataset_defs_path,

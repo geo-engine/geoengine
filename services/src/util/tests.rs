@@ -9,7 +9,7 @@ use crate::datasets::AddDataset;
 use crate::datasets::DatasetIdAndName;
 use crate::datasets::DatasetName;
 use crate::pro::contexts::ProGeoEngineDb;
-use crate::pro::contexts::ProPostgresContext;
+use crate::pro::contexts::PostgresContext;
 use crate::pro::permissions::Permission;
 use crate::pro::permissions::PermissionDb;
 use crate::pro::permissions::Role;
@@ -84,7 +84,7 @@ use super::postgres::DatabaseConnectionConfig;
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper(
-    ctx: &<ProPostgresContext<NoTls> as ApplicationContext>::SessionContext,
+    ctx: &<PostgresContext<NoTls> as ApplicationContext>::SessionContext,
 ) -> ProjectId {
     ctx.db()
         .create_project(CreateProject {
@@ -123,14 +123,14 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn register_ndvi_workflow_helper(
-    app_ctx: &ProPostgresContext<NoTls>,
+    app_ctx: &PostgresContext<NoTls>,
 ) -> (Workflow, WorkflowId) {
     register_ndvi_workflow_helper_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
 }
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn register_ndvi_workflow_helper_with_cache_ttl(
-    app_ctx: &ProPostgresContext<NoTls>,
+    app_ctx: &PostgresContext<NoTls>,
     cache_ttl: CacheTtlSeconds,
 ) -> (Workflow, WorkflowId) {
     let (_, dataset) = add_ndvi_to_datasets_with_cache_ttl(app_ctx, cache_ttl).await;
@@ -156,7 +156,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl(
     (workflow, id)
 }
 
-pub async fn add_ndvi_to_datasets(app_ctx: &ProPostgresContext<NoTls>) -> (DatasetId, NamedData) {
+pub async fn add_ndvi_to_datasets(app_ctx: &PostgresContext<NoTls>) -> (DatasetId, NamedData) {
     add_ndvi_to_datasets_with_cache_ttl(app_ctx, CacheTtlSeconds::default()).await
 }
 
@@ -166,7 +166,7 @@ pub async fn add_ndvi_to_datasets(app_ctx: &ProPostgresContext<NoTls>) -> (Datas
 ///
 /// Panics if the default session context could not be created.
 pub async fn add_ndvi_to_datasets_with_cache_ttl(
-    app_ctx: &ProPostgresContext<NoTls>,
+    app_ctx: &PostgresContext<NoTls>,
     cache_ttl: CacheTtlSeconds,
 ) -> (DatasetId, NamedData) {
     let dataset_name = DatasetName {
@@ -332,7 +332,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn register_ne2_multiband_workflow(
-    app_ctx: &ProPostgresContext<NoTls>,
+    app_ctx: &PostgresContext<NoTls>,
 ) -> (Workflow, WorkflowId) {
     let session = admin_login(app_ctx).await;
     let ctx = app_ctx.session_context(session);
@@ -497,7 +497,7 @@ pub async fn add_pro_file_definition_to_datasets<D: ProGeoEngineDb>(
 /// Add a definition from a file to the datasets as admin.
 #[allow(clippy::missing_panics_doc)]
 pub async fn add_pro_file_definition_to_datasets_as_admin(
-    app_ctx: &ProPostgresContext<NoTls>,
+    app_ctx: &PostgresContext<NoTls>,
     definition: &Path,
 ) -> DatasetIdAndName {
     let session = admin_login(app_ctx).await;
@@ -556,7 +556,7 @@ async fn dummy_handler() -> impl Responder {
 
 pub async fn send_test_request(
     req: test::TestRequest,
-    app_ctx: ProPostgresContext<NoTls>,
+    app_ctx: PostgresContext<NoTls>,
 ) -> ServiceResponse {
     #[allow(unused_mut)]
     let mut app =
@@ -571,24 +571,24 @@ pub async fn send_test_request(
             .wrap(middleware::NormalizePath::trim())
             .wrap(TracingLogger::default())
             .configure(configure_extractors)
-            .configure(handlers::datasets::init_dataset_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::layers::init_layer_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::permissions::init_permissions_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::plots::init_plot_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::projects::init_project_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::users::init_user_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::datasets::init_dataset_routes::<PostgresContext<NoTls>>)
+            .configure(handlers::layers::init_layer_routes::<PostgresContext<NoTls>>)
+            .configure(handlers::permissions::init_permissions_routes::<PostgresContext<NoTls>>)
+            .configure(handlers::plots::init_plot_routes::<PostgresContext<NoTls>>)
+            .configure(handlers::projects::init_project_routes::<PostgresContext<NoTls>>)
+            .configure(handlers::users::init_user_routes::<PostgresContext<NoTls>>)
             .configure(
                 handlers::spatial_references::init_spatial_reference_routes::<
-                    ProPostgresContext<NoTls>,
+                    PostgresContext<NoTls>,
                 >,
             )
-            .configure(handlers::upload::init_upload_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::tasks::init_task_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::wcs::init_wcs_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::wfs::init_wfs_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::wms::init_wms_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::workflows::init_workflow_routes::<ProPostgresContext<NoTls>>)
-            .configure(handlers::machine_learning::init_ml_routes::<ProPostgresContext<NoTls>>)
+            .configure(handlers::upload::init_upload_routes::<PostgresContext<NoTls>>)
+            .configure(handlers::tasks::init_task_routes::<PostgresContext<NoTls>>)
+            .configure(handlers::wcs::init_wcs_routes::<PostgresContext<NoTls>>)
+            .configure(handlers::wfs::init_wfs_routes::<PostgresContext<NoTls>>)
+            .configure(handlers::wms::init_wms_routes::<PostgresContext<NoTls>>)
+            .configure(handlers::workflows::init_workflow_routes::<PostgresContext<NoTls>>)
+            .configure(handlers::machine_learning::init_ml_routes::<PostgresContext<NoTls>>)
             .service(dummy_handler);
 
     let app = test::init_service(app).await;

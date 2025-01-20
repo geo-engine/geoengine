@@ -533,7 +533,7 @@ fn default_time_from_config() -> TimeInterval {
 mod tests {
     use crate::contexts::Session;
     use crate::ge_context;
-    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::contexts::PostgresContext;
     use crate::pro::users::UserAuth;
     use crate::pro::util::tests::register_ndvi_workflow_helper;
     use crate::util::tests::{read_body_string, send_test_request};
@@ -544,7 +544,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn get_capabilities(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_capabilities(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -628,7 +628,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn describe_coverage(app_ctx: ProPostgresContext<NoTls>) {
+    async fn describe_coverage(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -713,7 +713,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "tiling_spec")]
-    async fn get_coverage_with_nodatavalue(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_coverage_with_nodatavalue(app_ctx: PostgresContext<NoTls>) {
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -757,7 +757,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "tiling_spec")]
-    async fn it_sets_cache_control_header(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_sets_cache_control_header(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();

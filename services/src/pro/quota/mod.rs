@@ -224,7 +224,7 @@ mod tests {
         contexts::{ApplicationContext, SessionContext},
         ge_context,
         pro::{
-            contexts::ProPostgresContext,
+            contexts::PostgresContext,
             users::{UserAuth, UserCredentials, UserRegistration},
             util::tests::{admin_login, MockQuotaTracking},
         },
@@ -232,7 +232,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn it_tracks_quota(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_tracks_quota(app_ctx: PostgresContext<NoTls>) {
         let _user = app_ctx
             .register_user(UserRegistration {
                 email: "foo@example.com".to_string(),
@@ -284,7 +284,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_tracks_quota_buffered(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_tracks_quota_buffered(app_ctx: PostgresContext<NoTls>) {
         let _user = app_ctx
             .register_user(UserRegistration {
                 email: "foo@example.com".to_string(),
@@ -339,7 +339,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_tracks_quota_buffered_timeout(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_tracks_quota_buffered_timeout(app_ctx: PostgresContext<NoTls>) {
         let _user = app_ctx
             .register_user(UserRegistration {
                 email: "foo@example.com".to_string(),

@@ -136,7 +136,7 @@ mod tests {
         datasets::upload::UploadId,
         ge_context,
         machine_learning::MlModelMetadata,
-        pro::{contexts::ProPostgresContext, users::UserAuth},
+        pro::{contexts::PostgresContext, users::UserAuth},
         util::tests::{send_test_request, SetMultipartBody, TestDataUploads},
     };
     use actix_http::header;
@@ -145,7 +145,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn it_stores_ml_models_for_application(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_stores_ml_models_for_application(app_ctx: PostgresContext<NoTls>) {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
         let session = app_ctx.create_anonymous_session().await.unwrap();

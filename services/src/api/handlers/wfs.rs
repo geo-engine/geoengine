@@ -673,7 +673,7 @@ mod tests {
     use crate::contexts::Session;
     use crate::datasets::DatasetIdAndName;
     use crate::ge_context;
-    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::contexts::PostgresContext;
     use crate::pro::users::UserAuth;
     use crate::util::tests::{
         add_pro_file_definition_to_datasets_as_admin, check_allowed_http_methods, read_body_string,
@@ -695,7 +695,7 @@ mod tests {
     use xml::ParserConfig;
 
     #[ge_context::test]
-    async fn mock_test(app_ctx: ProPostgresContext<NoTls>) {
+    async fn mock_test(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -788,7 +788,7 @@ mod tests {
     }
 
     async fn get_capabilities_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
@@ -834,7 +834,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_capabilities(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_capabilities(app_ctx: PostgresContext<NoTls>) {
         let res = get_capabilities_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
@@ -849,7 +849,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_capabilities_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_capabilities_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| get_capabilities_test_helper(app_ctx.clone(), method),
             &[Method::GET],
@@ -858,7 +858,7 @@ x;y
     }
 
     async fn get_feature_registry_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
@@ -900,7 +900,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_feature_registry(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_feature_registry(app_ctx: PostgresContext<NoTls>) {
         let res = get_feature_registry_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
@@ -951,7 +951,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_feature_registry_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_feature_registry_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| get_feature_registry_test_helper(app_ctx.clone(), method),
             &[Method::GET],
@@ -960,7 +960,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_feature_registry_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_feature_registry_missing_fields(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -980,7 +980,7 @@ x;y
     }
 
     async fn get_feature_json_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
@@ -1036,7 +1036,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_feature_json(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_feature_json(app_ctx: PostgresContext<NoTls>) {
         let res = get_feature_json_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
@@ -1087,7 +1087,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_feature_json_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_feature_json_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| get_feature_json_test_helper(app_ctx.clone(), method),
             &[Method::GET],
@@ -1096,7 +1096,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn get_feature_json_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_feature_json_missing_fields(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -1135,7 +1135,7 @@ x;y
 
     #[ge_context::test(tiling_spec = "raster_vector_join_tiling_spec")]
     #[allow(clippy::too_many_lines)]
-    async fn raster_vector_join(app_ctx: ProPostgresContext<NoTls>) {
+    async fn raster_vector_join(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1238,7 +1238,7 @@ x;y
     }
 
     #[ge_context::test]
-    async fn it_sets_cache_control_header(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_sets_cache_control_header(app_ctx: PostgresContext<NoTls>) {
         let res = get_feature_json_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);

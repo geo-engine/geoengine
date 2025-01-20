@@ -385,7 +385,7 @@ fn parse_inputs(inputs: &Punctuated<FnArg, syn::token::Comma>) -> Result<Inputs>
             .to_string();
 
         let var = match last_segment.as_str() {
-            "ProPostgresContext" => &mut result.app_ctx,
+            "PostgresContext" => &mut result.app_ctx,
             "PostgresSessionContext" => &mut result.user_ctx,
             "DatabaseConnectionConfig" => &mut result.db_config,
             other => {

@@ -895,7 +895,7 @@ mod tests {
         ge_context,
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
         pro::{
-            contexts::{ProPostgresContext, PostgresDb},
+            contexts::{PostgresContext, PostgresDb},
             layers::ProLayerProviderDb,
             users::UserAuth,
             util::tests::admin_login,
@@ -925,7 +925,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn loading_info(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn loading_info(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         // TODO: mock STAC endpoint
 
         let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
@@ -1010,7 +1010,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn query_data(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn query_data(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         // TODO: mock STAC endpoint
 
         let mut exe = MockExecutionContext::test_default();
@@ -1097,7 +1097,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn query_data_with_failing_requests(app_ctx: ProPostgresContext<NoTls>) {
+    async fn query_data_with_failing_requests(app_ctx: PostgresContext<NoTls>) {
         // crate::util::tests::initialize_debugging_in_test(); // use for debugging
         hide_gdal_errors();
 
@@ -1576,7 +1576,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_adds_the_data_provider_to_the_db(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_adds_the_data_provider_to_the_db(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 

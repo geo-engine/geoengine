@@ -848,7 +848,7 @@ mod tests {
         contexts::{ApplicationContext, SessionContext},
         ge_context,
         pro::{
-            contexts::ProPostgresContext,
+            contexts::PostgresContext,
             permissions::PermissionDb,
             users::{UserAuth, UserSession},
         },
@@ -868,7 +868,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn it_autocompletes_datasets(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_autocompletes_datasets(app_ctx: PostgresContext<NoTls>) {
         let session_a = app_ctx.create_anonymous_session().await.unwrap();
         let session_b = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -910,7 +910,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_own_datasets(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_loads_own_datasets(app_ctx: PostgresContext<NoTls>) {
         let session_a = app_ctx.create_anonymous_session().await.unwrap();
 
         let db_a = app_ctx.session_context(session_a.clone()).db();

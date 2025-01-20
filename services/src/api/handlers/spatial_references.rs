@@ -269,7 +269,7 @@ mod tests {
     use super::*;
     use crate::contexts::Session;
     use crate::ge_context;
-    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::contexts::PostgresContext;
     use crate::pro::users::UserAuth;
     use crate::util::tests::send_test_request;
     use actix_web;
@@ -281,7 +281,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn get_spatial_reference(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_spatial_reference(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();

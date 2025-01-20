@@ -1385,7 +1385,7 @@ mod tests {
     use crate::datasets::DatasetIdAndName;
     use crate::error::Result;
     use crate::ge_context;
-    use crate::pro::contexts::ProPostgresContext;
+    use crate::pro::contexts::PostgresContext;
     use crate::pro::users::UserAuth;
     use crate::pro::util::tests::admin_login;
     use crate::projects::{PointSymbology, RasterSymbology, Symbology};
@@ -1418,7 +1418,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_list_datasets(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_list_datasets(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1569,7 +1569,7 @@ mod tests {
     }
 
     async fn upload_ne_10m_ports_files(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         session_id: SessionId,
     ) -> Result<UploadId> {
         let files = vec![
@@ -1599,7 +1599,7 @@ mod tests {
     }
 
     pub async fn construct_dataset_from_upload(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         upload_id: UploadId,
         session_id: SessionId,
     ) -> DatasetName {
@@ -1706,7 +1706,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_creates_system_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn it_creates_system_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let volume = VolumeName("test_data".to_string());
@@ -2248,7 +2248,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn get_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn get_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -2332,7 +2332,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_suggests_metadata(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn it_suggests_metadata(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -2471,7 +2471,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_deletes_system_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn it_deletes_system_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -2532,7 +2532,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_gets_loading_info(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn it_gets_loading_info(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -2623,7 +2623,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_updates_loading_info(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn it_updates_loading_info(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -2706,7 +2706,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_gets_updates_symbology(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn it_gets_updates_symbology(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -2755,7 +2755,7 @@ mod tests {
     }
 
     #[ge_context::test()]
-    async fn it_updates_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn it_updates_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -2793,7 +2793,7 @@ mod tests {
     }
 
     #[ge_context::test()]
-    async fn it_updates_provenance(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn it_updates_provenance(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -2878,7 +2878,7 @@ mod tests {
     }
 
     #[ge_context::test(test_execution = "serial")]
-    async fn it_lists_layers(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_lists_layers(app_ctx: PostgresContext<NoTls>) {
         let changed_workdir = TestWorkdirChanger::go_to_workspace("services");
 
         let session = admin_login(&app_ctx).await;
@@ -2919,7 +2919,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "create_dataset_tiling_specification")]
-    async fn create_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn create_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -2978,7 +2978,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_creates_volume_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn it_creates_volume_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let volume = VolumeName("test_data".to_string());
@@ -3032,7 +3032,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_deletes_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn it_deletes_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -3070,7 +3070,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_deletes_volume_dataset(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn it_deletes_volume_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let volume = VolumeName("test_data".to_string());
 
         let mut meta_data = create_ndvi_meta_data();

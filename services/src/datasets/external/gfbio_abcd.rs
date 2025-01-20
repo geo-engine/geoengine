@@ -644,7 +644,7 @@ mod tests {
     use super::*;
     use crate::contexts::SessionContext;
     use crate::layers::layer::ProviderLayerCollectionId;
-    use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext};
+    use crate::pro::contexts::{PostgresSessionContext, PostgresContext};
     use crate::util::config;
     use crate::{ge_context, test_data};
     use bb8_postgres::bb8::ManageConnection;
@@ -709,7 +709,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_lists(_app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+    async fn it_lists(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
 
         let test_schema = create_test_data(&db_config).await;
@@ -786,7 +786,7 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn it_searches_fulltext(
-        _app_ctx: ProPostgresContext<NoTls>,
+        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
@@ -904,7 +904,7 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn it_searches_prefix(
-        _app_ctx: ProPostgresContext<NoTls>,
+        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
@@ -1050,7 +1050,7 @@ mod tests {
 
     #[ge_context::test]
     async fn it_autocompletes_fulltext_search(
-        _app_ctx: ProPostgresContext<NoTls>,
+        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
@@ -1117,7 +1117,7 @@ mod tests {
 
     #[ge_context::test]
     async fn it_autocompletes_prefix_search(
-        _app_ctx: ProPostgresContext<NoTls>,
+        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
@@ -1201,7 +1201,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
     async fn it_creates_meta_data(
-        _app_ctx: ProPostgresContext<NoTls>,
+        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) {
         async fn test(
@@ -1394,7 +1394,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_loads(_app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+    async fn it_loads(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         async fn test(
             ctx: &PostgresSessionContext<NoTls>,
             db_config: &config::Postgres,
@@ -1542,7 +1542,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_cites(_app_ctx: ProPostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+    async fn it_cites(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         async fn test(
             ctx: &PostgresSessionContext<NoTls>,
             db_config: &config::Postgres,

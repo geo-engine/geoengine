@@ -265,7 +265,7 @@ mod tests {
     use crate::error::Error;
     use crate::ge_context;
     use crate::layers::external::{DataProvider, DataProviderDefinition};
-    use crate::pro::contexts::{PostgresSessionContext, ProPostgresContext};
+    use crate::pro::contexts::{PostgresSessionContext, PostgresContext};
     use futures::StreamExt;
     use geoengine_datatypes::collections::{
         DataCollection, FeatureCollectionInfos, IntoGeometryIterator, MultiPointCollection,
@@ -446,7 +446,7 @@ mod tests {
 
     #[ge_context::test]
     async fn it_creates_meta_data(
-        _app_ctx: ProPostgresContext<NoTls>,
+        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) {
         let doi = "10.1594/PANGAEA.909550";
@@ -475,7 +475,7 @@ mod tests {
 
     #[ge_context::test]
     async fn it_loads_no_geometry(
-        _app_ctx: ProPostgresContext<NoTls>,
+        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) {
         let doi = "10.1594/PANGAEA.909550";
@@ -542,7 +542,7 @@ mod tests {
 
     #[ge_context::test]
     async fn it_loads_default_point(
-        _app_ctx: ProPostgresContext<NoTls>,
+        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) {
         let doi = "10.1594/PANGAEA.933024";
@@ -621,7 +621,7 @@ mod tests {
 
     #[ge_context::test]
     async fn it_loads_default_polygon(
-        _app_ctx: ProPostgresContext<NoTls>,
+        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) {
         let doi = "10.1594/PANGAEA.913417";
@@ -696,7 +696,7 @@ mod tests {
 
     #[ge_context::test]
     async fn it_loads_points(
-        _app_ctx: ProPostgresContext<NoTls>,
+        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) {
         let doi = "10.1594/PANGAEA.921338";
@@ -767,7 +767,7 @@ mod tests {
 
     #[ge_context::test]
     async fn it_creates_provenance(
-        _app_ctx: ProPostgresContext<NoTls>,
+        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) {
         let doi = "10.1594/PANGAEA.921338";

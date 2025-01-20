@@ -1,7 +1,7 @@
 use crate::api::handlers::get_token;
 use crate::contexts::{ApplicationContext, Session, SessionId};
 use crate::error;
-use crate::pro::contexts::ProPostgresContext;
+use crate::pro::contexts::PostgresContext;
 use crate::pro::permissions::{Role, RoleId};
 use crate::pro::users::UserId;
 use crate::projects::{ProjectId, STRectangle};
@@ -93,7 +93,7 @@ impl FromRequest for UserSession {
         };
 
         let pg_ctx = req
-            .app_data::<web::Data<ProPostgresContext<NoTls>>>()
+            .app_data::<web::Data<PostgresContext<NoTls>>>()
             .expect(
             "Application context should be present because it is set during server initialization.",
         );

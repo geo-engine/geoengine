@@ -152,12 +152,12 @@ mod tests {
     use crate::{
         contexts::{ApplicationContext, SessionContext},
         ge_context,
-        pro::{contexts::ProPostgresContext, users::UserAuth},
+        pro::{contexts::PostgresContext, users::UserAuth},
     };
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn it_lists(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_lists(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let ctx = app_ctx.session_context(session);

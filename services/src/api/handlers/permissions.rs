@@ -206,7 +206,7 @@ mod tests {
     use crate::{
         ge_context,
         pro::{
-            contexts::ProPostgresContext,
+            contexts::PostgresContext,
             users::{UserAuth, UserCredentials, UserRegistration},
             util::tests::{add_ndvi_to_datasets, add_ports_to_datasets, admin_login},
         },
@@ -223,7 +223,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_checks_permission_during_intialization(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_checks_permission_during_intialization(app_ctx: PostgresContext<NoTls>) {
         // create user and sessions
 
         let user_id = app_ctx
@@ -319,7 +319,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_lists_permissions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_lists_permissions(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
 
         let (gdal_dataset_id, _) = add_ndvi_to_datasets(&app_ctx, true, true).await;
