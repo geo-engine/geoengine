@@ -894,9 +894,9 @@ mod tests {
         contexts::{ApplicationContext, SessionContext},
         ge_context,
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
+        layers::ProLayerProviderDb,
         pro::{
             contexts::{PostgresContext, PostgresDb},
-            layers::ProLayerProviderDb,
             users::UserAuth,
             util::tests::admin_login,
         },

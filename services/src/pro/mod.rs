@@ -2,7 +2,6 @@
 
 pub mod contexts;
 pub mod datasets;
-pub mod layers;
 pub mod users;
 pub mod util;
 pub mod workflows;

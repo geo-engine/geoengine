@@ -12,12 +12,12 @@ use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
-use crate::machine_learning::error::MachineLearningError;
-use crate::machine_learning::name::MlModelName;
-use crate::pro::layers::add_from_directory::{
+use crate::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
     add_pro_providers_from_directory,
 };
+use crate::machine_learning::error::MachineLearningError;
+use crate::machine_learning::name::MlModelName;
 use crate::pro::users::OidcManager;
 use crate::pro::users::{UserAuth, UserSession};
 use crate::quota::{initialize_quota_tracking, QuotaTrackingFactory};
