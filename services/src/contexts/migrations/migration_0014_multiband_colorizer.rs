@@ -33,7 +33,7 @@ mod tests {
     use crate::contexts::Migration0000Initial;
     use crate::error::Result;
     use crate::util::postgres::DatabaseConnectionConfig;
-    use crate::{contexts::migrate_database, config::get_config_element};
+    use crate::{config::get_config_element, contexts::migrate_database};
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
     use geoengine_datatypes::test_data;
     use tokio_postgres::NoTls;

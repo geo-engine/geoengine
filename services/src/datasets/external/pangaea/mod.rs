@@ -265,7 +265,7 @@ mod tests {
     use crate::error::Error;
     use crate::ge_context;
     use crate::layers::external::{DataProvider, DataProviderDefinition};
-    use crate::pro::contexts::{PostgresSessionContext, PostgresContext};
+    use crate::pro::contexts::{PostgresContext, PostgresSessionContext};
     use futures::StreamExt;
     use geoengine_datatypes::collections::{
         DataCollection, FeatureCollectionInfos, IntoGeometryIterator, MultiPointCollection,
@@ -695,10 +695,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_points(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_loads_points(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         let doi = "10.1594/PANGAEA.921338";
 
         let mut server = Server::run();

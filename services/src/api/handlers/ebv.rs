@@ -696,9 +696,7 @@ mod tests {
                 )
                 .wrap(middleware::NormalizePath::trim())
                 .configure(configure_extractors)
-                .service(
-                    web::scope("/ebv").configure(init_ebv_routes::<PostgresContext<NoTls>>()),
-                );
+                .service(web::scope("/ebv").configure(init_ebv_routes::<PostgresContext<NoTls>>()));
 
             app
         })

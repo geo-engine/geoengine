@@ -29,7 +29,7 @@ mod tests {
     use super::*;
     use crate::contexts::migrations::all_migrations;
     use crate::util::postgres::DatabaseConnectionConfig;
-    use crate::{contexts::migrate_database, config::get_config_element};
+    use crate::{config::get_config_element, contexts::migrate_database};
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
     use tokio_postgres::NoTls;
 

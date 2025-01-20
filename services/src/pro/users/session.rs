@@ -92,9 +92,7 @@ impl FromRequest for UserSession {
             Err(error) => return Box::pin(err(error)),
         };
 
-        let pg_ctx = req
-            .app_data::<web::Data<PostgresContext<NoTls>>>()
-            .expect(
+        let pg_ctx = req.app_data::<web::Data<PostgresContext<NoTls>>>().expect(
             "Application context should be present because it is set during server initialization.",
         );
         let pg_ctx = pg_ctx.get_ref().clone();

@@ -1,5 +1,6 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::api::model::responses::IdResponse;
+use crate::config::get_config_element;
 use crate::contexts::ApplicationContext;
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::Error::NotImplemented;
@@ -12,7 +13,6 @@ use crate::layers::listing::{
     LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchParameters,
 };
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
-use crate::config::get_config_element;
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use crate::util::workflows::validate_workflow;
 use crate::workflows::registry::WorkflowRegistry;
@@ -1184,6 +1184,7 @@ mod tests {
 
     use super::*;
     use crate::api::model::responses::ErrorResponse;
+    use crate::config::get_config_element;
     use crate::contexts::SessionId;
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::ge_context;
@@ -1194,7 +1195,6 @@ mod tests {
     use crate::pro::util::tests::admin_login;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
-    use crate::config::get_config_element;
     use crate::util::tests::{
         read_body_string, send_test_request, MockQueryContext, TestDataUploads,
     };
@@ -2172,9 +2172,7 @@ mod tests {
     #[ge_context::test(
         tiling_spec = "test_raster_layer_with_timeshift_to_dataset_success_tiling_spec"
     )]
-    async fn test_raster_layer_with_timeshift_to_dataset_success(
-        app_ctx: PostgresContext<NoTls>,
-    ) {
+    async fn test_raster_layer_with_timeshift_to_dataset_success(app_ctx: PostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 1_000);
         raster_layer_to_dataset_success(app_ctx, mock_source).await;
     }
@@ -2239,9 +2237,7 @@ mod tests {
     #[ge_context::test(
         tiling_spec = "test_raster_layer_to_dataset_no_spatial_resolution_tiling_spec"
     )]
-    async fn test_raster_layer_to_dataset_no_spatial_resolution(
-        app_ctx: PostgresContext<NoTls>,
-    ) {
+    async fn test_raster_layer_to_dataset_no_spatial_resolution(app_ctx: PostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, false, 0);
 
         let session = admin_login(&app_ctx).await;

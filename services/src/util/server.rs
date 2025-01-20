@@ -1,6 +1,6 @@
 use crate::api::model::responses::ErrorResponse;
-use crate::error::Result;
 use crate::config::get_config_element;
+use crate::error::Result;
 
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::header::{HeaderName, HeaderValue};

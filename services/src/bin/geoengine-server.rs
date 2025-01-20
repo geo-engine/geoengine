@@ -1,9 +1,9 @@
 use flexi_logger::writers::{FileLogWriter, FileLogWriterHandle};
 use flexi_logger::{Age, Cleanup, Criterion, FileSpec, Naming, WriteMode};
 pub use geoengine_operators::processing::initialize_expression_dependencies;
-use geoengine_services::error::Result;
 use geoengine_services::config;
 use geoengine_services::config::get_config_element;
+use geoengine_services::error::Result;
 use tracing::Subscriber;
 use tracing_subscriber::field::RecordFields;
 use tracing_subscriber::fmt::format::{DefaultFields, Writer};
@@ -52,8 +52,7 @@ pub async fn start_server() -> Result<()> {
     let registry = registry.with(file_layer);
 
     // create a telemetry layer for output to opentelemetry and add it to the registry
-    let open_telemetry_config: geoengine_services::config::OpenTelemetry =
-        get_config_element()?;
+    let open_telemetry_config: geoengine_services::config::OpenTelemetry = get_config_element()?;
     let opentelemetry_layer = if open_telemetry_config.enabled {
         Some(open_telemetry_layer(&open_telemetry_config)?)
     } else {

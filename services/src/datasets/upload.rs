@@ -5,8 +5,8 @@ use crate::error::Result;
 use crate::identifier;
 use crate::util::path_with_base_path;
 use crate::{
-    error,
     config::{self, get_config_element},
+    error,
 };
 use async_trait::async_trait;
 use geoengine_datatypes::test_data;

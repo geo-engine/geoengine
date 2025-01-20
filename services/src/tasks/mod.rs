@@ -5,7 +5,7 @@ pub mod util;
 
 use self::time_estimation::TimeEstimation;
 use crate::identifier;
-use crate::{error::Result, config::get_config_element};
+use crate::{config::get_config_element, error::Result};
 pub use error::TaskError;
 use futures::channel::oneshot;
 use geoengine_datatypes::primitives::DateTime;

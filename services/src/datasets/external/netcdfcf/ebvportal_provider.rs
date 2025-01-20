@@ -702,7 +702,7 @@ mod tests {
         contexts::SessionContext,
         ge_context,
         layers::layer::{LayerListing, ProviderLayerId},
-        pro::contexts::{PostgresSessionContext, PostgresContext},
+        pro::contexts::{PostgresContext, PostgresSessionContext},
     };
     use geoengine_datatypes::test_data;
     use httptest::{matchers::request, responders::status_code, Expectation};
@@ -953,10 +953,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_get_class(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_get_class(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         let mock_server = httptest::Server::run();
         mock_server.expect(
             Expectation::matching(request::method_path("GET", "/api/v1/ebv-map")).respond_with(
@@ -1474,10 +1471,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_get_groups(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_get_groups(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         // crate::util::tests::initialize_debugging_in_test(); // TODO: remove
 
         let mock_server = httptest::Server::run();

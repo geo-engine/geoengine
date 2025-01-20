@@ -108,9 +108,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::get_config_element;
     use crate::contexts::migrations::all_migrations;
     use crate::contexts::{migrate_database, Migration0000Initial};
-    use crate::config::get_config_element;
     use crate::util::postgres::DatabaseConnectionConfig;
     use bb8_postgres::bb8::Pool;
     use bb8_postgres::PostgresConnectionManager;

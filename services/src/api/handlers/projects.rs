@@ -532,10 +532,7 @@ mod tests {
         .await;
     }
 
-    async fn list_test_helper(
-        app_ctx: PostgresContext<NoTls>,
-        method: Method,
-    ) -> ServiceResponse {
+    async fn list_test_helper(app_ctx: PostgresContext<NoTls>, method: Method) -> ServiceResponse {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -621,10 +618,7 @@ mod tests {
         .await;
     }
 
-    async fn load_test_helper(
-        app_ctx: PostgresContext<NoTls>,
-        method: Method,
-    ) -> ServiceResponse {
+    async fn load_test_helper(app_ctx: PostgresContext<NoTls>, method: Method) -> ServiceResponse {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 

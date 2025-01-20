@@ -1064,7 +1064,7 @@ mod tests {
         contexts::SessionContext,
         datasets::external::netcdfcf::{EBV_PROVIDER_ID, NETCDF_CF_PROVIDER_ID},
         ge_context,
-        pro::contexts::{PostgresSessionContext, PostgresContext},
+        pro::contexts::{PostgresContext, PostgresSessionContext},
     };
     use tokio_postgres::NoTls;
 

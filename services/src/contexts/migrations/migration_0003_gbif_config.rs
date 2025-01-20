@@ -50,8 +50,8 @@ mod tests {
     use crate::contexts::{Migration0001RasterStacks, Migration0002DatasetListingProvider};
     use crate::util::postgres::DatabaseConnectionConfig;
     use crate::{
-        contexts::{migrate_database, migrations::migration_0000_initial::Migration0000Initial},
         config::get_config_element,
+        contexts::{migrate_database, migrations::migration_0000_initial::Migration0000Initial},
     };
 
     use super::*;
