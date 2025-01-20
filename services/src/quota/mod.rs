@@ -220,11 +220,9 @@ mod tests {
     use crate::{
         contexts::{ApplicationContext, SessionContext},
         ge_context,
-        pro::{
-            contexts::PostgresContext,
-            util::tests::{admin_login, MockQuotaTracking},
-        },
+        pro::contexts::PostgresContext,
         users::{UserAuth, UserCredentials, UserRegistration},
+        util::tests::{admin_login, MockQuotaTracking},
     };
     use tokio_postgres::NoTls;
 

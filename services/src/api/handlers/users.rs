@@ -945,14 +945,14 @@ mod tests {
     use crate::ge_context;
     use crate::permissions::Role;
     use crate::pro::contexts::PostgresContext;
-    use crate::pro::util::tests::mock_oidc::{
+    use crate::users::{AuthCodeRequestURL, OidcManager, UserAuth, UserId};
+    use crate::util::tests::mock_oidc::{
         mock_refresh_server, mock_token_response, mock_valid_provider_discovery,
         MockRefreshServerConfig, MockTokenConfig, SINGLE_STATE,
     };
-    use crate::pro::util::tests::{
-        admin_login, create_project_helper, create_session_helper, register_ndvi_workflow_helper,
+    use crate::util::tests::{
+        admin_login, create_project_helper2, create_session_helper, register_ndvi_workflow_helper,
     };
-    use crate::users::{AuthCodeRequestURL, OidcManager, UserAuth, UserId};
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
     use actix_http::header::CONTENT_TYPE;
     use actix_web::dev::ServiceResponse;
@@ -1338,7 +1338,7 @@ mod tests {
 
     #[ge_context::test]
     async fn session_view_project(app_ctx: PostgresContext<NoTls>) {
-        let (session, project) = create_project_helper(&app_ctx).await;
+        let (session, project) = create_project_helper2(&app_ctx).await;
 
         let req = test::TestRequest::post()
             .uri(&format!("/session/project/{project}"))

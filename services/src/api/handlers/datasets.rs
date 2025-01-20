@@ -1384,10 +1384,10 @@ mod tests {
     use crate::error::Result;
     use crate::ge_context;
     use crate::pro::contexts::PostgresContext;
-    use crate::pro::util::tests::admin_login;
     use crate::projects::{PointSymbology, RasterSymbology, Symbology};
     use crate::test_data;
     use crate::users::UserAuth;
+    use crate::util::tests::admin_login;
     use crate::util::tests::{
         add_pro_file_definition_to_datasets, read_body_json, read_body_string, send_test_request,
         MockQueryContext, SetMultipartBody, TestDataUploads,

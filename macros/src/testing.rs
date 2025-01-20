@@ -52,7 +52,7 @@ pub fn test(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::E
 
             #before;
 
-            crate::pro::util::tests::with_pro_temp_context_from_spec(
+            crate::util::tests::with_temp_context_from_spec(
                 tiling_spec,
                 query_ctx_chunk_size,
                 quota_config,
@@ -213,7 +213,7 @@ impl TestConfig {
             UserConfig::Admin => quote! {
                 let #user_ctx_name: #user_ctx_ty = {
                     use crate::contexts::ApplicationContext;
-                    let session = crate::pro::util::tests::admin_login(&#app_ctx_var).await;
+                    let session = crate::util::tests::admin_login(&#app_ctx_var).await;
                     #app_ctx_var.session_context(session)
                 };
             },
@@ -444,7 +444,7 @@ mod tests {
 
                 (|| {})();
 
-                crate::pro::util::tests::with_pro_temp_context_from_spec(
+                crate::util::tests::with_temp_context_from_spec(
                     tiling_spec,
                     query_ctx_chunk_size,
                     quota_config,
@@ -488,7 +488,7 @@ mod tests {
 
                 (|| {})();
 
-                crate::pro::util::tests::with_pro_temp_context_from_spec(
+                crate::util::tests::with_temp_context_from_spec(
                     tiling_spec,
                     query_ctx_chunk_size,
                     quota_config,
@@ -540,7 +540,7 @@ mod tests {
 
                 (|| {})();
 
-                crate::pro::util::tests::with_pro_temp_context_from_spec(
+                crate::util::tests::with_temp_context_from_spec(
                     tiling_spec,
                     query_ctx_chunk_size,
                     quota_config,
@@ -549,7 +549,7 @@ mod tests {
                     |_app_ctx, db_config| async move {
                         let ctx: PostgresSessionContext<NoTls> = {
                             use crate::contexts::ApplicationContext;
-                            let session = crate::pro::util::tests::admin_login(&_app_ctx).await;
+                            let session = crate::util::tests::admin_login(&_app_ctx).await;
                             _app_ctx.session_context(session)
                         };
                         #[warn(clippy::used_underscore_binding)]
@@ -597,7 +597,7 @@ mod tests {
 
                 before_fn();
 
-                crate::pro::util::tests::with_pro_temp_context_from_spec(
+                crate::util::tests::with_temp_context_from_spec(
                     tiling_spec,
                     query_ctx_chunk_size,
                     quota_config,

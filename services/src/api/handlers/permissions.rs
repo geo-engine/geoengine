@@ -205,12 +205,12 @@ mod tests {
     use super::*;
     use crate::{
         ge_context,
-        pro::{
-            contexts::PostgresContext,
-            util::tests::{add_ndvi_to_datasets, add_ports_to_datasets, admin_login},
-        },
+        pro::contexts::PostgresContext,
         users::{UserAuth, UserCredentials, UserRegistration},
-        util::tests::{read_body_string, send_test_request},
+        util::tests::{
+            add_ndvi_to_datasets2, add_ports_to_datasets, admin_login, read_body_string,
+            send_test_request,
+        },
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -249,7 +249,7 @@ mod tests {
         // setup data and operators
 
         let (gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, false, false).await;
+            add_ndvi_to_datasets2(&app_ctx, false, false).await;
         let gdal = GdalSource {
             params: GdalSourceParameters {
                 data: gdal_dataset_name,
@@ -322,7 +322,7 @@ mod tests {
     async fn it_lists_permissions(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
 
-        let (gdal_dataset_id, _) = add_ndvi_to_datasets(&app_ctx, true, true).await;
+        let (gdal_dataset_id, _) = add_ndvi_to_datasets2(&app_ctx, true, true).await;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(

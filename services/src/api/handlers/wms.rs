@@ -488,8 +488,8 @@ mod tests {
     use crate::datasets::DatasetName;
     use crate::ge_context;
     use crate::pro::contexts::PostgresContext;
-    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::users::UserAuth;
+    use crate::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::util::tests::{
         check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper_with_cache_ttl,
         register_ne2_multiband_workflow, send_test_request, MockQueryContext,

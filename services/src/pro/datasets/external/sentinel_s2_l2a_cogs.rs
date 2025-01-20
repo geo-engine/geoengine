@@ -895,12 +895,10 @@ mod tests {
         ge_context,
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
         layers::ProLayerProviderDb,
-        pro::{
-            contexts::{PostgresContext, PostgresDb},
-            util::tests::admin_login,
-        },
+        pro::contexts::{PostgresContext, PostgresDb},
         test_data,
         users::UserAuth,
+        util::tests::admin_login,
     };
     use futures::StreamExt;
     use geoengine_datatypes::{

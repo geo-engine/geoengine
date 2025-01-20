@@ -505,8 +505,6 @@ mod tests {
         INTERNAL_PROVIDER_ID,
     };
     use crate::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
-    use crate::pro::util::tests::mock_oidc::{mock_refresh_server, MockRefreshServerConfig};
-    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper, MockQuotaTracking};
     use crate::projects::{
         CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
         ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
@@ -514,6 +512,8 @@ mod tests {
     };
     use crate::users::{OidcTokens, SessionTokenStore};
     use crate::users::{RoleDb, UserClaims, UserCredentials, UserDb, UserId, UserRegistration};
+    use crate::util::tests::mock_oidc::{mock_refresh_server, MockRefreshServerConfig};
+    use crate::util::tests::{admin_login, register_ndvi_workflow_helper, MockQuotaTracking};
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
     use bb8_postgres::tokio_postgres::NoTls;

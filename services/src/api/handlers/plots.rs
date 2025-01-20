@@ -6,7 +6,6 @@ use crate::error;
 use crate::error::Result;
 use crate::util::parsing::parse_spatial_resolution;
 use crate::util::server::connection_closed;
-use crate::util::tests::MockQueryContext;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, Responder};
@@ -110,7 +109,8 @@ async fn get_plot_handler<C: ApplicationContext>(
     );
 
     let ctx = app_ctx.session_context(session);
-    let workflow = ctx.db().load_workflow(&WorkflowId(id.into_inner())).await?;
+    let workflow_id = WorkflowId(id.into_inner());
+    let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let operator = workflow.operator.get_plot()?;
 
@@ -153,7 +153,7 @@ async fn get_plot_handler<C: ApplicationContext>(
 
     let processor = initialized.query_processor()?;
 
-    let mut query_ctx = ctx.mock_query_context()?;
+    let mut query_ctx = ctx.query_context(workflow_id.0, Uuid::new_v4())?;
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
 

@@ -1191,10 +1191,10 @@ mod tests {
     use crate::layers::layer::Layer;
     use crate::layers::storage::INTERNAL_PROVIDER_ID;
     use crate::pro::contexts::PostgresContext;
-    use crate::pro::util::tests::admin_login;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::users::{UserAuth, UserSession};
+    use crate::util::tests::admin_login;
     use crate::util::tests::{
         read_body_string, send_test_request, MockQueryContext, TestDataUploads,
     };

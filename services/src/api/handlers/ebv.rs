@@ -667,7 +667,7 @@ mod tests {
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::ge_context;
     use crate::pro::contexts::PostgresContext;
-    use crate::pro::util::tests::admin_login;
+    use crate::util::tests::admin_login;
     use crate::{
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,
         tasks::util::test::wait_for_task_to_finish,

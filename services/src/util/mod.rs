@@ -19,8 +19,7 @@ pub mod operators;
 pub mod parsing;
 pub mod postgres;
 pub mod server;
-// TODO: this should actually be only used in tests
-#[allow(clippy::unwrap_used)]
+// TODO: refactor to be gated by `#[cfg(test)]`
 pub mod tests;
 pub mod workflows;
 
