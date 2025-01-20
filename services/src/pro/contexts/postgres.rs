@@ -18,11 +18,11 @@ use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
     add_pro_providers_from_directory,
 };
-use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::OidcManager;
 use crate::pro::users::{UserAuth, UserSession};
 use crate::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::tasks::SimpleTaskManagerContext;
+use crate::tasks::{TypedTaskManagerBackend, UserTaskManager};
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -58,7 +58,7 @@ where
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
-    task_manager: Arc<ProTaskManagerBackend>,
+    task_manager: Arc<TypedTaskManagerBackend>,
     oidc_manager: OidcManager,
     quota: QuotaTrackingFactory,
     pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
@@ -349,7 +349,7 @@ where
     type GeoEngineDB = PostgresDb<Tls>;
 
     type TaskContext = SimpleTaskManagerContext;
-    type TaskManager = ProTaskManager; // this does not persist across restarts
+    type TaskManager = UserTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
 
@@ -358,7 +358,7 @@ where
     }
 
     fn tasks(&self) -> Self::TaskManager {
-        ProTaskManager::new(self.context.task_manager.clone(), self.session.clone())
+        UserTaskManager::new(self.context.task_manager.clone(), self.session.clone())
     }
 
     fn query_context(&self, workflow: Uuid, computation: Uuid) -> Result<Self::QueryContext> {

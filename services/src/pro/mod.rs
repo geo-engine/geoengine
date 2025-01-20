@@ -5,7 +5,6 @@ pub mod datasets;
 pub mod layers;
 pub mod permissions;
 pub mod projects;
-pub mod tasks;
 pub mod users;
 pub mod util;
 pub mod workflows;
