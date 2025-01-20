@@ -18,10 +18,10 @@ use crate::pro::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
     add_pro_providers_from_directory,
 };
-use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
 use crate::pro::users::OidcManager;
 use crate::pro::users::{UserAuth, UserSession};
+use crate::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::tasks::SimpleTaskManagerContext;
 use async_trait::async_trait;
 use bb8_postgres::{
