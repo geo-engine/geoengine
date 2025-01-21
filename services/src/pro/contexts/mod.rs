@@ -1,5 +1,3 @@
-mod db_types;
-pub(crate) mod migrations;
 mod postgres;
 
 use crate::config::get_config_element;

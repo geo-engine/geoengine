@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::pro::datasets::external::copernicus_dataspace::stac::{
+use crate::datasets::external::copernicus_dataspace::stac::{
     load_stac_items, resolve_datetime_duplicates,
 };
 use gdal::{DatasetOptions, GdalOpenFlags};
@@ -299,7 +299,7 @@ mod tests {
         Expectation, Server,
     };
 
-    use crate::pro::datasets::external::copernicus_dataspace::ids::{L2ABand, UtmZoneDirection};
+    use crate::datasets::external::copernicus_dataspace::ids::{L2ABand, UtmZoneDirection};
 
     use super::*;
 

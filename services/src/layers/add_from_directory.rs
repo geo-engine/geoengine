@@ -1,15 +1,17 @@
+use crate::datasets::storage::{DatasetDb, DatasetDefinition};
 use crate::layers::storage::LayerDb;
-use crate::layers::ProLayerProviderDb;
 use crate::{
     error::Result,
     layers::{
+        external::TypedDataProviderDefinition,
         layer::{AddLayer, AddLayerCollection, LayerCollectionDefinition, LayerDefinition},
         listing::{LayerCollectionId, LayerCollectionProvider},
     },
     permissions::{Permission, PermissionDb, Role},
-    pro::datasets::TypedProDataProviderDefinition,
 };
+use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::error::BoxedResultExt;
+use geoengine_datatypes::util::helpers::ge_report;
 use log::{debug, error, info, warn};
 use std::{
     collections::HashMap,
@@ -19,6 +21,8 @@ use std::{
     path::PathBuf,
 };
 use uuid::Uuid;
+
+use super::storage::LayerProviderDb;
 
 pub const UNSORTED_COLLECTION_ID: Uuid = Uuid::from_u128(0xffb2_dd9e_f5ad_427c_b7f1_c9a0_c7a0_ae3f);
 
@@ -202,24 +206,21 @@ pub async fn add_layer_collections_from_directory<
     }
 }
 
-pub async fn add_pro_providers_from_directory<D: ProLayerProviderDb>(
-    db: &mut D,
-    base_path: PathBuf,
-) {
-    async fn add_provider_definition_from_dir_entry<D: ProLayerProviderDb>(
+pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_path: PathBuf) {
+    async fn add_provider_definition_from_dir_entry<D: LayerProviderDb>(
         db: &mut D,
         entry: &DirEntry,
     ) -> Result<()> {
-        let def: TypedProDataProviderDefinition =
+        let def: TypedDataProviderDefinition =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
-        db.add_pro_layer_provider(def).await?; // TODO: add as system user
+        db.add_layer_provider(def).await?; // TODO: add as system user
         Ok(())
     }
 
     let Ok(dir) = fs::read_dir(&base_path) else {
         error!(
-            "Skipped adding pro providers from directory `{:?}` because it can't be read",
+            "Skipped adding providers from directory `{:?}` because it can't be read",
             base_path
         );
         return;
@@ -232,10 +233,10 @@ pub async fn add_pro_providers_from_directory<D: ProLayerProviderDb>(
                     && entry.path().extension().map_or(false, |ext| ext == "json") =>
             {
                 match add_provider_definition_from_dir_entry(db, &entry).await {
-                    Ok(()) => info!("Added pro provider from file `{:?}`", entry.path()),
+                    Ok(()) => info!("Added provider from file `{:?}`", entry.path()),
                     Err(e) => {
                         warn!(
-                            "Skipped adding pro provider from file `{:?}` error: `{:?}`",
+                            "Skipped adding provider from file `{:?}` error: `{:?}`",
                             entry.path(),
                             e
                         );
@@ -243,11 +244,62 @@ pub async fn add_pro_providers_from_directory<D: ProLayerProviderDb>(
                 }
             }
             Err(e) => {
-                warn!("Skipped adding pro provider from directory entry `{:?}`", e);
+                warn!("Skipped adding provider from directory entry `{:?}`", e);
             }
             _ => {
                 // ignore directories, etc.
             }
+        }
+    }
+}
+
+pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
+    dataset_db: &mut D,
+    file_path: PathBuf,
+) {
+    async fn add_dataset_definition_from_dir_entry<D: DatasetDb + PermissionDb>(
+        db: &mut D,
+        entry: &DirEntry,
+    ) -> Result<()> {
+        let def: DatasetDefinition =
+            serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
+
+        let dataset_id: DatasetId = db
+            .add_dataset(def.properties.clone(), def.meta_data.clone())
+            .await?
+            .id;
+
+        db.add_permission(
+            Role::registered_user_role_id(),
+            dataset_id,
+            Permission::Read,
+        )
+        .await
+        .boxed_context(crate::error::PermissionDb)?;
+
+        db.add_permission(Role::anonymous_role_id(), dataset_id, Permission::Read)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        Ok(())
+    }
+
+    let Ok(dir) = fs::read_dir(file_path) else {
+        warn!("Skipped adding datasets from directory because it can't be read");
+        return;
+    };
+
+    for entry in dir {
+        if let Ok(entry) = entry {
+            if let Err(e) = add_dataset_definition_from_dir_entry(dataset_db, &entry).await {
+                warn!(
+                    "Skipped adding dataset from directory entry: {:?} error: {}",
+                    entry,
+                    ge_report(e)
+                );
+            }
+        } else {
+            warn!("Skipped adding dataset from directory entry: {:?}", entry);
         }
     }
 }

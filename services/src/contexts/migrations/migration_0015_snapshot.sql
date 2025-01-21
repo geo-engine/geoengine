@@ -69,7 +69,7 @@ CREATE TYPE "Breakpoint" AS (
 );
 
 CREATE TYPE "ColorizerType" AS ENUM (
-    'LinearGradient', 'LogarithmicGradient', 'Palette', 'Rgba'
+    'LinearGradient', 'LogarithmicGradient', 'Palette'
 );
 
 CREATE TYPE "Colorizer" AS (
@@ -135,9 +135,35 @@ CREATE TYPE "PolygonSymbology" AS (
     auto_simplified boolean
 );
 
+CREATE TYPE "RasterColorizerType" AS ENUM (
+    'SingleBand',
+    'MultiBand'
+);
+
+CREATE TYPE "RasterColorizer" AS (
+    "type" "RasterColorizerType",
+    -- single band colorizer
+    band bigint,
+    band_colorizer "Colorizer",
+    -- multi band colorizer
+    red_band bigint,
+    green_band bigint,
+    blue_band bigint,
+    red_min double precision,
+    red_max double precision,
+    red_scale double precision,
+    green_min double precision,
+    green_max double precision,
+    green_scale double precision,
+    blue_min double precision,
+    blue_max double precision,
+    blue_scale double precision,
+    no_data_color "RgbaColor"
+);
+
 CREATE TYPE "RasterSymbology" AS (
     opacity double precision,
-    colorizer "Colorizer"
+    raster_colorizer "RasterColorizer"
 );
 
 CREATE TYPE "Symbology" AS (
@@ -218,14 +244,19 @@ CREATE TYPE "VectorColumnInfo" AS (
     measurement "Measurement"
 );
 
+CREATE TYPE "RasterBandDescriptor" AS (
+    "name" text,
+    measurement "Measurement"
+);
+
 CREATE TYPE "RasterResultDescriptor" AS (
     data_type "RasterDataType",
     -- SpatialReferenceOption
     spatial_reference "SpatialReference",
-    measurement "Measurement",
     "time" "TimeInterval",
     bbox "SpatialPartition2D",
-    resolution "SpatialResolution"
+    resolution "SpatialResolution",
+    bands "RasterBandDescriptor" []
 );
 
 CREATE TYPE "VectorResultDescriptor" AS (
@@ -640,7 +671,9 @@ CREATE TYPE "ArunaDataProviderDefinition" AS (
     project_id text,
     api_token text,
     filter_label text,
-    cache_ttl int
+    cache_ttl int,
+    description text,
+    priority smallint
 );
 
 CREATE TYPE "DatabaseConnectionConfig" AS (
@@ -655,13 +688,19 @@ CREATE TYPE "DatabaseConnectionConfig" AS (
 CREATE TYPE "GbifDataProviderDefinition" AS (
     "name" text,
     db_config "DatabaseConnectionConfig",
-    cache_ttl int
+    cache_ttl int,
+    autocomplete_timeout int,
+    description text,
+    priority smallint,
+    columns text []
 );
 
 CREATE TYPE "GfbioAbcdDataProviderDefinition" AS (
     "name" text,
     db_config "DatabaseConnectionConfig",
-    cache_ttl int
+    cache_ttl int,
+    description text,
+    priority smallint
 );
 
 CREATE TYPE "GfbioCollectionsDataProviderDefinition" AS (
@@ -670,28 +709,36 @@ CREATE TYPE "GfbioCollectionsDataProviderDefinition" AS (
     collection_api_auth_token text,
     abcd_db_config "DatabaseConnectionConfig",
     pangaea_url text,
-    cache_ttl int
+    cache_ttl int,
+    description text,
+    priority smallint
 );
 
 CREATE TYPE "EbvPortalDataProviderDefinition" AS (
     "name" text,
-    "path" text,
+    "data" text,
     base_url text,
     overviews text,
-    cache_ttl int
+    cache_ttl int,
+    description text,
+    priority smallint
 );
 
 CREATE TYPE "NetCdfCfDataProviderDefinition" AS (
     "name" text,
-    "path" text,
+    "data" text,
     overviews text,
-    cache_ttl int
+    cache_ttl int,
+    description text,
+    priority smallint
 );
 
 CREATE TYPE "PangaeaDataProviderDefinition" AS (
     "name" text,
     base_url text,
-    cache_ttl int
+    cache_ttl int,
+    description text,
+    priority smallint
 );
 
 CREATE TYPE "EdrVectorSpec" AS (
@@ -707,7 +754,23 @@ CREATE TYPE "EdrDataProviderDefinition" AS (
     vector_spec "EdrVectorSpec",
     cache_ttl int,
     discrete_vrs text [],
-    provenance "Provenance" []
+    provenance "Provenance" [],
+    description text,
+    priority smallint
+);
+
+CREATE TYPE "DatasetLayerListingCollection" AS (
+    "name" text,
+    description text,
+    tags text []
+);
+
+CREATE TYPE "DatasetLayerListingProviderDefinition" AS (
+    id uuid,
+    "name" text,
+    description text,
+    collections "DatasetLayerListingCollection" [],
+    priority smallint
 );
 
 CREATE TYPE "DataProviderDefinition" AS (
@@ -720,14 +783,400 @@ CREATE TYPE "DataProviderDefinition" AS (
     ebv_portal_data_provider_definition "EbvPortalDataProviderDefinition",
     net_cdf_cf_data_provider_definition "NetCdfCfDataProviderDefinition",
     pangaea_data_provider_definition "PangaeaDataProviderDefinition",
-    edr_data_provider_definition "EdrDataProviderDefinition"
+    edr_data_provider_definition "EdrDataProviderDefinition",
+    dataset_layer_listing_provider_definition
+    "DatasetLayerListingProviderDefinition"
 );
 
 CREATE TABLE layer_providers (
     id uuid PRIMARY KEY,
     type_name text NOT NULL,
     name text NOT NULL,
-    definition "DataProviderDefinition" NOT NULL
+    definition "DataProviderDefinition" NOT NULL,
+    priority smallint NOT NULL DEFAULT 0
 );
 
 -- TODO: relationship between uploads and datasets?
+
+-- EBV PROVIDER TABLE DEFINITIONS
+
+CREATE TABLE ebv_provider_dataset_locks (
+    provider_id uuid NOT NULL,
+    file_name text NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (provider_id, file_name)
+);
+
+CREATE TABLE ebv_provider_overviews (
+    provider_id uuid NOT NULL,
+    file_name text NOT NULL,
+    title text NOT NULL,
+    summary text NOT NULL,
+    spatial_reference "SpatialReference" NOT NULL,
+    colorizer "Colorizer" NOT NULL,
+    creator_name text,
+    creator_email text,
+    creator_institution text,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (provider_id, file_name)
+);
+
+CREATE TABLE ebv_provider_groups (
+    provider_id uuid NOT NULL,
+    file_name text NOT NULL,
+    name text [] NOT NULL,
+    title text NOT NULL,
+    description text NOT NULL,
+    data_type "RasterDataType",
+    data_range float [2],
+    unit text NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (provider_id, file_name, name) DEFERRABLE,
+
+    FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (
+        provider_id,
+        file_name
+    ) ON DELETE CASCADE DEFERRABLE
+);
+
+CREATE TABLE ebv_provider_entities (
+    provider_id uuid NOT NULL,
+    file_name text NOT NULL,
+    id bigint NOT NULL,
+    name text NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (provider_id, file_name, id) DEFERRABLE,
+
+    FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (
+        provider_id,
+        file_name
+    ) ON DELETE CASCADE DEFERRABLE
+);
+
+CREATE TABLE ebv_provider_timestamps (
+    provider_id uuid NOT NULL,
+    file_name text NOT NULL,
+    "time" bigint NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (provider_id, file_name, "time") DEFERRABLE,
+
+    FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (
+        provider_id,
+        file_name
+    ) ON DELETE CASCADE DEFERRABLE
+);
+
+CREATE TABLE ebv_provider_loading_infos (
+    provider_id uuid NOT NULL,
+    file_name text NOT NULL,
+    group_names text [] NOT NULL,
+    entity_id bigint NOT NULL,
+    meta_data "GdalMetaDataList" NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (provider_id, file_name, group_names, entity_id) DEFERRABLE,
+
+    FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (
+        provider_id,
+        file_name
+    ) ON DELETE CASCADE DEFERRABLE
+);
+
+CREATE TYPE "MlModelMetadata" AS (
+    file_name text,
+    input_type "RasterDataType",
+    num_input_bands OID,
+    output_type "RasterDataType"
+);
+
+CREATE TYPE "MlModelName" AS (namespace text, name text);
+
+CREATE TABLE ml_models ( -- noqa: 
+    id uuid PRIMARY KEY,
+    "name" "MlModelName" UNIQUE NOT NULL,
+    display_name text NOT NULL,
+    description text NOT NULL,
+    upload uuid REFERENCES uploads (id) ON DELETE CASCADE NOT NULL,
+    metadata "MlModelMetadata"
+);
+
+-- ADDITIONS
+
+CREATE TYPE "StacBand" AS (
+    "name" text,
+    no_data_value double precision,
+    data_type "RasterDataType"
+);
+
+CREATE TYPE "StacZone" AS (
+    "name" text,
+    epsg oid
+);
+
+CREATE TYPE "StacApiRetries" AS (
+    number_of_retries bigint,
+    initial_delay_ms bigint,
+    exponential_backoff_factor double precision
+);
+
+CREATE TYPE "GdalRetries" AS (
+    number_of_retries bigint
+);
+
+CREATE TYPE "StacQueryBuffer" AS (
+    start_seconds bigint,
+    end_seconds bigint
+);
+
+CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
+    "name" text,
+    id uuid,
+    api_url text,
+    bands "StacBand" [],
+    zones "StacZone" [],
+    stac_api_retries "StacApiRetries",
+    gdal_retries "GdalRetries",
+    cache_ttl int,
+    description text,
+    priority smallint,
+    query_buffer "StacQueryBuffer"
+);
+
+CREATE TYPE "CopernicusDataspaceDataProviderDefinition" AS (
+    "name" text,
+    id uuid,
+    stac_url text,
+    s3_url text,
+    s3_access_key text,
+    s3_secret_key text,
+    description text,
+    priority smallint,
+    gdal_config "StringPair" []
+);
+
+CREATE TYPE "ProDataProviderDefinition" AS (
+    -- one of
+    sentinel_s2_l2_a_cogs_provider_definition
+    "SentinelS2L2ACogsProviderDefinition",
+    copernicus_dataspace_provider_definition
+    "CopernicusDataspaceDataProviderDefinition"
+);
+
+CREATE TABLE pro_layer_providers (
+    id uuid PRIMARY KEY,
+    type_name text NOT NULL,
+    name text NOT NULL,
+    definition "ProDataProviderDefinition" NOT NULL,
+    priority smallint NOT NULL DEFAULT 0
+);
+
+-- TODO: distinguish between roles that are (correspond to) users
+--       and roles that are not
+
+-- TODO: integrity constraint for roles that correspond to users
+--       + DELETE CASCADE
+
+CREATE TABLE roles (
+    id uuid PRIMARY KEY,
+    name text UNIQUE NOT NULL
+);
+
+CREATE TABLE users (
+    id uuid PRIMARY KEY REFERENCES roles (id),
+    email character varying(256) UNIQUE,
+    password_hash character varying(256),
+    real_name character varying(256),
+    active boolean NOT NULL,
+    quota_available bigint NOT NULL DEFAULT 0,
+    quota_used bigint NOT NULL DEFAULT 0,
+    -- TODO: rename to total_quota_used?
+    CONSTRAINT users_anonymous_ck CHECK ((
+        email IS NULL
+        AND password_hash IS NULL
+        AND real_name IS NULL
+    )
+    OR (
+        email IS NOT NULL
+        AND password_hash IS NOT NULL
+        AND real_name IS NOT NULL
+    )
+    ),
+    CONSTRAINT users_quota_used_ck CHECK (quota_used >= 0)
+);
+
+-- relation between users and roles
+
+-- all users have a default role where role_id = user_id
+
+CREATE TABLE user_roles (
+    user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
+    role_id uuid REFERENCES roles (id) ON DELETE CASCADE NOT NULL,
+    PRIMARY KEY (user_id, role_id)
+);
+
+CREATE TABLE user_sessions (
+    user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
+    session_id uuid REFERENCES sessions (id) ON DELETE CASCADE NOT NULL,
+    created timestamp with time zone NOT NULL,
+    valid_until timestamp with time zone NOT NULL,
+    PRIMARY KEY (user_id, session_id)
+);
+
+CREATE TABLE project_version_authors (
+    project_version_id uuid REFERENCES project_versions (
+        id
+    ) ON DELETE CASCADE NOT NULL,
+    user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
+    PRIMARY KEY (project_version_id, user_id)
+);
+
+CREATE TABLE user_uploads (
+    user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
+    upload_id uuid REFERENCES uploads (id) ON DELETE CASCADE NOT NULL,
+    PRIMARY KEY (user_id, upload_id)
+);
+
+CREATE TYPE "Permission" AS ENUM ('Read', 'Owner');
+
+-- TODO: uploads, providers permissions
+
+-- TODO: relationship between uploads and datasets?
+
+CREATE TABLE external_users (
+    id uuid PRIMARY KEY REFERENCES users (id),
+    external_id character varying(256) UNIQUE,
+    email character varying(256),
+    real_name character varying(256),
+    active boolean NOT NULL
+);
+
+CREATE TABLE permissions (
+    -- resource_type "ResourceType" NOT NULL,
+    role_id uuid REFERENCES roles (id) ON DELETE CASCADE NOT NULL,
+    permission "Permission" NOT NULL,
+    dataset_id uuid REFERENCES datasets (id) ON DELETE CASCADE,
+    layer_id uuid REFERENCES layers (id) ON DELETE CASCADE,
+    layer_collection_id uuid REFERENCES layer_collections (
+        id
+    ) ON DELETE CASCADE,
+    project_id uuid REFERENCES projects (id) ON DELETE CASCADE,
+    ml_model_id uuid REFERENCES ml_models (id) ON DELETE CASCADE,
+    CHECK (
+        (
+            (dataset_id IS NOT NULL)::integer
+            + (layer_id IS NOT NULL)::integer
+            + (layer_collection_id IS NOT NULL)::integer
+            + (project_id IS NOT NULL)::integer
+            + (ml_model_id IS NOT NULL)::integer
+        ) = 1
+    )
+);
+
+CREATE UNIQUE INDEX ON permissions (
+    role_id,
+    permission,
+    dataset_id
+);
+
+CREATE UNIQUE INDEX ON permissions (role_id, permission, layer_id);
+
+CREATE UNIQUE INDEX ON permissions (
+    role_id,
+    permission,
+    layer_collection_id
+);
+
+CREATE UNIQUE INDEX ON permissions (
+    role_id,
+    permission,
+    project_id
+);
+
+CREATE UNIQUE INDEX ON permissions (
+    role_id,
+    permission,
+    ml_model_id
+);
+
+CREATE VIEW user_permitted_datasets
+AS
+SELECT
+    r.user_id,
+    p.dataset_id,
+    p.permission
+FROM user_roles AS r
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id AND p.dataset_id IS NOT NULL
+);
+
+CREATE VIEW user_permitted_projects
+AS
+SELECT
+    r.user_id,
+    p.project_id,
+    p.permission
+FROM user_roles AS r
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id AND p.project_id IS NOT NULL
+);
+
+CREATE VIEW user_permitted_layer_collections
+AS
+SELECT
+    r.user_id,
+    p.layer_collection_id,
+    p.permission
+FROM user_roles AS r
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id AND p.layer_collection_id IS NOT NULL
+);
+
+CREATE VIEW user_permitted_layers
+AS
+SELECT
+    r.user_id,
+    p.layer_id,
+    p.permission
+FROM user_roles AS r
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id AND p.layer_id IS NOT NULL
+);
+
+CREATE TABLE oidc_session_tokens (
+    session_id uuid PRIMARY KEY REFERENCES sessions (
+        id
+    ) ON DELETE CASCADE NOT NULL,
+    access_token bytea NOT NULL,
+    access_token_encryption_nonce bytea,
+    access_token_valid_until timestamp with time zone NOT NULL,
+    refresh_token bytea,
+    refresh_token_encryption_nonce bytea
+);
+
+CREATE VIEW user_permitted_ml_models
+AS
+SELECT
+    r.user_id,
+    p.ml_model_id,
+    p.permission
+FROM user_roles AS r
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id AND p.ml_model_id IS NOT NULL
+);
+
+CREATE TABLE quota_log (
+    timestamp timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_id uuid NOT NULL,
+    workflow_id uuid NOT NULL,
+    computation_id uuid NOT NULL,
+    operator_name text NOT NULL,
+    operator_path text NOT NULL,
+    data text
+);
+
+CREATE INDEX ON quota_log (user_id, timestamp, computation_id);

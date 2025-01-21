@@ -28,14 +28,8 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 pub use migrations::{
-    initialize_database, migrate_database, migration_0000_initial::Migration0000Initial,
-    CurrentSchemaMigration, DatabaseVersion, Migration, Migration0001RasterStacks,
-    Migration0002DatasetListingProvider, Migration0003GbifConfig,
-    Migration0004DatasetListingProviderPrio, Migration0005GbifColumnSelection,
-    Migration0006EbvProvider, Migration0007OwnerRole, Migration0008BandNames,
-    Migration0009OidcTokens, Migration0010S2StacTimeBuffers, Migration0011RemoveXgb,
-    Migration0012MlModelDb, Migration0013CopernicusProvider, Migration0014MultibandColorizer,
-    Migration0015LogQuota, MigrationResult,
+    initialize_database, migrate_database, CurrentSchemaMigration, DatabaseVersion, Migration,
+    MigrationResult,
 };
 pub use session::{Session, SessionId};
 

@@ -894,7 +894,6 @@ mod tests {
         contexts::{ApplicationContext, SessionContext},
         ge_context,
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
-        layers::ProLayerProviderDb,
         pro::contexts::{PostgresContext, PostgresDb},
         test_data,
         users::UserAuth,
@@ -1184,7 +1183,7 @@ mod tests {
             responders::status_code(206)
                 .append_header("Content-Type", "application/json")
                 .body(
-                    include_bytes!("../../../../../test_data/pro/stac_responses/cog-header.bin")
+                    include_bytes!("../../../../test_data/pro/stac_responses/cog-header.bin")
                         .to_vec(),
                 )
                 .append_header(
@@ -1253,7 +1252,7 @@ mod tests {
                     .append_header("Content-Type", "application/json")
                     .body(
                         include_bytes!(
-                            "../../../../../test_data/pro/stac_responses/cog-tile.bin"
+                            "../../../../test_data/pro/stac_responses/cog-tile.bin"
                         )[0..2]
                         .to_vec()
                     ).append_header(
@@ -1278,7 +1277,7 @@ mod tests {
                     .append_header("Content-Type", "application/json")
                     .body(
                         include_bytes!(
-                            "../../../../../test_data/pro/stac_responses/cog-tile.bin"
+                            "../../../../test_data/pro/stac_responses/cog-tile.bin"
                         )
                         .to_vec()
                     ).append_header(
@@ -1583,7 +1582,7 @@ mod tests {
         ))
         .unwrap();
 
-        ctx.db().add_pro_layer_provider(def.into()).await.unwrap();
+        ctx.db().add_layer_provider(def.into()).await.unwrap();
 
         ctx.db()
             .load_layer_provider(DataProviderId::from_u128(

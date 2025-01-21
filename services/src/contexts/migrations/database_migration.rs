@@ -193,9 +193,7 @@ mod tests {
     use super::*;
     use crate::{
         config::get_config_element,
-        contexts::migrations::{
-            all_migrations, migration_0000_initial::Migration0000Initial, CurrentSchemaMigration,
-        },
+        contexts::migrations::{all_migrations, CurrentSchemaMigration, Migration0015LogQuota},
         util::postgres::DatabaseConnectionConfig,
     };
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
@@ -249,7 +247,7 @@ mod tests {
         }
 
         let migrations: Vec<Box<dyn Migration>> = vec![
-            Box::new(Migration0000Initial),
+            Box::new(Migration0015LogQuota),
             Box::new(TestMigration),
             Box::new(FollowUpMigration),
         ];

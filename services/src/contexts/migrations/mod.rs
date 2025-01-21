@@ -1,20 +1,6 @@
 pub use crate::contexts::migrations::{
-    current_schema::CurrentSchemaMigration, migration_0000_initial::Migration0000Initial,
-    migration_0001_raster_stacks::Migration0001RasterStacks,
-    migration_0002_dataset_listing_provider::Migration0002DatasetListingProvider,
-    migration_0003_gbif_config::Migration0003GbifConfig,
-    migration_0004_dataset_listing_provider_prio::Migration0004DatasetListingProviderPrio,
-    migration_0005_gbif_column_selection::Migration0005GbifColumnSelection,
-    migration_0006_ebv_provider::Migration0006EbvProvider,
-    migration_0007_owner_role::Migration0007OwnerRole,
-    migration_0008_band_names::Migration0008BandNames,
-    migration_0009_oidc_tokens::Migration0009OidcTokens,
-    migration_0010_s2_stack_time_buffers::Migration0010S2StacTimeBuffers,
-    migration_0011_remove_xgb::Migration0011RemoveXgb,
-    migration_0012_ml_model_db::Migration0012MlModelDb,
-    migration_0013_copernicus_provider::Migration0013CopernicusProvider,
-    migration_0014_multiband_colorizer::Migration0014MultibandColorizer,
-    migration_0015_log_quota::Migration0015LogQuota,
+    current_schema::CurrentSchemaMigration, migration_0015_log_quota::Migration0015LogQuota,
+    migration_0016_merge_providers::Migration0016MergeProviders,
 };
 pub use database_migration::{
     initialize_database, migrate_database, DatabaseVersion, Migration, MigrationResult,
@@ -22,22 +8,8 @@ pub use database_migration::{
 
 mod current_schema;
 mod database_migration;
-pub mod migration_0000_initial;
-pub mod migration_0001_raster_stacks;
-pub mod migration_0002_dataset_listing_provider;
-pub mod migration_0003_gbif_config;
-pub mod migration_0004_dataset_listing_provider_prio;
-pub mod migration_0005_gbif_column_selection;
-mod migration_0006_ebv_provider;
-pub mod migration_0007_owner_role;
-pub mod migration_0008_band_names;
-pub mod migration_0009_oidc_tokens;
-pub mod migration_0010_s2_stack_time_buffers;
-pub mod migration_0011_remove_xgb;
-pub mod migration_0012_ml_model_db;
-pub mod migration_0013_copernicus_provider;
-pub mod migration_0014_multiband_colorizer;
-pub mod migration_0015_log_quota;
+mod migration_0015_log_quota;
+mod migration_0016_merge_providers;
 
 #[cfg(test)]
 mod schema_info;
@@ -51,22 +23,8 @@ pub(crate) use schema_info::{assert_migration_schema_eq, AssertSchemaEqPopulatio
 ///
 pub fn all_migrations() -> Vec<Box<dyn Migration>> {
     vec![
-        Box::new(Migration0000Initial),
-        Box::new(Migration0001RasterStacks),
-        Box::new(Migration0002DatasetListingProvider),
-        Box::new(Migration0003GbifConfig),
-        Box::new(Migration0004DatasetListingProviderPrio),
-        Box::new(Migration0005GbifColumnSelection),
-        Box::new(Migration0006EbvProvider),
-        Box::new(Migration0007OwnerRole),
-        Box::new(Migration0008BandNames),
-        Box::new(Migration0009OidcTokens),
-        Box::new(Migration0010S2StacTimeBuffers),
-        Box::new(Migration0011RemoveXgb),
-        Box::new(Migration0012MlModelDb),
-        Box::new(Migration0013CopernicusProvider),
-        Box::new(Migration0014MultibandColorizer),
         Box::new(Migration0015LogQuota),
+        Box::new(Migration0016MergeProviders),
     ]
 }
 

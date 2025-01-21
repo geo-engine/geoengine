@@ -184,6 +184,8 @@ INSERT INTO layer_providers (
         NULL,
         NULL,
         NULL,
+        NULL,
+        NULL,
         NULL
     )::"DataProviderDefinition"
 );
