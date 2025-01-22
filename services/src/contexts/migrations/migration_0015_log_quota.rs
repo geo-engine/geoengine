@@ -9,7 +9,16 @@ pub struct Migration0015LogQuota;
 #[async_trait]
 impl Migration for Migration0015LogQuota {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        None // must have migrated to 0015 with old version
+        // Upon migration `0015_log_quota`, we did a major refactoring and removed the deprecated pro migrations.
+        // Hence, we added a snapshot of the database schema to this migration instead of just the migration itself.
+        // This is the state of the database schema at commit `071ba4e636a709f05ecb18b6f01bd19f313b0c94`.
+        // Furthermore, we deleted all prior migrations, so we can't determine the previous version here.
+        //
+        // If you have a database version prior to `0015_log_quota`, you will need to migrate to `0015_log_quota` first.
+        // Use commit `071ba4e636a709f05ecb18b6f01bd19f313b0c94` as a reference.
+        // Then, you can migrate to the latest version.
+        //
+        None
     }
 
     fn version(&self) -> DatabaseVersion {
@@ -31,7 +40,7 @@ impl Migration for Migration0015LogQuota {
 
         tx
             .execute(
-                "INSERT INTO geoengine (clear_database_on_start, database_version) VALUES ($1, '0000_initial');",
+                "INSERT INTO geoengine (clear_database_on_start, database_version) VALUES ($1, '0015_log_quota');",
             &[&config.clear_database_on_start])
             .await?;
 

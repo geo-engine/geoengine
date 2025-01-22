@@ -23,7 +23,7 @@ pub(crate) use schema_info::{assert_migration_schema_eq, AssertSchemaEqPopulatio
 ///
 pub fn all_migrations() -> Vec<Box<dyn Migration>> {
     vec![
-        Box::new(Migration0015LogQuota),
+        Box::new(Migration0015LogQuota), // cf. [`migration_0015_log_quota.rs`] why we start at `0015`
         Box::new(Migration0016MergeProviders),
     ]
 }
