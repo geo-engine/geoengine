@@ -31,6 +31,7 @@ use crate::api::model::operators::{
     UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
 };
 use crate::api::model::responses::datasets::DatasetNameResponse;
+use crate::api::model::responses::ml_models::MlModelNameResponse;
 use crate::api::model::responses::{
     BadRequestQueryResponse, ErrorResponse, IdResponse, PayloadTooLargeResponse, PngResponse,
     UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
@@ -423,7 +424,8 @@ use utoipa::{Modify, OpenApi};
             MlModel,
             MlModelId,
             MlModelName,
-            MlModelMetadata
+            MlModelMetadata,
+            MlModelNameResponse
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
