@@ -61,6 +61,8 @@ DROP TYPE "ProDataProviderDefinition";
 
 -- user_sessions
 
+DELETE FROM sessions;
+
 ALTER TABLE sessions ADD COLUMN
 user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL;
 ALTER TABLE sessions ADD COLUMN created timestamp with time zone NOT NULL;
