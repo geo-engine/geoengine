@@ -31,5 +31,30 @@ INSERT INTO layer_providers (
 FROM pro_layer_providers AS pro
 WHERE pro.type_name = 'SentinelS2L2ACogsProviderDefinition';
 
+INSERT INTO layer_providers (
+    id,
+    type_name,
+    name,
+    definition
+) SELECT
+    pro.id,
+    pro.type_name,
+    pro.name,
+    (
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL, -- noqa: PRS
+        (pro.definition).copernicus_dataspace_provider_definition
+    )::"DataProviderDefinition"
+FROM pro_layer_providers AS pro
+WHERE pro.type_name = 'CopernicusDataspaceDataProviderDefinition';
+
 DROP TABLE pro_layer_providers;
 DROP TYPE "ProDataProviderDefinition";
