@@ -193,10 +193,19 @@ mod tests {
     use super::*;
     use crate::{
         config::get_config_element,
-        contexts::migrations::{all_migrations, CurrentSchemaMigration, Migration0015LogQuota},
+        contexts::{
+            migrations::{all_migrations, CurrentSchemaMigration, Migration0015LogQuota},
+            SessionId,
+        },
+        permissions::RoleId,
+        pro::contexts::PostgresDb,
+        projects::{ProjectDb, ProjectListOptions},
+        users::{UserId, UserInfo, UserSession},
         util::postgres::DatabaseConnectionConfig,
+        workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
     };
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
+    use geoengine_datatypes::{primitives::DateTime, test_data};
     use tokio_postgres::NoTls;
 
     #[tokio::test]
@@ -306,6 +315,73 @@ mod tests {
             &all_migrations(),
         )
         .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn it_migrates_data() -> Result<()> {
+        // This test creates the initial schema and fills it with test data.
+        // Then, it migrates the database to the newest version.
+        // Finally, it tries to load the test data again via the Db implementations.
+
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
+
+        let pool = Pool::builder().max_size(1).build(pg_mgr).await?;
+
+        let mut conn = pool.get().await?;
+
+        // initial schema
+        migrate_database(&mut conn, &all_migrations()[0..1]).await?;
+
+        // insert test data on initial schema
+        let test_data_sql = std::fs::read_to_string(test_data!("migrations/test_data.sql"))?;
+        conn.batch_execute(&test_data_sql).await?;
+
+        // migrate to latest schema
+        migrate_database(&mut conn, &all_migrations()).await?;
+
+        // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
+        drop(conn);
+
+        // create `PostgresDb` on migrated database and test methods
+        let db = PostgresDb::new(
+            pool.clone(),
+            UserSession {
+                id: SessionId::from_u128(0xe11c7674_7ca5_4e07_840c_260835d3fc8d),
+                user: UserInfo {
+                    id: UserId::from_u128(0xb589a590_9c0c_4b55_9aa2_d178a5f42a78),
+                    email: Some("foobar@example.org".to_string()),
+                    real_name: Some("Foo Bar".to_string()),
+                },
+                created: DateTime::new_utc(2023, 1, 1, 0, 0, 0),
+                valid_until: DateTime::new_utc(9999, 1, 1, 0, 0, 0),
+                project: None,
+                view: None,
+                roles: vec![RoleId::from_u128(0xb589a590_9c0c_4b55_9aa2_d178a5f42a78)],
+            },
+        );
+
+        let projects = db
+            .list_projects(ProjectListOptions {
+                order: crate::projects::OrderBy::NameAsc,
+                offset: 0,
+                limit: 10,
+            })
+            .await
+            .unwrap();
+
+        assert!(!projects.is_empty());
+
+        db.load_workflow(&WorkflowId::from_u128(
+            0x38ddfc17_016e_4910_8adf_b1af36a8590c,
+        ))
+        .await
+        .unwrap();
+
+        // TODO: test more methods and more Dbs
 
         Ok(())
     }
