@@ -765,7 +765,7 @@ mod tests {
     use super::*;
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::datasets::external::netcdfcf::NETCDF_CF_PROVIDER_ID;
-    use crate::pro::contexts::{PostgresContext, PostgresDb, PostgresSessionContext};
+    use crate::pro::contexts::{PostgresDb, PostgresSessionContext};
     use crate::{contexts::SessionContext, ge_context, tasks::util::NopTaskContext};
     use gdal::{DatasetOptions, GdalOpenFlags};
     use geoengine_datatypes::{
@@ -889,10 +889,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_create_overviews(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_create_overviews(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -935,10 +932,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_create_overviews_irregular(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_create_overviews_irregular(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -1087,10 +1081,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_overviews(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_remove_overviews(ctx: PostgresSessionContext<NoTls>) {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
         }

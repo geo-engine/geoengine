@@ -10,7 +10,7 @@ use crate::{
     pro::datasets::TypedProDataProviderDefinition,
 };
 use geoengine_datatypes::error::BoxedResultExt;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use std::{
     collections::HashMap,
     ffi::OsStr,

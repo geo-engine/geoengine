@@ -785,10 +785,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_searches_fulltext(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_searches_fulltext(ctx: PostgresSessionContext<NoTls>) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
 
         let test_schema = create_test_data(&db_config).await;
@@ -903,10 +900,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_searches_prefix(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_searches_prefix(ctx: PostgresSessionContext<NoTls>) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
 
         let test_schema = create_test_data(&db_config).await;
@@ -1049,10 +1043,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_autocompletes_fulltext_search(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_autocompletes_fulltext_search(ctx: PostgresSessionContext<NoTls>) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
 
         let test_schema = create_test_data(&db_config).await;
@@ -1116,10 +1107,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_autocompletes_prefix_search(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_autocompletes_prefix_search(ctx: PostgresSessionContext<NoTls>) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
 
         let test_schema = create_test_data(&db_config).await;
@@ -1200,10 +1188,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_creates_meta_data(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_creates_meta_data(ctx: PostgresSessionContext<NoTls>) {
         async fn test(
             ctx: &PostgresSessionContext<NoTls>,
             db_config: &config::Postgres,
