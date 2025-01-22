@@ -215,11 +215,11 @@ mod tests {
         #[async_trait]
         impl Migration for TestMigration {
             fn prev_version(&self) -> Option<DatabaseVersion> {
-                Some("0000_initial".to_string())
+                Some(Migration0015LogQuota.version())
             }
 
             fn version(&self) -> DatabaseVersion {
-                "0001_mock".to_string()
+                "0016_mock".to_string()
             }
 
             async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
@@ -240,11 +240,11 @@ mod tests {
         #[async_trait]
         impl Migration for FollowUpMigration {
             fn prev_version(&self) -> Option<DatabaseVersion> {
-                Some("0001_mock".to_string())
+                Some(TestMigration.version())
             }
 
             fn version(&self) -> DatabaseVersion {
-                "0002_follow_up".to_string()
+                "0017_follow_up".to_string()
             }
 
             async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {

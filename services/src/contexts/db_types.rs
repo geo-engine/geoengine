@@ -1280,7 +1280,7 @@ mod tests {
 
             assert_sql_type(
                 &pool,
-                "ProDataProviderDefinition",
+                "DataProviderDefinition",
                 [
                     TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(
                         CopernicusDataspaceDataProviderDefinition {

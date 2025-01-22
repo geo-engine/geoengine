@@ -926,7 +926,7 @@ mod tests {
         // TODO: mock STAC endpoint
 
         let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
-            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
+            File::open(test_data!("provider_defs/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
         let provider = Box::new(def)
@@ -1013,7 +1013,7 @@ mod tests {
         let mut exe = MockExecutionContext::test_default();
 
         let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
-            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
+            File::open(test_data!("provider_defs/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
         let provider = Box::new(def)
@@ -1577,7 +1577,7 @@ mod tests {
         let ctx = app_ctx.session_context(session.clone());
 
         let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
-            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json")).unwrap(),
+            File::open(test_data!("provider_defs/sentinel_s2_l2a_cogs.json")).unwrap(),
         ))
         .unwrap();
 
@@ -1606,7 +1606,7 @@ mod tests {
             LayerProviderListing {
                 id: DataProviderId::from_u128(0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5),
                 name: "Element 84 AWS STAC".to_owned(),
-                priority: 0,
+                priority: 50,
             }
         );
     }
