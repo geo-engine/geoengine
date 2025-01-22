@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
-use utoipa::ToResponse;
+use utoipa::{ToResponse, ToSchema};
 
 use crate::machine_learning::name::MlModelName;
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToResponse)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToResponse, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[response(description = "Name of generated resource", example = json!({
     "name": "ns:name"
