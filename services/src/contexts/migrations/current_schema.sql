@@ -1,5 +1,5 @@
 CREATE TABLE geoengine (
-    clear_database_on_start boolean NOT NULL DEFAULT false,
+    clear_database_on_start boolean NOT NULL DEFAULT FALSE,
     database_version text NOT NULL
 );
 
