@@ -48,7 +48,7 @@ impl ResponseError for MachineLearningError {
     path = "/ml/models",
     request_body = MlModel,
     responses(
-        (status = 200)
+        (status = 200, body = [MlModelNameResponse])
     ),
     security(
         ("session_token" = [])
