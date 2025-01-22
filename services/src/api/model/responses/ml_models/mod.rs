@@ -9,11 +9,11 @@ use crate::machine_learning::name::MlModelName;
     "name": "ns:name"
 }))]
 pub struct MlModelNameResponse {
-    pub dataset_name: MlModelName,
+    pub ml_model_name: MlModelName,
 }
 
 impl From<MlModelName> for MlModelNameResponse {
-    fn from(dataset_name: MlModelName) -> Self {
-        Self { dataset_name }
+    fn from(ml_model_name: MlModelName) -> Self {
+        Self { ml_model_name }
     }
 }
