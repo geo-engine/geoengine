@@ -1099,7 +1099,7 @@ mod tests {
         hide_gdal_errors();
 
         let stac_response =
-            std::fs::read_to_string(test_data!("pro/stac_responses/items_page_1_limit_500.json"))
+            std::fs::read_to_string(test_data!("stac_responses/items_page_1_limit_500.json"))
                 .unwrap();
         let server = Server::run();
 
@@ -1183,8 +1183,7 @@ mod tests {
             responders::status_code(206)
                 .append_header("Content-Type", "application/json")
                 .body(
-                    include_bytes!("../../../../test_data/pro/stac_responses/cog-header.bin")
-                        .to_vec(),
+                    include_bytes!("../../../../test_data/stac_responses/cog-header.bin").to_vec(),
                 )
                 .append_header(
                     "x-amz-id-2",
@@ -1252,7 +1251,7 @@ mod tests {
                     .append_header("Content-Type", "application/json")
                     .body(
                         include_bytes!(
-                            "../../../../test_data/pro/stac_responses/cog-tile.bin"
+                            "../../../../test_data/stac_responses/cog-tile.bin"
                         )[0..2]
                         .to_vec()
                     ).append_header(
@@ -1277,7 +1276,7 @@ mod tests {
                     .append_header("Content-Type", "application/json")
                     .body(
                         include_bytes!(
-                            "../../../../test_data/pro/stac_responses/cog-tile.bin"
+                            "../../../../test_data/stac_responses/cog-tile.bin"
                         )
                         .to_vec()
                     ).append_header(

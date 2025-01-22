@@ -343,7 +343,7 @@ mod tests {
 
         // STAC request
         let stac_body = tokio::fs::read(test_data!(
-            "pro/copernicus_dataspace/stac_responses/stac_response_1.json"
+            "copernicus_dataspace/stac_responses/stac_response_1.json"
         ))
         .await
         .unwrap();
@@ -373,7 +373,7 @@ mod tests {
 
         // top level dataset request
         let mtd_xml_body = tokio::fs::read(test_data!(
-            "pro/copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/MTD_MSIL2A.xml"
+            "copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/MTD_MSIL2A.xml"
         ))
         .await
         .unwrap();
@@ -388,7 +388,7 @@ mod tests {
 
         // granule request
         let granule_mtd_xml_body = tokio::fs::read(test_data!(
-            "pro/copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/MTD_TL.xml"
+            "copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/MTD_TL.xml"
         ))
         .await
         .unwrap();
@@ -405,7 +405,7 @@ mod tests {
 
         // B04
         let b04_jp2_head_body = tokio::fs::read(test_data!(
-                "pro/copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B04_10m.jp2.head"
+                "copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B04_10m.jp2.head"
             ))
             .await.unwrap();
 
@@ -419,7 +419,7 @@ mod tests {
 
         // B03
         let b03_jp2_head_body = tokio::fs::read(test_data!(
-                "pro/copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B03_10m.jp2.head"
+                "copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B03_10m.jp2.head"
             ))
             .await
             .unwrap();
@@ -434,7 +434,7 @@ mod tests {
 
         // B02
         let b02_jp2_head_body = tokio::fs::read(test_data!(
-                 "pro/copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B02_10m.jp2.head"
+                 "copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B02_10m.jp2.head"
              ))
              .await
              .unwrap();
@@ -449,7 +449,7 @@ mod tests {
 
         // B08
         let b08_jp2_head_body = tokio::fs::read(test_data!(
-                "pro/copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B08_10m.jp2.head"
+                "copernicus_dataspace/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B08_10m.jp2.head"
             ))
             .await
             .unwrap();

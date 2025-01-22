@@ -951,7 +951,7 @@ pub async fn admin_login<C: ApplicationContext<Session = UserSession> + UserAuth
 
 /// Loads a pretrained mock model from disk
 pub async fn load_mock_model_from_disk() -> Result<String, std::io::Error> {
-    let path = test_data!("pro/ml/")
+    let path = test_data!("ml/")
         .join("b764bf81-e21d-4eb8-bf01-fac9af13faee")
         .join("mock_model.json");
 

@@ -154,7 +154,7 @@ mod tests {
 
         let body = vec![(
             "model.onnx",
-            include_bytes!("../../../../test_data/pro/ml/onnx/test_classification.onnx"),
+            include_bytes!("../../../../test_data/ml/onnx/test_classification.onnx"),
         )];
 
         let req = test::TestRequest::post()
