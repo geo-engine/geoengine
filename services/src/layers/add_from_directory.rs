@@ -12,7 +12,7 @@ use crate::{
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::util::helpers::ge_report;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -122,7 +122,6 @@ pub async fn add_layer_collections_from_directory<
         .await?;
 
         // share with users
-        debug!("sharing collection");
         db.add_permission(
             Role::registered_user_role_id(),
             def.id.clone(),

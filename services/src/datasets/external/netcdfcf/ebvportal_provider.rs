@@ -810,10 +810,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn test_get_classes(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_get_classes(ctx: PostgresSessionContext<NoTls>) {
         let mock_server = httptest::Server::run();
         mock_server.expect(
             Expectation::matching(request::method_path("GET", "/api/v1/ebv-map")).respond_with(
@@ -1214,10 +1211,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_get_dataset(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_get_dataset(ctx: PostgresSessionContext<NoTls>) {
         let mock_server = httptest::Server::run();
 
         mock_server.expect(

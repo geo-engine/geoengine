@@ -1780,10 +1780,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_listing_from_netcdf_m(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_listing_from_netcdf_m(ctx: PostgresSessionContext<NoTls>) {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
@@ -1842,10 +1839,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_listing_from_netcdf_sm(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_listing_from_netcdf_sm(ctx: PostgresSessionContext<NoTls>) {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
@@ -1928,10 +1922,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_metadata_from_netcdf_sm(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_metadata_from_netcdf_sm(ctx: PostgresSessionContext<NoTls>) {
         let provider = NetCdfCfDataProvider {
             id: NETCDF_CF_PROVIDER_ID,
             name: "Test Provider".to_string(),
@@ -2058,10 +2049,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_loading_info_from_index(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_loading_info_from_index(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -2165,10 +2153,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_listing_from_netcdf_sm_from_index(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_listing_from_netcdf_sm_from_index(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -2264,10 +2249,7 @@ mod tests {
 
     #[ge_context::test(user = "admin")]
     #[allow(clippy::too_many_lines)]
-    async fn test_irregular_time_series(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_irregular_time_series(ctx: PostgresSessionContext<NoTls>) {
         let land_cover_dataset_name = add_land_cover_to_datasets(&ctx.db()).await;
 
         let provider_definition = EbvPortalDataProviderDefinition {
@@ -2386,10 +2368,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_lists_with_and_without_overviews(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_lists_with_and_without_overviews(ctx: PostgresSessionContext<NoTls>) {
         async fn get_all_collections(
             provider: &dyn DataProvider,
             root_id: LayerCollectionId,
@@ -2478,10 +2457,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_with_and_without_overviews(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_loads_with_and_without_overviews(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -2538,10 +2514,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_refreshes_metadata_only(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_refreshes_metadata_only(ctx: PostgresSessionContext<NoTls>) {
         async fn query_collection_name(
             provider: &NetCdfCfDataProvider<PostgresDb<NoTls>>,
             id: &LayerCollectionId,
@@ -2665,10 +2638,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_handles_esri_in_creation_and_refresh(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_handles_esri_in_creation_and_refresh(ctx: PostgresSessionContext<NoTls>) {
         async fn query_collection_name(
             provider: &NetCdfCfDataProvider<PostgresDb<NoTls>>,
             id: &LayerCollectionId,

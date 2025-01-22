@@ -763,7 +763,7 @@ pub async fn remove_overviews<D: NetCdfCfProviderDb + 'static + std::fmt::Debug>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, PostgresDb, PostgresSessionContext};
+    use crate::contexts::{PostgresDb, PostgresSessionContext};
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::datasets::external::netcdfcf::NETCDF_CF_PROVIDER_ID;
     use crate::{contexts::SessionContext, ge_context, tasks::util::NopTaskContext};
@@ -889,10 +889,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_create_overviews(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_create_overviews(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -935,10 +932,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_create_overviews_irregular(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_create_overviews_irregular(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -1087,10 +1081,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_overviews(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_remove_overviews(ctx: PostgresSessionContext<NoTls>) {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
         }

@@ -1213,7 +1213,7 @@ mod tests {
     use super::*;
     use crate::{
         contexts::SessionContext,
-        contexts::{PostgresContext, PostgresDb, PostgresSessionContext},
+        contexts::{PostgresDb, PostgresSessionContext},
         ge_context,
     };
     use geoengine_datatypes::{
@@ -1320,10 +1320,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_root_collection(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) -> Result<()> {
+    async fn it_loads_root_collection(ctx: PostgresSessionContext<NoTls>) -> Result<()> {
         let root_collection_id = LayerCollectionId("collections".to_string());
         let datasets = load_layer_collection(&root_collection_id, ctx.db()).await?;
 
@@ -1403,7 +1400,6 @@ mod tests {
 
     #[ge_context::test]
     async fn it_loads_raster_parameter_collection(
-        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) -> Result<()> {
         let collection_id = LayerCollectionId("collections!GFS_isobaric".to_string());
@@ -1438,10 +1434,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_vector_height_collection(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) -> Result<()> {
+    async fn it_loads_vector_height_collection(ctx: PostgresSessionContext<NoTls>) -> Result<()> {
         let collection_id = LayerCollectionId("collections!PointsInFrance".to_string());
         let datasets = load_layer_collection(&collection_id, ctx.db()).await?;
 
@@ -1483,10 +1476,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn vector_without_height_collection_invalid(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn vector_without_height_collection_invalid(ctx: PostgresSessionContext<NoTls>) {
         let collection_id = LayerCollectionId("collections!PointsInGermany".to_string());
         let res = load_layer_collection(&collection_id, ctx.db()).await;
 
@@ -1494,10 +1484,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_raster_height_collection(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) -> Result<()> {
+    async fn it_loads_raster_height_collection(ctx: PostgresSessionContext<NoTls>) -> Result<()> {
         let collection_id = LayerCollectionId("collections!GFS_isobaric!temperature".to_string());
         let datasets = load_layer_collection(&collection_id, ctx.db()).await?;
 
@@ -1544,7 +1531,6 @@ mod tests {
 
     #[ge_context::test]
     async fn vector_with_parameter_collection_invalid(
-        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) -> Result<()> {
         let collection_id = LayerCollectionId("collections!PointsInGermany!ID".to_string());
@@ -1557,7 +1543,6 @@ mod tests {
 
     #[ge_context::test]
     async fn raster_with_parameter_without_height_collection_invalid(
-        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) -> Result<()> {
         let collection_id =
@@ -1571,7 +1556,6 @@ mod tests {
 
     #[ge_context::test]
     async fn collection_with_parameter_and_height_invalid(
-        _app_ctx: PostgresContext<NoTls>,
         ctx: PostgresSessionContext<NoTls>,
     ) -> Result<()> {
         let collection_id =
@@ -1616,10 +1600,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn generate_ogr_metadata(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn generate_ogr_metadata(ctx: PostgresSessionContext<NoTls>) {
         let mut server = Server::run();
         let meta = load_metadata::<
             OgrSourceDataset,
@@ -1701,10 +1682,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn generate_gdal_metadata(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn generate_gdal_metadata(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors(); //hide GTIFF_HONOUR_NEGATIVE_SCALEY warning
 
         let mut server = Server::run();

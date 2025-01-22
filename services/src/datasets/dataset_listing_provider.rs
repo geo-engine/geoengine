@@ -593,10 +593,7 @@ mod tests {
     }
 
     #[ge_context::test(user = "admin")]
-    async fn it_autocompletes(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_autocompletes(ctx: PostgresSessionContext<NoTls>) {
         let db = ctx.db();
 
         let provider = DatasetLayerListingProviderDefinition {

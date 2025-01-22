@@ -194,7 +194,6 @@ fn send_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::PostgresContext;
     use crate::contexts::PostgresSessionContext;
     use crate::ge_context;
     use crate::util::tests::MockQueryContext;
@@ -222,10 +221,7 @@ mod tests {
     }
 
     #[ge_context::test(query_ctx_chunk_size = "max_chunk_size")]
-    async fn test_websocket_stream(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn test_websocket_stream(ctx: PostgresSessionContext<NoTls>) {
         fn send_next(input_sender: &UnboundedSender<Result<Bytes, PayloadError>>) {
             let mut buf = BytesMut::new();
             actix_http::ws::Parser::write_message(

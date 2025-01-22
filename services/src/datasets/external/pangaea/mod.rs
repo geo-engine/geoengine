@@ -445,10 +445,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_creates_meta_data(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_creates_meta_data(ctx: PostgresSessionContext<NoTls>) {
         let doi = "10.1594/PANGAEA.909550";
 
         let mut server = Server::run();
@@ -474,10 +471,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_no_geometry(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_loads_no_geometry(ctx: PostgresSessionContext<NoTls>) {
         let doi = "10.1594/PANGAEA.909550";
 
         let mut server = Server::run();
@@ -541,10 +535,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_default_point(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_loads_default_point(ctx: PostgresSessionContext<NoTls>) {
         let doi = "10.1594/PANGAEA.933024";
 
         let mut server = Server::run();
@@ -620,10 +611,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_default_polygon(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_loads_default_polygon(ctx: PostgresSessionContext<NoTls>) {
         let doi = "10.1594/PANGAEA.913417";
 
         let mut server = Server::run();
@@ -763,10 +751,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_creates_provenance(
-        _app_ctx: PostgresContext<NoTls>,
-        ctx: PostgresSessionContext<NoTls>,
-    ) {
+    async fn it_creates_provenance(ctx: PostgresSessionContext<NoTls>) {
         let doi = "10.1594/PANGAEA.921338";
 
         let mut server = Server::run();
