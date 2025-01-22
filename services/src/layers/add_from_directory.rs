@@ -118,7 +118,6 @@ pub async fn add_layer_collections_from_directory<
         .await?;
 
         // share with users
-        debug!("sharing collection");
         db.add_permission(
             Role::registered_user_role_id(),
             def.id.clone(),
