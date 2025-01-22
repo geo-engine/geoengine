@@ -530,14 +530,6 @@ CREATE TYPE "MetaDataDefinition" AS (
 -- seperate table for projects used in foreign key constraints
 CREATE TABLE projects (id uuid PRIMARY KEY);
 
-CREATE TABLE sessions (
-    id uuid PRIMARY KEY,
-    project_id uuid REFERENCES projects (id) ON DELETE
-    SET
-    NULL,
-    view "STRectangle"
-);
-
 CREATE TABLE project_versions (
     id uuid PRIMARY KEY,
     project_id uuid REFERENCES projects (id) ON DELETE CASCADE NOT NULL,
@@ -1005,14 +997,6 @@ CREATE TABLE user_roles (
     PRIMARY KEY (user_id, role_id)
 );
 
-CREATE TABLE user_sessions (
-    user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
-    session_id uuid REFERENCES sessions (id) ON DELETE CASCADE NOT NULL,
-    created timestamp with time zone NOT NULL,
-    valid_until timestamp with time zone NOT NULL,
-    PRIMARY KEY (user_id, session_id)
-);
-
 CREATE TABLE project_version_authors (
     project_version_id uuid REFERENCES project_versions (
         id
@@ -1025,6 +1009,15 @@ CREATE TABLE user_uploads (
     user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
     upload_id uuid REFERENCES uploads (id) ON DELETE CASCADE NOT NULL,
     PRIMARY KEY (user_id, upload_id)
+);
+
+CREATE TABLE sessions (
+    id uuid PRIMARY KEY,
+    project_id uuid REFERENCES projects (id) ON DELETE SET NULL,
+    view "STRectangle",
+    user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
+    created timestamp with time zone NOT NULL,
+    valid_until timestamp with time zone NOT NULL
 );
 
 CREATE TYPE "Permission" AS ENUM ('Read', 'Owner');

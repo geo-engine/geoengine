@@ -58,3 +58,12 @@ WHERE pro.type_name = 'CopernicusDataspaceDataProviderDefinition';
 
 DROP TABLE pro_layer_providers;
 DROP TYPE "ProDataProviderDefinition";
+
+-- user_sessions
+
+ALTER TABLE sessions ADD COLUMN
+user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL;
+ALTER TABLE sessions ADD COLUMN created timestamp with time zone NOT NULL;
+ALTER TABLE sessions ADD COLUMN valid_until timestamp with time zone NOT NULL;
+
+DROP TABLE user_sessions;

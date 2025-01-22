@@ -132,36 +132,22 @@ where
             .await?;
 
         let session_id = SessionId::new();
-        let stmt = tx
-            .prepare(
-                "
-                INSERT INTO sessions (id)
-                VALUES ($1);",
-            )
-            .await?;
-
-        tx.execute(&stmt, &[&session_id]).await?;
-
-        let stmt = tx
-            .prepare(
-                "
-            INSERT INTO 
-                user_sessions (user_id, session_id, created, valid_until) 
-            VALUES 
-                ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3))
-            RETURNING 
-                created, valid_until;",
-            )
-            .await?;
 
         // TODO: load from config
         let session_duration = chrono::Duration::days(30);
         let row = tx
             .query_one(
-                &stmt,
+                "
+                INSERT INTO 
+                    sessions (id, user_id, created, valid_until) 
+                VALUES 
+                    ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3))
+                RETURNING 
+                    created, valid_until;
+                ",
                 &[
-                    &user_id,
                     &session_id,
+                    &user_id,
                     &(session_duration.num_seconds() as f64),
                 ],
             )
@@ -205,35 +191,23 @@ where
 
         if bcrypt::verify(user_credentials.password, password_hash) {
             let session_id = SessionId::new();
-            let stmt = tx
-                .prepare(
-                    "
-                INSERT INTO sessions (id)
-                VALUES ($1);",
-                )
-                .await?;
-
-            tx.execute(&stmt, &[&session_id]).await?;
 
             // TODO: load from config
             let session_duration = chrono::Duration::days(30);
-            let stmt = tx
-                .prepare(
-                    "
-                INSERT INTO 
-                    user_sessions (user_id, session_id, created, valid_until) 
-                VALUES 
-                    ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3))
-                RETURNING 
-                    created, valid_until;",
-                )
-                .await?;
+
             let row = tx
                 .query_one(
-                    &stmt,
+                    "
+                    INSERT INTO 
+                        sessions (id, user_id, created, valid_until) 
+                    VALUES 
+                        ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3))
+                    RETURNING 
+                        created, valid_until;
+                    ",
                     &[
-                        &user_id,
                         &session_id,
+                        &user_id,
                         &(session_duration.num_seconds() as f64),
                     ],
                 )
@@ -343,33 +317,20 @@ where
         };
 
         let session_id = SessionId::new();
-        let stmt = tx
-            .prepare(
-                "
-            INSERT INTO sessions (id)
-            VALUES ($1);",
-            )
-            .await?;
 
-        tx.execute(&stmt, &[&session_id]).await?;
-
-        let stmt = tx
-            .prepare(
-                "
-            INSERT INTO 
-                user_sessions (user_id, session_id, created, valid_until) 
-            VALUES 
-                ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3))
-            RETURNING 
-                created, valid_until;",
-            )
-            .await?;
         let row = tx
             .query_one(
-                &stmt,
+                "
+                INSERT INTO 
+                    sessions (id, user_id, created, valid_until) 
+                VALUES 
+                    ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + make_interval(secs:=$3))
+                RETURNING 
+                    created, valid_until;
+                ",
                 &[
-                    &user_id,
                     &session_id,
+                    &user_id,
                     &(oidc_tokens.expires_in.num_seconds() as f64),
                 ],
             )
@@ -418,17 +379,17 @@ where
                 u.id,   
                 COALESCE(u.email, eu.email) AS email,
                 COALESCE(u.real_name, eu.real_name) AS real_name,
-                us.created, 
-                us.valid_until, 
+                s.created, 
+                s.valid_until, 
                 s.project_id,
                 s.view,
-                CASE WHEN CURRENT_TIMESTAMP < us.valid_until THEN TRUE ELSE FALSE END AS valid_session
+                CASE WHEN CURRENT_TIMESTAMP < s.valid_until THEN TRUE ELSE FALSE END AS valid_session
             FROM
-                sessions s JOIN user_sessions us ON (s.id = us.session_id)
-                    JOIN users u ON (us.user_id = u.id)
+                sessions s
+                    JOIN users u ON (s.user_id = u.id)
                     LEFT JOIN external_users eu ON (u.id = eu.id)
                     LEFT JOIN oidc_session_tokens t ON (s.id = t.session_id)
-            WHERE s.id = $1 AND (CURRENT_TIMESTAMP < us.valid_until OR t.refresh_token IS NOT NULL);",
+            WHERE s.id = $1 AND (CURRENT_TIMESTAMP < s.valid_until OR t.refresh_token IS NOT NULL);",
             )
             .await?;
 
@@ -605,23 +566,18 @@ where
             )
             .await?;
 
-            let stmt = tx
-                .prepare(
-                    "
-                UPDATE
-                    user_sessions
-                SET
-                    valid_until = CURRENT_TIMESTAMP + make_interval(secs:=$2)
-                WHERE
-                    session_id = $1
-                RETURNING
-                    valid_until;",
-                )
-                .await?;
-
             let expiration = tx
                 .query_one(
-                    &stmt,
+                    "
+                    UPDATE
+                        sessions
+                    SET
+                        valid_until = CURRENT_TIMESTAMP + make_interval(secs:=$2)
+                    WHERE
+                        id = $1
+                    RETURNING
+                        valid_until;
+                    ",
                     &[&session, &(oidc_tokens.expires_in.num_seconds() as f64)],
                 )
                 .await?

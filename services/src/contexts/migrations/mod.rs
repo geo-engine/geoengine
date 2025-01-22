@@ -38,7 +38,6 @@ mod tests {
             &all_migrations(),
             include_str!("current_schema.sql"),
             AssertSchemaEqPopulationConfig {
-                has_views: false,
                 has_parameters: false,
                 ..Default::default()
             },
