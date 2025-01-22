@@ -98,9 +98,7 @@ where
 pub(crate) async fn register_user_handler<C: ApplicationContext + UserAuth>(
     user: ValidatedJson<UserRegistration>,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-{
+) -> Result<impl Responder> {
     ensure!(
         config::get_config_element::<crate::config::User>()?.registration,
         error::UserRegistrationDisabled
@@ -140,9 +138,7 @@ responses(
 pub(crate) async fn login_handler<C: ApplicationContext + UserAuth>(
     user: ValidatedJson<UserCredentials>,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-{
+) -> Result<impl Responder> {
     let session = app_ctx
         .login(user.into_inner())
         .await
@@ -166,9 +162,7 @@ where
 pub(crate) async fn logout_handler<C: ApplicationContext<Session = UserSession>>(
     session: UserSession,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-{
+) -> Result<impl Responder> {
     app_ctx.session_context(session).db().logout().await?;
     Ok(HttpResponse::Ok())
 }
@@ -203,9 +197,7 @@ where
     )
 )]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-pub(crate) async fn session_handler<C: ApplicationContext>(session: C::Session) -> impl Responder
-where
-{
+pub(crate) async fn session_handler<C: ApplicationContext>(session: C::Session) -> impl Responder {
     web::Json(session)
 }
 
@@ -237,9 +229,7 @@ where
 )]
 pub(crate) async fn anonymous_handler<C: ApplicationContext + UserAuth>(
     app_ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-{
+) -> Result<impl Responder> {
     if !config::get_config_element::<crate::config::Session>()?.anonymous_access {
         return Err(error::Error::Unauthorized {
             source: Box::new(error::Error::AnonymousAccessDisabled),
@@ -269,9 +259,7 @@ pub(crate) async fn session_project_handler<C: ApplicationContext<Session = User
     project: web::Path<ProjectId>,
     session: UserSession,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder>
-where
-{
+) -> Result<impl Responder> {
     app_ctx
         .session_context(session)
         .db()
@@ -298,9 +286,7 @@ pub(crate) async fn session_view_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     view: web::Json<STRectangle>,
-) -> Result<impl Responder>
-where
-{
+) -> Result<impl Responder> {
     app_ctx
         .session_context(session)
         .db()
@@ -336,9 +322,7 @@ pub struct Quota {
 pub(crate) async fn quota_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
-) -> Result<web::Json<Quota>>
-where
-{
+) -> Result<web::Json<Quota>> {
     let db = app_ctx.session_context(session).db();
     let available = db.quota_available().await?;
     let used = db.quota_used().await?;
@@ -371,9 +355,7 @@ pub(crate) async fn computations_quota_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     params: web::Query<ComputationQuotaParams>,
     session: C::Session,
-) -> Result<web::Json<Vec<ComputationQuota>>>
-where
-{
+) -> Result<web::Json<Vec<ComputationQuota>>> {
     let params = params.into_inner();
 
     let db = app_ctx.session_context(session).db();
@@ -403,9 +385,7 @@ pub(crate) async fn computation_quota_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     computation: web::Path<Uuid>,
     session: C::Session,
-) -> Result<web::Json<Vec<OperatorQuota>>>
-where
-{
+) -> Result<web::Json<Vec<OperatorQuota>>> {
     let computation = computation.into_inner();
 
     let db = app_ctx.session_context(session).db();
@@ -439,9 +419,7 @@ pub(crate) async fn data_usage_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     params: web::Query<UsageParams>,
     session: C::Session,
-) -> Result<web::Json<Vec<DataUsage>>>
-where
-{
+) -> Result<web::Json<Vec<DataUsage>>> {
     let params = params.into_inner();
 
     let db = app_ctx.session_context(session).db();
@@ -488,9 +466,7 @@ pub(crate) async fn data_usage_summary_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     params: web::Query<UsageSummaryParams>,
     session: C::Session,
-) -> Result<web::Json<Vec<DataUsageSummary>>>
-where
-{
+) -> Result<web::Json<Vec<DataUsageSummary>>> {
     let params = params.into_inner();
 
     let db = app_ctx.session_context(session).db();
@@ -530,9 +506,7 @@ pub(crate) async fn get_user_quota_handler<C: ApplicationContext<Session = UserS
     app_ctx: web::Data<C>,
     session: UserSession,
     user: web::Path<UserId>,
-) -> Result<web::Json<Quota>>
-where
-{
+) -> Result<web::Json<Quota>> {
     let user = user.into_inner();
 
     if session.user.id != user && !session.is_admin() {
@@ -574,9 +548,7 @@ pub(crate) async fn update_user_quota_handler<C: ApplicationContext>(
     session: C::Session,
     user: web::Path<UserId>,
     update: web::Json<UpdateQuota>,
-) -> Result<HttpResponse>
-where
-{
+) -> Result<HttpResponse> {
     let user = user.into_inner();
 
     let update = update.into_inner();
@@ -609,9 +581,7 @@ where
 )]
 pub(crate) async fn oidc_init<C: ApplicationContext>(
     app_ctx: web::Data<C>,
-) -> Result<web::Json<AuthCodeRequestURL>>
-where
-{
+) -> Result<web::Json<AuthCodeRequestURL>> {
     ensure!(
         config::get_config_element::<crate::config::Oidc>()?.enabled,
         crate::users::OidcDisabled
@@ -660,9 +630,7 @@ where
 pub(crate) async fn oidc_login<C: ApplicationContext + UserAuth>(
     response: web::Json<AuthCodeResponse>,
     app_ctx: web::Data<C>,
-) -> Result<web::Json<UserSession>>
-where
-{
+) -> Result<web::Json<UserSession>> {
     ensure!(
         config::get_config_element::<crate::config::Oidc>()?.enabled,
         crate::users::OidcDisabled
@@ -709,9 +677,7 @@ pub(crate) async fn add_role_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
     add_role: web::Json<AddRole>,
-) -> Result<web::Json<IdResponse<RoleId>>>
-where
-{
+) -> Result<web::Json<IdResponse<RoleId>>> {
     let add_role = add_role.into_inner();
 
     let id = app_ctx
@@ -743,9 +709,7 @@ pub(crate) async fn get_role_by_name_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
     role_name: web::Path<String>,
-) -> Result<web::Json<IdResponse<RoleId>>>
-where
-{
+) -> Result<web::Json<IdResponse<RoleId>>> {
     let role_name = role_name.into_inner();
 
     let role_id = app_ctx
@@ -777,9 +741,7 @@ pub(crate) async fn remove_role_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
     role: web::Path<RoleId>,
-) -> Result<HttpResponse>
-where
-{
+) -> Result<HttpResponse> {
     let role = role.into_inner();
 
     app_ctx
@@ -812,9 +774,7 @@ pub(crate) async fn assign_role_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
     user: web::Path<(UserId, RoleId)>,
-) -> Result<HttpResponse>
-where
-{
+) -> Result<HttpResponse> {
     let (user, role) = user.into_inner();
 
     app_ctx
@@ -847,9 +807,7 @@ pub(crate) async fn revoke_role_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
     user: web::Path<(UserId, RoleId)>,
-) -> Result<HttpResponse>
-where
-{
+) -> Result<HttpResponse> {
     let (user, role) = user.into_inner();
 
     app_ctx
@@ -895,9 +853,7 @@ where
 pub(crate) async fn get_role_descriptions<C: ApplicationContext<Session = UserSession>>(
     app_ctx: web::Data<C>,
     session: C::Session,
-) -> Result<web::Json<Vec<RoleDescription>>>
-where
-{
+) -> Result<web::Json<Vec<RoleDescription>>> {
     let user = session.user.id;
 
     let res = app_ctx

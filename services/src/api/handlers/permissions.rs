@@ -94,9 +94,7 @@ async fn get_resource_permissions_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     resource_id: web::Path<(String, String)>,
     options: web::Query<PermissionListOptions>,
-) -> Result<web::Json<Vec<PermissionListing>>>
-where
-{
+) -> Result<web::Json<Vec<PermissionListing>>> {
     let resource_id = ResourceId::try_from(resource_id.into_inner())?;
     let options = options.into_inner();
 
@@ -135,9 +133,7 @@ async fn add_permission_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     permission: web::Json<PermissionRequest>,
-) -> Result<HttpResponse>
-where
-{
+) -> Result<HttpResponse> {
     let permission = permission.into_inner();
 
     let db = app_ctx.session_context(session).db();
@@ -178,9 +174,7 @@ async fn remove_permission_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     permission: web::Json<PermissionRequest>,
-) -> Result<HttpResponse>
-where
-{
+) -> Result<HttpResponse> {
     let permission = permission.into_inner();
 
     let db = app_ctx.session_context(session).db();

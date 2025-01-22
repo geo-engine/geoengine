@@ -798,9 +798,7 @@ pub fn create_random_user_session_helper() -> UserSession {
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper2<C: ApplicationContext<Session = UserSession> + UserAuth>(
     app_ctx: &C,
-) -> (UserSession, ProjectId)
-where
-{
+) -> (UserSession, ProjectId) {
     let session = create_session_helper(app_ctx).await;
 
     let project = app_ctx
@@ -824,9 +822,7 @@ pub async fn add_ndvi_to_datasets2<C: ApplicationContext<Session = UserSession>>
     app_ctx: &C,
     share_with_users: bool,
     share_with_anonymous: bool,
-) -> (DatasetId, NamedData)
-where
-{
+) -> (DatasetId, NamedData) {
     let dataset_name = DatasetName {
         namespace: None,
         name: "NDVI".to_string(),

@@ -1305,9 +1305,7 @@ async fn create_dataset_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
-) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError>
-where
-{
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError> {
     let create = create.into_inner();
     match create {
         CreateDataset {
@@ -1326,9 +1324,7 @@ async fn create_system_dataset<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
-) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError>
-where
-{
+) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError> {
     let volumes = get_config_element::<Data>()
         .context(CannotAccessConfig)?
         .volumes;
