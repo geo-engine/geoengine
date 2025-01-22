@@ -1,5 +1,6 @@
-use crate::contexts::PostgresDb;
 use crate::error::Result;
+use crate::pro::contexts::PostgresDb;
+use crate::workflows::registry::TxWorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{error, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
@@ -7,8 +8,6 @@ use bb8_postgres::{
     tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
 };
 use snafu::ResultExt;
-
-use super::registry::TxWorkflowRegistry;
 
 #[async_trait]
 impl<Tls> TxWorkflowRegistry for PostgresDb<Tls>
@@ -59,6 +58,7 @@ where
     }
 
     async fn load_workflow(&self, id: &WorkflowId) -> Result<Workflow> {
+        // TODO: add authorization beyond the fact that you can only access workflows if you happen to know the id.
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT workflow FROM workflows WHERE id = $1")

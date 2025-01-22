@@ -1,5 +1,7 @@
 use crate::api::model::responses::ErrorResponse;
-use crate::contexts::{PostgresContext, SessionId, SimpleApplicationContext};
+use crate::contexts::SessionId;
+use crate::pro::contexts::PostgresContext;
+use crate::users::UserAuth;
 use actix_web::dev::ServiceResponse;
 use actix_web::http::{header, Method};
 use actix_web::test::TestRequest;
@@ -191,21 +193,21 @@ where
 ///
 /// # Panics
 ///
-/// panics if a Ref occurs in an example, as this case is not yet supported.
+/// panics if the creation of an anonymous session fails or the example contains a Ref which is not yet supported.
 pub async fn can_run_examples<F, Fut>(
     app_ctx: PostgresContext<NoTls>,
     api: OpenApi,
     send_test_request: F,
 ) where
     F: Fn(TestRequest, PostgresContext<NoTls>) -> Fut
+        + Send
         + std::panic::UnwindSafe
-        + std::marker::Send
-        + 'static,
+        + 'static
+        + Clone,
     Fut: Future<Output = ServiceResponse>,
 {
     let components = api.components.expect("api has at least one component");
 
-    let session_id = app_ctx.default_session_id().await;
     for (uri, path_item) in api.paths.paths {
         for (http_method, operation) in path_item.operations {
             if let Some(request_body) = operation.request_body {
@@ -220,8 +222,12 @@ pub async fn can_run_examples<F, Fut>(
                             parameters: &operation.parameters,
                             body: example,
                             with_auth,
+                            session_id: app_ctx
+                                .create_anonymous_session()
+                                .await
+                                .expect("creating an anonymous session should always work")
+                                .id,
                             ctx: app_ctx.clone(),
-                            session_id,
                             send_test_request: &send_test_request,
                         }
                         .check_for_bad_documentation()
@@ -232,9 +238,7 @@ pub async fn can_run_examples<F, Fut>(
                                 RefOr::Ref(_reference) => {
                                     // This never happened during testing.
                                     // It is undocumented how the references would look like.
-                                    panic!(
-                                        "checking examples with references is not yet implemented"
-                                    )
+                                    panic!("checking pro examples with references is not yet implemented")
                                 }
                                 RefOr::T(concrete) => {
                                     if let Some(body) = concrete.value {
@@ -245,8 +249,12 @@ pub async fn can_run_examples<F, Fut>(
                                             parameters: &operation.parameters,
                                             body,
                                             with_auth,
+                                            session_id: app_ctx
+                                                .create_anonymous_session()
+                                                .await
+                                                .expect("creating an anonymous session should always work")
+                                                .id,
                                             ctx: app_ctx.clone(),
-                                            session_id,
                                             send_test_request: &send_test_request,
                                         }
                                         .check_for_bad_documentation()
@@ -268,7 +276,6 @@ pub async fn can_run_examples<F, Fut>(
 mod tests {
     use super::*;
     use crate::api::model::services::Volume;
-    use crate::contexts::SimpleApplicationContext;
     use crate::ge_context;
     use crate::util::server::{configure_extractors, render_404, render_405};
     use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
@@ -301,9 +308,9 @@ mod tests {
         HttpResponse::Ok()
     }
 
-    async fn dummy_send_test_request<C: SimpleApplicationContext>(
+    async fn dummy_send_test_request(
         req: TestRequest,
-        ctx: C,
+        ctx: PostgresContext<NoTls>,
     ) -> ServiceResponse {
         let app = actix_web::test::init_service(
             App::new()

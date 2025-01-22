@@ -99,18 +99,17 @@ where
 #[cfg(test)]
 mod tests {
     use crate::contexts::{initialize_database, CurrentSchemaMigration, Migration0000Initial};
-    use crate::pro::permissions::RoleId;
-    use crate::pro::users::UserDb;
+    use crate::permissions::RoleId;
     use crate::projects::{ProjectDb, ProjectListOptions};
+    use crate::users::UserDb;
+    use crate::util::postgres::DatabaseConnectionConfig;
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::WorkflowId;
     use crate::{
+        config::get_config_element,
         contexts::{migrate_database, SessionId},
-        pro::{
-            contexts::{migrations::pro_migrations, ProPostgresDb},
-            users::{UserId, UserInfo, UserSession},
-        },
-        util::config::get_config_element,
+        pro::contexts::{migrations::pro_migrations, PostgresDb},
+        users::{UserId, UserInfo, UserSession},
     };
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
     use geoengine_datatypes::primitives::DateTime;
@@ -122,8 +121,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_performs_all_pro_migrations() -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -136,8 +136,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_uses_the_current_schema_if_the_database_is_empty() -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -159,8 +160,9 @@ mod tests {
         // Then, it migrates the database to the newest version.
         // Finally, it tries to load the test data again via the Db implementations.
 
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().max_size(1).build(pg_mgr).await?;
 
@@ -186,8 +188,8 @@ mod tests {
         // drop the connection because the pool is limited to one connection, s.t. we can reuse the temporary schema
         drop(conn);
 
-        // create `ProPostgresDb` on migrated database and test methods
-        let db = ProPostgresDb::new(
+        // create `PostgresDb` on migrated database and test methods
+        let db = PostgresDb::new(
             pool.clone(),
             UserSession {
                 id: SessionId::from_str("e11c7674-7ca5-4e07-840c-260835d3fc8d").unwrap(),

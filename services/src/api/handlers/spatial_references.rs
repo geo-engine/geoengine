@@ -267,9 +267,10 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, Session};
-    use crate::contexts::{SessionContext, SimpleApplicationContext};
+    use crate::contexts::Session;
     use crate::ge_context;
+    use crate::pro::contexts::PostgresContext;
+    use crate::users::UserAuth;
     use crate::util::tests::send_test_request;
     use actix_web;
     use actix_web::http::header;
@@ -281,8 +282,9 @@ mod tests {
 
     #[ge_context::test]
     async fn get_spatial_reference(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let req = actix_web::test::TestRequest::get()
             .uri("/spatialReferenceSpecification/EPSG:4326")

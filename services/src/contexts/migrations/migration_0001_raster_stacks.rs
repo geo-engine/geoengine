@@ -148,8 +148,9 @@ mod tests {
     use tokio_postgres::NoTls;
 
     use crate::{
+        config::get_config_element,
         contexts::{migrate_database, migrations::migration_0000_initial::Migration0000Initial},
-        util::config::get_config_element,
+        util::postgres::DatabaseConnectionConfig,
     };
 
     use super::*;
@@ -157,8 +158,9 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_migrates_result_descriptors_and_symbologies() -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().max_size(1).build(pg_mgr).await?;
 

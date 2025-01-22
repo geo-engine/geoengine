@@ -1,11 +1,11 @@
+use crate::api::handlers::users::UsageSummaryGranularity;
 use crate::contexts::SessionId;
 use crate::error::Result;
-use crate::pro::api::handlers::users::UsageSummaryGranularity;
-use crate::pro::permissions::{RoleDescription, RoleId};
-use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
-use crate::pro::users::oidc::{OidcTokens, UserClaims};
-use crate::pro::users::{UserCredentials, UserId, UserRegistration, UserSession};
+use crate::permissions::{RoleDescription, RoleId};
 use crate::projects::{ProjectId, STRectangle};
+use crate::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
+use crate::users::oidc::{OidcTokens, UserClaims};
+use crate::users::{UserCredentials, UserId, UserRegistration, UserSession};
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_operators::meta::quota::ComputationUnit;
@@ -195,7 +195,7 @@ pub trait UserDb: Send + Sync {
 pub enum RoleDbError {
     #[snafu(display("Permission error: {source}"))]
     PermissionDb {
-        source: crate::pro::permissions::PermissionDbError,
+        source: crate::permissions::PermissionDbError,
     },
     #[snafu(display("Role with id {role_id} does not exist."))]
     RoleIdDoesNotExist { role_id: RoleId },

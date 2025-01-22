@@ -23,7 +23,7 @@ impl Migration for Migration0000Initial {
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
-        let config = crate::util::config::get_config_element::<crate::util::config::Postgres>()?;
+        let config = crate::config::get_config_element::<crate::config::Postgres>()?;
 
         let schema_name = &config.schema;
 

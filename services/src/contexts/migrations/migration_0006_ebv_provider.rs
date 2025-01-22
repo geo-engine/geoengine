@@ -28,14 +28,16 @@ impl Migration for Migration0006EbvProvider {
 mod tests {
     use super::*;
     use crate::contexts::migrations::all_migrations;
-    use crate::{contexts::migrate_database, util::config::get_config_element};
+    use crate::util::postgres::DatabaseConnectionConfig;
+    use crate::{config::get_config_element, contexts::migrate_database};
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
     use tokio_postgres::NoTls;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn it_adds_a_database_config() {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>().unwrap();
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into().unwrap(), NoTls);
+        let postgres_config = get_config_element::<crate::config::Postgres>().unwrap();
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().max_size(1).build(pg_mgr).await.unwrap();
 

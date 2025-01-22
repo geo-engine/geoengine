@@ -1,8 +1,5 @@
-use super::{
-    users::{UserDb, UserSession},
-    util::config::QuotaTrackingMode,
-};
-use crate::pro::users::UserId;
+use crate::config::QuotaTrackingMode;
+use crate::users::{UserDb, UserId, UserSession};
 use geoengine_datatypes::{primitives::DateTime, util::test::TestDefault};
 use geoengine_operators::meta::quota::{ComputationUnit, QuotaMessage, QuotaTracking};
 use serde::{Deserialize, Serialize};
@@ -222,17 +219,15 @@ mod tests {
     use super::*;
     use crate::{
         contexts::{ApplicationContext, SessionContext},
-        pro::{
-            contexts::ProPostgresContext,
-            ge_context,
-            users::{UserAuth, UserCredentials, UserRegistration},
-            util::tests::{admin_login, MockQuotaTracking},
-        },
+        ge_context,
+        pro::contexts::PostgresContext,
+        users::{UserAuth, UserCredentials, UserRegistration},
+        util::tests::{admin_login, MockQuotaTracking},
     };
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn it_tracks_quota(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_tracks_quota(app_ctx: PostgresContext<NoTls>) {
         let _user = app_ctx
             .register_user(UserRegistration {
                 email: "foo@example.com".to_string(),
@@ -284,7 +279,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_tracks_quota_buffered(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_tracks_quota_buffered(app_ctx: PostgresContext<NoTls>) {
         let _user = app_ctx
             .register_user(UserRegistration {
                 email: "foo@example.com".to_string(),
@@ -339,7 +334,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_tracks_quota_buffered_timeout(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_tracks_quota_buffered_timeout(app_ctx: PostgresContext<NoTls>) {
         let _user = app_ctx
             .register_user(UserRegistration {
                 email: "foo@example.com".to_string(),

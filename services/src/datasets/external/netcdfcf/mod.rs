@@ -1571,11 +1571,12 @@ fn gdal_netcdf_open(base_path: Option<&Path>, path: &Path) -> Result<gdal::Datas
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, PostgresDb, SessionContext, SimpleApplicationContext};
+    use crate::contexts::SessionContext;
     use crate::datasets::external::netcdfcf::ebvportal_provider::EbvPortalDataProviderDefinition;
     use crate::ge_context;
     use crate::layers::layer::LayerListing;
     use crate::layers::storage::LayerProviderDb;
+    use crate::pro::contexts::{PostgresContext, PostgresDb, PostgresSessionContext};
     use crate::{tasks::util::NopTaskContext, util::tests::add_land_cover_to_datasets};
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
@@ -1587,7 +1588,7 @@ mod tests {
         },
         spatial_reference::SpatialReferenceAuthority,
         test_data,
-        util::{gdal::hide_gdal_errors, test::TestDefault},
+        util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::engine::{
         MultipleRasterSources, RasterBandDescriptors, RasterOperator, SingleRasterSource,
@@ -1597,7 +1598,7 @@ mod tests {
     };
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::{
-        engine::{MockQueryContext, PlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath},
+        engine::{PlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath},
         plot::{
             MeanRasterPixelValuesOverTime, MeanRasterPixelValuesOverTimeParams,
             MeanRasterPixelValuesOverTimePosition,
@@ -1690,7 +1691,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_listing(app_ctx: PostgresContext<NoTls>) {
+    async fn test_listing(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
@@ -1699,7 +1700,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -1779,7 +1780,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_listing_from_netcdf_m(app_ctx: PostgresContext<NoTls>) {
+    async fn test_listing_from_netcdf_m(ctx: PostgresSessionContext<NoTls>) {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
@@ -1788,7 +1789,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -1838,7 +1839,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_listing_from_netcdf_sm(app_ctx: PostgresContext<NoTls>) {
+    async fn test_listing_from_netcdf_sm(ctx: PostgresSessionContext<NoTls>) {
         let provider = Box::new(NetCdfCfDataProviderDefinition {
             name: "NetCdfCfDataProvider".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
@@ -1847,7 +1848,7 @@ mod tests {
             overviews: test_data!("netcdf4d/overviews").into(),
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -1921,7 +1922,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_metadata_from_netcdf_sm(app_ctx: PostgresContext<NoTls>) {
+    async fn test_metadata_from_netcdf_sm(ctx: PostgresSessionContext<NoTls>) {
         let provider = NetCdfCfDataProvider {
             id: NETCDF_CF_PROVIDER_ID,
             name: "Test Provider".to_string(),
@@ -1929,7 +1930,7 @@ mod tests {
             data: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
             cache_ttl: Default::default(),
-            db: Arc::new(app_ctx.default_session_context().await.unwrap().db()),
+            db: Arc::new(ctx.db()),
         };
 
         let metadata = provider
@@ -2021,7 +2022,8 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn list_files(app_ctx: PostgresContext<NoTls>) {
+    #[allow(clippy::unused_async)]
+    async fn list_files(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         let provider = NetCdfCfDataProvider {
             id: NETCDF_CF_PROVIDER_ID,
             name: "Test Provider".to_string(),
@@ -2029,7 +2031,7 @@ mod tests {
             data: test_data!("netcdf4d/").to_path_buf(),
             overviews: test_data!("netcdf4d/overviews").to_path_buf(),
             cache_ttl: Default::default(),
-            db: Arc::new(app_ctx.default_session_context().await.unwrap().db()),
+            db: Arc::new(ctx.db()),
         };
 
         let expected_files: Vec<PathBuf> = vec![
@@ -2047,7 +2049,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_loading_info_from_index(app_ctx: PostgresContext<NoTls>) {
+    async fn test_loading_info_from_index(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -2059,7 +2061,7 @@ mod tests {
             data: test_data!("netcdf4d/").to_path_buf(),
             overviews: overview_folder.path().to_path_buf(),
             cache_ttl: Default::default(),
-            db: Arc::new(app_ctx.default_session_context().await.unwrap().db()),
+            db: Arc::new(ctx.db()),
         };
 
         provider
@@ -2151,7 +2153,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_listing_from_netcdf_sm_from_index(app_ctx: PostgresContext<NoTls>) {
+    async fn test_listing_from_netcdf_sm_from_index(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -2164,7 +2166,7 @@ mod tests {
             overviews: overview_folder.path().to_path_buf(),
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -2245,12 +2247,10 @@ mod tests {
         );
     }
 
-    #[ge_context::test]
+    #[ge_context::test(user = "admin")]
     #[allow(clippy::too_many_lines)]
-    async fn test_irregular_time_series(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-
-        let land_cover_dataset_id = add_land_cover_to_datasets(&ctx.db()).await;
+    async fn test_irregular_time_series(ctx: PostgresSessionContext<NoTls>) {
+        let land_cover_dataset_name = add_land_cover_to_datasets(&ctx.db()).await;
 
         let provider_definition = EbvPortalDataProviderDefinition {
             name: "EBV Portal".to_string(),
@@ -2307,9 +2307,7 @@ mod tests {
                                     sources: SingleRasterSource {
                                         raster: GdalSource {
                                             params: GdalSourceParameters {
-                                                data: geoengine_datatypes::dataset::NamedData::with_system_name(
-                                                    land_cover_dataset_id.to_string(),
-                                                ),
+                                                data: land_cover_dataset_name.into(),
                                             },
                                         }.boxed(),
                                     }
@@ -2338,7 +2336,9 @@ mod tests {
             panic!("wrong plot type");
         };
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = ctx
+            .query_context(Default::default(), Default::default())
+            .unwrap();
 
         let result = processor
             .plot_query(
@@ -2368,7 +2368,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_lists_with_and_without_overviews(app_ctx: PostgresContext<NoTls>) {
+    async fn it_lists_with_and_without_overviews(ctx: PostgresSessionContext<NoTls>) {
         async fn get_all_collections(
             provider: &dyn DataProvider,
             root_id: LayerCollectionId,
@@ -2418,7 +2418,7 @@ mod tests {
             overviews: overview_folder.path().to_path_buf(),
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -2457,7 +2457,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_with_and_without_overviews(app_ctx: PostgresContext<NoTls>) {
+    async fn it_loads_with_and_without_overviews(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
@@ -2470,7 +2470,7 @@ mod tests {
             overviews: overview_folder.path().to_path_buf(),
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -2514,7 +2514,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_refreshes_metadata_only(app_ctx: PostgresContext<NoTls>) {
+    async fn it_refreshes_metadata_only(ctx: PostgresSessionContext<NoTls>) {
         async fn query_collection_name(
             provider: &NetCdfCfDataProvider<PostgresDb<NoTls>>,
             id: &LayerCollectionId,
@@ -2534,8 +2534,6 @@ mod tests {
 
         hide_gdal_errors();
 
-        let session_context = app_ctx.default_session_context().await.unwrap();
-
         let overview_folder = tempfile::tempdir().unwrap();
 
         let provider = Box::new(NetCdfCfDataProviderDefinition {
@@ -2546,7 +2544,7 @@ mod tests {
             overviews: overview_folder.path().to_path_buf(),
             cache_ttl: Default::default(),
         })
-        .initialize(session_context.db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -2581,7 +2579,7 @@ mod tests {
 
         // manipulate a field in the metadata
 
-        let db = session_context.db();
+        let db = ctx.db();
 
         db.test_execute_with_transaction(
             "UPDATE ebv_provider_overviews SET title = 'MANIPULATED' WHERE file_name = $1",
@@ -2640,7 +2638,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_handles_esri_in_creation_and_refresh(app_ctx: PostgresContext<NoTls>) {
+    async fn it_handles_esri_in_creation_and_refresh(ctx: PostgresSessionContext<NoTls>) {
         async fn query_collection_name(
             provider: &NetCdfCfDataProvider<PostgresDb<NoTls>>,
             id: &LayerCollectionId,
@@ -2660,8 +2658,6 @@ mod tests {
 
         hide_gdal_errors();
 
-        let session_context = app_ctx.default_session_context().await.unwrap();
-
         let overview_folder = tempfile::tempdir().unwrap();
 
         let provider = Box::new(NetCdfCfDataProviderDefinition {
@@ -2672,7 +2668,7 @@ mod tests {
             overviews: overview_folder.path().to_path_buf(),
             cache_ttl: Default::default(),
         })
-        .initialize(session_context.db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -2704,7 +2700,7 @@ mod tests {
 
         // manipulate a field in the metadata
 
-        let db = session_context.db();
+        let db = ctx.db();
 
         db.test_execute_with_transaction(
             "UPDATE ebv_provider_overviews SET title = 'MANIPULATED' WHERE file_name = $1",

@@ -397,12 +397,14 @@ pub(crate) async fn project_versions_handler<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext, SimpleSession};
+    use crate::contexts::Session;
     use crate::ge_context;
+    use crate::pro::contexts::PostgresContext;
     use crate::projects::{
         LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId, ProjectLayer,
         ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
     };
+    use crate::users::{UserAuth, UserSession};
     use crate::util::tests::{
         check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,
     };
@@ -416,16 +418,15 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
-    use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
-    use tokio_postgres::{NoTls, Socket};
+    use tokio_postgres::NoTls;
 
     async fn create_test_helper(
         app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         let create = CreateProject {
             name: "Test".to_string(),
@@ -466,9 +467,9 @@ mod tests {
 
     #[ge_context::test]
     async fn create_invalid_body(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         let req = test::TestRequest::post()
             .uri("/project")
@@ -488,9 +489,9 @@ mod tests {
 
     #[ge_context::test]
     async fn create_missing_fields(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         let create = json!({
             "description": "Foo".to_string(),
@@ -532,10 +533,12 @@ mod tests {
     }
 
     async fn list_test_helper(app_ctx: PostgresContext<NoTls>, method: Method) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session = ctx.session();
-        let _ = create_project_helper(&app_ctx).await;
+        let session_id = session.id();
+
+        let _ = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::default()
             .method(method)
@@ -556,7 +559,7 @@ mod tests {
                 .unwrap()
             ))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, app_ctx).await
     }
 
@@ -581,7 +584,10 @@ mod tests {
 
     #[ge_context::test]
     async fn list_missing_header(app_ctx: PostgresContext<NoTls>) {
-        create_project_helper(&app_ctx).await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        create_project_helper(&ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!(
@@ -613,10 +619,11 @@ mod tests {
     }
 
     async fn load_test_helper(app_ctx: PostgresContext<NoTls>, method: Method) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+        let project = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::default()
             .method(method)
@@ -646,7 +653,9 @@ mod tests {
 
     #[ge_context::test]
     async fn load_missing_header(app_ctx: PostgresContext<NoTls>) {
-        let project = create_project_helper(&app_ctx).await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+        let project = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!("/project/{project}"))
@@ -664,9 +673,9 @@ mod tests {
 
     #[ge_context::test]
     async fn load_not_found(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         let req = test::TestRequest::get()
             .uri("/project")
@@ -680,11 +689,12 @@ mod tests {
     async fn update_test_helper(
         app_ctx: PostgresContext<NoTls>,
         method: Method,
-    ) -> (SimpleSession, ProjectId, ServiceResponse) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+    ) -> (UserSession, ProjectId, ServiceResponse) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+        let project = create_project_helper(&ctx).await;
 
         let update = update_project_helper(project);
 
@@ -717,10 +727,11 @@ mod tests {
 
     #[ge_context::test]
     async fn update_invalid_body(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+        let project = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::patch()
             .uri(&format!("/project/{project}"))
@@ -741,10 +752,11 @@ mod tests {
 
     #[ge_context::test]
     async fn update_missing_fields(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+        let project = create_project_helper(&ctx).await;
 
         let update = json!({
             "name": "TestUpdate",
@@ -783,18 +795,12 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn update_layers(app_ctx: PostgresContext<NoTls>) {
-        async fn update_and_load_latest<Tls>(
-            app_ctx: &PostgresContext<Tls>,
-            session: &SimpleSession,
+        async fn update_and_load_latest(
+            app_ctx: &PostgresContext<NoTls>,
+            session: &UserSession,
             project_id: ProjectId,
             update: UpdateProject,
-        ) -> Vec<ProjectLayer>
-        where
-            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + std::fmt::Debug + 'static,
-            <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-            <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-            <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-        {
+        ) -> Vec<ProjectLayer> {
             let req = test::TestRequest::patch()
                 .uri(&format!("/project/{project_id}"))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
@@ -813,10 +819,11 @@ mod tests {
             loaded.layers
         }
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+        let project = create_project_helper(&ctx).await;
 
         let layer_1 = ProjectLayer {
             workflow: WorkflowId::new(),
@@ -940,18 +947,12 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn update_plots(app_ctx: PostgresContext<NoTls>) {
-        async fn update_and_load_latest<Tls>(
-            app_ctx: &PostgresContext<Tls>,
-            session: &SimpleSession,
+        async fn update_and_load_latest(
+            app_ctx: &PostgresContext<NoTls>,
+            session: &UserSession,
             project_id: ProjectId,
             update: UpdateProject,
-        ) -> Vec<Plot>
-        where
-            Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + std::fmt::Debug + 'static,
-            <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-            <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-            <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-        {
+        ) -> Vec<Plot> {
             let req = test::TestRequest::patch()
                 .uri(&format!("/project/{project_id}"))
                 .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
@@ -970,10 +971,11 @@ mod tests {
             loaded.plots
         }
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+        let project = create_project_helper(&ctx).await;
 
         let plot_1 = Plot {
             workflow: WorkflowId::new(),
@@ -1074,15 +1076,17 @@ mod tests {
 
     #[ge_context::test]
     async fn delete(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+        let session_id = session.id();
+
+        let project = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::delete()
             .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
@@ -1092,24 +1096,25 @@ mod tests {
         let req = test::TestRequest::delete()
             .uri(&format!("/project/{project}"))
             .append_header((header::CONTENT_LENGTH, 0))
-            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
             400,
             "DeleteProject",
-            &format!("Could not delete project: Project {project} does not exist"),
+            &format!("Could not delete project: Accessing project {project} failed: Permission Owner for resource project:{project} denied."),
         )
         .await;
     }
 
     #[ge_context::test]
     async fn load_version(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session = ctx.session().clone();
-        let project = create_project_helper(&app_ctx).await;
+        let project = create_project_helper(&ctx).await;
 
         let db = ctx.db();
 
@@ -1146,8 +1151,9 @@ mod tests {
 
     #[ge_context::test]
     async fn load_version_not_found(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
-        let project = create_project_helper(&app_ctx).await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+        let project = create_project_helper(&ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!(
@@ -1162,9 +1168,10 @@ mod tests {
 
     #[ge_context::test]
     async fn list_versions(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let project = create_project_helper(&app_ctx).await;
+        let project = create_project_helper(&ctx).await;
 
         let ctx = app_ctx.session_context(session.clone());
 

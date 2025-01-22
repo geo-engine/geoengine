@@ -24,7 +24,7 @@ use tokio_postgres::{
 };
 
 #[async_trait]
-impl<Tls> NetCdfCfProviderDb for crate::pro::contexts::ProPostgresDb<Tls>
+impl<Tls> NetCdfCfProviderDb for crate::pro::contexts::PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

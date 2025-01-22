@@ -1,28 +1,28 @@
 use super::migrations::{pro_migrations, ProMigrationImpl};
 use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
+use crate::api::cli::add_datasets_from_directory;
 use crate::api::cli::add_providers_from_directory;
 use crate::api::model::services::Volume;
+use crate::config::{get_config_element, Cache, Oidc, Quota};
 use crate::contexts::{
     initialize_database, ApplicationContext, CurrentSchemaMigration, MigrationResult,
-    PostgresContext, QueryContextImpl, SessionId,
+    QueryContextImpl, SessionId,
 };
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
-use crate::machine_learning::error::MachineLearningError;
-use crate::machine_learning::name::MlModelName;
-use crate::pro::api::cli::add_datasets_from_directory;
-use crate::pro::layers::add_from_directory::{
+use crate::layers::add_from_directory::{
     add_layer_collections_from_directory, add_layers_from_directory,
     add_pro_providers_from_directory,
 };
-use crate::pro::quota::{initialize_quota_tracking, QuotaTrackingFactory};
-use crate::pro::tasks::{ProTaskManager, ProTaskManagerBackend};
-use crate::pro::users::OidcManager;
-use crate::pro::users::{UserAuth, UserSession};
-use crate::pro::util::config::{Cache, Oidc, Quota};
+use crate::machine_learning::error::MachineLearningError;
+use crate::machine_learning::name::MlModelName;
+use crate::quota::{initialize_quota_tracking, QuotaTrackingFactory};
 use crate::tasks::SimpleTaskManagerContext;
+use crate::tasks::{TypedTaskManagerBackend, UserTaskManager};
+use crate::users::OidcManager;
+use crate::users::{UserAuth, UserSession};
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
@@ -41,13 +41,14 @@ use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio_postgres::error::SqlState;
 use uuid::Uuid;
 
 // TODO: do not report postgres error details to user
 
 /// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
 #[derive(Clone)]
-pub struct ProPostgresContext<Tls>
+pub struct PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -57,7 +58,7 @@ where
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
-    task_manager: Arc<ProTaskManagerBackend>,
+    task_manager: Arc<TypedTaskManagerBackend>,
     oidc_manager: OidcManager,
     quota: QuotaTrackingFactory,
     pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
@@ -65,7 +66,7 @@ where
     tile_cache: Arc<SharedCache>,
 }
 
-impl<Tls> ProPostgresContext<Tls>
+impl<Tls> PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -86,7 +87,7 @@ where
 
         Self::create_pro_database(pool.get().await?).await?;
 
-        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(
             quota_config.mode,
             db,
@@ -94,7 +95,7 @@ where
             quota_config.increment_quota_buffer_timeout_seconds,
         );
 
-        Ok(ProPostgresContext {
+        Ok(PostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -121,7 +122,7 @@ where
 
         Self::create_pro_database(pool.get().await?).await?;
 
-        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(
             quota_config.mode,
             db,
@@ -129,7 +130,7 @@ where
             quota_config.increment_quota_buffer_timeout_seconds,
         );
 
-        Ok(ProPostgresContext {
+        Ok(PostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
@@ -166,7 +167,7 @@ where
 
         let created_schema = Self::create_pro_database(pool.get().await?).await?;
 
-        let db = ProPostgresDb::new(pool.clone(), UserSession::admin_session());
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
         let quota = initialize_quota_tracking(
             quota_config.mode,
             db,
@@ -174,7 +175,7 @@ where
             quota_config.increment_quota_buffer_timeout_seconds,
         );
 
-        let app_ctx = ProPostgresContext {
+        let app_ctx = PostgresContext {
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
@@ -212,7 +213,7 @@ where
     pub(crate) async fn create_pro_database(
         mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
     ) -> Result<bool> {
-        PostgresContext::maybe_clear_database(&conn).await?;
+        Self::maybe_clear_database(&conn).await?;
 
         let migration = initialize_database(
             &mut conn,
@@ -223,10 +224,71 @@ where
 
         Ok(migration == MigrationResult::CreatedDatabase)
     }
+
+    /// Clears the database if the Settings demand and the database properties allows it.
+    pub(crate) async fn maybe_clear_database(
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<()> {
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
+        let database_status = Self::check_schema_status(conn).await?;
+        let schema_name = postgres_config.schema;
+
+        match database_status {
+            DatabaseStatus::InitializedClearDatabase
+                if postgres_config.clear_database_on_start && schema_name != "pg_temp" =>
+            {
+                info!("Clearing schema {}.", schema_name);
+                conn.batch_execute(&format!("DROP SCHEMA {schema_name} CASCADE;"))
+                    .await?;
+            }
+            DatabaseStatus::InitializedKeepDatabase if postgres_config.clear_database_on_start => {
+                return Err(Error::ClearDatabaseOnStartupNotAllowed)
+            }
+            DatabaseStatus::InitializedClearDatabase
+            | DatabaseStatus::InitializedKeepDatabase
+            | DatabaseStatus::Unitialized => (),
+        };
+
+        Ok(())
+    }
+
+    async fn check_schema_status(
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<DatabaseStatus> {
+        let stmt = match conn
+            .prepare("SELECT clear_database_on_start from geoengine;")
+            .await
+        {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                if let Some(code) = e.code() {
+                    if *code == SqlState::UNDEFINED_TABLE {
+                        info!("Initializing schema.");
+                        return Ok(DatabaseStatus::Unitialized);
+                    }
+                }
+                return Err(error::Error::TokioPostgres { source: e });
+            }
+        };
+
+        let row = conn.query_one(&stmt, &[]).await?;
+
+        if row.get(0) {
+            Ok(DatabaseStatus::InitializedClearDatabase)
+        } else {
+            Ok(DatabaseStatus::InitializedKeepDatabase)
+        }
+    }
+}
+
+enum DatabaseStatus {
+    Unitialized,
+    InitializedClearDatabase,
+    InitializedKeepDatabase,
 }
 
 #[async_trait]
-impl<Tls> ApplicationContext for ProPostgresContext<Tls>
+impl<Tls> ApplicationContext for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -251,7 +313,7 @@ where
     }
 }
 
-impl<Tls> ProApplicationContext for ProPostgresContext<Tls>
+impl<Tls> ProApplicationContext for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -272,7 +334,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     session: UserSession,
-    context: ProPostgresContext<Tls>,
+    context: PostgresContext<Tls>,
 }
 
 #[async_trait]
@@ -284,19 +346,19 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     type Session = UserSession;
-    type GeoEngineDB = ProPostgresDb<Tls>;
+    type GeoEngineDB = PostgresDb<Tls>;
 
     type TaskContext = SimpleTaskManagerContext;
-    type TaskManager = ProTaskManager; // this does not persist across restarts
+    type TaskManager = UserTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
 
     fn db(&self) -> Self::GeoEngineDB {
-        ProPostgresDb::new(self.context.pool.clone(), self.session.clone())
+        PostgresDb::new(self.context.pool.clone(), self.session.clone())
     }
 
     fn tasks(&self) -> Self::TaskManager {
-        ProTaskManager::new(self.context.task_manager.clone(), self.session.clone())
+        UserTaskManager::new(self.context.task_manager.clone(), self.session.clone())
     }
 
     fn query_context(&self, workflow: Uuid, computation: Uuid) -> Result<Self::QueryContext> {
@@ -316,7 +378,7 @@ where
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {
-        Ok(ExecutionContextImpl::<ProPostgresDb<Tls>>::new(
+        Ok(ExecutionContextImpl::<PostgresDb<Tls>>::new(
             self.db(),
             self.context.thread_pool.clone(),
             self.context.exe_ctx_tiling_spec,
@@ -346,7 +408,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct ProPostgresDb<Tls>
+pub struct PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -357,7 +419,7 @@ where
     pub(crate) session: UserSession,
 }
 
-impl<Tls> ProPostgresDb<Tls>
+impl<Tls> PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -400,7 +462,7 @@ where
     }
 }
 
-impl<Tls> GeoEngineDb for ProPostgresDb<Tls>
+impl<Tls> GeoEngineDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -409,7 +471,7 @@ where
 {
 }
 
-impl<Tls> ProGeoEngineDb for ProPostgresDb<Tls>
+impl<Tls> ProGeoEngineDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -421,6 +483,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::QuotaTrackingMode;
     use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
@@ -428,6 +491,7 @@ mod tests {
     use crate::datasets::upload::{FileId, UploadId};
     use crate::datasets::upload::{FileUpload, Upload, UploadDb};
     use crate::datasets::{AddDataset, DatasetIdAndName};
+    use crate::ge_context;
     use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
@@ -440,20 +504,16 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
-    use crate::pro::ge_context;
-    use crate::pro::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
-    use crate::pro::users::{OidcTokens, SessionTokenStore};
-    use crate::pro::users::{
-        RoleDb, UserClaims, UserCredentials, UserDb, UserId, UserRegistration,
-    };
-    use crate::pro::util::config::QuotaTrackingMode;
-    use crate::pro::util::tests::mock_oidc::{mock_refresh_server, MockRefreshServerConfig};
-    use crate::pro::util::tests::{admin_login, register_ndvi_workflow_helper, MockQuotaTracking};
+    use crate::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
     use crate::projects::{
         CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
         ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
         UpdateProject,
     };
+    use crate::users::{OidcTokens, SessionTokenStore};
+    use crate::users::{RoleDb, UserClaims, UserCredentials, UserDb, UserId, UserRegistration};
+    use crate::util::tests::mock_oidc::{mock_refresh_server, MockRefreshServerConfig};
+    use crate::util::tests::{admin_login, register_ndvi_workflow_helper, MockQuotaTracking};
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
     use bb8_postgres::tokio_postgres::NoTls;
@@ -491,7 +551,7 @@ mod tests {
     use std::str::FromStr;
 
     #[ge_context::test]
-    async fn test(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test(app_ctx: PostgresContext<NoTls>) {
         anonymous(&app_ctx).await;
 
         let _user_id = user_reg_login(&app_ctx).await;
@@ -520,7 +580,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_external(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_external(app_ctx: PostgresContext<NoTls>) {
         anonymous(&app_ctx).await;
 
         let session = external_user_login_twice(&app_ctx).await;
@@ -548,7 +608,7 @@ mod tests {
         }
     }
 
-    async fn set_session(app_ctx: &ProPostgresContext<NoTls>, projects: &[ProjectListing]) {
+    async fn set_session(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
         let credentials = UserCredentials {
             email: "foo@example.com".into(),
             password: "secret123".into(),
@@ -559,10 +619,7 @@ mod tests {
         set_session_in_database(app_ctx, projects, session).await;
     }
 
-    async fn set_session_external(
-        app_ctx: &ProPostgresContext<NoTls>,
-        projects: &[ProjectListing],
-    ) {
+    async fn set_session_external(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
         let external_user_claims = UserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
@@ -581,7 +638,7 @@ mod tests {
     }
 
     async fn set_session_in_database(
-        app_ctx: &ProPostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         projects: &[ProjectListing],
         session: UserSession,
     ) {
@@ -603,7 +660,7 @@ mod tests {
     }
 
     async fn delete_project(
-        app_ctx: &ProPostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
@@ -615,7 +672,7 @@ mod tests {
     }
 
     async fn add_permission(
-        app_ctx: &ProPostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
@@ -661,7 +718,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     async fn update_projects(
-        app_ctx: &ProPostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
         project_id: ProjectId,
     ) {
@@ -776,7 +833,7 @@ mod tests {
     }
 
     async fn list_projects(
-        app_ctx: &ProPostgresContext<NoTls>,
+        app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
     ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
@@ -795,7 +852,7 @@ mod tests {
         projects
     }
 
-    async fn create_projects(app_ctx: &ProPostgresContext<NoTls>, session: &UserSession) {
+    async fn create_projects(app_ctx: &PostgresContext<NoTls>, session: &UserSession) {
         let db = app_ctx.session_context(session.clone()).db();
 
         for i in 0..10 {
@@ -818,7 +875,7 @@ mod tests {
         }
     }
 
-    async fn user_reg_login(app_ctx: &ProPostgresContext<NoTls>) -> UserId {
+    async fn user_reg_login(app_ctx: &PostgresContext<NoTls>) -> UserId {
         let user_registration = UserRegistration {
             email: "foo@example.com".into(),
             password: "secret123".into(),
@@ -845,7 +902,7 @@ mod tests {
         user_id
     }
 
-    async fn external_user_login_twice(app_ctx: &ProPostgresContext<NoTls>) -> UserSession {
+    async fn external_user_login_twice(app_ctx: &PostgresContext<NoTls>) -> UserSession {
         let external_user_claims = UserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
@@ -900,7 +957,7 @@ mod tests {
         result
     }
 
-    async fn anonymous(app_ctx: &ProPostgresContext<NoTls>) {
+    async fn anonymous(app_ctx: &PostgresContext<NoTls>) {
         let now: DateTime = chrono::offset::Utc::now().into();
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let then: DateTime = chrono::offset::Utc::now().into();
@@ -918,7 +975,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_persists_workflows(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_persists_workflows(app_ctx: PostgresContext<NoTls>) {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
@@ -949,7 +1006,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_persists_datasets(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_persists_datasets(app_ctx: PostgresContext<NoTls>) {
         let loading_info = OgrSourceDataset {
             file_name: PathBuf::from("test.csv"),
             layer_name: "test.csv".to_owned(),
@@ -1109,7 +1166,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_persists_uploads(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_persists_uploads(app_ctx: PostgresContext<NoTls>) {
         let id = UploadId::from_str("2de18cd8-4a38-4111-a445-e3734bc18a80").unwrap();
         let input = Upload {
             id,
@@ -1133,7 +1190,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_persists_layer_providers(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_persists_layer_providers(app_ctx: PostgresContext<NoTls>) {
         let db = app_ctx.session_context(UserSession::admin_session()).db();
 
         let provider = NetCdfCfDataProviderDefinition {
@@ -1183,7 +1240,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_lists_only_permitted_datasets(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_lists_only_permitted_datasets(app_ctx: PostgresContext<NoTls>) {
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
         let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1257,7 +1314,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_shows_only_permitted_provenance(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_shows_only_permitted_provenance(app_ctx: PostgresContext<NoTls>) {
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
         let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1309,7 +1366,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_updates_permissions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_updates_permissions(app_ctx: PostgresContext<NoTls>) {
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
         let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1367,7 +1424,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_uses_roles_for_permissions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_uses_roles_for_permissions(app_ctx: PostgresContext<NoTls>) {
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
         let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1425,7 +1482,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_secures_meta_data(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_secures_meta_data(app_ctx: PostgresContext<NoTls>) {
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
         let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1496,7 +1553,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_loads_all_meta_data_types(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_loads_all_meta_data_types(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let db = app_ctx.session_context(session.clone()).db();
@@ -1671,7 +1728,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_secures_uploads(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_secures_uploads(app_ctx: PostgresContext<NoTls>) {
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
         let session2 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -1698,7 +1755,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_collects_layers(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_collects_layers(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
@@ -1893,7 +1950,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_searches_layers(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_searches_layers(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
@@ -2238,7 +2295,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_searches_layers_with_permissions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_searches_layers_with_permissions(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
         let admin_layer_db = app_ctx.session_context(admin_session).db();
 
@@ -2744,7 +2801,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_autocompletes_layers(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_autocompletes_layers(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
@@ -2924,7 +2981,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_autocompletes_layers_with_permissions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_autocompletes_layers_with_permissions(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
         let admin_layer_db = app_ctx.session_context(admin_session).db();
 
@@ -3197,7 +3254,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_reports_search_capabilities(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_reports_search_capabilities(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
@@ -3293,7 +3350,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_tracks_used_quota_in_postgres(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_tracks_used_quota_in_postgres(app_ctx: PostgresContext<NoTls>) {
         let _user = app_ctx
             .register_user(UserRegistration {
                 email: "foo@example.com".to_string(),
@@ -3343,7 +3400,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_tracks_available_quota(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_tracks_available_quota(app_ctx: PostgresContext<NoTls>) {
         let user = app_ctx
             .register_user(UserRegistration {
                 email: "foo@example.com".to_string(),
@@ -3400,7 +3457,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_updates_quota_in_postgres(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_updates_quota_in_postgres(app_ctx: PostgresContext<NoTls>) {
         let user = app_ctx
             .register_user(UserRegistration {
                 email: "foo@example.com".to_string(),
@@ -3423,14 +3480,14 @@ mod tests {
 
         assert_eq!(
             db.quota_available().await.unwrap(),
-            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
+            crate::config::get_config_element::<crate::config::Quota>()
                 .unwrap()
                 .initial_credits
         );
 
         assert_eq!(
             admin_db.quota_available_by_user(&user).await.unwrap(),
-            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
+            crate::config::get_config_element::<crate::config::Quota>()
                 .unwrap()
                 .initial_credits
         );
@@ -3447,7 +3504,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_removes_layer_collections(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_removes_layer_collections(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
@@ -3614,7 +3671,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_removes_collections_from_collections(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_removes_collections_from_collections(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let db = app_ctx.session_context(session).db();
@@ -3695,7 +3752,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_removes_layers_from_collections(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_removes_layers_from_collections(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
 
         let db = app_ctx.session_context(session).db();
@@ -3821,7 +3878,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_deletes_dataset(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_deletes_dataset(app_ctx: PostgresContext<NoTls>) {
         let loading_info = OgrSourceDataset {
             file_name: PathBuf::from("test.csv"),
             layer_name: "test.csv".to_owned(),
@@ -3912,7 +3969,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_deletes_admin_dataset(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_deletes_admin_dataset(app_ctx: PostgresContext<NoTls>) {
         let dataset_name = DatasetName::new(None, "my_dataset");
 
         let loading_info = OgrSourceDataset {
@@ -4002,7 +4059,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_missing_layer_dataset_in_collection_listing(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_missing_layer_dataset_in_collection_listing(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let db = app_ctx.session_context(session).db();
 
@@ -4058,7 +4115,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_restricts_layer_permissions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_restricts_layer_permissions(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
         let session1 = app_ctx.create_anonymous_session().await.unwrap();
 
@@ -4126,7 +4183,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_handles_user_roles(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_handles_user_roles(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
         let user_id = app_ctx
             .register_user(UserRegistration {
@@ -4287,7 +4344,7 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_updates_project_layer_symbology(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_updates_project_layer_symbology(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
@@ -4600,7 +4657,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_resolves_dataset_names_to_ids(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_resolves_dataset_names_to_ids(app_ctx: PostgresContext<NoTls>) {
         let admin_session = UserSession::admin_session();
         let db = app_ctx.session_context(admin_session.clone()).db();
 
@@ -4726,7 +4783,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_bulk_updates_quota(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_bulk_updates_quota(app_ctx: PostgresContext<NoTls>) {
         let admin_session = UserSession::admin_session();
         let db = app_ctx.session_context(admin_session.clone()).db();
 
@@ -4762,7 +4819,7 @@ mod tests {
         assert_eq!(db.quota_used_by_user(&user2).await.unwrap(), 3);
     }
 
-    async fn it_handles_oidc_tokens(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_handles_oidc_tokens(app_ctx: PostgresContext<NoTls>) {
         let external_user_claims = UserClaims {
             external_id: SubjectIdentifier::new("Foo bar Id".into()),
             email: "foo@bar.de".into(),
@@ -4819,7 +4876,7 @@ mod tests {
     }
 
     #[ge_context::test(oidc_db = "oidc_only_refresh")]
-    async fn it_handles_oidc_tokens_without_encryption(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_handles_oidc_tokens_without_encryption(app_ctx: PostgresContext<NoTls>) {
         it_handles_oidc_tokens(app_ctx).await;
     }
 
@@ -4843,7 +4900,7 @@ mod tests {
     }
 
     #[ge_context::test(oidc_db = "oidc_only_refresh_with_encryption")]
-    async fn it_handles_oidc_tokens_with_encryption(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_handles_oidc_tokens_with_encryption(app_ctx: PostgresContext<NoTls>) {
         it_handles_oidc_tokens(app_ctx).await;
     }
 }

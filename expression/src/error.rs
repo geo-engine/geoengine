@@ -15,7 +15,7 @@ pub enum ExpressionExecutionError {
 
     #[snafu(display("Cannot build dependencies"))]
     DepsBuild {
-        /// [`cargo::util::errors::CargoResult`] has a lifetime that refers to a [`cargo::util::config::Config`].
+        /// [`cargo::util::errors::CargoResult`] has a lifetime that refers to a [`cargo::config::Config`].
         /// This is a debug print.
         debug: String,
     },

@@ -3,9 +3,10 @@ use super::{
     NetCdfCf4DProviderError, NetCdfCfProviderDb, NetCdfOverview, TimeCoverage,
 };
 use crate::{
+    config::get_config_element,
     datasets::external::netcdfcf::loading::{create_loading_info, ParamModification},
     tasks::{TaskContext, TaskStatusInfo},
-    util::{config::get_config_element, path_with_base_path},
+    util::path_with_base_path,
 };
 use gdal::{
     cpl::CslStringList,
@@ -631,7 +632,7 @@ impl CogRasterCreationOptionss {
         const DEFAULT_COMPRESSION_LEVEL: u8 = 6; // this is the GDAL default
         const DEFAULT_RESAMPLING_METHOD: ResamplingMethod = ResamplingMethod::Nearest;
 
-        let gdal_options = get_config_element::<crate::util::config::Gdal>()
+        let gdal_options = get_config_element::<crate::config::Gdal>()
             .boxed_context(error::CannotCreateOverviews)?;
         let num_threads = gdal_options.compression_num_threads.to_string();
         let compression_format = gdal_options
@@ -764,11 +765,8 @@ mod tests {
     use super::*;
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::datasets::external::netcdfcf::NETCDF_CF_PROVIDER_ID;
-    use crate::{
-        contexts::{PostgresContext, SessionContext, SimpleApplicationContext},
-        ge_context,
-        tasks::util::NopTaskContext,
-    };
+    use crate::pro::contexts::{PostgresDb, PostgresSessionContext};
+    use crate::{contexts::SessionContext, ge_context, tasks::util::NopTaskContext};
     use gdal::{DatasetOptions, GdalOpenFlags};
     use geoengine_datatypes::{
         primitives::{DateTime, SpatialResolution, TimeInterval},
@@ -891,12 +889,12 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_create_overviews(app_ctx: PostgresContext<NoTls>) {
+    async fn test_create_overviews(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        let db = Arc::new(app_ctx.default_session_context().await.unwrap().db());
+        let db = Arc::new(ctx.db());
 
         create_overviews(
             NopTaskContext,
@@ -934,13 +932,12 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_create_overviews_irregular(app_ctx: PostgresContext<NoTls>) {
+    async fn test_create_overviews_irregular(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors();
 
         let overview_folder = tempfile::tempdir().unwrap();
 
-        let session_context = app_ctx.default_session_context().await.unwrap();
-        let db: Arc<crate::contexts::PostgresDb<NoTls>> = Arc::new(session_context.db());
+        let db: Arc<PostgresDb<NoTls>> = Arc::new(ctx.db());
 
         create_overviews(
             NopTaskContext,
@@ -1084,7 +1081,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_overviews(app_ctx: PostgresContext<NoTls>) {
+    async fn test_remove_overviews(ctx: PostgresSessionContext<NoTls>) {
         fn is_empty(directory: &Path) -> bool {
             directory.read_dir().unwrap().next().is_none()
         }
@@ -1095,7 +1092,7 @@ mod tests {
 
         let dataset_path = Path::new("dataset_m.nc");
 
-        let db = Arc::new(app_ctx.default_session_context().await.unwrap().db());
+        let db = Arc::new(ctx.db());
 
         assert!(!db
             .overviews_exist(

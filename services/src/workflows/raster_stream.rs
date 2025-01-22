@@ -171,11 +171,11 @@ fn send_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        contexts::{PostgresContext, PostgresSessionContext, SimpleApplicationContext},
-        ge_context,
-        util::tests::register_ndvi_workflow_helper,
-    };
+    use crate::ge_context;
+    use crate::pro::contexts::PostgresContext;
+    use crate::users::UserAuth;
+    use crate::util::tests::register_ndvi_workflow_helper;
+    use crate::{contexts::ApplicationContext, pro::contexts::PostgresSessionContext};
     use actix_http::error::PayloadError;
     use actix_web_actors::ws::WebsocketContext;
     use bytes::{Bytes, BytesMut};
@@ -204,7 +204,8 @@ mod tests {
             input_sender.unbounded_send(Ok(buf.into())).unwrap();
         }
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let (workflow, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 

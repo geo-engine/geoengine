@@ -892,15 +892,13 @@ mod tests {
     use super::*;
     use crate::{
         contexts::{ApplicationContext, SessionContext},
+        ge_context,
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
-        pro::{
-            contexts::{ProPostgresContext, ProPostgresDb},
-            ge_context,
-            layers::ProLayerProviderDb,
-            users::UserAuth,
-            util::tests::admin_login,
-        },
+        layers::ProLayerProviderDb,
+        pro::contexts::{PostgresContext, PostgresDb},
         test_data,
+        users::UserAuth,
+        util::tests::admin_login,
     };
     use futures::StreamExt;
     use geoengine_datatypes::{
@@ -925,7 +923,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn loading_info(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn loading_info(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         // TODO: mock STAC endpoint
 
         let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
@@ -1010,7 +1008,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn query_data(app_ctx: ProPostgresContext<NoTls>) -> Result<()> {
+    async fn query_data(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         // TODO: mock STAC endpoint
 
         let mut exe = MockExecutionContext::test_default();
@@ -1097,7 +1095,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn query_data_with_failing_requests(app_ctx: ProPostgresContext<NoTls>) {
+    async fn query_data_with_failing_requests(app_ctx: PostgresContext<NoTls>) {
         // crate::util::tests::initialize_debugging_in_test(); // use for debugging
         hide_gdal_errors();
 
@@ -1305,7 +1303,7 @@ mod tests {
 
         let provider_id: DataProviderId = "5779494c-f3a2-48b3-8a2d-5fbba8c5b6c5".parse().unwrap();
 
-        let provider_def: Box<dyn DataProviderDefinition<ProPostgresDb<NoTls>>> =
+        let provider_def: Box<dyn DataProviderDefinition<PostgresDb<NoTls>>> =
             Box::new(SentinelS2L2ACogsProviderDefinition {
                 name: "Element 84 AWS STAC".into(),
                 id: provider_id,
@@ -1576,7 +1574,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_adds_the_data_provider_to_the_db(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_adds_the_data_provider_to_the_db(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 

@@ -2,16 +2,16 @@ mod db_types;
 pub(crate) mod migrations;
 mod postgres;
 
-use super::permissions::PermissionDb;
-use super::users::{RoleDb, UserAuth, UserSession};
-use super::util::config::{Cache, QuotaTrackingMode};
+use crate::config::get_config_element;
+use crate::config::{Cache, QuotaTrackingMode};
 use crate::contexts::{ApplicationContext, GeoEngineDb};
 use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::machine_learning::MlModelDb;
-use crate::pro::users::{OidcManager, UserDb};
-use crate::util::config::get_config_element;
+use crate::permissions::PermissionDb;
+use crate::users::{OidcManager, UserDb};
+use crate::users::{RoleDb, UserAuth, UserSession};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
@@ -30,8 +30,8 @@ use rayon::ThreadPool;
 use std::str::FromStr;
 use std::sync::Arc;
 
-pub use postgres::ProPostgresContext;
-pub use postgres::ProPostgresDb;
+pub use postgres::PostgresDb;
+pub use postgres::{PostgresContext, PostgresSessionContext};
 
 /// A pro application contexts that extends the default context.
 pub trait ProApplicationContext: ApplicationContext<Session = UserSession> + UserAuth {
@@ -324,15 +324,14 @@ pub struct QuotaCheckerImpl<U: UserDb> {
 impl<U: UserDb> QuotaCheck for QuotaCheckerImpl<U> {
     async fn ensure_quota_available(&self) -> geoengine_operators::util::Result<()> {
         // TODO: cache the result, s.th. other operators in the same workflow can re-use it
-        let quota_check_enabled =
-            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
-                .map_err(
-                    |e| geoengine_operators::error::Error::CreatingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?
-                .mode
-                == QuotaTrackingMode::Check;
+        let quota_check_enabled = crate::config::get_config_element::<crate::config::Quota>()
+            .map_err(
+                |e| geoengine_operators::error::Error::CreatingProcessorFailed {
+                    source: Box::new(e),
+                },
+            )?
+            .mode
+            == QuotaTrackingMode::Check;
 
         if !quota_check_enabled {
             return Ok(());
@@ -346,7 +345,7 @@ impl<U: UserDb> QuotaCheck for QuotaCheckerImpl<U> {
 
         if quota_available <= 0 {
             return Err(geoengine_operators::error::Error::CreatingProcessorFailed {
-                source: Box::new(crate::pro::quota::QuotaError::QuotaExhausted),
+                source: Box::new(crate::quota::QuotaError::QuotaExhausted),
             });
         }
 

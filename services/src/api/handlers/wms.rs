@@ -6,11 +6,11 @@ use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::api::ogc::wms::request::{
     GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat,
 };
+use crate::config;
+use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::util::config;
-use crate::util::config::get_config_element;
 use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
@@ -221,7 +221,7 @@ where
 }
 
 fn wms_url(workflow: WorkflowId) -> Result<Url> {
-    let web_config = crate::util::config::get_config_element::<crate::util::config::Web>()?;
+    let web_config = crate::config::get_config_element::<crate::config::Web>()?;
     let base = web_config.api_url()?;
 
     ogc_endpoint_url(&base, OgcProtocol::Wms, workflow)
@@ -482,15 +482,17 @@ mod tests {
 
     use super::*;
     use crate::api::model::responses::ErrorResponse;
-    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
+    use crate::contexts::Session;
     use crate::datasets::listing::DatasetProvider;
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::DatasetName;
     use crate::ge_context;
+    use crate::pro::contexts::PostgresContext;
+    use crate::users::UserAuth;
+    use crate::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::util::tests::{
-        check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
-        register_ndvi_workflow_helper_with_cache_ttl, register_ne2_multiband_workflow,
-        send_test_request, MockQueryContext,
+        check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper_with_cache_ttl,
+        register_ne2_multiband_workflow, send_test_request, MockQueryContext,
     };
     use actix_http::header::{self, CONTENT_TYPE};
     use actix_web::dev::ServiceResponse;
@@ -517,8 +519,9 @@ mod tests {
         path: Option<&str>,
     ) -> ServiceResponse {
         let path = path.map(ToString::to_string);
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let session_id = session.id();
 
         let req = actix_web::test::TestRequest::default()
             .method(method)
@@ -574,8 +577,10 @@ mod tests {
         app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -628,7 +633,8 @@ mod tests {
     // The result should be similar to the GDAL output of this command: gdalwarp -tr 1 1 -r near -srcnodata 0 -dstnodata 0  MOD13A2_M_NDVI_2014-01-01.TIFF MOD13A2_M_NDVI_2014-01-01_360_180_near_0.TIFF
     #[ge_context::test]
     async fn png_from_stream_non_full(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
         let exe_ctx = ctx.execution_context().unwrap();
 
         let gdal_source = GdalSourceProcessor::<u8> {
@@ -684,7 +690,8 @@ mod tests {
         method: Method,
         path: Option<&str>,
     ) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -725,8 +732,9 @@ mod tests {
 
     #[ge_context::test]
     async fn get_map_ndvi(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -750,7 +758,8 @@ mod tests {
     ///Actix uses serde_urlencoded inside web::Query which does not support this
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
     async fn get_map_uppercase(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -796,7 +805,8 @@ mod tests {
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
     async fn get_map_colorizer(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -858,7 +868,8 @@ mod tests {
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
     async fn it_supports_multiband_colorizer(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -922,7 +933,8 @@ mod tests {
     async fn it_supports_multiband_colorizer_with_less_then_3_bands(
         app_ctx: PostgresContext<NoTls>,
     ) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -989,8 +1001,9 @@ mod tests {
 
     #[ge_context::test]
     async fn it_zoomes_very_far(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -1048,8 +1061,9 @@ mod tests {
 
     #[ge_context::test]
     async fn default_error(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -1118,8 +1132,9 @@ mod tests {
 
     #[ge_context::test]
     async fn json_error(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -1177,8 +1192,9 @@ mod tests {
 
     #[ge_context::test]
     async fn it_sets_cache_control_header_no_cache(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -1200,8 +1216,9 @@ mod tests {
 
     #[ge_context::test]
     async fn it_sets_cache_control_header_with_cache(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) =
             register_ndvi_workflow_helper_with_cache_ttl(&app_ctx, CacheTtlSeconds::new(60)).await;

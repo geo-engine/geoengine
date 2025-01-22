@@ -129,27 +129,24 @@ pub(crate) async fn get_ml_model<C: ApplicationContext>(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::{
+        api::model::{datatypes::RasterDataType, responses::IdResponse},
+        contexts::Session,
+        datasets::upload::UploadId,
+        ge_context,
+        machine_learning::MlModelMetadata,
+        pro::contexts::PostgresContext,
+        users::UserAuth,
+        util::tests::{send_test_request, SetMultipartBody, TestDataUploads},
+    };
     use actix_http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
     use tokio_postgres::NoTls;
 
-    use crate::{
-        api::model::{datatypes::RasterDataType, responses::IdResponse},
-        contexts::Session,
-        datasets::upload::UploadId,
-        machine_learning::MlModelMetadata,
-        pro::{
-            contexts::ProPostgresContext, ge_context, users::UserAuth,
-            util::tests::send_pro_test_request,
-        },
-        util::tests::{SetMultipartBody, TestDataUploads},
-    };
-
-    use super::*;
-
     #[ge_context::test]
-    async fn it_stores_ml_models_for_application(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_stores_ml_models_for_application(app_ctx: PostgresContext<NoTls>) {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -157,7 +154,7 @@ mod tests {
 
         let body = vec![(
             "model.onnx",
-            include_bytes!("../../../../../test_data/pro/ml/onnx/test_classification.onnx"),
+            include_bytes!("../../../../test_data/pro/ml/onnx/test_classification.onnx"),
         )];
 
         let req = test::TestRequest::post()
@@ -165,7 +162,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_multipart(body);
 
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -190,7 +187,7 @@ mod tests {
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .set_json(&model);
 
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -198,7 +195,7 @@ mod tests {
             .uri("/ml/models?offset=0&limit=10")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_pro_test_request(req, app_ctx.clone()).await;
+        let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200);
 
@@ -212,7 +209,7 @@ mod tests {
             .uri(&format!("/ml/models/{}", model.name))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
-        let res = send_pro_test_request(req, app_ctx).await;
+        let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200);
 

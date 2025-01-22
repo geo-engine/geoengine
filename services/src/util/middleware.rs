@@ -87,11 +87,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use crate::{ge_context, pro::contexts::PostgresContext, util::tests::send_test_request};
     use actix_web::test;
     use tokio_postgres::NoTls;
-
-    use crate::{contexts::PostgresContext, ge_context, util::tests::send_test_request};
 
     #[ge_context::test]
     async fn it_sends_request_id_on_error(app_ctx: PostgresContext<NoTls>) {

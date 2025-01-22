@@ -1,4 +1,4 @@
-use super::users::UserSession;
+use crate::users::UserSession;
 use crate::{
     error,
     tasks::{
@@ -18,18 +18,18 @@ const ADMIN_ONLY_TASKS: [&str; 3] = [
 ];
 
 #[derive(Default)]
-pub struct ProTaskManagerBackend {
+pub struct TypedTaskManagerBackend {
     simple_task_manager: SimpleTaskManagerBackend,
     task_type_by_id: RwLock<HashMap<TaskId, &'static str>>,
 }
 
-pub struct ProTaskManager {
-    backend: Arc<ProTaskManagerBackend>,
+pub struct UserTaskManager {
+    backend: Arc<TypedTaskManagerBackend>,
     session: UserSession,
 }
 
-impl ProTaskManager {
-    pub fn new(backend: Arc<ProTaskManagerBackend>, session: UserSession) -> Self {
+impl UserTaskManager {
+    pub fn new(backend: Arc<TypedTaskManagerBackend>, session: UserSession) -> Self {
         Self { backend, session }
     }
 }
@@ -48,7 +48,7 @@ fn check_task_type_is_allowed(
 }
 
 #[async_trait::async_trait]
-impl TaskManager<SimpleTaskManagerContext> for ProTaskManager {
+impl TaskManager<SimpleTaskManagerContext> for UserTaskManager {
     async fn schedule_task(
         &self,
         task: Box<dyn Task<SimpleTaskManagerContext>>,
@@ -151,12 +151,14 @@ mod tests {
     use super::*;
     use crate::{
         contexts::{ApplicationContext, SessionContext},
-        pro::{contexts::ProPostgresContext, ge_context, users::UserAuth},
+        ge_context,
+        pro::contexts::PostgresContext,
+        users::UserAuth,
     };
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn it_lists(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_lists(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let ctx = app_ctx.session_context(session);

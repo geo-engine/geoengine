@@ -1,11 +1,12 @@
+use crate::api::apidoc::ApiDoc;
 use crate::api::handlers;
+use crate::config::{self, get_config_element};
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::{Error, Result};
 use crate::pro;
-use crate::pro::api::ApiDoc;
-use crate::pro::contexts::ProPostgresContext;
-use crate::util::config::{self, get_config_element};
+use crate::pro::contexts::PostgresContext;
 use crate::util::middleware::OutputRequestId;
+use crate::util::postgres::DatabaseConnectionConfig;
 use crate::util::server::{
     calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
     log_server_info, render_404, render_405, serve_openapi_json, CustomRootSpanBuilder,
@@ -43,12 +44,12 @@ where
     HttpServer::new(move || {
         let mut api = web::scope(&api_prefix)
             .configure(configure_extractors)
-            .configure(pro::api::handlers::datasets::init_dataset_routes::<C>)
+            .configure(handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
-            .configure(pro::api::handlers::permissions::init_permissions_routes::<C>)
+            .configure(handlers::permissions::init_permissions_routes::<C>)
             .configure(handlers::plots::init_plot_routes::<C>)
             .configure(handlers::projects::init_project_routes::<C>)
-            .configure(pro::api::handlers::users::init_user_routes::<C>)
+            .configure(handlers::users::init_user_routes::<C>)
             .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
             .configure(handlers::upload::init_upload_routes::<C>)
             .configure(handlers::tasks::init_task_routes::<C>)
@@ -56,7 +57,7 @@ where
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)
             .configure(handlers::workflows::init_workflow_routes::<C>)
-            .configure(pro::api::handlers::machine_learning::init_ml_routes::<C>)
+            .configure(handlers::machine_learning::init_ml_routes::<C>)
             .route(
                 "/available",
                 web::get().to(crate::util::server::available_handler),
@@ -125,12 +126,12 @@ where
 pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     log_server_info()?;
 
-    let user_config: crate::pro::util::config::User = get_config_element()?;
-    let oidc_config: crate::pro::util::config::Oidc = get_config_element()?;
-    let web_config: crate::util::config::Web = get_config_element()?;
-    let open_telemetry: crate::pro::util::config::OpenTelemetry = get_config_element()?;
-    let cache_config: crate::pro::util::config::Cache = get_config_element()?;
-    let quota_config: crate::pro::util::config::Quota = get_config_element()?;
+    let user_config: crate::config::User = get_config_element()?;
+    let oidc_config: crate::config::Oidc = get_config_element()?;
+    let web_config: crate::config::Web = get_config_element()?;
+    let open_telemetry: crate::config::OpenTelemetry = get_config_element()?;
+    let cache_config: crate::config::Cache = get_config_element()?;
+    let quota_config: crate::config::Quota = get_config_element()?;
 
     if user_config.registration {
         info!("User Registration: enabled");
@@ -189,18 +190,19 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 async fn start_postgres(
     data_path_config: config::DataProvider,
     tiling_spec: TilingSpecification,
-    oidc_config: crate::pro::util::config::Oidc,
+    oidc_config: crate::config::Oidc,
     chunk_byte_size: ChunkByteSize,
     static_files_dir: Option<PathBuf>,
     web_config: config::Web,
-    cache_config: crate::pro::util::config::Cache,
-    quota_config: crate::pro::util::config::Quota,
+    cache_config: crate::config::Cache,
+    quota_config: crate::config::Quota,
 ) -> Result<()> {
     {
-        let db_config = config::get_config_element::<config::Postgres>()?;
+        let db_config: DatabaseConnectionConfig =
+            config::get_config_element::<config::Postgres>()?.into();
 
-        let ctx = ProPostgresContext::new_with_data(
-            bb8_postgres::tokio_postgres::Config::try_from(db_config)?,
+        let ctx = PostgresContext::new_with_data(
+            db_config.pg_config(),
             NoTls,
             data_path_config.dataset_defs_path,
             data_path_config.provider_defs_path,
