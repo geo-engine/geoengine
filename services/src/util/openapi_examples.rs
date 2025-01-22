@@ -1,6 +1,6 @@
 use crate::api::model::responses::ErrorResponse;
+use crate::contexts::PostgresContext;
 use crate::contexts::SessionId;
-use crate::pro::contexts::PostgresContext;
 use crate::users::UserAuth;
 use actix_web::dev::ServiceResponse;
 use actix_web::http::{header, Method};

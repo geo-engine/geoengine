@@ -482,12 +482,12 @@ mod tests {
 
     use super::*;
     use crate::api::model::responses::ErrorResponse;
+    use crate::contexts::PostgresContext;
     use crate::contexts::Session;
     use crate::datasets::listing::DatasetProvider;
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::DatasetName;
     use crate::ge_context;
-    use crate::pro::contexts::PostgresContext;
     use crate::users::UserAuth;
     use crate::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::util::tests::{

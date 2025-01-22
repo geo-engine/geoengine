@@ -194,9 +194,9 @@ fn send_result(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::PostgresContext;
+    use crate::contexts::PostgresSessionContext;
     use crate::ge_context;
-    use crate::pro::contexts::PostgresContext;
-    use crate::pro::contexts::PostgresSessionContext;
     use crate::util::tests::MockQueryContext;
     use crate::workflows::workflow::Workflow;
     use actix_http::error::PayloadError;

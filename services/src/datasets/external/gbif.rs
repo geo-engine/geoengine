@@ -1530,11 +1530,11 @@ impl DataProvider for GbifDataProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::PostgresSessionContext;
     use crate::contexts::SessionContext;
     use crate::ge_context;
     use crate::layers::layer::Layer;
     use crate::layers::layer::ProviderLayerCollectionId;
-    use crate::pro::contexts::PostgresSessionContext;
     use crate::test_data;
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;

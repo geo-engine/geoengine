@@ -1,9 +1,9 @@
 use crate::api::handlers::users::UsageSummaryGranularity;
-use crate::contexts::SessionId;
+use crate::contexts::PostgresDb;
+use crate::contexts::{ApplicationContext, SessionId};
 use crate::error::{Error, Result};
 use crate::permissions::TxPermissionDb;
 use crate::permissions::{Role, RoleDescription, RoleId};
-use crate::pro::contexts::{PostgresDb, ProApplicationContext};
 use crate::projects::{ProjectId, STRectangle};
 use crate::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
 use crate::users::oidc::{FlatMaybeEncryptedOidcTokens, OidcTokens, UserClaims};
@@ -16,7 +16,7 @@ use crate::users::{
 };
 use crate::util::postgres::PostgresErrorExt;
 use crate::util::Identifier;
-use crate::{error, pro::contexts::PostgresContext};
+use crate::{contexts::PostgresContext, error};
 use async_trait::async_trait;
 use geoengine_operators::meta::quota::ComputationUnit;
 

@@ -1,4 +1,5 @@
 use crate::api::model::services::UpdateDataset;
+use crate::contexts::PostgresDb;
 use crate::datasets::listing::Provenance;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::listing::{OrderBy, ProvenanceOutput};
@@ -9,7 +10,6 @@ use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::error::{self, Error, Result};
 use crate::permissions::TxPermissionDb;
 use crate::permissions::{Permission, RoleId};
-use crate::pro::contexts::PostgresDb;
 use crate::projects::Symbology;
 use crate::util::postgres::PostgresErrorExt;
 use async_trait::async_trait;
@@ -886,10 +886,10 @@ mod tests {
 
     use super::*;
     use crate::{
+        contexts::PostgresContext,
         contexts::{ApplicationContext, SessionContext},
         ge_context,
         permissions::PermissionDb,
-        pro::contexts::PostgresContext,
         users::{UserAuth, UserSession},
     };
     use geoengine_datatypes::{

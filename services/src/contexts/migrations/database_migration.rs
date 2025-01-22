@@ -193,12 +193,12 @@ mod tests {
     use super::*;
     use crate::{
         config::get_config_element,
+        contexts::PostgresDb,
         contexts::{
             migrations::{all_migrations, CurrentSchemaMigration, Migration0015LogQuota},
             SessionId,
         },
         permissions::RoleId,
-        pro::contexts::PostgresDb,
         projects::{ProjectDb, ProjectListOptions},
         users::{UserId, UserInfo, UserSession},
         util::postgres::DatabaseConnectionConfig,

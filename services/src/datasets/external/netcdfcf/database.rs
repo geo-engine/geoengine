@@ -86,7 +86,7 @@ pub trait NetCdfCfProviderDb: Send + Sync {
 }
 
 #[async_trait]
-impl<Tls> NetCdfCfProviderDb for crate::pro::contexts::PostgresDb<Tls>
+impl<Tls> NetCdfCfProviderDb for crate::contexts::PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -1176,9 +1176,9 @@ mod tests {
     use super::*;
     use crate::{
         contexts::SessionContext,
+        contexts::{PostgresContext, PostgresSessionContext},
         datasets::external::netcdfcf::{EBV_PROVIDER_ID, NETCDF_CF_PROVIDER_ID},
         ge_context,
-        pro::contexts::{PostgresContext, PostgresSessionContext},
     };
     use tokio_postgres::NoTls;
 

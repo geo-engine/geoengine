@@ -1,8 +1,8 @@
 use crate::api::handlers::get_token;
+use crate::contexts::PostgresContext;
 use crate::contexts::{ApplicationContext, Session, SessionId};
 use crate::error;
 use crate::permissions::{Role, RoleId};
-use crate::pro::contexts::PostgresContext;
 use crate::projects::{ProjectId, STRectangle};
 use crate::users::UserId;
 use crate::util::Identifier;

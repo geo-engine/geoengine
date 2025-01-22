@@ -132,11 +132,11 @@ mod tests {
     use super::*;
     use crate::{
         api::model::{datatypes::RasterDataType, responses::IdResponse},
+        contexts::PostgresContext,
         contexts::Session,
         datasets::upload::UploadId,
         ge_context,
         machine_learning::MlModelMetadata,
-        pro::contexts::PostgresContext,
         users::UserAuth,
         util::tests::{send_test_request, SetMultipartBody, TestDataUploads},
     };

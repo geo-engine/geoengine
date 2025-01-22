@@ -1,12 +1,11 @@
 use self::migrations::all_migrations;
-
-use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
 use crate::api::model::services::Volume;
 use crate::config::{get_config_element, Cache, Oidc, Quota};
 use crate::contexts::{
     initialize_database, migrations, ApplicationContext, CurrentSchemaMigration, MigrationResult,
     QueryContextImpl, SessionId,
 };
+use crate::contexts::{ExecutionContextImpl, QuotaCheckerImpl};
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
@@ -308,15 +307,7 @@ where
             .map_err(Box::new)
             .context(error::Unauthorized)
     }
-}
 
-impl<Tls> ProApplicationContext for PostgresContext<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
     fn oidc_manager(&self) -> &OidcManager {
         &self.oidc_manager
     }
@@ -460,15 +451,6 @@ where
 }
 
 impl<Tls> GeoEngineDb for PostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-}
-
-impl<Tls> ProGeoEngineDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

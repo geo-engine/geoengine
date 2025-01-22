@@ -663,10 +663,10 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvRemoveOverviewTask<C> {
 mod tests {
 
     use super::*;
+    use crate::contexts::PostgresContext;
     use crate::contexts::Session;
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::ge_context;
-    use crate::pro::contexts::PostgresContext;
     use crate::util::tests::admin_login;
     use crate::{
         datasets::external::netcdfcf::NetCdfCfDataProviderDefinition,

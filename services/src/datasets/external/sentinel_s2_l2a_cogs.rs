@@ -892,9 +892,9 @@ mod tests {
     use super::*;
     use crate::{
         contexts::{ApplicationContext, SessionContext},
+        contexts::{PostgresContext, PostgresDb},
         ge_context,
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
-        pro::contexts::{PostgresContext, PostgresDb},
         test_data,
         users::UserAuth,
         util::tests::admin_login,

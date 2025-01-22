@@ -171,11 +171,11 @@ fn send_result(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::PostgresContext;
     use crate::ge_context;
-    use crate::pro::contexts::PostgresContext;
     use crate::users::UserAuth;
     use crate::util::tests::register_ndvi_workflow_helper;
-    use crate::{contexts::ApplicationContext, pro::contexts::PostgresSessionContext};
+    use crate::{contexts::ApplicationContext, contexts::PostgresSessionContext};
     use actix_http::error::PayloadError;
     use actix_web_actors::ws::WebsocketContext;
     use bytes::{Bytes, BytesMut};

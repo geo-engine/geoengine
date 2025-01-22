@@ -4,7 +4,6 @@ use crate::error::Result;
 use crate::layers::listing::LayerCollectionId;
 use crate::permissions::{Permission, PermissionListing};
 use crate::permissions::{PermissionDb, ResourceId, RoleId};
-use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use crate::projects::ProjectId;
 use actix_web::{web, FromRequest, HttpResponse};
 use geoengine_datatypes::error::BoxedResultExt;
@@ -13,8 +12,8 @@ use utoipa::{IntoParams, ToSchema};
 
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ProApplicationContext,
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+    C: ApplicationContext,
+
     C::Session: FromRequest,
 {
     cfg.service(
@@ -90,14 +89,13 @@ pub struct PermissionListOptions {
         ("session_token" = [])
     )
 )]
-async fn get_resource_permissions_handler<C: ProApplicationContext>(
+async fn get_resource_permissions_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     resource_id: web::Path<(String, String)>,
     options: web::Query<PermissionListOptions>,
 ) -> Result<web::Json<Vec<PermissionListing>>>
 where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let resource_id = ResourceId::try_from(resource_id.into_inner())?;
     let options = options.into_inner();
@@ -133,13 +131,12 @@ where
         ("session_token" = [])
     )
 )]
-async fn add_permission_handler<C: ProApplicationContext>(
+async fn add_permission_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     permission: web::Json<PermissionRequest>,
 ) -> Result<HttpResponse>
 where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let permission = permission.into_inner();
 
@@ -177,13 +174,12 @@ where
         ("session_token" = [])
     )
 )]
-async fn remove_permission_handler<C: ProApplicationContext>(
+async fn remove_permission_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     permission: web::Json<PermissionRequest>,
 ) -> Result<HttpResponse>
 where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let permission = permission.into_inner();
 
@@ -204,8 +200,8 @@ mod tests {
 
     use super::*;
     use crate::{
+        contexts::PostgresContext,
         ge_context,
-        pro::contexts::PostgresContext,
         users::{UserAuth, UserCredentials, UserRegistration},
         util::tests::{
             add_ndvi_to_datasets2, add_ports_to_datasets, admin_login, read_body_string,

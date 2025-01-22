@@ -19,7 +19,6 @@ use crate::{
     },
     error::{self, Error, Result},
     permissions::{Permission, PermissionDb, Role},
-    pro::contexts::{ProApplicationContext, ProGeoEngineDb},
     projects::Symbology,
     util::{
         extractors::{ValidatedJson, ValidatedQuery},
@@ -61,8 +60,8 @@ use utoipa::{ToResponse, ToSchema};
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
-    C: ProApplicationContext,
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
+    C: ApplicationContext,
+
     C::Session: FromRequest,
 {
     cfg.service(
@@ -1302,13 +1301,12 @@ pub async fn list_volume_file_layers_handler<C: ApplicationContext>(
         ("session_token" = [])
     )
 )]
-async fn create_dataset_handler<C: ProApplicationContext>(
+async fn create_dataset_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     create: web::Json<CreateDataset>,
 ) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError>
 where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let create = create.into_inner();
     match create {
@@ -1323,14 +1321,13 @@ where
     }
 }
 
-async fn create_system_dataset<C: ProApplicationContext>(
+async fn create_system_dataset<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
 ) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError>
 where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let volumes = get_config_element::<Data>()
         .context(CannotAccessConfig)?
@@ -1377,19 +1374,19 @@ mod tests {
     use crate::api::model::responses::datasets::DatasetNameResponse;
     use crate::api::model::responses::IdResponse;
     use crate::api::model::services::{DatasetDefinition, Provenance};
+    use crate::contexts::PostgresContext;
     use crate::contexts::{Session, SessionId};
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::{UploadId, VolumeName};
     use crate::datasets::DatasetIdAndName;
     use crate::error::Result;
     use crate::ge_context;
-    use crate::pro::contexts::PostgresContext;
     use crate::projects::{PointSymbology, RasterSymbology, Symbology};
     use crate::test_data;
     use crate::users::UserAuth;
     use crate::util::tests::admin_login;
     use crate::util::tests::{
-        add_pro_file_definition_to_datasets, read_body_json, read_body_string, send_test_request,
+        add_file_definition_to_datasets, read_body_json, read_body_string, send_test_request,
         MockQueryContext, SetMultipartBody, TestDataUploads,
     };
     use actix_web;
@@ -2711,8 +2708,7 @@ mod tests {
         let DatasetIdAndName {
             id: dataset_id,
             name: dataset_name,
-        } = add_pro_file_definition_to_datasets(&ctx.db(), test_data!("dataset_defs/ndvi.json"))
-            .await;
+        } = add_file_definition_to_datasets(&ctx.db(), test_data!("dataset_defs/ndvi.json")).await;
 
         let symbology = Symbology::Raster(RasterSymbology {
             opacity: 1.0,
@@ -2760,8 +2756,7 @@ mod tests {
         let DatasetIdAndName {
             id: dataset_id,
             name: dataset_name,
-        } = add_pro_file_definition_to_datasets(&ctx.db(), test_data!("dataset_defs/ndvi.json"))
-            .await;
+        } = add_file_definition_to_datasets(&ctx.db(), test_data!("dataset_defs/ndvi.json")).await;
 
         let update: UpdateDataset = UpdateDataset {
             name: DatasetName::new(None, "new_name"),
@@ -2798,8 +2793,7 @@ mod tests {
         let DatasetIdAndName {
             id: dataset_id,
             name: dataset_name,
-        } = add_pro_file_definition_to_datasets(&ctx.db(), test_data!("dataset_defs/ndvi.json"))
-            .await;
+        } = add_file_definition_to_datasets(&ctx.db(), test_data!("dataset_defs/ndvi.json")).await;
 
         let provenances: Provenances = Provenances {
             provenances: vec![Provenance {
