@@ -56,13 +56,8 @@ use crate::layers::listing::{
 };
 use crate::machine_learning::name::MlModelName;
 use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
-use crate::pro::permissions::{
+use crate::permissions::{
     Permission, PermissionListing, ResourceId, Role, RoleDescription, RoleId,
-};
-use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
-use crate::pro::users::{
-    AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
-    UserSession,
 };
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
@@ -70,7 +65,12 @@ use crate::projects::{
     ProjectId, ProjectLayer, ProjectListing, ProjectUpdateToken, ProjectVersion, ProjectVersionId,
     RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
+use crate::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
+use crate::users::{
+    AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
+    UserSession,
+};
 use crate::util::{
     apidoc::{OpenApiServerInfo, TransformSchemasWithTag},
     server::ServerInfo,
@@ -479,9 +479,9 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::util::tests::send_test_request;
-    use crate::{pro::contexts::ProPostgresContext, util::openapi_examples::can_run_examples};
+    use crate::{pro::contexts::PostgresContext, util::openapi_examples::can_run_examples};
     use tokio_postgres::NoTls;
 
     #[test]
@@ -490,7 +490,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_can_run_examples(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_can_run_examples(app_ctx: PostgresContext<NoTls>) {
         can_run_examples(app_ctx, ApiDoc::openapi(), send_test_request).await;
     }
 }

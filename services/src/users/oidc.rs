@@ -1,12 +1,12 @@
+use crate::config::Oidc;
 use crate::contexts::Db;
 use crate::error::Error;
-use crate::pro::util::config::Oidc;
-#[cfg(test)]
-use crate::pro::util::tests::mock_oidc::{SINGLE_NONCE, SINGLE_STATE};
 use crate::util::encryption::{
     AesGcmStringPasswordEncryption, EncryptionError, MaybeEncryptedBytes, OptionalStringEncryption,
     U96,
 };
+#[cfg(test)]
+use crate::util::tests::mock_oidc::{SINGLE_NONCE, SINGLE_STATE};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::Duration;
 use oauth2::basic::{BasicErrorResponseType, BasicRevocationErrorResponse, BasicTokenType};
@@ -611,15 +611,15 @@ impl OidcRequestClient {
 #[cfg(test)]
 mod tests {
     use crate::error::Result;
-    use crate::pro::users::oidc::OidcError::{
+    use crate::users::oidc::OidcError::{
         IllegalProvider, LoginFailed, ProviderDiscovery, ResponseFieldError, TokenExchangeError,
     };
-    use crate::pro::users::oidc::{
+    use crate::users::oidc::{
         AuthCodeResponse, DefaultClient, DefaultJsonWebKeySet, DefaultProviderMetadata,
         OidcRequestDb,
     };
-    use crate::pro::users::OidcError::IllegalRequestToken;
-    use crate::pro::util::tests::mock_oidc::{
+    use crate::users::OidcError::IllegalRequestToken;
+    use crate::util::tests::mock_oidc::{
         mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_NONCE,
         SINGLE_STATE,
     };

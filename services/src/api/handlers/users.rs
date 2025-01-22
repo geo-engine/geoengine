@@ -1,24 +1,24 @@
 use crate::api::model::responses::IdResponse;
+use crate::config;
 use crate::contexts::ApplicationContext;
 use crate::contexts::SessionContext;
 use crate::error;
 use crate::error::Result;
+use crate::permissions::{RoleDescription, RoleId};
 use crate::pro::contexts::ProApplicationContext;
 use crate::pro::contexts::ProGeoEngineDb;
-use crate::pro::permissions::{RoleDescription, RoleId};
-use crate::pro::quota::ComputationQuota;
-use crate::pro::quota::DataUsage;
-use crate::pro::quota::DataUsageSummary;
-use crate::pro::quota::OperatorQuota;
-use crate::pro::users::UserAuth;
-use crate::pro::users::UserDb;
-use crate::pro::users::UserId;
-use crate::pro::users::UserRegistration;
-use crate::pro::users::UserSession;
-use crate::pro::users::{AuthCodeRequestURL, AuthCodeResponse, RoleDb, UserCredentials};
 use crate::projects::ProjectId;
 use crate::projects::STRectangle;
-use crate::util::config;
+use crate::quota::ComputationQuota;
+use crate::quota::DataUsage;
+use crate::quota::DataUsageSummary;
+use crate::quota::OperatorQuota;
+use crate::users::UserAuth;
+use crate::users::UserDb;
+use crate::users::UserId;
+use crate::users::UserRegistration;
+use crate::users::UserSession;
+use crate::users::{AuthCodeRequestURL, AuthCodeResponse, RoleDb, UserCredentials};
 use crate::util::extractors::ValidatedJson;
 use actix_web::FromRequest;
 use actix_web::{web, HttpResponse, Responder};
@@ -106,7 +106,7 @@ where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
-        config::get_config_element::<crate::pro::util::config::User>()?.registration,
+        config::get_config_element::<crate::config::User>()?.registration,
         error::UserRegistrationDisabled
     );
 
@@ -248,7 +248,7 @@ pub(crate) async fn anonymous_handler<C: ApplicationContext + UserAuth>(
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
-    if !config::get_config_element::<crate::util::config::Session>()?.anonymous_access {
+    if !config::get_config_element::<crate::config::Session>()?.anonymous_access {
         return Err(error::Error::Unauthorized {
             source: Box::new(error::Error::AnonymousAccessDisabled),
         });
@@ -631,8 +631,8 @@ where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
-        config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
-        crate::pro::users::OidcDisabled
+        config::get_config_element::<crate::config::Oidc>()?.enabled,
+        crate::users::OidcDisabled
     );
     let auth_code_request_url = app_ctx
         .oidc_manager()
@@ -683,8 +683,8 @@ where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     ensure!(
-        config::get_config_element::<crate::pro::util::config::Oidc>()?.enabled,
-        crate::pro::users::OidcDisabled
+        config::get_config_element::<crate::config::Oidc>()?.enabled,
+        crate::users::OidcDisabled
     );
     let authentication_response = app_ctx
         .oidc_manager()
@@ -940,19 +940,19 @@ mod tests {
     use super::*;
     use crate::api::model::datatypes::RasterColorizer;
     use crate::api::model::responses::ErrorResponse;
+    use crate::config::Oidc;
     use crate::contexts::{Session, SessionContext};
-    use crate::pro::ge_context;
-    use crate::pro::permissions::Role;
-    use crate::pro::users::{AuthCodeRequestURL, OidcManager, UserAuth};
-    use crate::pro::util::config::Oidc;
-    use crate::pro::util::tests::mock_oidc::{
+    use crate::ge_context;
+    use crate::permissions::Role;
+    use crate::pro::contexts::PostgresContext;
+    use crate::users::{AuthCodeRequestURL, OidcManager, UserAuth, UserId};
+    use crate::util::tests::mock_oidc::{
         mock_refresh_server, mock_token_response, mock_valid_provider_discovery,
         MockRefreshServerConfig, MockTokenConfig, SINGLE_STATE,
     };
-    use crate::pro::util::tests::{
-        admin_login, create_project_helper, create_session_helper, register_ndvi_workflow_helper,
+    use crate::util::tests::{
+        admin_login, create_project_helper2, create_session_helper, register_ndvi_workflow_helper,
     };
-    use crate::pro::{contexts::ProPostgresContext, users::UserId};
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
     use actix_http::header::CONTENT_TYPE;
     use actix_web::dev::ServiceResponse;
@@ -971,7 +971,7 @@ mod tests {
     use uuid::Uuid;
 
     async fn register_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         method: Method,
         email: &str,
     ) -> ServiceResponse {
@@ -991,7 +991,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register(app_ctx: ProPostgresContext<NoTls>) {
+    async fn register(app_ctx: PostgresContext<NoTls>) {
         let res = register_test_helper(app_ctx, Method::POST, "foo@example.com").await;
 
         assert_eq!(res.status(), 200);
@@ -1000,14 +1000,14 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_fail(app_ctx: ProPostgresContext<NoTls>) {
+    async fn register_fail(app_ctx: PostgresContext<NoTls>) {
         let res = register_test_helper(app_ctx, Method::POST, "notanemail").await;
 
         ErrorResponse::assert(res, 400, "ValidationError", "email: invalid email\n").await;
     }
 
     #[ge_context::test]
-    async fn register_duplicate_email(app_ctx: ProPostgresContext<NoTls>) {
+    async fn register_duplicate_email(app_ctx: PostgresContext<NoTls>) {
         register_test_helper(app_ctx.clone(), Method::POST, "foo@example.com").await;
 
         // register user
@@ -1023,7 +1023,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn register_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| register_test_helper(app_ctx.clone(), method, "foo@example.com"),
             &[Method::POST],
@@ -1032,7 +1032,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_invalid_body(app_ctx: ProPostgresContext<NoTls>) {
+    async fn register_invalid_body(app_ctx: PostgresContext<NoTls>) {
         // register user
         let req = test::TestRequest::post()
             .uri("/user")
@@ -1050,7 +1050,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
+    async fn register_missing_fields(app_ctx: PostgresContext<NoTls>) {
         let user = json!({
             "password": "secret123",
             "real_name": " Foo Bar",
@@ -1073,7 +1073,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_invalid_type(app_ctx: ProPostgresContext<NoTls>) {
+    async fn register_invalid_type(app_ctx: PostgresContext<NoTls>) {
         // register user
         let req = test::TestRequest::post()
             .uri("/user")
@@ -1091,7 +1091,7 @@ mod tests {
     }
 
     async fn login_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         method: Method,
         password: &str,
     ) -> ServiceResponse {
@@ -1121,7 +1121,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn login(app_ctx: ProPostgresContext<NoTls>) {
+    async fn login(app_ctx: PostgresContext<NoTls>) {
         let res = login_test_helper(app_ctx, Method::POST, "secret123").await;
 
         assert_eq!(res.status(), 200);
@@ -1130,7 +1130,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn login_fail(app_ctx: ProPostgresContext<NoTls>) {
+    async fn login_fail(app_ctx: PostgresContext<NoTls>) {
         let res = login_test_helper(app_ctx, Method::POST, "wrongpassword").await;
 
         ErrorResponse::assert(
@@ -1143,7 +1143,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn login_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn login_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| login_test_helper(app_ctx.clone(), method, "secret123"),
             &[Method::POST],
@@ -1152,7 +1152,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn login_invalid_body(app_ctx: ProPostgresContext<NoTls>) {
+    async fn login_invalid_body(app_ctx: PostgresContext<NoTls>) {
         let req = test::TestRequest::post()
             .uri("/login")
             .append_header((header::CONTENT_LENGTH, 0))
@@ -1170,7 +1170,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn login_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
+    async fn login_missing_fields(app_ctx: PostgresContext<NoTls>) {
         let user = UserRegistration {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
@@ -1200,7 +1200,7 @@ mod tests {
     }
 
     async fn logout_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
         let user = UserRegistration {
@@ -1228,7 +1228,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn logout(app_ctx: ProPostgresContext<NoTls>) {
+    async fn logout(app_ctx: PostgresContext<NoTls>) {
         let res = logout_test_helper(app_ctx, Method::POST).await;
 
         assert_eq!(res.status(), 200);
@@ -1236,7 +1236,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn logout_missing_header(app_ctx: ProPostgresContext<NoTls>) {
+    async fn logout_missing_header(app_ctx: PostgresContext<NoTls>) {
         let req = test::TestRequest::post().uri("/logout");
         let res = send_test_request(req, app_ctx).await;
 
@@ -1250,7 +1250,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn logout_wrong_token(app_ctx: ProPostgresContext<NoTls>) {
+    async fn logout_wrong_token(app_ctx: PostgresContext<NoTls>) {
         let req = test::TestRequest::post().uri("/logout").append_header((
             header::AUTHORIZATION,
             Bearer::new("6ecff667-258e-4108-9dc9-93cb8c64793c"),
@@ -1267,7 +1267,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn logout_wrong_scheme(app_ctx: ProPostgresContext<NoTls>) {
+    async fn logout_wrong_scheme(app_ctx: PostgresContext<NoTls>) {
         let req = test::TestRequest::post()
             .uri("/logout")
             .append_header((header::AUTHORIZATION, "7e855f3c-b0cd-46d1-b5b3-19e6e3f9ea5"));
@@ -1283,7 +1283,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn logout_invalid_token(app_ctx: ProPostgresContext<NoTls>) {
+    async fn logout_invalid_token(app_ctx: PostgresContext<NoTls>) {
         let req = test::TestRequest::post()
             .uri("/logout")
             .append_header((header::AUTHORIZATION, format!("Bearer {}", "no uuid")));
@@ -1299,7 +1299,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn logout_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn logout_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| logout_test_helper(app_ctx.clone(), method),
             &[Method::POST],
@@ -1308,7 +1308,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn session(app_ctx: ProPostgresContext<NoTls>) {
+    async fn session(app_ctx: PostgresContext<NoTls>) {
         let session = create_session_helper(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1337,8 +1337,8 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn session_view_project(app_ctx: ProPostgresContext<NoTls>) {
-        let (session, project) = create_project_helper(&app_ctx).await;
+    async fn session_view_project(app_ctx: PostgresContext<NoTls>) {
+        let (session, project) = create_project_helper2(&app_ctx).await;
 
         let req = test::TestRequest::post()
             .uri(&format!("/session/project/{project}"))
@@ -1378,7 +1378,7 @@ mod tests {
     }
 
     #[ge_context::test(test_execution = "serial")]
-    async fn it_disables_anonymous_access(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_disables_anonymous_access(app_ctx: PostgresContext<NoTls>) {
         let req = test::TestRequest::post().uri("/anonymous");
         let res = send_test_request(req, app_ctx.clone()).await;
 
@@ -1402,7 +1402,7 @@ mod tests {
     }
 
     #[ge_context::test(test_execution = "serial")]
-    async fn it_disables_user_registration(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_disables_user_registration(app_ctx: PostgresContext<NoTls>) {
         let user_reg = UserRegistration {
             email: "foo@example.com".to_owned(),
             password: "secret123".to_owned(),
@@ -1458,10 +1458,7 @@ mod tests {
         OidcManager::from_oidc_with_static_tokens(oidc_config)
     }
 
-    async fn oidc_init_test_helper(
-        method: Method,
-        ctx: ProPostgresContext<NoTls>,
-    ) -> ServiceResponse {
+    async fn oidc_init_test_helper(method: Method, ctx: PostgresContext<NoTls>) -> ServiceResponse {
         let req = test::TestRequest::default()
             .method(method)
             .uri("/oidcInit")
@@ -1471,7 +1468,7 @@ mod tests {
 
     async fn oidc_login_test_helper(
         method: Method,
-        ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresContext<NoTls>,
         auth_code_response: AuthCodeResponse,
     ) -> ServiceResponse {
         let req = test::TestRequest::default()
@@ -1492,7 +1489,7 @@ mod tests {
     }
 
     #[ge_context::test(oidc_db = "oidc_attr_for_test")]
-    async fn oidc_init(app_ctx: ProPostgresContext<NoTls>) {
+    async fn oidc_init(app_ctx: PostgresContext<NoTls>) {
         let res = oidc_init_test_helper(Method::POST, app_ctx).await;
 
         assert_eq!(res.status(), 200);
@@ -1527,7 +1524,7 @@ mod tests {
     }
 
     #[ge_context::test(oidc_db = "oidc_bad_server")]
-    async fn oidc_illegal_provider(app_ctx: ProPostgresContext<NoTls>) {
+    async fn oidc_illegal_provider(app_ctx: PostgresContext<NoTls>) {
         let res = oidc_init_test_helper(Method::POST, app_ctx).await;
 
         ErrorResponse::assert_eq_message_starts_with(
@@ -1539,7 +1536,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn oidc_init_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn oidc_init_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| oidc_init_test_helper(method, app_ctx.clone()),
             &[Method::POST],
@@ -1570,7 +1567,7 @@ mod tests {
     }
 
     #[ge_context::test(oidc_db = "oidc_login_oidc_db")]
-    async fn oidc_login(app_ctx: ProPostgresContext<NoTls>) {
+    async fn oidc_login(app_ctx: PostgresContext<NoTls>) {
         let auth_code_response = AuthCodeResponse {
             session_state: String::new(),
             code: String::new(),
@@ -1604,7 +1601,7 @@ mod tests {
     }
 
     #[ge_context::test(oidc_db = "oidc_login_illegal_request_oidc_db")]
-    async fn oidc_login_illegal_request(app_ctx: ProPostgresContext<NoTls>) {
+    async fn oidc_login_illegal_request(app_ctx: PostgresContext<NoTls>) {
         let auth_code_response = AuthCodeResponse {
             session_state: String::new(),
             code: String::new(),
@@ -1640,7 +1637,7 @@ mod tests {
     }
 
     #[ge_context::test(oidc_db = "oidc_login_fail_oidc_db")]
-    async fn oidc_login_fail(app_ctx: ProPostgresContext<NoTls>) {
+    async fn oidc_login_fail(app_ctx: PostgresContext<NoTls>) {
         let auth_code_response = AuthCodeResponse {
             session_state: String::new(),
             code: String::new(),
@@ -1669,7 +1666,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn oidc_login_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn oidc_login_invalid_method(app_ctx: PostgresContext<NoTls>) {
         let auth_code_response = AuthCodeResponse {
             session_state: String::new(),
             code: String::new(),
@@ -1684,7 +1681,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn oidc_login_invalid_body(app_ctx: ProPostgresContext<NoTls>) {
+    async fn oidc_login_invalid_body(app_ctx: PostgresContext<NoTls>) {
         let req = test::TestRequest::post()
             .uri("/oidcLogin")
             .append_header((header::CONTENT_LENGTH, 0))
@@ -1701,7 +1698,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn oidc_login_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
+    async fn oidc_login_missing_fields(app_ctx: PostgresContext<NoTls>) {
         let auth_code_response = json!({
             "sessionState": "",
             "code": "",
@@ -1724,7 +1721,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn oidc_login_invalid_type(app_ctx: ProPostgresContext<NoTls>) {
+    async fn oidc_login_invalid_type(app_ctx: PostgresContext<NoTls>) {
         // register user
         let req = test::TestRequest::post()
             .uri("/oidcLogin")
@@ -1761,7 +1758,7 @@ mod tests {
     }
 
     #[ge_context::test(oidc_db = "oidc_refresh")]
-    async fn oidc_login_refresh_session(app_ctx: ProPostgresContext<NoTls>) {
+    async fn oidc_login_refresh_session(app_ctx: PostgresContext<NoTls>) {
         let auth_code_response = AuthCodeResponse {
             session_state: String::new(),
             code: String::new(),
@@ -1826,7 +1823,7 @@ mod tests {
     }
 
     #[ge_context::test(oidc_db = "oidc_short_duration")]
-    async fn oidc_login_no_refresh(app_ctx: ProPostgresContext<NoTls>) {
+    async fn oidc_login_no_refresh(app_ctx: PostgresContext<NoTls>) {
         let auth_code_response = AuthCodeResponse {
             session_state: String::new(),
             code: String::new(),
@@ -1864,7 +1861,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_gets_quota(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_gets_quota(app_ctx: PostgresContext<NoTls>) {
         let user = UserRegistration {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
@@ -1924,7 +1921,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_updates_quota(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_updates_quota(app_ctx: PostgresContext<NoTls>) {
         let user = UserRegistration {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
@@ -1945,7 +1942,7 @@ mod tests {
         let quota: Quota = test::read_body_json(res).await;
         assert_eq!(
             quota.available,
-            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()
+            crate::config::get_config_element::<crate::config::Quota>()
                 .unwrap()
                 .initial_credits
         );
@@ -1975,7 +1972,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_checks_quota_before_querying(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_checks_quota_before_querying(app_ctx: PostgresContext<NoTls>) {
         let admin_db = app_ctx.session_context(UserSession::admin_session()).db();
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -2066,7 +2063,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_adds_and_removes_role(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_adds_and_removes_role(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
 
         let add = AddRole {
@@ -2097,7 +2094,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_assigns_and_revokes_role(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_assigns_and_revokes_role(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
 
         let user_id = app_ctx
@@ -2149,7 +2146,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_gets_role_descriptions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_gets_role_descriptions(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
         let admin_db = app_ctx.session_context(admin_session.clone()).db();
         let role_id = admin_db.add_role("foo").await.unwrap();
@@ -2215,7 +2212,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_logs_quota(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_logs_quota(app_ctx: PostgresContext<NoTls>) {
         let user = UserRegistration {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),
@@ -2277,7 +2274,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_logs_data_usage(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_logs_data_usage(app_ctx: PostgresContext<NoTls>) {
         let user = UserRegistration {
             email: "foo@example.com".to_string(),
             password: "secret123".to_string(),

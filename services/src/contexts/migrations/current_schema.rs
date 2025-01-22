@@ -18,7 +18,7 @@ impl CurrentSchemaMigration {
     pub async fn create_current_schema(
         &self,
         tx: &Transaction<'_>,
-        config: &crate::util::config::Postgres,
+        config: &crate::config::Postgres,
     ) -> Result<()> {
         let schema_name = &config.schema;
 
@@ -35,7 +35,7 @@ impl CurrentSchemaMigration {
     pub async fn populate_current_schema(
         &self,
         tx: &Transaction<'_>,
-        config: &crate::util::config::Postgres,
+        config: &crate::config::Postgres,
     ) -> Result<()> {
         tx.execute(
             "
@@ -122,7 +122,7 @@ impl Migration for CurrentSchemaMigration {
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
-        let config = crate::util::config::get_config_element::<crate::util::config::Postgres>()?;
+        let config = crate::config::get_config_element::<crate::config::Postgres>()?;
 
         self.create_current_schema(tx, &config).await?;
 

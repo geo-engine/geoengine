@@ -1,5 +1,6 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::api::model::responses::IdResponse;
+use crate::config::get_config_element;
 use crate::contexts::ApplicationContext;
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::Error::NotImplemented;
@@ -12,7 +13,6 @@ use crate::layers::listing::{
     LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchParameters,
 };
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
-use crate::util::config::get_config_element;
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use crate::util::workflows::validate_workflow;
 use crate::workflows::registry::WorkflowRegistry;
@@ -828,7 +828,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
     };
 
     let compression_num_threads =
-        get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
+        get_config_element::<crate::config::Gdal>()?.compression_num_threads;
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("layer {item}"),
@@ -1184,17 +1184,17 @@ mod tests {
 
     use super::*;
     use crate::api::model::responses::ErrorResponse;
+    use crate::config::get_config_element;
     use crate::contexts::SessionId;
     use crate::datasets::RasterDatasetFromWorkflowResult;
+    use crate::ge_context;
     use crate::layers::layer::Layer;
     use crate::layers::storage::INTERNAL_PROVIDER_ID;
-    use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
-    use crate::pro::users::{UserAuth, UserSession};
-    use crate::pro::util::tests::admin_login;
+    use crate::pro::contexts::PostgresContext;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
-    use crate::util::config::get_config_element;
+    use crate::users::{UserAuth, UserSession};
+    use crate::util::tests::admin_login;
     use crate::util::tests::{
         read_body_string, send_test_request, MockQueryContext, TestDataUploads,
     };
@@ -1229,7 +1229,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn test_add_layer_to_collection(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_add_layer_to_collection(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1281,7 +1281,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_add_existing_layer_to_collection(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_add_existing_layer_to_collection(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1344,7 +1344,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_add_layer_collection(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_add_layer_collection(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1372,7 +1372,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_update_layer_collection(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_update_layer_collection(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1413,7 +1413,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_update_layer(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_update_layer(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1483,7 +1483,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_checks_for_workflow_validity(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_checks_for_workflow_validity(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1562,7 +1562,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_layer(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_remove_layer(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1609,7 +1609,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_add_existing_collection_to_collection(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_add_existing_collection_to_collection(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1662,7 +1662,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_layer_from_collection(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_remove_layer_from_collection(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1726,7 +1726,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_collection(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_remove_collection(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1770,7 +1770,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_remove_collection_from_collection(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_remove_collection_from_collection(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1816,7 +1816,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_search_capabilities(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_search_capabilities(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -1830,7 +1830,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_search(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_search(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1849,7 +1849,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn test_search_autocomplete(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_search_autocomplete(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1982,7 +1982,7 @@ mod tests {
             }
         }
 
-        async fn create_layer_in_context(&self, app_ctx: &ProPostgresContext<NoTls>) -> Layer {
+        async fn create_layer_in_context(&self, app_ctx: &PostgresContext<NoTls>) -> Layer {
             let session = admin_login(app_ctx).await;
             let ctx = app_ctx.session_context(session.clone());
 
@@ -2022,7 +2022,7 @@ mod tests {
     }
 
     async fn send_dataset_creation_test_request(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         layer: Layer,
         session_id: SessionId,
     ) -> ServiceResponse {
@@ -2038,7 +2038,7 @@ mod tests {
     }
 
     async fn create_dataset_request_with_result_success(
-        ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresContext<NoTls>,
         layer: Layer,
         session: UserSession,
     ) -> RasterDatasetFromWorkflowResult {
@@ -2096,7 +2096,7 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326(),
             },
             GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
+                compression_num_threads: get_config_element::<crate::config::Gdal>()
                     .unwrap()
                     .compression_num_threads,
                 as_cog: true,
@@ -2110,7 +2110,7 @@ mod tests {
     }
 
     async fn raster_layer_to_dataset_success(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         mock_source: MockRasterWorkflowLayerDescription,
     ) {
         let session = admin_login(&app_ctx).await;
@@ -2159,7 +2159,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "test_raster_layer_to_dataset_success_tiling_spec")]
-    async fn test_raster_layer_to_dataset_success(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_raster_layer_to_dataset_success(app_ctx: PostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 0);
         raster_layer_to_dataset_success(app_ctx, mock_source).await;
     }
@@ -2172,9 +2172,7 @@ mod tests {
     #[ge_context::test(
         tiling_spec = "test_raster_layer_with_timeshift_to_dataset_success_tiling_spec"
     )]
-    async fn test_raster_layer_with_timeshift_to_dataset_success(
-        app_ctx: ProPostgresContext<NoTls>,
-    ) {
+    async fn test_raster_layer_with_timeshift_to_dataset_success(app_ctx: PostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, true, 1_000);
         raster_layer_to_dataset_success(app_ctx, mock_source).await;
     }
@@ -2185,7 +2183,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "test_raster_layer_to_dataset_no_time_interval_tiling_spec")]
-    async fn test_raster_layer_to_dataset_no_time_interval(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_raster_layer_to_dataset_no_time_interval(app_ctx: PostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
 
         let session = admin_login(&app_ctx).await;
@@ -2211,7 +2209,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "test_raster_layer_to_dataset_no_bounding_box_tiling_spec")]
-    async fn test_raster_layer_to_dataset_no_bounding_box(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_raster_layer_to_dataset_no_bounding_box(app_ctx: PostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, false, true, 0);
 
         let session = admin_login(&app_ctx).await;
@@ -2239,9 +2237,7 @@ mod tests {
     #[ge_context::test(
         tiling_spec = "test_raster_layer_to_dataset_no_spatial_resolution_tiling_spec"
     )]
-    async fn test_raster_layer_to_dataset_no_spatial_resolution(
-        app_ctx: ProPostgresContext<NoTls>,
-    ) {
+    async fn test_raster_layer_to_dataset_no_spatial_resolution(app_ctx: PostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, false, 0);
 
         let session = admin_login(&app_ctx).await;

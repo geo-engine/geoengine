@@ -3,11 +3,11 @@ use super::{
     PostgresPermissionDbError, ResourceId, RoleId,
 };
 use crate::error::Result;
-use crate::pro::contexts::ProPostgresDb;
-use crate::pro::permissions::{
+use crate::permissions::{
     CannotGrantOwnerPermissionPermissionDbError, CannotRevokeOwnPermissionPermissionDbError,
     MustBeAdminPermissionDbError, PermissionDeniedPermissionDbError, Role,
 };
+use crate::pro::contexts::PostgresDb;
 use async_trait::async_trait;
 use snafu::{ensure, ResultExt};
 use tokio_postgres::{
@@ -56,7 +56,7 @@ impl ResourceTypeName for ResourceId {
 
 /// internal functionality for transactional permission db
 ///
-/// In contrast to the `PermissionDb` this is not to be used by services but only by the `ProPostgresDb` internally.
+/// In contrast to the `PermissionDb` this is not to be used by services but only by the `PostgresDb` internally.
 /// This is because services do not know about database transactions.
 #[async_trait]
 pub trait TxPermissionDb {
@@ -128,7 +128,7 @@ pub trait TxPermissionDb {
 }
 
 #[async_trait]
-impl<Tls> TxPermissionDb for ProPostgresDb<Tls>
+impl<Tls> TxPermissionDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -375,7 +375,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> PermissionDb for ProPostgresDb<Tls>
+impl<Tls> PermissionDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

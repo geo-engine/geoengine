@@ -1,31 +1,23 @@
-use std::borrow::Cow;
-
+use crate::{
+    api::model::datatypes::RasterDataType,
+    config::{get_config_element, MachineLearning},
+    datasets::upload::{UploadId, UploadRootPath},
+    identifier,
+    util::path_with_base_path,
+};
 use async_trait::async_trait;
 use error::{error::CouldNotFindMlModelFileMachineLearningError, MachineLearningError};
 use name::MlModelName;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
-use tokio_postgres::{
-    tls::{MakeTlsConnect, TlsConnect},
-    Socket,
-};
+use std::borrow::Cow;
 use utoipa::{IntoParams, ToSchema};
 use validator::{Validate, ValidationError};
 
-use crate::{
-    api::model::datatypes::RasterDataType,
-    contexts::PostgresDb,
-    datasets::upload::{UploadId, UploadRootPath},
-    identifier,
-    util::{
-        config::{get_config_element, MachineLearning},
-        path_with_base_path,
-    },
-};
-
 pub mod error;
 pub mod name;
+mod postgres;
 
 identifier!(MlModelId);
 
@@ -107,35 +99,4 @@ pub trait MlModelDb {
     ) -> Result<MlModelMetadata, MachineLearningError>;
 
     async fn add_model(&self, model: MlModel) -> Result<(), MachineLearningError>;
-}
-
-#[async_trait]
-impl<Tls> MlModelDb for PostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    async fn list_models(
-        &self,
-        _options: &MlModelListOptions,
-    ) -> Result<Vec<MlModel>, MachineLearningError> {
-        unimplemented!()
-    }
-
-    async fn load_model(&self, _name: &MlModelName) -> Result<MlModel, MachineLearningError> {
-        unimplemented!()
-    }
-
-    async fn load_model_metadata(
-        &self,
-        _name: &MlModelName,
-    ) -> Result<MlModelMetadata, MachineLearningError> {
-        unimplemented!()
-    }
-
-    async fn add_model(&self, _model: MlModel) -> Result<(), MachineLearningError> {
-        unimplemented!()
-    }
 }

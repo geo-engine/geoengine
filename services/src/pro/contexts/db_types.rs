@@ -195,17 +195,15 @@ mod tests {
 
     use super::*;
     use crate::{
-        pro::{
-            datasets::{StacBand, StacQueryBuffer, StacZone},
-            util::tests::with_pro_temp_context,
-        },
+        pro::datasets::{StacBand, StacQueryBuffer, StacZone},
         util::postgres::assert_sql_type,
+        util::tests::with_temp_context,
     };
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
     async fn test_postgres_type_serialization() {
-        with_pro_temp_context(|app_ctx, _| async move {
+        with_temp_context(|app_ctx, _| async move {
             let pool = app_ctx.pool.get().await.unwrap();
 
             assert_sql_type(

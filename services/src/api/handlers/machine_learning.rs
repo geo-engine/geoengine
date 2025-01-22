@@ -129,24 +129,24 @@ pub(crate) async fn get_ml_model<C: ApplicationContext>(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::{
+        api::model::{datatypes::RasterDataType, responses::IdResponse},
+        contexts::Session,
+        datasets::upload::UploadId,
+        ge_context,
+        machine_learning::MlModelMetadata,
+        pro::contexts::PostgresContext,
+        users::UserAuth,
+        util::tests::{send_test_request, SetMultipartBody, TestDataUploads},
+    };
     use actix_http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
     use tokio_postgres::NoTls;
 
-    use crate::{
-        api::model::{datatypes::RasterDataType, responses::IdResponse},
-        contexts::Session,
-        datasets::upload::UploadId,
-        machine_learning::MlModelMetadata,
-        pro::{contexts::ProPostgresContext, ge_context, users::UserAuth},
-        util::tests::{send_test_request, SetMultipartBody, TestDataUploads},
-    };
-
-    use super::*;
-
     #[ge_context::test]
-    async fn it_stores_ml_models_for_application(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_stores_ml_models_for_application(app_ctx: PostgresContext<NoTls>) {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
         let session = app_ctx.create_anonymous_session().await.unwrap();

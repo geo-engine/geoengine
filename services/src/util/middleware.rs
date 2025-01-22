@@ -87,15 +87,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        pro::{contexts::ProPostgresContext, ge_context},
-        util::tests::send_test_request,
-    };
+    use crate::{ge_context, pro::contexts::PostgresContext, util::tests::send_test_request};
     use actix_web::test;
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn it_sends_request_id_on_error(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_sends_request_id_on_error(app_ctx: PostgresContext<NoTls>) {
         let req = test::TestRequest::get().uri("/asdf1234_notfound");
 
         let res = send_test_request(req, app_ctx.clone()).await;
@@ -105,7 +102,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_hides_request_id_on_success(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_hides_request_id_on_success(app_ctx: PostgresContext<NoTls>) {
         let req = test::TestRequest::get().uri("/dummy");
 
         let res = send_test_request(req, app_ctx.clone()).await;

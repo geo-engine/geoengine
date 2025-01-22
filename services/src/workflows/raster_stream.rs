@@ -171,9 +171,9 @@ fn send_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
-    use crate::pro::users::UserAuth;
+    use crate::ge_context;
+    use crate::pro::contexts::PostgresContext;
+    use crate::users::UserAuth;
     use crate::util::tests::register_ndvi_workflow_helper;
     use crate::{contexts::ApplicationContext, pro::contexts::PostgresSessionContext};
     use actix_http::error::PayloadError;
@@ -190,7 +190,7 @@ mod tests {
     use uuid::Uuid;
 
     #[ge_context::test]
-    async fn test_websocket_stream(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_websocket_stream(app_ctx: PostgresContext<NoTls>) {
         fn send_next(input_sender: &UnboundedSender<Result<Bytes, PayloadError>>) {
             let mut buf = BytesMut::new();
             actix_http::ws::Parser::write_message(

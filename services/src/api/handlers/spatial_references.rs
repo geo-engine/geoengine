@@ -268,9 +268,9 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
 mod tests {
     use super::*;
     use crate::contexts::Session;
-    use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
-    use crate::pro::users::UserAuth;
+    use crate::ge_context;
+    use crate::pro::contexts::PostgresContext;
+    use crate::users::UserAuth;
     use crate::util::tests::send_test_request;
     use actix_web;
     use actix_web::http::header;
@@ -281,7 +281,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn get_spatial_reference(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_spatial_reference(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();

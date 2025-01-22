@@ -641,6 +641,12 @@ impl
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::config;
+    use crate::contexts::SessionContext;
+    use crate::layers::layer::ProviderLayerCollectionId;
+    use crate::pro::contexts::{PostgresContext, PostgresSessionContext};
+    use crate::{ge_context, test_data};
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
@@ -653,14 +659,8 @@ mod tests {
     use geoengine_operators::engine::QueryProcessor;
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
     use rand::RngCore;
-    use tokio_postgres::Config;
-
-    use super::*;
-    use crate::contexts::{PostgresContext, SessionContext, SimpleApplicationContext};
-    use crate::layers::layer::ProviderLayerCollectionId;
-    use crate::util::config;
-    use crate::{ge_context, test_data};
     use std::{fs::File, io::Read, path::PathBuf};
+    use tokio_postgres::Config;
 
     /// Create a schema with test tables and return the schema name
     async fn create_test_data(db_config: &config::Postgres) -> String {
@@ -709,7 +709,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_lists(app_ctx: PostgresContext<NoTls>) {
+    async fn it_lists(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
 
         let test_schema = create_test_data(&db_config).await;
@@ -728,7 +728,7 @@ mod tests {
             },
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -785,7 +785,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_searches_fulltext(app_ctx: PostgresContext<NoTls>) {
+    async fn it_searches_fulltext(ctx: PostgresSessionContext<NoTls>) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
 
         let test_schema = create_test_data(&db_config).await;
@@ -804,7 +804,7 @@ mod tests {
             },
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -900,7 +900,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_searches_prefix(app_ctx: PostgresContext<NoTls>) {
+    async fn it_searches_prefix(ctx: PostgresSessionContext<NoTls>) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
 
         let test_schema = create_test_data(&db_config).await;
@@ -919,7 +919,7 @@ mod tests {
             },
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -1043,7 +1043,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_autocompletes_fulltext_search(app_ctx: PostgresContext<NoTls>) {
+    async fn it_autocompletes_fulltext_search(ctx: PostgresSessionContext<NoTls>) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
 
         let test_schema = create_test_data(&db_config).await;
@@ -1062,7 +1062,7 @@ mod tests {
             },
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -1107,7 +1107,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_autocompletes_prefix_search(app_ctx: PostgresContext<NoTls>) {
+    async fn it_autocompletes_prefix_search(ctx: PostgresSessionContext<NoTls>) {
         let db_config = config::get_config_element::<config::Postgres>().unwrap();
 
         let test_schema = create_test_data(&db_config).await;
@@ -1126,7 +1126,7 @@ mod tests {
             },
             cache_ttl: Default::default(),
         })
-        .initialize(app_ctx.default_session_context().await.unwrap().db())
+        .initialize(ctx.db())
         .await
         .unwrap();
 
@@ -1188,9 +1188,9 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
-    async fn it_creates_meta_data(app_ctx: PostgresContext<NoTls>) {
+    async fn it_creates_meta_data(ctx: PostgresSessionContext<NoTls>) {
         async fn test(
-            app_ctx: &PostgresContext<NoTls>,
+            ctx: &PostgresSessionContext<NoTls>,
             db_config: &config::Postgres,
             test_schema: &str,
         ) -> Result<(), String> {
@@ -1212,7 +1212,7 @@ mod tests {
                 db_config: provider_db_config,
                 cache_ttl: Default::default(),
             })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
+            .initialize(ctx.db())
             .await
             .map_err(|e| e.to_string())?;
 
@@ -1370,7 +1370,7 @@ mod tests {
 
         let test_schema = create_test_data(&db_config).await;
 
-        let test = test(&app_ctx, &db_config, &test_schema).await;
+        let test = test(&ctx, &db_config, &test_schema).await;
 
         cleanup_test_data(&db_config, test_schema).await;
 
@@ -1379,9 +1379,9 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_loads(app_ctx: PostgresContext<NoTls>) {
+    async fn it_loads(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         async fn test(
-            app_ctx: &PostgresContext<NoTls>,
+            ctx: &PostgresSessionContext<NoTls>,
             db_config: &config::Postgres,
             test_schema: &str,
         ) -> Result<(), String> {
@@ -1399,7 +1399,7 @@ mod tests {
                 },
                 cache_ttl: Default::default(),
             })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
+            .initialize(ctx.db())
             .await
             .map_err(|e| e.to_string())?;
 
@@ -1519,7 +1519,7 @@ mod tests {
 
         let test_schema = create_test_data(&db_config).await;
 
-        let result = test(&app_ctx, &db_config, &test_schema).await;
+        let result = test(&ctx, &db_config, &test_schema).await;
 
         cleanup_test_data(&db_config, test_schema).await;
 
@@ -1527,9 +1527,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_cites(app_ctx: PostgresContext<NoTls>) {
+    async fn it_cites(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
         async fn test(
-            app_ctx: &PostgresContext<NoTls>,
+            ctx: &PostgresSessionContext<NoTls>,
             db_config: &config::Postgres,
             test_schema: &str,
         ) -> Result<(), String> {
@@ -1547,7 +1547,7 @@ mod tests {
                 },
                 cache_ttl: Default::default(),
             })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
+            .initialize(ctx.db())
             .await
             .map_err(|e| e.to_string())?;
 
@@ -1584,7 +1584,7 @@ mod tests {
 
         let test_schema = create_test_data(&db_config).await;
 
-        let result = test(&app_ctx, &db_config, &test_schema).await;
+        let result = test(&ctx, &db_config, &test_schema).await;
 
         cleanup_test_data(&db_config, test_schema).await;
 

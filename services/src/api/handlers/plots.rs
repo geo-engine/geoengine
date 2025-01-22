@@ -1,12 +1,11 @@
 use crate::api::model::datatypes::TimeInterval;
 use crate::api::ogc::util::{parse_bbox, parse_time};
+use crate::config;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error;
 use crate::error::Result;
-use crate::util::config;
 use crate::util::parsing::parse_spatial_resolution;
 use crate::util::server::connection_closed;
-use crate::util::tests::MockQueryContext;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{web, FromRequest, HttpRequest, Responder};
@@ -110,7 +109,8 @@ async fn get_plot_handler<C: ApplicationContext>(
     );
 
     let ctx = app_ctx.session_context(session);
-    let workflow = ctx.db().load_workflow(&WorkflowId(id.into_inner())).await?;
+    let workflow_id = WorkflowId(id.into_inner());
+    let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let operator = workflow.operator.get_plot()?;
 
@@ -153,7 +153,7 @@ async fn get_plot_handler<C: ApplicationContext>(
 
     let processor = initialized.query_processor()?;
 
-    let mut query_ctx = ctx.mock_query_context()?;
+    let mut query_ctx = ctx.query_context(workflow_id.0, Uuid::new_v4())?;
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
@@ -209,9 +209,9 @@ pub struct WrappedPlotOutput {
 mod tests {
     use super::*;
     use crate::contexts::Session;
-    use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
-    use crate::pro::users::UserAuth;
+    use crate::ge_context;
+    use crate::pro::contexts::PostgresContext;
+    use crate::users::UserAuth;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_json, read_body_string, send_test_request,
     };
@@ -271,7 +271,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "json_tiling_spec")]
-    async fn json(app_ctx: ProPostgresContext<NoTls>) {
+    async fn json(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -337,7 +337,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "json_vega_tiling_spec")]
-    async fn json_vega(app_ctx: ProPostgresContext<NoTls>) {
+    async fn json_vega(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -466,9 +466,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn check_request_types(app_ctx: ProPostgresContext<NoTls>) {
+    async fn check_request_types(app_ctx: PostgresContext<NoTls>) {
         async fn get_workflow_json(
-            app_ctx: ProPostgresContext<NoTls>,
+            app_ctx: PostgresContext<NoTls>,
             method: Method,
         ) -> ServiceResponse {
             let session = app_ctx.create_anonymous_session().await.unwrap();

@@ -1,7 +1,7 @@
 use crate::api::model::responses::ErrorResponse;
 use crate::contexts::SessionId;
-use crate::pro::contexts::ProPostgresContext;
-use crate::pro::users::UserAuth;
+use crate::pro::contexts::PostgresContext;
+use crate::users::UserAuth;
 use actix_web::dev::ServiceResponse;
 use actix_web::http::{header, Method};
 use actix_web::test::TestRequest;
@@ -195,11 +195,11 @@ where
 ///
 /// panics if the creation of an anonymous session fails or the example contains a Ref which is not yet supported.
 pub async fn can_run_examples<F, Fut>(
-    app_ctx: ProPostgresContext<NoTls>,
+    app_ctx: PostgresContext<NoTls>,
     api: OpenApi,
     send_test_request: F,
 ) where
-    F: Fn(TestRequest, ProPostgresContext<NoTls>) -> Fut
+    F: Fn(TestRequest, PostgresContext<NoTls>) -> Fut
         + Send
         + std::panic::UnwindSafe
         + 'static
@@ -276,7 +276,7 @@ pub async fn can_run_examples<F, Fut>(
 mod tests {
     use super::*;
     use crate::api::model::services::Volume;
-    use crate::pro::ge_context;
+    use crate::ge_context;
     use crate::util::server::{configure_extractors, render_404, render_405};
     use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
     use serde::Deserialize;
@@ -310,7 +310,7 @@ mod tests {
 
     async fn dummy_send_test_request(
         req: TestRequest,
-        ctx: ProPostgresContext<NoTls>,
+        ctx: PostgresContext<NoTls>,
     ) -> ServiceResponse {
         let app = actix_web::test::init_service(
             App::new()
@@ -329,7 +329,7 @@ mod tests {
             .map_into_boxed_body()
     }
 
-    async fn run_dummy_example(app_ctx: ProPostgresContext<NoTls>, example: serde_json::Value) {
+    async fn run_dummy_example(app_ctx: PostgresContext<NoTls>, example: serde_json::Value) {
         can_run_examples(
             app_ctx,
             OpenApiBuilder::new()
@@ -392,12 +392,12 @@ mod tests {
     }
 
     #[ge_context::test(expect_panic = "BodyDeserializeError")]
-    async fn detects_bodydeserializeerror(app_ctx: ProPostgresContext<NoTls>) {
+    async fn detects_bodydeserializeerror(app_ctx: PostgresContext<NoTls>) {
         run_dummy_example(app_ctx, json!({"path": "note-name_field_missing"})).await;
     }
 
     #[ge_context::test]
-    async fn successfull_example_run(app_ctx: ProPostgresContext<NoTls>) {
+    async fn successfull_example_run(app_ctx: PostgresContext<NoTls>) {
         run_dummy_example(app_ctx, json!({"name": "Files", "path": "/path/to/files"})).await;
     }
 }

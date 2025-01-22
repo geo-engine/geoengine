@@ -2,9 +2,9 @@ use crate::api::model::datatypes::{DatasetId, LayerId};
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::layers::listing::LayerCollectionId;
+use crate::permissions::{Permission, PermissionListing};
+use crate::permissions::{PermissionDb, ResourceId, RoleId};
 use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
-use crate::pro::permissions::{Permission, PermissionListing};
-use crate::pro::permissions::{PermissionDb, ResourceId, RoleId};
 use crate::projects::ProjectId;
 use actix_web::{web, FromRequest, HttpResponse};
 use geoengine_datatypes::error::BoxedResultExt;
@@ -204,13 +204,13 @@ mod tests {
 
     use super::*;
     use crate::{
-        pro::{
-            contexts::ProPostgresContext,
-            ge_context,
-            users::{UserAuth, UserCredentials, UserRegistration},
-            util::tests::{add_ndvi_to_datasets, add_ports_to_datasets, admin_login},
+        ge_context,
+        pro::contexts::PostgresContext,
+        users::{UserAuth, UserCredentials, UserRegistration},
+        util::tests::{
+            add_ndvi_to_datasets2, add_ports_to_datasets, admin_login, read_body_string,
+            send_test_request,
         },
-        util::tests::{read_body_string, send_test_request},
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -223,7 +223,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_checks_permission_during_intialization(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_checks_permission_during_intialization(app_ctx: PostgresContext<NoTls>) {
         // create user and sessions
 
         let user_id = app_ctx
@@ -249,7 +249,7 @@ mod tests {
         // setup data and operators
 
         let (gdal_dataset_id, gdal_dataset_name) =
-            add_ndvi_to_datasets(&app_ctx, false, false).await;
+            add_ndvi_to_datasets2(&app_ctx, false, false).await;
         let gdal = GdalSource {
             params: GdalSourceParameters {
                 data: gdal_dataset_name,
@@ -319,10 +319,10 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_lists_permissions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_lists_permissions(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
 
-        let (gdal_dataset_id, _) = add_ndvi_to_datasets(&app_ctx, true, true).await;
+        let (gdal_dataset_id, _) = add_ndvi_to_datasets2(&app_ctx, true, true).await;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(

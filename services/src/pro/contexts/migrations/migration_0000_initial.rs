@@ -4,7 +4,7 @@ use tokio_postgres::Transaction;
 use uuid::Uuid;
 
 use super::database_migration::{ProMigration, ProMigrationImpl};
-use crate::{contexts::Migration0000Initial, error::Result, util::config::get_config_element};
+use crate::{config::get_config_element, contexts::Migration0000Initial, error::Result};
 
 const INTERNAL_LAYER_DB_ROOT_COLLECTION_ID: Uuid =
     Uuid::from_u128(0x0510_2bb3_a855_4a37_8a8a_3002_6a91_fef1);
@@ -19,7 +19,7 @@ const ADMIN_QUOTA: i64 = 9_223_372_036_854_775_807; // max postgres `bigint` val
 #[async_trait]
 impl ProMigration for ProMigrationImpl<Migration0000Initial> {
     async fn pro_migrate(&self, tx: &Transaction<'_>) -> Result<()> {
-        let user_config = get_config_element::<crate::pro::util::config::User>()?;
+        let user_config = get_config_element::<crate::config::User>()?;
 
         tx.batch_execute(include_str!("migration_0000_initial.sql"))
             .await?;

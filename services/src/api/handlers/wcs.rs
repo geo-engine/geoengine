@@ -2,11 +2,11 @@ use crate::api::handlers::spatial_references::{spatial_reference_specification, 
 use crate::api::model::datatypes::TimeInterval;
 use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::api::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
+use crate::config;
+use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::util::config;
-use crate::util::config::get_config_element;
 use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
@@ -58,7 +58,7 @@ where
 }
 
 fn wcs_url(workflow: WorkflowId) -> Result<Url> {
-    let web_config = crate::util::config::get_config_element::<crate::util::config::Web>()?;
+    let web_config = crate::config::get_config_element::<crate::config::Web>()?;
     let base = web_config.api_url()?;
 
     ogc_endpoint_url(&base, OgcProtocol::Wcs, workflow)
@@ -488,11 +488,11 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
                 spatial_reference: request_spatial_ref,
             },
             GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()?.compression_num_threads,
+                compression_num_threads: get_config_element::<crate::config::Gdal>()?.compression_num_threads,
                 as_cog: false,
                 force_big_tiff: false,
             },
-            Some(get_config_element::<crate::util::config::Wcs>()?.tile_limit),
+            Some(get_config_element::<crate::config::Wcs>()?.tile_limit),
             conn_closed,
             execution_context.tiling_specification(),
         )
@@ -532,10 +532,10 @@ fn default_time_from_config() -> TimeInterval {
 #[cfg(test)]
 mod tests {
     use crate::contexts::Session;
-    use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
-    use crate::pro::users::UserAuth;
-    use crate::pro::util::tests::register_ndvi_workflow_helper;
+    use crate::ge_context;
+    use crate::pro::contexts::PostgresContext;
+    use crate::users::UserAuth;
+    use crate::util::tests::register_ndvi_workflow_helper;
     use crate::util::tests::{read_body_string, send_test_request};
     use actix_web::http::header;
     use actix_web::test;
@@ -544,7 +544,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn get_capabilities(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_capabilities(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -628,7 +628,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn describe_coverage(app_ctx: ProPostgresContext<NoTls>) {
+    async fn describe_coverage(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -713,7 +713,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "tiling_spec")]
-    async fn get_coverage_with_nodatavalue(app_ctx: ProPostgresContext<NoTls>) {
+    async fn get_coverage_with_nodatavalue(app_ctx: PostgresContext<NoTls>) {
         // override the pixel size since this test was designed for 600 x 600 pixel tiles
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -757,7 +757,7 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "tiling_spec")]
-    async fn it_sets_cache_control_header(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_sets_cache_control_header(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();

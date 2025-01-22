@@ -2,12 +2,12 @@ use crate::api::handlers::tasks::TaskResponse;
 use crate::api::model::datatypes::{BandSelection, DataId, TimeInterval};
 use crate::api::model::responses::IdResponse;
 use crate::api::ogc::util::{parse_bbox, parse_time};
+use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
-use crate::util::config::get_config_element;
 use crate::util::parsing::{
     parse_band_selection, parse_spatial_partition, parse_spatial_resolution,
 };
@@ -441,7 +441,7 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
     let id = id.into_inner();
     let workflow = ctx.db().load_workflow(&id).await?;
     let compression_num_threads =
-        get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
+        get_config_element::<crate::config::Gdal>()?.compression_num_threads;
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("workflow {id}"),
@@ -656,16 +656,16 @@ mod tests {
 
     use super::*;
     use crate::api::model::responses::ErrorResponse;
+    use crate::config::get_config_element;
     use crate::contexts::Session;
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::{DatasetName, RasterDatasetFromWorkflowResult};
-    use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
-    use crate::pro::users::UserAuth;
-    use crate::pro::util::tests::admin_login;
+    use crate::ge_context;
+    use crate::pro::contexts::PostgresContext;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
-    use crate::util::config::get_config_element;
+    use crate::users::UserAuth;
+    use crate::util::tests::admin_login;
     use crate::util::tests::{
         add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
         read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
@@ -706,7 +706,7 @@ mod tests {
     use zip::ZipArchive;
 
     async fn register_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -734,7 +734,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register(app_ctx: ProPostgresContext<NoTls>) {
+    async fn register(app_ctx: PostgresContext<NoTls>) {
         let res = register_test_helper(app_ctx, Method::POST).await;
 
         assert_eq!(res.status(), 200);
@@ -743,7 +743,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn register_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| register_test_helper(app_ctx.clone(), method),
             &[Method::POST],
@@ -752,7 +752,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_missing_header(app_ctx: ProPostgresContext<NoTls>) {
+    async fn register_missing_header(app_ctx: PostgresContext<NoTls>) {
         let workflow = Workflow {
             operator: MockPointSource {
                 params: MockPointSourceParams {
@@ -780,7 +780,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_invalid_body(app_ctx: ProPostgresContext<NoTls>) {
+    async fn register_invalid_body(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -804,7 +804,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn register_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
+    async fn register_missing_fields(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -829,7 +829,7 @@ mod tests {
     }
 
     async fn load_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> (Workflow, ServiceResponse) {
         let session = admin_login(&app_ctx).await;
@@ -861,7 +861,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load(app_ctx: ProPostgresContext<NoTls>) {
+    async fn load(app_ctx: PostgresContext<NoTls>) {
         let (workflow, res) = load_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
@@ -872,7 +872,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn load_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods2(
             |method| load_test_helper(app_ctx.clone(), method),
             &[Method::GET],
@@ -882,7 +882,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load_missing_header(app_ctx: ProPostgresContext<NoTls>) {
+    async fn load_missing_header(app_ctx: PostgresContext<NoTls>) {
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let req = test::TestRequest::get().uri(&format!("/workflow/{id}"));
@@ -898,7 +898,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load_not_exist(app_ctx: ProPostgresContext<NoTls>) {
+    async fn load_not_exist(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -912,7 +912,7 @@ mod tests {
     }
 
     async fn vector_metadata_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -950,7 +950,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn vector_metadata(app_ctx: ProPostgresContext<NoTls>) {
+    async fn vector_metadata(app_ctx: PostgresContext<NoTls>) {
         let res = vector_metadata_test_helper(app_ctx, Method::GET).await;
 
         let res_status = res.status();
@@ -984,7 +984,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn raster_metadata(app_ctx: ProPostgresContext<NoTls>) {
+    async fn raster_metadata(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1048,7 +1048,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn metadata_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn metadata_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| vector_metadata_test_helper(app_ctx.clone(), method),
             &[Method::GET],
@@ -1057,7 +1057,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn metadata_missing_header(app_ctx: ProPostgresContext<NoTls>) {
+    async fn metadata_missing_header(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1096,7 +1096,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn plot_metadata(app_ctx: ProPostgresContext<NoTls>) {
+    async fn plot_metadata(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1139,7 +1139,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn provenance(app_ctx: ProPostgresContext<NoTls>) {
+    async fn provenance(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1187,7 +1187,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_does_not_register_invalid_workflow(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_does_not_register_invalid_workflow(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
         let session_id = ctx.session().id();
@@ -1235,7 +1235,7 @@ mod tests {
 
     #[ge_context::test(tiling_spec = "test_download_all_metadata_zip_tiling_spec")]
     #[allow(clippy::too_many_lines)]
-    async fn test_download_all_metadata_zip(app_ctx: ProPostgresContext<NoTls>) {
+    async fn test_download_all_metadata_zip(app_ctx: PostgresContext<NoTls>) {
         fn zip_file_to_json(mut zip_file: ZipFile) -> serde_json::Value {
             let mut bytes = Vec::new();
             zip_file.read_to_end(&mut bytes).unwrap();
@@ -1355,7 +1355,7 @@ mod tests {
 
     #[ge_context::test(tiling_spec = "dataset_from_workflow_task_success_tiling_spec")]
     #[allow(clippy::too_many_lines)]
-    async fn dataset_from_workflow_task_success(app_ctx: ProPostgresContext<NoTls>) {
+    async fn dataset_from_workflow_task_success(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1467,7 +1467,7 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326(),
             },
             GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
+                compression_num_threads: get_config_element::<crate::config::Gdal>()
                     .unwrap()
                     .compression_num_threads,
                 as_cog: false,

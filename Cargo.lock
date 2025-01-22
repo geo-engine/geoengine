@@ -2527,6 +2527,8 @@ dependencies = [
 name = "geoengine-macros"
 version = "0.8.0"
 dependencies = [
+ "pretty_assertions",
+ "prettyplease",
  "proc-macro2",
  "quote",
  "syn 2.0.90",

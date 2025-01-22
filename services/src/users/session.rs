@@ -1,10 +1,10 @@
 use crate::api::handlers::get_token;
-use crate::contexts::{ApplicationContext, MockableSession, Session, SessionId};
+use crate::contexts::{ApplicationContext, Session, SessionId};
 use crate::error;
-use crate::pro::contexts::ProPostgresContext;
-use crate::pro::permissions::{Role, RoleId};
-use crate::pro::users::UserId;
+use crate::permissions::{Role, RoleId};
+use crate::pro::contexts::PostgresContext;
 use crate::projects::{ProjectId, STRectangle};
+use crate::users::UserId;
 use crate::util::Identifier;
 use actix_http::Payload;
 use actix_web::{web, FromRequest, HttpRequest};
@@ -60,25 +60,6 @@ impl UserSession {
     }
 }
 
-impl MockableSession for UserSession {
-    fn mock() -> Self {
-        let user_id = UserId::new();
-        Self {
-            id: SessionId::new(),
-            user: UserInfo {
-                id: user_id,
-                email: None,
-                real_name: None,
-            },
-            created: DateTime::now(),
-            valid_until: DateTime::now(),
-            project: None,
-            view: None,
-            roles: vec![user_id.into(), Role::registered_user_role_id()],
-        }
-    }
-}
-
 impl Session for UserSession {
     fn id(&self) -> SessionId {
         self.id
@@ -111,9 +92,7 @@ impl FromRequest for UserSession {
             Err(error) => return Box::pin(err(error)),
         };
 
-        let pg_ctx = req
-            .app_data::<web::Data<ProPostgresContext<NoTls>>>()
-            .expect(
+        let pg_ctx = req.app_data::<web::Data<PostgresContext<NoTls>>>().expect(
             "Application context should be present because it is set during server initialization.",
         );
         let pg_ctx = pg_ctx.get_ref().clone();

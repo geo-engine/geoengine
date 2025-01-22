@@ -1,22 +1,22 @@
 use crate::api::handlers::users::UsageSummaryGranularity;
 use crate::contexts::SessionId;
 use crate::error::{Error, Result};
-use crate::pro::contexts::{ProApplicationContext, ProPostgresDb};
-use crate::pro::permissions::postgres_permissiondb::TxPermissionDb;
-use crate::pro::permissions::{Role, RoleDescription, RoleId};
-use crate::pro::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
-use crate::pro::users::oidc::{FlatMaybeEncryptedOidcTokens, OidcTokens, UserClaims};
-use crate::pro::users::userdb::{
+use crate::permissions::TxPermissionDb;
+use crate::permissions::{Role, RoleDescription, RoleId};
+use crate::pro::contexts::{PostgresDb, ProApplicationContext};
+use crate::projects::{ProjectId, STRectangle};
+use crate::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
+use crate::users::oidc::{FlatMaybeEncryptedOidcTokens, OidcTokens, UserClaims};
+use crate::users::userdb::{
     CannotRevokeRoleThatIsNotAssignedRoleDbError, RoleIdDoesNotExistRoleDbError,
 };
-use crate::pro::users::{
+use crate::users::{
     SessionTokenStore, StoredOidcTokens, User, UserCredentials, UserDb, UserId, UserInfo,
     UserRegistration, UserSession,
 };
-use crate::projects::{ProjectId, STRectangle};
 use crate::util::postgres::PostgresErrorExt;
 use crate::util::Identifier;
-use crate::{error, pro::contexts::ProPostgresContext};
+use crate::{error, pro::contexts::PostgresContext};
 use async_trait::async_trait;
 use geoengine_operators::meta::quota::ComputationUnit;
 
@@ -35,7 +35,7 @@ use super::userdb::{
 };
 
 #[async_trait]
-impl<Tls> UserAuth for ProPostgresContext<Tls>
+impl<Tls> UserAuth for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -67,8 +67,7 @@ where
             .await?;
 
         let quota_available =
-            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
-                .initial_credits;
+            crate::config::get_config_element::<crate::config::Quota>()?.initial_credits;
 
         tx.execute(
             &stmt,
@@ -113,8 +112,7 @@ where
             .await?;
 
         let quota_available =
-            crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
-                .initial_credits;
+            crate::config::get_config_element::<crate::config::Quota>()?.initial_credits;
 
         let stmt = tx
             .prepare("INSERT INTO users (id, quota_available, active) VALUES ($1, $2, TRUE);")
@@ -301,8 +299,7 @@ where
                 tx.execute(&stmt, &[&user_id, &user.email]).await?;
 
                 let quota_available =
-                    crate::util::config::get_config_element::<crate::pro::util::config::Quota>()?
-                        .initial_credits;
+                    crate::config::get_config_element::<crate::config::Quota>()?.initial_credits;
 
                 //TODO: A user might be able to login without external login using this (internal) id. Would be a problem with anonymous users as well.
                 let stmt = tx
@@ -491,7 +488,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> SessionTokenStore for ProPostgresContext<Tls>
+impl<Tls> SessionTokenStore for PostgresContext<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -679,7 +676,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> UserDb for ProPostgresDb<Tls>
+impl<Tls> UserDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -1111,7 +1108,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> RoleDb for ProPostgresDb<Tls>
+impl<Tls> RoleDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

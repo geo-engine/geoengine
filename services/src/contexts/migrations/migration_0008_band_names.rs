@@ -108,9 +108,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::get_config_element;
     use crate::contexts::migrations::all_migrations;
     use crate::contexts::{migrate_database, Migration0000Initial};
-    use crate::util::config::get_config_element;
+    use crate::util::postgres::DatabaseConnectionConfig;
     use bb8_postgres::bb8::Pool;
     use bb8_postgres::PostgresConnectionManager;
     use geoengine_datatypes::test_data;
@@ -123,8 +124,9 @@ mod tests {
     async fn it_does_not_get_stuck() -> Result<()> {
         let workflow = json!({});
 
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().max_size(1).build(pg_mgr).await?;
 

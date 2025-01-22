@@ -200,16 +200,16 @@ async fn list_upload_file_layers_handler(
 mod tests {
     use super::*;
     use crate::contexts::Session;
-    use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
-    use crate::pro::users::UserAuth;
+    use crate::ge_context;
+    use crate::pro::contexts::PostgresContext;
+    use crate::users::UserAuth;
     use crate::util::tests::{send_test_request, SetMultipartBody, TestDataUploads};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn upload(app_ctx: ProPostgresContext<NoTls>) {
+    async fn upload(app_ctx: PostgresContext<NoTls>) {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -251,7 +251,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_lists_layers(app_ctx: ProPostgresContext<NoTls>) {
+    async fn it_lists_layers(app_ctx: PostgresContext<NoTls>) {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
         let session = app_ctx.create_anonymous_session().await.unwrap();

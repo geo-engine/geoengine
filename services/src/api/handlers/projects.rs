@@ -398,13 +398,13 @@ pub(crate) async fn project_versions_handler<C: ApplicationContext>(
 mod tests {
     use super::*;
     use crate::contexts::Session;
-    use crate::pro::contexts::ProPostgresContext;
-    use crate::pro::ge_context;
-    use crate::pro::users::{UserAuth, UserSession};
+    use crate::ge_context;
+    use crate::pro::contexts::PostgresContext;
     use crate::projects::{
         LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId, ProjectLayer,
         ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
     };
+    use crate::users::{UserAuth, UserSession};
     use crate::util::tests::{
         check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,
     };
@@ -421,7 +421,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     async fn create_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -448,7 +448,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn create(app_ctx: ProPostgresContext<NoTls>) {
+    async fn create(app_ctx: PostgresContext<NoTls>) {
         let res = create_test_helper(app_ctx, Method::POST).await;
 
         assert_eq!(res.status(), 200);
@@ -457,7 +457,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn create_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn create_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| create_test_helper(app_ctx.clone(), method),
             &[Method::POST],
@@ -466,7 +466,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn create_invalid_body(app_ctx: ProPostgresContext<NoTls>) {
+    async fn create_invalid_body(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -488,7 +488,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn create_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
+    async fn create_missing_fields(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -514,7 +514,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn create_missing_header(app_ctx: ProPostgresContext<NoTls>) {
+    async fn create_missing_header(app_ctx: PostgresContext<NoTls>) {
         let create = json!({
             "description": "Foo".to_string(),
             "bounds": STRectangle::new(SpatialReference::epsg_4326(), 0., 0., 1., 1., 0, 1).unwrap(),
@@ -532,10 +532,7 @@ mod tests {
         .await;
     }
 
-    async fn list_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
-        method: Method,
-    ) -> ServiceResponse {
+    async fn list_test_helper(app_ctx: PostgresContext<NoTls>, method: Method) -> ServiceResponse {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -567,7 +564,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn list(app_ctx: ProPostgresContext<NoTls>) {
+    async fn list(app_ctx: PostgresContext<NoTls>) {
         let res = list_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
@@ -577,7 +574,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn list_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn list_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| list_test_helper(app_ctx.clone(), method),
             &[Method::GET],
@@ -586,7 +583,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn list_missing_header(app_ctx: ProPostgresContext<NoTls>) {
+    async fn list_missing_header(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -621,10 +618,7 @@ mod tests {
         .await;
     }
 
-    async fn load_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
-        method: Method,
-    ) -> ServiceResponse {
+    async fn load_test_helper(app_ctx: PostgresContext<NoTls>, method: Method) -> ServiceResponse {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -640,7 +634,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load(app_ctx: ProPostgresContext<NoTls>) {
+    async fn load(app_ctx: PostgresContext<NoTls>) {
         let res = load_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
@@ -649,7 +643,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load_invalid_method(app_ctx: ProPostgresContext<NoTls>) {
+    async fn load_invalid_method(app_ctx: PostgresContext<NoTls>) {
         check_allowed_http_methods(
             |method| load_test_helper(app_ctx.clone(), method),
             &[Method::GET, Method::PATCH, Method::DELETE],
@@ -658,7 +652,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load_missing_header(app_ctx: ProPostgresContext<NoTls>) {
+    async fn load_missing_header(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
         let project = create_project_helper(&ctx).await;
@@ -678,7 +672,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load_not_found(app_ctx: ProPostgresContext<NoTls>) {
+    async fn load_not_found(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let session_id = session.id();
@@ -693,7 +687,7 @@ mod tests {
     }
 
     async fn update_test_helper(
-        app_ctx: ProPostgresContext<NoTls>,
+        app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> (UserSession, ProjectId, ServiceResponse) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -716,7 +710,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn update(app_ctx: ProPostgresContext<NoTls>) {
+    async fn update(app_ctx: PostgresContext<NoTls>) {
         let (session, project, res) = update_test_helper(app_ctx.clone(), Method::PATCH).await;
 
         assert_eq!(res.status(), 200);
@@ -732,7 +726,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn update_invalid_body(app_ctx: ProPostgresContext<NoTls>) {
+    async fn update_invalid_body(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -757,7 +751,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn update_missing_fields(app_ctx: ProPostgresContext<NoTls>) {
+    async fn update_missing_fields(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -800,9 +794,9 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn update_layers(app_ctx: ProPostgresContext<NoTls>) {
+    async fn update_layers(app_ctx: PostgresContext<NoTls>) {
         async fn update_and_load_latest(
-            app_ctx: &ProPostgresContext<NoTls>,
+            app_ctx: &PostgresContext<NoTls>,
             session: &UserSession,
             project_id: ProjectId,
             update: UpdateProject,
@@ -952,9 +946,9 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn update_plots(app_ctx: ProPostgresContext<NoTls>) {
+    async fn update_plots(app_ctx: PostgresContext<NoTls>) {
         async fn update_and_load_latest(
-            app_ctx: &ProPostgresContext<NoTls>,
+            app_ctx: &PostgresContext<NoTls>,
             session: &UserSession,
             project_id: ProjectId,
             update: UpdateProject,
@@ -1081,7 +1075,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn delete(app_ctx: ProPostgresContext<NoTls>) {
+    async fn delete(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1115,7 +1109,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load_version(app_ctx: ProPostgresContext<NoTls>) {
+    async fn load_version(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1156,7 +1150,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn load_version_not_found(app_ctx: ProPostgresContext<NoTls>) {
+    async fn load_version_not_found(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
         let project = create_project_helper(&ctx).await;
@@ -1173,7 +1167,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn list_versions(app_ctx: ProPostgresContext<NoTls>) {
+    async fn list_versions(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 

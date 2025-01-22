@@ -34,7 +34,7 @@ impl DroppingServer {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn it_starts_without_warnings_and_accepts_connections() {
-    use geoengine_services::util::config::get_config_element;
+    use geoengine_services::config::get_config_element;
 
     const SCHEMA_NAME: &str = "it_starts_without_warnings_and_accepts_connections";
 
@@ -76,7 +76,7 @@ async fn it_starts_without_warnings_and_accepts_connections() {
     std::env::set_current_dir(test_data!("..")).expect("failed to set current directory");
 
     // create a fresh schema for this test
-    let config = get_config_element::<geoengine_services::util::config::Postgres>().unwrap();
+    let config = get_config_element::<geoengine_services::config::Postgres>().unwrap();
     let (client, connection) = tokio_postgres::connect(
         &format!(
             "host={host} port={port} user={user} password={password} dbname={database}",
