@@ -61,11 +61,20 @@ DROP TYPE "ProDataProviderDefinition";
 
 -- user_sessions
 
-DELETE FROM sessions;
-
 ALTER TABLE sessions ADD COLUMN
-user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL;
-ALTER TABLE sessions ADD COLUMN created timestamp with time zone NOT NULL;
-ALTER TABLE sessions ADD COLUMN valid_until timestamp with time zone NOT NULL;
+user_id uuid REFERENCES users (id) ON DELETE CASCADE;
+ALTER TABLE sessions ADD COLUMN created timestamp with time zone;
+ALTER TABLE sessions ADD COLUMN valid_until timestamp with time zone;
+
+UPDATE sessions SET
+    user_id = us.user_id,
+    created = us.created,
+    valid_until = us.valid_until
+FROM user_sessions AS us
+WHERE sessions.id = us.session_id;
+
+ALTER TABLE sessions ALTER COLUMN user_id SET NOT NULL;
+ALTER TABLE sessions ALTER COLUMN created SET NOT NULL;
+ALTER TABLE sessions ALTER COLUMN valid_until SET NOT NULL;
 
 DROP TABLE user_sessions;
