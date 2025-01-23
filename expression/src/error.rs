@@ -35,6 +35,9 @@ pub enum ExpressionExecutionError {
     #[snafu(display("Cannot load expression for execution"))]
     LinkExpression { source: libloading::Error },
 
+    #[snafu(display("Error during compilation of expression"))]
+    CompilationFailed,
+
     #[snafu(display("Unknown function in expression: {name}"))]
     LinkedFunctionNotFound {
         source: libloading::Error,
