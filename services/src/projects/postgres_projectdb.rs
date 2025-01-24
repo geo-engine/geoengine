@@ -1,9 +1,9 @@
 use super::error::PostgresProjectDbError;
 use super::error::ProjectDbError;
+use crate::contexts::PostgresDb;
 use crate::error::Result;
 use crate::permissions::Permission;
 use crate::permissions::TxPermissionDb;
-use crate::pro::contexts::PostgresDb;
 use crate::projects::error::{
     AccessFailedProjectDbError, Bb8ProjectDbError, ProjectNotFoundProjectDbError,
 };

@@ -1,10 +1,10 @@
 use crate::api::apidoc::ApiDoc;
 use crate::api::handlers;
 use crate::config::{self, get_config_element};
-use crate::contexts::{ApplicationContext, SessionContext};
+use crate::contexts::ApplicationContext;
+use crate::contexts::PostgresContext;
 use crate::error::{Error, Result};
-use crate::pro;
-use crate::pro::contexts::PostgresContext;
+use crate::users::UserSession;
 use crate::util::middleware::OutputRequestId;
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::util::server::{
@@ -18,7 +18,6 @@ use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::util::gdal::register_gdal_drivers_from_list;
 use log::info;
-use pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tracing_actix_web::TracingLogger;
@@ -33,9 +32,8 @@ async fn start<C>(
     app_ctx: C,
 ) -> Result<(), Error>
 where
-    C: ProApplicationContext,
+    C: ApplicationContext<Session = UserSession>,
     C::Session: FromRequest,
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
     let wrapped_ctx = web::Data::new(app_ctx);
 

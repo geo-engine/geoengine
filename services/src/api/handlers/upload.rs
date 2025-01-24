@@ -199,9 +199,9 @@ async fn list_upload_file_layers_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::PostgresContext;
     use crate::contexts::Session;
     use crate::ge_context;
-    use crate::pro::contexts::PostgresContext;
     use crate::users::UserAuth;
     use crate::util::tests::{send_test_request, SetMultipartBody, TestDataUploads};
     use actix_web::{http::header, test};

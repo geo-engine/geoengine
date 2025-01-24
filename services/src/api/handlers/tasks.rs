@@ -168,9 +168,9 @@ async fn abort_handler<C: ApplicationContext>(
 mod tests {
 
     use super::*;
+    use crate::contexts::PostgresContext;
     use crate::contexts::Session;
     use crate::ge_context;
-    use crate::pro::contexts::PostgresContext;
     use crate::tasks::{
         util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
     };

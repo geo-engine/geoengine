@@ -132,11 +132,11 @@ mod tests {
     use super::*;
     use crate::{
         api::model::{datatypes::RasterDataType, responses::IdResponse},
+        contexts::PostgresContext,
         contexts::Session,
         datasets::upload::UploadId,
         ge_context,
         machine_learning::MlModelMetadata,
-        pro::contexts::PostgresContext,
         users::UserAuth,
         util::tests::{send_test_request, SetMultipartBody, TestDataUploads},
     };
@@ -154,7 +154,7 @@ mod tests {
 
         let body = vec![(
             "model.onnx",
-            include_bytes!("../../../../test_data/pro/ml/onnx/test_classification.onnx"),
+            include_bytes!("../../../../test_data/ml/onnx/test_classification.onnx"),
         )];
 
         let req = test::TestRequest::post()

@@ -700,9 +700,9 @@ mod tests {
     use super::*;
     use crate::{
         contexts::SessionContext,
+        contexts::{PostgresContext, PostgresSessionContext},
         ge_context,
         layers::layer::{LayerListing, ProviderLayerId},
-        pro::contexts::{PostgresContext, PostgresSessionContext},
     };
     use geoengine_datatypes::test_data;
     use httptest::{matchers::request, responders::status_code, Expectation};

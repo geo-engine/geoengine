@@ -763,9 +763,9 @@ pub async fn remove_overviews<D: NetCdfCfProviderDb + 'static + std::fmt::Debug>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::{PostgresDb, PostgresSessionContext};
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::datasets::external::netcdfcf::NETCDF_CF_PROVIDER_ID;
-    use crate::pro::contexts::{PostgresDb, PostgresSessionContext};
     use crate::{contexts::SessionContext, ge_context, tasks::util::NopTaskContext};
     use gdal::{DatasetOptions, GdalOpenFlags};
     use geoengine_datatypes::{

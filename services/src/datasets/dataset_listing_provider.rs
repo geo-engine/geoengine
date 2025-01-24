@@ -453,10 +453,10 @@ mod tests {
     use super::*;
     use crate::{
         contexts::SessionContext,
+        contexts::{PostgresContext, PostgresDb, PostgresSessionContext},
         datasets::{storage::DatasetStore, AddDataset},
         ge_context,
         layers::storage::LayerProviderDb,
-        pro::contexts::{PostgresContext, PostgresDb, PostgresSessionContext},
     };
     use geoengine_datatypes::{
         collections::VectorDataType,
