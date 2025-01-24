@@ -7,6 +7,7 @@ pub type Result<T, E = ExpressionExecutionError> = std::result::Result<T, E>;
 const DEPS_CARGO_TOML: &[u8] = std::include_bytes!("../deps-workspace/Cargo.toml");
 const DEPS_CARGO_LOCK: &[u8] = std::include_bytes!("../deps-workspace/Cargo.lock");
 const DEPS_LIB_RS: &[u8] = std::include_bytes!("../deps-workspace/lib.rs");
+const RUST_TOOLCHAIN_TOML: &[u8] = std::include_bytes!("../../rust-toolchain.toml");
 
 /// A pre-built workspace for linking dependencies.
 ///
@@ -25,7 +26,7 @@ impl ExpressionDependencies {
 
         Self::copy_deps_workspace(cargo_workspace.path()).context(error::DepsWorkspace)?;
 
-        // build the dependencies using cargo throuhh a subprocess
+        // build the dependencies using cargo through a subprocess
         // note, that we do not use the cargo crate here, because it led to a deadlock in tests
         let output = std::process::Command::new("cargo")
             .current_dir(cargo_workspace.path())
@@ -59,6 +60,10 @@ impl ExpressionDependencies {
         std::fs::write(cargo_workspace.join("Cargo.toml"), DEPS_CARGO_TOML)?;
         std::fs::write(cargo_workspace.join("Cargo.lock"), DEPS_CARGO_LOCK)?;
         std::fs::write(cargo_workspace.join("lib.rs"), DEPS_LIB_RS)?;
+        std::fs::write(
+            cargo_workspace.join("rust-toolchain.toml"),
+            RUST_TOOLCHAIN_TOML,
+        )?;
         Ok(())
     }
 }
