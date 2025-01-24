@@ -156,14 +156,20 @@ fn compile_file(
         command.args(["-A", "warnings"]);
     }
 
-    let exit_status = command
+    let output = command
         .arg("-o")
         .arg(&output_filename)
         .arg(input_filename)
-        .status()
+        .output()
         .context(Compiler)?;
 
-    ensure!(exit_status.success(), CompilationFailed);
+    ensure!(
+        output.status.success(),
+        CompilationFailed {
+            stderr: String::from_utf8_lossy(&output.stderr),
+            stdout: String::from_utf8_lossy(&output.stdout),
+        }
+    );
 
     Ok(output_filename)
 }
