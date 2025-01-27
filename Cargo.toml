@@ -100,6 +100,7 @@ gdal-sys = "0.10"
 # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
 geo = "0.29.3"
 geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
+geo-types = "0.7.15"                                                       # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16.1"
 image = "0.25"
