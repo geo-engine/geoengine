@@ -36,7 +36,7 @@ pub enum ExpressionExecutionError {
     LinkExpression { source: libloading::Error },
 
     #[snafu(display(
-        "Error during compilation of expression. Stdout: {stdout}, Stderr: {stderr}"
+        "Error during compilation of expression."
     ))]
     CompilationFailed { stderr: String, stdout: String },
 
