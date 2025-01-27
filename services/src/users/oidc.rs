@@ -5,22 +5,20 @@ use crate::util::encryption::{
     AesGcmStringPasswordEncryption, EncryptionError, MaybeEncryptedBytes, OptionalStringEncryption,
     U96,
 };
-#[cfg(test)]
-use crate::util::tests::mock_oidc::{SINGLE_NONCE, SINGLE_STATE};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::Duration;
-use oauth2::basic::{BasicErrorResponseType, BasicRevocationErrorResponse, BasicTokenType};
-use oauth2::{AccessToken, RefreshToken, RequestTokenError, Scope, StandardRevocableToken};
+use oauth2::basic::{BasicErrorResponseType, BasicRevocationErrorResponse};
+use oauth2::{
+    AccessToken, ConfigurationError, EndpointMaybeSet, EndpointNotSet, EndpointSet, RefreshToken,
+    RequestTokenError, Scope, StandardRevocableToken,
+};
 use openidconnect::core::{
     CoreAuthDisplay, CoreAuthPrompt, CoreAuthenticationFlow, CoreClaimName, CoreClaimType,
-    CoreClient, CoreClientAuthMethod, CoreGenderClaim, CoreGrantType, CoreJsonWebKey,
-    CoreJsonWebKeyType, CoreJsonWebKeyUse, CoreJweContentEncryptionAlgorithm,
-    CoreJweKeyManagementAlgorithm, CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreResponseMode,
-    CoreResponseType, CoreSubjectIdentifierType, CoreTokenIntrospectionResponse, CoreTokenResponse,
+    CoreClientAuthMethod, CoreGenderClaim, CoreGrantType, CoreJsonWebKey,
+    CoreJweContentEncryptionAlgorithm, CoreJweKeyManagementAlgorithm, CoreJwsSigningAlgorithm,
+    CoreResponseMode, CoreResponseType, CoreSubjectIdentifierType, CoreTokenIntrospectionResponse,
+    CoreTokenResponse,
 };
-use openidconnect::reqwest::async_http_client;
-#[cfg(test)]
-use openidconnect::JsonWebKeySet;
 use openidconnect::{
     AccessTokenHash, AuthorizationCode, Client, ClientId, ClientSecret, CsrfToken, DiscoveryError,
     EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, IssuerUrl, Nonce, OAuth2TokenResponse,
@@ -28,7 +26,7 @@ use openidconnect::{
     StandardErrorResponse, SubjectIdentifier, TokenResponse,
 };
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+use snafu::{ResultExt, Snafu};
 use std::collections::HashMap;
 use std::sync::Arc;
 use url::{ParseError, Url};
@@ -45,9 +43,6 @@ pub type DefaultProviderMetadata = ProviderMetadata<
     CoreGrantType,
     CoreJweContentEncryptionAlgorithm,
     CoreJweKeyManagementAlgorithm,
-    CoreJwsSigningAlgorithm,
-    CoreJsonWebKeyType,
-    CoreJsonWebKeyUse,
     CoreJsonWebKey,
     CoreResponseMode,
     CoreResponseType,
@@ -55,25 +50,33 @@ pub type DefaultProviderMetadata = ProviderMetadata<
 >;
 
 #[cfg(test)]
-pub type DefaultJsonWebKeySet =
-    JsonWebKeySet<CoreJwsSigningAlgorithm, CoreJsonWebKeyType, CoreJsonWebKeyUse, CoreJsonWebKey>;
+pub type DefaultJsonWebKeySet = openidconnect::JsonWebKeySet<CoreJsonWebKey>;
 
-type DefaultClient = Client<
+type DefaultClient<
+    HasAuthUrl = EndpointSet,
+    HasDeviceAuthUrl = EndpointNotSet,
+    HasIntrospectionUrl = EndpointNotSet,
+    HasRevocationUrl = EndpointNotSet,
+    HasTokenUrl = EndpointMaybeSet,
+    HasUserInfoUrl = EndpointMaybeSet,
+> = Client<
     EmptyAdditionalClaims,
     CoreAuthDisplay,
     CoreGenderClaim,
     CoreJweContentEncryptionAlgorithm,
-    CoreJwsSigningAlgorithm,
-    CoreJsonWebKeyType,
-    CoreJsonWebKeyUse,
     CoreJsonWebKey,
     CoreAuthPrompt,
     StandardErrorResponse<BasicErrorResponseType>,
     CoreTokenResponse,
-    BasicTokenType,
     CoreTokenIntrospectionResponse,
     StandardRevocableToken,
     BasicRevocationErrorResponse,
+    HasAuthUrl,
+    HasDeviceAuthUrl,
+    HasIntrospectionUrl,
+    HasRevocationUrl,
+    HasTokenUrl,
+    HasUserInfoUrl,
 >;
 
 #[derive(Clone)]
@@ -129,6 +132,8 @@ impl OidcManager {
     }
     #[cfg(test)]
     pub(crate) fn from_oidc_with_static_tokens(value: Oidc) -> Self {
+        use crate::util::tests::mock_oidc::{SINGLE_NONCE, SINGLE_STATE};
+
         let request_db = OidcRequestDb {
             issuer: value.issuer.to_string(),
             client_id: value.client_id.to_string(),
@@ -138,6 +143,7 @@ impl OidcManager {
             users: Arc::new(Default::default()),
             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
             nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
+            http_client: create_async_http_client().unwrap(),
         };
         OidcManager {
             oidc_request_db: Some(Arc::new(request_db)),
@@ -148,6 +154,13 @@ impl OidcManager {
             ),
         }
     }
+}
+
+fn create_async_http_client() -> Result<reqwest::Client> {
+    reqwest::ClientBuilder::new()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .context(HttpClient)
 }
 
 impl Default for OidcManager {
@@ -183,6 +196,7 @@ struct OidcRequestDb {
     users: Db<HashMap<String, PendingRequest>>,
     state_function: fn() -> CsrfToken,
     nonce_function: fn() -> Nonce,
+    http_client: reqwest::Client,
 }
 
 struct PendingRequest {
@@ -258,13 +272,14 @@ pub enum OidcError {
     IllegalProviderConfig {
         source: ParseError,
     },
-    #[snafu(display("ProviderDiscoveryError: {}", source))]
+    #[snafu(context(false), display("ProviderDiscoveryError: {}", source))]
     ProviderDiscovery {
-        source: DiscoveryError<oauth2::reqwest::Error<reqwest::Error>>,
+        source: DiscoveryError<oauth2::HttpClientError<oauth2::reqwest::Error>>,
     },
+    #[snafu(context(false))]
     IllegalRequestToken {
         source: RequestTokenError<
-            oauth2::reqwest::Error<reqwest::Error>,
+            oauth2::HttpClientError<oauth2::reqwest::Error>,
             StandardErrorResponse<BasicErrorResponseType>,
         >,
     },
@@ -290,35 +305,20 @@ pub enum OidcError {
     Encryption {
         source: EncryptionError,
     },
-}
+    #[snafu(context(false), display("Configuration error: {source}"))]
+    Configuration {
+        source: ConfigurationError,
+    },
 
-impl From<DiscoveryError<oauth2::reqwest::Error<reqwest::Error>>> for OidcError {
-    fn from(source: DiscoveryError<oauth2::reqwest::Error<reqwest::Error>>) -> Self {
-        Self::ProviderDiscovery { source }
-    }
+    #[snafu(display("Cannot create HTTP client"))]
+    HttpClient {
+        source: reqwest::Error,
+    },
 }
 
 impl From<ParseError> for OidcError {
     fn from(source: ParseError) -> Self {
         Self::IllegalProviderConfig { source }
-    }
-}
-
-impl
-    From<
-        oauth2::RequestTokenError<
-            oauth2::reqwest::Error<reqwest::Error>,
-            oauth2::StandardErrorResponse<oauth2::basic::BasicErrorResponseType>,
-        >,
-    > for OidcError
-{
-    fn from(
-        source: RequestTokenError<
-            oauth2::reqwest::Error<reqwest::Error>,
-            StandardErrorResponse<BasicErrorResponseType>,
-        >,
-    ) -> Self {
-        Self::IllegalRequestToken { source }
     }
 }
 
@@ -328,7 +328,7 @@ impl OidcRequestDb {
 
         //TODO: Provider meta data could be added as a fixed field in the DB, making discovery a one-time process. This would have implications for server startup.
         let provider_metadata: DefaultProviderMetadata =
-            CoreProviderMetadata::discover_async(issuer_url, async_http_client).await?;
+            DefaultProviderMetadata::discover_async(issuer_url, &self.http_client).await?;
 
         let response_types_supported = provider_metadata.response_types_supported();
         if !response_types_supported.contains(&ResponseTypes::new(vec![CoreResponseType::Code])) {
@@ -376,7 +376,7 @@ impl OidcRequestDb {
             });
         }
 
-        let client = CoreClient::from_provider_metadata(
+        let client = DefaultClient::from_provider_metadata(
             provider_metadata,
             ClientId::new(self.client_id.to_string()),
             self.client_secret
@@ -468,9 +468,9 @@ impl OidcRequestDb {
                 })?;
 
         let token_response = client
-            .exchange_code(AuthorizationCode::new(auth_code_response.code))
+            .exchange_code(AuthorizationCode::new(auth_code_response.code))?
             .set_pkce_verifier(pending_request.code_verifier)
-            .request_async(async_http_client)
+            .request_async(&self.http_client)
             .await
             .map_err(|token_error| OidcError::TokenExchangeError {
                 reason: "Request for code to token exchange failed".to_string(),
@@ -483,8 +483,10 @@ impl OidcRequestDb {
                 reason: "missing".to_string(),
             })?;
 
+        let id_token_verifier = client.id_token_verifier();
+
         let claims = id_token
-            .claims(&client.id_token_verifier(), &pending_request.nonce)
+            .claims(&id_token_verifier, &pending_request.nonce)
             .map_err(|claims_error| OidcError::TokenExchangeError {
                 reason: "Failed to verify claims".to_string(),
                 source: Box::new(claims_error),
@@ -493,11 +495,17 @@ impl OidcRequestDb {
         if let Some(expected_access_token_hash) = claims.access_token_hash() {
             let actual_access_token_hash = AccessTokenHash::from_token(
                 token_response.access_token(),
-                &id_token
+                id_token
                     .signing_alg()
                     .map_err(|signing_error| OidcError::TokenExchangeError {
                         reason: "Unsupported Signing Algorithm".to_string(),
                         source: Box::new(signing_error),
+                    })?,
+                id_token
+                    .signing_key(&id_token_verifier)
+                    .map_err(|verification_error| OidcError::TokenExchangeError {
+                        reason: "Cannot verify signature".to_string(),
+                        source: Box::new(verification_error),
                     })?,
             )
             .map_err(|signing_error| OidcError::TokenExchangeError {
@@ -550,8 +558,8 @@ impl OidcRequestDb {
         refresh_token: RefreshToken,
     ) -> Result<OidcTokens> {
         let result = client
-            .exchange_refresh_token(&refresh_token)
-            .request_async(async_http_client)
+            .exchange_refresh_token(&refresh_token)?
+            .request_async(&self.http_client)
             .await?;
 
         Self::decode_token_response(&result)
@@ -572,6 +580,7 @@ impl TryFrom<Oidc> for OidcRequestDb {
                 users: Arc::new(Default::default()),
                 state_function: CsrfToken::new_random,
                 nonce_function: Nonce::new_random,
+                http_client: create_async_http_client()?,
             };
             Ok(db)
         } else {
@@ -610,6 +619,7 @@ impl OidcRequestClient {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::error::Result;
     use crate::users::oidc::OidcError::{
         IllegalProvider, LoginFailed, ProviderDiscovery, ResponseFieldError, TokenExchangeError,
@@ -631,8 +641,8 @@ mod tests {
         AccessToken, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields, RedirectUrl,
         StandardTokenResponse, TokenResponse,
     };
-    use openidconnect::core::{CoreClient, CoreIdTokenFields, CoreTokenResponse, CoreTokenType};
-    use openidconnect::Nonce;
+    use openidconnect::core::{CoreIdTokenFields, CoreTokenResponse, CoreTokenType};
+    use openidconnect::{Client, Nonce};
     use serde_json::json;
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -651,6 +661,7 @@ mod tests {
             users: Arc::new(Default::default()),
             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
             nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
+            http_client: create_async_http_client().unwrap(),
         }
     }
 
@@ -664,6 +675,7 @@ mod tests {
             users: Arc::new(Default::default()),
             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
             nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
+            http_client: create_async_http_client().unwrap(),
         }
     }
 
@@ -675,12 +687,14 @@ mod tests {
         let provider_metadata =
             mock_provider_metadata(request_db.issuer.as_str()).set_jwks(mock_jwks());
 
-        let result = CoreClient::from_provider_metadata(
+        let result = Client::from_provider_metadata(
             provider_metadata,
             ClientId::new(client_id),
             client_secret.map(ClientSecret::new),
         )
         .set_redirect_uri(RedirectUrl::new(redirect_uri)?);
+
+        // let reuslt = Client::new(ClientId::new(client_id), issuer, jwks);
 
         Ok(result)
     }
@@ -866,6 +880,7 @@ mod tests {
             users: Arc::new(Default::default()),
             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
             nonce_function: || Nonce::new(SINGLE_NONCE.to_string()),
+            http_client: create_async_http_client().unwrap(),
         };
 
         let client = mock_client(&request_db).unwrap();
