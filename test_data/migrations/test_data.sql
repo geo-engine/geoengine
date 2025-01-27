@@ -11,7 +11,7 @@ INSERT INTO project_versions (
     'Test Project Description',
     (
         ('Epsg', 4326), -- noqa: PRS
-        ((-180, -90), (180, 90)), 
+        ((-180, -90), (180, 90)),
         (0, 10000)
     ),
     ('Hours', 1),
@@ -101,9 +101,9 @@ INSERT INTO datasets (
             (0.1, 0.1)::"SpatialResolution",
             ARRAY[
                 ('band', (NULL, NULL)::"Measurement")::"RasterBandDescriptor"
-            ]::"RasterBandDescriptor"[]
+            ]::"RasterBandDescriptor" []
         )::"RasterResultDescriptor", -- noqa: PRS
-        NULL, 
+        NULL,
         NULL
     )::"ResultDescriptor",
     (
@@ -112,7 +112,7 @@ INSERT INTO datasets (
         NULL, -- noqa: PRS
         (
             (0, 0)::"TimeInterval",
-             (
+            (
                 'foo/bar.tiff',
                 0,
                 (
@@ -124,10 +124,10 @@ INSERT INTO datasets (
                 1800,
                 'Error'::"FileNotFoundHandling",
                 0.0,
-                array[]::"GdalMetadataMapping"[],
-                array[]::text[],
-                array[]::"StringPair"[],
-                false,
+                ARRAY[]::"GdalMetadataMapping" [],
+                ARRAY[]::TEXT [],
+                ARRAY[]::"StringPair" [],
+                FALSE,
                 ROW(0)::"GdalRetryOptions"
             )::"GdalDatasetParameters",
             (
@@ -140,11 +140,13 @@ INSERT INTO datasets (
                 )::"SpatialPartition2D",
                 (0.1, 0.1)::"SpatialResolution",
                 ARRAY[
-                    ('band', (NULL, NULL)::"Measurement")::"RasterBandDescriptor"
-                ]::"RasterBandDescriptor"[]
+                    (
+                        'band', (NULL, NULL)::"Measurement"
+                    )::"RasterBandDescriptor"
+                ]::"RasterBandDescriptor" []
             )::"RasterResultDescriptor",
-            0   
-        )::"GdalMetaDataStatic",        
+            0
+        )::"GdalMetaDataStatic",
         NULL,
         NULL
     )::"MetaDataDefinition",
@@ -156,14 +158,14 @@ INSERT INTO datasets (
                 0,
                 (
                     'LinearGradient'::"ColorizerType", -- noqa: PRS
-                    array[(
-                            0.0, 
-                            array[128,128,128,255]::"RgbaColor"
-                        )::"Breakpoint"
-                    ]::"Breakpoint"[],
-                    array[0,0,0,0]::"RgbaColor",
-                    array[0,0,0,0]::"RgbaColor",
-                    array[0,0,0,0]::"RgbaColor",
+                    ARRAY[(
+                        0.0,
+                        ARRAY[128, 128, 128, 255]::"RgbaColor"
+                    )::"Breakpoint"
+                    ]::"Breakpoint" [],
+                    ARRAY[0, 0, 0, 0]::"RgbaColor",
+                    ARRAY[0, 0, 0, 0]::"RgbaColor",
+                    ARRAY[0, 0, 0, 0]::"RgbaColor",
                     NULL
                 )::"Colorizer",
                 NULL,
@@ -212,7 +214,7 @@ INSERT INTO layer_providers (
             1000,
             'GBIF Dump',
             10,
-            ARRAY[]::TEXT[]
+            ARRAY[]::TEXT []
         )::"GbifDataProviderDefinition",
         NULL,
         NULL,
