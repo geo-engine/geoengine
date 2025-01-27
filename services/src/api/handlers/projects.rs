@@ -397,9 +397,9 @@ pub(crate) async fn project_versions_handler<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::PostgresContext;
     use crate::contexts::Session;
     use crate::ge_context;
-    use crate::pro::contexts::PostgresContext;
     use crate::projects::{
         LayerUpdate, LayerVisibility, Plot, PlotUpdate, Project, ProjectId, ProjectLayer,
         ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,

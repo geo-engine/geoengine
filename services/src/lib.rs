@@ -17,9 +17,6 @@ pub mod users;
 pub mod util;
 pub mod workflows;
 
-/// TODO: merge with rest of the code
-pub mod pro;
-
 pub use geoengine_datatypes::test_data;
 
 // re-export test macro

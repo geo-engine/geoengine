@@ -9,7 +9,15 @@ use crate::{
     },
 };
 use async_trait::async_trait;
+use pwhash::bcrypt;
 use tokio_postgres::Transaction;
+use uuid::Uuid;
+
+const ADMIN_ROLE_ID: Uuid = Uuid::from_u128(0xd532_8854_6190_4af9_ad69_4e74_b096_1ac9);
+const REGISTERED_USER_ROLE_ID: Uuid = Uuid::from_u128(0x4e80_81b6_8aa6_4275_af0c_2fa2_da55_7d28);
+const ANONYMOUS_USER_ROLE_ID: Uuid = Uuid::from_u128(0xfd8e_87bf_515c_4f36_8da6_1a53_702f_f102);
+
+const ADMIN_QUOTA: i64 = 9_223_372_036_854_775_807; // max postgres `bigint` value
 
 /// Migration to create the current schema instead of starting by version `0000`.
 pub struct CurrentSchemaMigration;
@@ -32,10 +40,18 @@ impl CurrentSchemaMigration {
         Ok(())
     }
 
+    /// Populates the current schema with the initial data.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the password hash for the admin user cannot be created.
+    ///
+    #[allow(clippy::too_many_lines)]
     pub async fn populate_current_schema(
         &self,
         tx: &Transaction<'_>,
         config: &crate::config::Postgres,
+        user_config: crate::config::User,
     ) -> Result<()> {
         tx.execute(
             "
@@ -104,6 +120,89 @@ impl CurrentSchemaMigration {
         )
         .await?;
 
+        tx.execute(
+            "
+                INSERT INTO roles
+                    (id, name)
+                VALUES
+                    ($1, 'admin'),
+                    ($2, 'user'),
+                    ($3, 'anonymous')
+                ;
+                ",
+            &[
+                &ADMIN_ROLE_ID,
+                &REGISTERED_USER_ROLE_ID,
+                &ANONYMOUS_USER_ROLE_ID,
+            ],
+        )
+        .await?;
+
+        tx.execute(
+            "
+                INSERT INTO users (
+                    id, 
+                    email,
+                    password_hash,
+                    real_name,
+                    quota_available,
+                    active
+                ) VALUES (
+                    $1, 
+                    $2,
+                    $3,
+                    'admin',
+                    $4,
+                    true
+                );
+                ",
+            &[
+                &ADMIN_ROLE_ID,
+                &user_config.admin_email,
+                &bcrypt::hash(user_config.admin_password)
+                    .expect("Admin password hash should be valid"),
+                &ADMIN_QUOTA,
+            ],
+        )
+        .await?;
+
+        tx.execute(
+            "
+                INSERT INTO user_roles (
+                    user_id,
+                    role_id
+                ) VALUES (
+                    $1,
+                    $1
+                );
+                ",
+            &[&ADMIN_ROLE_ID],
+        )
+        .await?;
+
+        tx.execute(
+            "
+                    INSERT INTO permissions
+                        (role_id, layer_collection_id, permission)  
+                    VALUES 
+                        ($1, $4, 'Owner'),
+                        ($2, $4, 'Read'),
+                        ($3, $4, 'Read'),
+                        ($1, $5, 'Owner'),
+                        ($2, $5, 'Read'),
+                        ($3, $5, 'Read')
+                    ;
+                    ",
+            &[
+                &ADMIN_ROLE_ID,
+                &REGISTERED_USER_ROLE_ID,
+                &ANONYMOUS_USER_ROLE_ID,
+                &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+                &UNSORTED_COLLECTION_ID,
+            ],
+        )
+        .await?;
+
         Ok(())
     }
 }
@@ -123,9 +222,10 @@ impl Migration for CurrentSchemaMigration {
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
         let config = crate::config::get_config_element::<crate::config::Postgres>()?;
+        let user_config = crate::config::get_config_element::<crate::config::User>()?;
 
         self.create_current_schema(tx, &config).await?;
 
-        self.populate_current_schema(tx, &config).await
+        self.populate_current_schema(tx, &config, user_config).await
     }
 }

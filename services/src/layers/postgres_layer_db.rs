@@ -12,10 +12,9 @@ use super::storage::{
     LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
     INTERNAL_PROVIDER_ID,
 };
+use crate::contexts::PostgresDb;
 use crate::layers::external::DataProviderDefinition;
 use crate::permissions::{Permission, RoleId, TxPermissionDb};
-use crate::pro::contexts::PostgresDb;
-use crate::pro::datasets::TypedProDataProviderDefinition;
 use crate::workflows::registry::TxWorkflowRegistry;
 use crate::{
     error::{self, Result},
@@ -824,30 +823,20 @@ where
 
         let stmt = conn
             .prepare(
-                "(
-                    SELECT 
-                        id, 
-                        name,
-                        type_name,
-                        priority
-                    FROM 
-                        layer_providers
-                    WHERE
-                        priority > -1000
-                    UNION ALL
-                    SELECT 
-                        id, 
-                        name,
-                        type_name,
-                        priority
-                    FROM 
-                        pro_layer_providers
-                    WHERE
-                        priority > -1000
-                )
+                "
+                SELECT 
+                    id, 
+                    name,
+                    type_name,
+                    priority
+                FROM 
+                    layer_providers
+                WHERE
+                    priority > -1000
                 ORDER BY priority desc, name ASC
                 LIMIT $1 
-                OFFSET $2;",
+                OFFSET $2;
+                ",
             )
             .await?;
 
@@ -874,106 +863,26 @@ where
 
         let stmt = conn
             .prepare(
-                "SELECT
-                    definition, NULL AS pro_definition
+                "
+                SELECT
+                    definition
                 FROM
                     layer_providers
                 WHERE
                     id = $1
-                UNION ALL
-                SELECT
-                    NULL AS definition, definition AS pro_definition
-                FROM
-                    pro_layer_providers
-                WHERE
-                    id = $1",
+                ",
             )
             .await?;
 
         let row = conn.query_one(&stmt, &[&id]).await?;
+        let definition: TypedDataProviderDefinition = row.get(0);
 
-        if let Some(definition) = row.get::<_, Option<TypedDataProviderDefinition>>(0) {
-            return Box::new(definition)
-                .initialize(PostgresDb {
-                    conn_pool: self.conn_pool.clone(),
-                    session: self.session.clone(),
-                })
-                .await;
-        }
-
-        let pro_definition: TypedProDataProviderDefinition = row.get(1);
-        Box::new(pro_definition)
+        return Box::new(definition)
             .initialize(PostgresDb {
                 conn_pool: self.conn_pool.clone(),
                 session: self.session.clone(),
             })
-            .await
-    }
-}
-
-#[async_trait]
-pub trait ProLayerProviderDb: Send + Sync + 'static {
-    async fn add_pro_layer_provider(
-        &self,
-        provider: TypedProDataProviderDefinition,
-    ) -> Result<DataProviderId>;
-}
-
-#[async_trait]
-impl<Tls> ProLayerProviderDb for PostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    async fn add_pro_layer_provider(
-        &self,
-        provider: TypedProDataProviderDefinition,
-    ) -> Result<DataProviderId> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
-
-        let conn = self.conn_pool.get().await?;
-
-        let prio = DataProviderDefinition::<Self>::priority(&provider);
-        let clamp_prio = prio.clamp(-1000, 1000);
-
-        if prio != clamp_prio {
-            log::warn!(
-                "The priority of the provider {} is out of range! --> clamped {} to {}",
-                DataProviderDefinition::<Self>::name(&provider),
-                prio,
-                clamp_prio
-            );
-        }
-
-        let stmt = conn
-            .prepare(
-                "
-              INSERT INTO pro_layer_providers (
-                  id, 
-                  type_name, 
-                  name,
-                  definition,
-                  priority
-              )
-              VALUES ($1, $2, $3, $4, $5)",
-            )
-            .await?;
-
-        let id = DataProviderDefinition::<Self>::id(&provider);
-        conn.execute(
-            &stmt,
-            &[
-                &id,
-                &DataProviderDefinition::<Self>::type_name(&provider),
-                &DataProviderDefinition::<Self>::name(&provider),
-                &provider,
-                &clamp_prio,
-            ],
-        )
-        .await?;
-        Ok(id)
+            .await;
     }
 }
 

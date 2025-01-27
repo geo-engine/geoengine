@@ -1,20 +1,18 @@
-use super::migrations::{pro_migrations, ProMigrationImpl};
-use super::{ExecutionContextImpl, ProApplicationContext, ProGeoEngineDb, QuotaCheckerImpl};
-use crate::api::cli::add_datasets_from_directory;
-use crate::api::cli::add_providers_from_directory;
+use self::migrations::all_migrations;
 use crate::api::model::services::Volume;
 use crate::config::{get_config_element, Cache, Oidc, Quota};
 use crate::contexts::{
-    initialize_database, ApplicationContext, CurrentSchemaMigration, MigrationResult,
+    initialize_database, migrations, ApplicationContext, CurrentSchemaMigration, MigrationResult,
     QueryContextImpl, SessionId,
 };
+use crate::contexts::{ExecutionContextImpl, QuotaCheckerImpl};
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
 use crate::layers::add_from_directory::{
-    add_layer_collections_from_directory, add_layers_from_directory,
-    add_pro_providers_from_directory,
+    add_datasets_from_directory, add_layer_collections_from_directory, add_layers_from_directory,
+    add_providers_from_directory,
 };
 use crate::machine_learning::error::MachineLearningError;
 use crate::machine_learning::name::MlModelName;
@@ -201,8 +199,6 @@ where
             add_datasets_from_directory(&mut db, dataset_defs_path).await;
 
             add_providers_from_directory(&mut db, provider_defs_path.clone()).await;
-
-            add_pro_providers_from_directory(&mut db, provider_defs_path.join("pro")).await;
         }
 
         Ok(app_ctx)
@@ -217,8 +213,8 @@ where
 
         let migration = initialize_database(
             &mut conn,
-            Box::new(ProMigrationImpl::from(CurrentSchemaMigration)),
-            &pro_migrations(),
+            Box::new(CurrentSchemaMigration),
+            &all_migrations(),
         )
         .await?;
 
@@ -311,15 +307,7 @@ where
             .map_err(Box::new)
             .context(error::Unauthorized)
     }
-}
 
-impl<Tls> ProApplicationContext for PostgresContext<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
     fn oidc_manager(&self) -> &OidcManager {
         &self.oidc_manager
     }
@@ -463,15 +451,6 @@ where
 }
 
 impl<Tls> GeoEngineDb for PostgresDb<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-}
-
-impl<Tls> ProGeoEngineDb for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,

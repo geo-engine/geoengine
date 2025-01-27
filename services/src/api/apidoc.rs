@@ -481,7 +481,7 @@ mod tests {
     use super::*;
     use crate::ge_context;
     use crate::util::tests::send_test_request;
-    use crate::{pro::contexts::PostgresContext, util::openapi_examples::can_run_examples};
+    use crate::{contexts::PostgresContext, util::openapi_examples::can_run_examples};
     use tokio_postgres::NoTls;
 
     #[test]

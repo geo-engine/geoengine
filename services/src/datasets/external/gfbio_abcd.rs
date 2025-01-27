@@ -644,8 +644,8 @@ mod tests {
     use super::*;
     use crate::config;
     use crate::contexts::SessionContext;
+    use crate::contexts::{PostgresContext, PostgresSessionContext};
     use crate::layers::layer::ProviderLayerCollectionId;
-    use crate::pro::contexts::{PostgresContext, PostgresSessionContext};
     use crate::{ge_context, test_data};
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;

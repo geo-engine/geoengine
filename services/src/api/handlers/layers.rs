@@ -1185,12 +1185,12 @@ mod tests {
     use super::*;
     use crate::api::model::responses::ErrorResponse;
     use crate::config::get_config_element;
+    use crate::contexts::PostgresContext;
     use crate::contexts::SessionId;
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::ge_context;
     use crate::layers::layer::Layer;
     use crate::layers::storage::INTERNAL_PROVIDER_ID;
-    use crate::pro::contexts::PostgresContext;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::users::{UserAuth, UserSession};

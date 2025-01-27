@@ -48,13 +48,23 @@ INSERT INTO layers (
         (
             1.0, -- noqa: PRS
             (
-                'Rgba'::"ColorizerType", -- noqa: PRS
+                'MultiBand'::"RasterColorizerType",
                 NULL,
                 NULL,
-                NULL,
-                NULL,
-                NULL
-            )::"Colorizer"
+                0,
+                0,
+                0,
+                0,
+                255,
+                1,
+                0,
+                255,
+                1,
+                0,
+                255,
+                1,
+                ARRAY[0, 125, 255, 1]::"RgbaColor"
+            )::"RasterColorizer"
         )::"RasterSymbology", -- noqa: PRS
         NULL,
         NULL,
@@ -83,13 +93,15 @@ INSERT INTO datasets (
         (
             'U8'::"RasterDataType", -- noqa: PRS
             ('Epsg'::"SpatialReferenceAuthority", 4326)::"SpatialReference",
-            (NULL, NULL)::"Measurement",
             (0, 0)::"TimeInterval",
             (
                 (-180.0, -90.0)::"Coordinate2D",
                 (180.0, 90.0)::"Coordinate2D"
             )::"SpatialPartition2D",
-            (0.1, 0.1)::"SpatialResolution"
+            (0.1, 0.1)::"SpatialResolution",
+            ARRAY[
+                ('band', (NULL, NULL)::"Measurement")::"RasterBandDescriptor"
+            ]::"RasterBandDescriptor"[]
         )::"RasterResultDescriptor", -- noqa: PRS
         NULL, 
         NULL
@@ -121,13 +133,15 @@ INSERT INTO datasets (
             (
                 'U8'::"RasterDataType",
                 ('Epsg'::"SpatialReferenceAuthority", 4326)::"SpatialReference",
-                (NULL, NULL)::"Measurement",
                 (0, 0)::"TimeInterval",
                 (
                     (-180.0, -90.0)::"Coordinate2D",
                     (180.0, 90.0)::"Coordinate2D"
                 )::"SpatialPartition2D",
-                (0.1, 0.1)::"SpatialResolution"
+                (0.1, 0.1)::"SpatialResolution",
+                ARRAY[
+                    ('band', (NULL, NULL)::"Measurement")::"RasterBandDescriptor"
+                ]::"RasterBandDescriptor"[]
             )::"RasterResultDescriptor",
             0   
         )::"GdalMetaDataStatic",        
@@ -138,17 +152,34 @@ INSERT INTO datasets (
         (
             1.0, -- noqa: PRS
             (
-                'LinearGradient'::"ColorizerType", -- noqa: PRS
-                array[(
-                        0.0, 
-                        array[128,128,128,255]::"RgbaColor"
-                    )::"Breakpoint"
-                ]::"Breakpoint"[],
-                array[0,0,0,0]::"RgbaColor",
-                array[0,0,0,0]::"RgbaColor",
-                array[0,0,0,0]::"RgbaColor",
+                'MultiBand'::"RasterColorizerType",
+                0,
+                (
+                    'LinearGradient'::"ColorizerType", -- noqa: PRS
+                    array[(
+                            0.0, 
+                            array[128,128,128,255]::"RgbaColor"
+                        )::"Breakpoint"
+                    ]::"Breakpoint"[],
+                    array[0,0,0,0]::"RgbaColor",
+                    array[0,0,0,0]::"RgbaColor",
+                    array[0,0,0,0]::"RgbaColor",
+                    NULL
+                )::"Colorizer",
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
                 NULL
-            )::"Colorizer"
+            )::"RasterColorizer"
         )::"RasterSymbology", -- noqa: PRS
         NULL,
         NULL,
@@ -177,8 +208,13 @@ INSERT INTO layer_providers (
                 'geoengine',
                 'geoengine'
             )::"DatabaseConnectionConfig",
-            0
+            0,
+            1000,
+            'GBIF Dump',
+            10,
+            ARRAY[]::TEXT[]
         )::"GbifDataProviderDefinition",
+        NULL,
         NULL,
         NULL,
         NULL,
@@ -186,4 +222,48 @@ INSERT INTO layer_providers (
         NULL,
         NULL
     )::"DataProviderDefinition"
+);
+
+-- Test data for initial database schema which will be subjected to migrations 
+-- and verified to be loadable in the latest database version.
+
+INSERT INTO sessions (id, project_id, view) VALUES (
+    'e11c7674-7ca5-4e07-840c-260835d3fc8d',
+    NULL,
+    NULL
+);
+
+INSERT INTO roles (id, name) VALUES (
+    'b589a590-9c0c-4b55-9aa2-d178a5f42a78',
+    'foobar@example.org'
+);
+
+INSERT INTO users (
+    id, email, password_hash, real_name, active, quota_available, quota_used
+) VALUES (
+    'b589a590-9c0c-4b55-9aa2-d178a5f42a78',
+    'foobar@example.org',
+    'xyz',
+    'Foo Bar',
+    TRUE,
+    0,
+    0
+);
+
+INSERT INTO user_roles (user_id, role_id) VALUES (
+    'b589a590-9c0c-4b55-9aa2-d178a5f42a78',
+    'b589a590-9c0c-4b55-9aa2-d178a5f42a78'
+);
+
+INSERT INTO user_sessions (user_id, session_id, created, valid_until) VALUES (
+    'b589a590-9c0c-4b55-9aa2-d178a5f42a78',
+    'e11c7674-7ca5-4e07-840c-260835d3fc8d',
+    TIMESTAMP '2023-01-01 00:00:00',
+    TIMESTAMP '9999-01-01 00:00:00'
+);
+
+INSERT INTO permissions (role_id, permission, project_id) VALUES (
+    'b589a590-9c0c-4b55-9aa2-d178a5f42a78',
+    ('Owner'),
+    '6a272e75-7ea2-43d7-804d-d84308e0f0fe'
 );
