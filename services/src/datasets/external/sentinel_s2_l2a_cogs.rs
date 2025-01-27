@@ -436,7 +436,7 @@ impl SentinelS2L2aCogsMetaData {
             .filter(|f| {
                 f.properties
                     .proj_epsg
-                    .map_or(false, |epsg| epsg == self.zone.epsg)
+                    .is_some_and(|epsg| epsg == self.zone.epsg)
             })
             .collect();
 

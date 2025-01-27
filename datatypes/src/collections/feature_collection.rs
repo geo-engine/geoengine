@@ -1092,7 +1092,7 @@ where
             + self
                 .types
                 .iter()
-                .map(|(k, v)| mem::size_of_val(k) + k.as_bytes().len() + mem::size_of_val(v))
+                .map(|(k, v)| mem::size_of_val(k) + k.len() + mem::size_of_val(v))
                 .sum::<usize>();
 
         table_size + map_size

@@ -759,7 +759,7 @@ impl EdrExtents {
     fn has_discrete_vertical_axis(&self, discrete_vrs: &[String]) -> bool {
         self.vertical
             .as_ref()
-            .map_or(false, |val| discrete_vrs.contains(&val.vrs))
+            .is_some_and(|val| discrete_vrs.contains(&val.vrs))
     }
 }
 

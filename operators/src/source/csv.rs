@@ -113,11 +113,7 @@ impl ReaderState {
         let old_state = std::mem::replace(self, ReaderState::Error);
 
         if let ReaderState::Untouched(mut csv_reader) = old_state {
-            let header = match CsvSourceStream::setup_read(geometry_specification, &mut csv_reader)
-            {
-                Ok(header) => header,
-                Err(error) => return Err(error),
-            };
+            let header = CsvSourceStream::setup_read(geometry_specification, &mut csv_reader)?;
 
             let mut records = csv_reader.into_records();
 
