@@ -4,18 +4,26 @@
 [![Coverage Status](https://coveralls.io/repos/github/geo-engine/geoengine/badge.svg?branch=main)](https://coveralls.io/github/geo-engine/geoengine?branch=main)
 [![Documentation](https://img.shields.io/badge/documentation-docs.geoengine.io-blue)](https://docs.geoengine.io/)
 
-This workspace contains the Geo Engine crates.
+Geo Engine is a geospatial data processing engine that allows you to perform spatial analyses and visualizations.
+Its query engine has native time support and can handle large datasets through stream processing.
+It supports various geospatial data formats and provides a robust API for integrating with other applications, e.g., by providing OGC APIs.
 
-## Documentation
+You can find more documentation at [docs.geoengine.io](https://docs.geoengine.io/).
 
-- [Geo Engine Docs](https://docs.geoengine.io/)
+This workspace contains the Geo Engine server.
 
-## Development
+## Build
 
-- While Geo Engine should build on Linux and Windows environments, we currently only support Ubuntu Linux 22.04 LTS.
-- You need a recent Rust environment with a Rust nightly compiler. We recommend `rustup` to manage Rust `https://rustup.rs/`.
+We currently only support Ubuntu Linux 22.04 LTS.
+
+You need to have a Rust compiler and the package manager Cargo installed.
+We recommend [rustup.rs](https://rustup.rs) to manage both.
+
+You can run the server using `cargo run --release`.
 
 ### Dependencies
+
+There are some dependencies that need to be installed on the system:
 
 ```
 # Build essentials
@@ -29,6 +37,12 @@ apt install cmake sqlite3
 # Protocl Buffers
 apt install protobuf-compiler
 ```
+
+### Configuration
+
+You can override the values in `Settings-default.toml` by creating a `Settings.toml` and modifying the parameters to suit your requirements.
+
+## Development
 
 ### Lints
 
@@ -113,17 +127,20 @@ cat test_data/gbif/init_test_data.sql test_data/gbif/test_data.sql | \
 For performance-critical features, we aim to provide benchmarks in the `benches` directory.
 If you plan on optimizing a feature of Geo Engine, please confirm it this way.
 
-## Deployment
+### Expression dependencies
 
-Deploy an instance using `cargo run --package geoengine-services --bin main --release`.
+We use the [`expression/deps-workspace`](expression/deps-workspace) crate to manage dependencies for compiling expressions at runtime.
+This ensures that it is compatible with Geo Engine when linking against it.
 
-### Features
+To update the expression dependencies, you can use the [`update-expression-deps.rs`](.scripts/update-expression-deps.rs) script located in the [`.scripts`](.scripts) directory.
+This script helps to keep the dependencies in sync and up to date.
+Run it with:
 
-The PostgreSQL storage backend can optionally be enabled using `--features postgres` in the `cargo` command.
+```bash
+chmod +x .scripts/update-expression-deps.rs
 
-### Configuration
-
-Copy `Settings-default.toml` to `Settings.toml` and edit per your requirements.
+./.scripts/update-expression-deps.rs
+```
 
 ## Troubleshooting
 

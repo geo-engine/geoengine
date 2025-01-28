@@ -7,6 +7,14 @@ edition = "2024"
 [dependencies]
 tempfile = "3.15"
 ---
+//! This script updates the dependencies for the `expression/deps-workspace` by performing the following steps:
+//! 
+//! 1. Creates a temporary directory.
+//! 2. Copies all files from the `expression/deps-workspace` directory to the temporary directory.
+//! 4. Runs `cargo update` in the temporary directory to update the dependencies.
+//! 5. Copies the updated `Cargo.lock` file back to the `expression/deps-workspace` directory.
+//! 
+//! If any step fails, the script will print an error message and exit with a non-zero status code.
 
 use std::fs;
 use std::path::Path;
