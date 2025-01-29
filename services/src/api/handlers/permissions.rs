@@ -279,18 +279,25 @@ mod tests {
 
     use super::*;
     use crate::{
+        api::model::datatypes::RasterDataType as ApiRasterDataType,
         contexts::PostgresContext,
+        datasets::upload::{Upload, UploadDb, UploadId},
         ge_context,
+        layers::{layer::AddLayer, listing::LayerCollectionProvider, storage::LayerDb},
+        machine_learning::{MlModel, MlModelIdAndName, MlModelMetadata},
         users::{UserAuth, UserCredentials, UserRegistration},
         util::tests::{
             add_ndvi_to_datasets2, add_ports_to_datasets, admin_login, read_body_string,
             send_test_request,
         },
+        workflows::workflow::Workflow,
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::{primitives::Coordinate2D, util::Identifier};
     use geoengine_operators::{
-        engine::{RasterOperator, VectorOperator, WorkflowOperatorPath},
+        engine::{RasterOperator, TypedOperator, VectorOperator, WorkflowOperatorPath},
+        mock::{MockPointSource, MockPointSourceParams},
         source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
     };
     use serde_json::{json, Value};
@@ -394,7 +401,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_lists_permissions(app_ctx: PostgresContext<NoTls>) {
+    async fn it_lists_dataset_permissions(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
 
         let (_dataset_id, dataset_name) = add_ndvi_to_datasets2(&app_ctx, true, true).await;
@@ -449,6 +456,224 @@ mod tests {
                    }
                }]
             )
+        );
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_lists_ml_model_permissions(app_ctx: PostgresContext<NoTls>) {
+        let admin_session = admin_login(&app_ctx).await;
+
+        let db = app_ctx.session_context(admin_session.clone()).db();
+
+        let upload_id = UploadId::new();
+        let upload = Upload {
+            id: upload_id,
+            files: vec![],
+        };
+        db.create_upload(upload).await.unwrap();
+
+        let model = MlModel {
+            description: "No real model here".to_owned(),
+            display_name: "my unreal model".to_owned(),
+            metadata: MlModelMetadata {
+                file_name: "myUnrealmodel.onnx".to_owned(),
+                input_type: ApiRasterDataType::F32,
+                num_input_bands: 17,
+                output_type: ApiRasterDataType::F64,
+            },
+            name: MlModelName::new(None, "myUnrealModel").into(),
+            upload: upload_id,
+        };
+
+        let MlModelIdAndName {
+            id: _model_id,
+            name: model_name,
+        } = db.add_model(model).await.unwrap();
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/permissions/resources/mlModel/{model_name}?offset=0&limit=10",
+            ))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_test_request(req, app_ctx).await;
+
+        let res_status = res.status();
+        let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
+        assert_eq!(res_status, 200, "{res_body}");
+
+        assert_eq!(
+            res_body,
+            json!([{
+                   "permission":"Owner",
+                   "resource":  {
+                       "id": model_name.to_string(),
+                       "type": "mlModel"
+                   },
+                   "role": {
+                       "id": "d5328854-6190-4af9-ad69-4e74b0961ac9",
+                       "name": "admin"
+                   }
+               }]
+            )
+        );
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_lists_layer_collection_permissions(app_ctx: PostgresContext<NoTls>) {
+        let admin_session = admin_login(&app_ctx).await;
+
+        let db = app_ctx.session_context(admin_session.clone()).db();
+
+        let root_collection = &db.get_root_layer_collection_id().await.unwrap();
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/permissions/resources/layerCollection/{root_collection}?offset=0&limit=10",
+            ))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_test_request(req, app_ctx).await;
+
+        let res_status = res.status();
+        let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
+        assert_eq!(res_status, 200, "{res_body}");
+
+        assert_eq!(
+            res_body,
+            json!([{
+                   "permission":"Owner",
+                   "resource":  {
+                       "id": root_collection.to_string(),
+                       "type": "layerCollection"
+                   },
+                   "role": {
+                       "id": "d5328854-6190-4af9-ad69-4e74b0961ac9",
+                       "name":
+                       "admin"
+                   }
+               }, {
+                   "permission": "Read",
+                   "resource": {
+                       "id": root_collection.to_string(),
+                       "type": "layerCollection"
+                   },
+                   "role": {
+                       "id": "fd8e87bf-515c-4f36-8da6-1a53702ff102",
+                       "name": "anonymous"
+                   }
+               }, {
+                   "permission": "Read",
+                   "resource": {
+                       "id": root_collection.to_string(),
+                       "type": "layerCollection",
+                   },
+                   "role": {
+                       "id": "4e8081b6-8aa6-4275-af0c-2fa2da557d28",
+                       "name": "user"
+                   }
+               }]
+            )
+        );
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_lists_layer_permissions(app_ctx: PostgresContext<NoTls>) {
+        let admin_session = admin_login(&app_ctx).await;
+
+        let db = app_ctx.session_context(admin_session.clone()).db();
+
+        let root_collection = &db.get_root_layer_collection_id().await.unwrap();
+
+        let layer = AddLayer {
+            name: "layer".to_string(),
+            description: "description".to_string(),
+            workflow: Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: None,
+            metadata: Default::default(),
+            properties: Default::default(),
+        };
+
+        let l_id = db.add_layer(layer, root_collection).await.unwrap();
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/permissions/resources/layer/{l_id}?offset=0&limit=10",
+            ))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id.to_string()),
+            ));
+        let res = send_test_request(req, app_ctx).await;
+
+        let res_status = res.status();
+        let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
+        assert_eq!(res_status, 200, "{res_body}");
+
+        assert_eq!(
+            res_body,
+            json!([{
+                   "permission":"Owner",
+                   "resource":  {
+                       "id": l_id.to_string(),
+                       "type": "layer"
+                   },
+                   "role": {
+                       "id": "d5328854-6190-4af9-ad69-4e74b0961ac9",
+                       "name":
+                       "admin"
+                   }
+               } ]
+            )
+        );
+    }
+
+    #[test]
+    fn resource_from_str_tuple() {
+        let test_uuid = Uuid::new_v4();
+
+        let layer_res = Resource::try_from(("layer".to_owned(), "cats".to_owned())).unwrap();
+        assert_eq!(layer_res, Resource::Layer(LayerId("cats".to_owned())));
+
+        let layer_col_res =
+            Resource::try_from(("layerCollection".to_owned(), "cats".to_owned())).unwrap();
+        assert_eq!(
+            layer_col_res,
+            Resource::LayerCollection(LayerCollectionId("cats".to_owned()))
+        );
+
+        let project_res = Resource::try_from(("project".to_owned(), test_uuid.into())).unwrap();
+        assert_eq!(project_res, Resource::Project(ProjectId(test_uuid)));
+
+        let dataset_res = Resource::try_from(("dataset".to_owned(), "cats".to_owned())).unwrap();
+        assert_eq!(
+            dataset_res,
+            Resource::Dataset(DatasetName::new(None, "cats".to_owned()))
+        );
+
+        let ml_model_res = Resource::try_from(("mlModel".to_owned(), "cats".to_owned())).unwrap();
+        assert_eq!(
+            ml_model_res,
+            Resource::MlModel(MlModelName::new(None, "cats".to_owned()))
         );
     }
 }
