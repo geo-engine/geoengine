@@ -1,4 +1,5 @@
 use crate::{
+    contexts::PostgresDb,
     machine_learning::{
         error::{
             error::{Bb8MachineLearningError, PostgresMachineLearningError},
@@ -8,7 +9,6 @@ use crate::{
         MlModel, MlModelDb, MlModelId, MlModelIdAndName, MlModelListOptions, MlModelMetadata,
     },
     permissions::Permission,
-    pro::contexts::PostgresDb,
     util::postgres::PostgresErrorExt,
 };
 use async_trait::async_trait;

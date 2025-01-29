@@ -267,9 +267,9 @@ pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialRefere
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::PostgresContext;
     use crate::contexts::Session;
     use crate::ge_context;
-    use crate::pro::contexts::PostgresContext;
     use crate::users::UserAuth;
     use crate::util::tests::send_test_request;
     use actix_web;

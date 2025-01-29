@@ -892,10 +892,9 @@ mod tests {
     use super::*;
     use crate::{
         contexts::{ApplicationContext, SessionContext},
+        contexts::{PostgresContext, PostgresDb},
         ge_context,
         layers::storage::{LayerProviderDb, LayerProviderListing, LayerProviderListingOptions},
-        layers::ProLayerProviderDb,
-        pro::contexts::{PostgresContext, PostgresDb},
         test_data,
         users::UserAuth,
         util::tests::admin_login,
@@ -927,7 +926,7 @@ mod tests {
         // TODO: mock STAC endpoint
 
         let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
-            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
+            File::open(test_data!("provider_defs/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
         let provider = Box::new(def)
@@ -1014,7 +1013,7 @@ mod tests {
         let mut exe = MockExecutionContext::test_default();
 
         let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
-            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json"))?,
+            File::open(test_data!("provider_defs/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
         let provider = Box::new(def)
@@ -1100,7 +1099,7 @@ mod tests {
         hide_gdal_errors();
 
         let stac_response =
-            std::fs::read_to_string(test_data!("pro/stac_responses/items_page_1_limit_500.json"))
+            std::fs::read_to_string(test_data!("stac_responses/items_page_1_limit_500.json"))
                 .unwrap();
         let server = Server::run();
 
@@ -1184,8 +1183,7 @@ mod tests {
             responders::status_code(206)
                 .append_header("Content-Type", "application/json")
                 .body(
-                    include_bytes!("../../../../../test_data/pro/stac_responses/cog-header.bin")
-                        .to_vec(),
+                    include_bytes!("../../../../test_data/stac_responses/cog-header.bin").to_vec(),
                 )
                 .append_header(
                     "x-amz-id-2",
@@ -1253,7 +1251,7 @@ mod tests {
                     .append_header("Content-Type", "application/json")
                     .body(
                         include_bytes!(
-                            "../../../../../test_data/pro/stac_responses/cog-tile.bin"
+                            "../../../../test_data/stac_responses/cog-tile.bin"
                         )[0..2]
                         .to_vec()
                     ).append_header(
@@ -1278,7 +1276,7 @@ mod tests {
                     .append_header("Content-Type", "application/json")
                     .body(
                         include_bytes!(
-                            "../../../../../test_data/pro/stac_responses/cog-tile.bin"
+                            "../../../../test_data/stac_responses/cog-tile.bin"
                         )
                         .to_vec()
                     ).append_header(
@@ -1579,11 +1577,11 @@ mod tests {
         let ctx = app_ctx.session_context(session.clone());
 
         let def: SentinelS2L2ACogsProviderDefinition = serde_json::from_reader(BufReader::new(
-            File::open(test_data!("provider_defs/pro/sentinel_s2_l2a_cogs.json")).unwrap(),
+            File::open(test_data!("provider_defs/sentinel_s2_l2a_cogs.json")).unwrap(),
         ))
         .unwrap();
 
-        ctx.db().add_pro_layer_provider(def.into()).await.unwrap();
+        ctx.db().add_layer_provider(def.into()).await.unwrap();
 
         ctx.db()
             .load_layer_provider(DataProviderId::from_u128(
@@ -1608,7 +1606,7 @@ mod tests {
             LayerProviderListing {
                 id: DataProviderId::from_u128(0x5779494c_f3a2_48b3_8a2d_5fbba8c5b6c5),
                 name: "Element 84 AWS STAC".to_owned(),
-                priority: 0,
+                priority: 50,
             }
         );
     }

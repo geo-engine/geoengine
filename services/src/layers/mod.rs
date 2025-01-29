@@ -7,4 +7,3 @@ mod postgres_layer_db;
 pub mod storage;
 
 pub use error::LayerDbError;
-pub use postgres_layer_db::ProLayerProviderDb;

@@ -355,7 +355,7 @@ mod tests {
     fn ort() {
         let session = ort::session::Session::builder()
             .unwrap()
-            .commit_from_file(test_data!("pro/ml/onnx/test_classification.onnx"))
+            .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
 
         let input_name = &session.inputs[0].name;
@@ -380,7 +380,7 @@ mod tests {
     fn ort_dynamic() {
         let session = ort::session::Session::builder()
             .unwrap()
-            .commit_from_file(test_data!("pro/ml/onnx/test_classification.onnx"))
+            .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
 
         let input_name = &session.inputs[0].name;
@@ -418,7 +418,7 @@ mod tests {
     fn regression() {
         let session = ort::session::Session::builder()
             .unwrap()
-            .commit_from_file(test_data!("pro/ml/onnx/test_regression.onnx"))
+            .commit_from_file(test_data!("ml/onnx/test_regression.onnx"))
             .unwrap();
 
         let input_name = &session.inputs[0].name;
@@ -568,7 +568,7 @@ mod tests {
         };
         exe_ctx.ml_models.insert(
             model_name,
-            load_model_metadata(test_data!("pro/ml/onnx/test_classification.onnx")).unwrap(),
+            load_model_metadata(test_data!("ml/onnx/test_classification.onnx")).unwrap(),
         );
 
         let query_rect = RasterQueryRectangle {
@@ -776,7 +776,7 @@ mod tests {
         };
         exe_ctx.ml_models.insert(
             model_name,
-            load_model_metadata(test_data!("pro/ml/onnx/test_regression.onnx")).unwrap(),
+            load_model_metadata(test_data!("ml/onnx/test_regression.onnx")).unwrap(),
         );
 
         let query_rect = RasterQueryRectangle {

@@ -1213,8 +1213,8 @@ mod tests {
     use super::*;
     use crate::{
         contexts::SessionContext,
+        contexts::{PostgresDb, PostgresSessionContext},
         ge_context,
-        pro::contexts::{PostgresDb, PostgresSessionContext},
     };
     use geoengine_datatypes::{
         dataset::ExternalDataId,

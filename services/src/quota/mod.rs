@@ -218,9 +218,9 @@ pub struct DataUsageSummary {
 mod tests {
     use super::*;
     use crate::{
+        contexts::PostgresContext,
         contexts::{ApplicationContext, SessionContext},
         ge_context,
-        pro::contexts::PostgresContext,
         users::{UserAuth, UserCredentials, UserRegistration},
         util::tests::{admin_login, MockQuotaTracking},
     };

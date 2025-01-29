@@ -5,6 +5,7 @@ use crate::api::model::responses::ErrorResponse;
 use crate::config::{get_config_element, Postgres};
 use crate::contexts::ApplicationContext;
 use crate::contexts::GeoEngineDb;
+use crate::contexts::PostgresContext;
 use crate::datasets::listing::Provenance;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
@@ -15,8 +16,6 @@ use crate::datasets::DatasetName;
 use crate::permissions::Permission;
 use crate::permissions::PermissionDb;
 use crate::permissions::Role;
-use crate::pro::contexts::PostgresContext;
-use crate::pro::contexts::ProGeoEngineDb;
 use crate::projects::{
     CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,
     Symbology, UpdateProject,
@@ -35,7 +34,6 @@ use crate::{
 use crate::{
     config::Quota,
     contexts::SessionId,
-    pro::contexts::ProApplicationContext,
     users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
 };
 use actix_web::dev::ServiceResponse;
@@ -442,34 +440,6 @@ pub async fn add_file_definition_to_datasets<D: GeoEngineDb>(
             .into();
             MetaDataDefinition::GdalStatic(meta_data)
         }
-        _ => todo!("Implement for other meta data types when used"),
-    };
-
-    db.add_dataset(def.properties.clone(), def.meta_data.clone())
-        .await
-        .unwrap()
-}
-
-/// Add a definition from a file to the datasets.
-#[allow(clippy::missing_panics_doc)]
-pub async fn add_pro_file_definition_to_datasets<D: ProGeoEngineDb>(
-    db: &D,
-    definition: &Path,
-) -> DatasetIdAndName {
-    let mut def: DatasetDefinition =
-        serde_json::from_reader(BufReader::new(File::open(definition).unwrap())).unwrap();
-
-    // rewrite metadata to use the correct file path
-    def.meta_data = match def.meta_data {
-        MetaDataDefinition::GdalStatic(mut meta_data) => {
-            meta_data.params.file_path = test_data!(meta_data
-                .params
-                .file_path
-                .strip_prefix("test_data/")
-                .unwrap())
-            .into();
-            MetaDataDefinition::GdalStatic(meta_data)
-        }
         MetaDataDefinition::GdalMetaDataRegular(mut meta_data) => {
             meta_data.params.file_path = test_data!(meta_data
                 .params
@@ -514,7 +484,7 @@ pub async fn add_pro_file_definition_to_datasets_as_admin(
     let session = admin_login(app_ctx).await;
     let ctx = app_ctx.session_context(session);
 
-    add_pro_file_definition_to_datasets(&ctx.db(), definition).await
+    add_file_definition_to_datasets(&ctx.db(), definition).await
 }
 
 pub async fn check_allowed_http_methods2<T, TRes, P, PParam>(
@@ -828,10 +798,7 @@ pub fn create_random_user_session_helper() -> UserSession {
 #[allow(clippy::missing_panics_doc)]
 pub async fn create_project_helper2<C: ApplicationContext<Session = UserSession> + UserAuth>(
     app_ctx: &C,
-) -> (UserSession, ProjectId)
-where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-{
+) -> (UserSession, ProjectId) {
     let session = create_session_helper(app_ctx).await;
 
     let project = app_ctx
@@ -851,14 +818,11 @@ where
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn add_ndvi_to_datasets2<C: ProApplicationContext>(
+pub async fn add_ndvi_to_datasets2<C: ApplicationContext<Session = UserSession>>(
     app_ctx: &C,
     share_with_users: bool,
     share_with_anonymous: bool,
-) -> (DatasetId, NamedData)
-where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-{
+) -> (DatasetId, NamedData) {
     let dataset_name = DatasetName {
         namespace: None,
         name: "NDVI".to_string(),
@@ -911,14 +875,11 @@ where
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn add_ports_to_datasets<C: ProApplicationContext>(
+pub async fn add_ports_to_datasets<C: ApplicationContext<Session = UserSession>>(
     app_ctx: &C,
     share_with_users: bool,
     share_with_anonymous: bool,
-) -> (DatasetId, NamedData)
-where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-{
+) -> (DatasetId, NamedData) {
     let dataset_name = DatasetName {
         namespace: None,
         name: "ne_10m_ports".to_string(),
@@ -971,10 +932,9 @@ where
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn admin_login<C: ProApplicationContext>(ctx: &C) -> UserSession
-where
-    <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
-{
+pub async fn admin_login<C: ApplicationContext<Session = UserSession> + UserAuth>(
+    ctx: &C,
+) -> UserSession {
     let user_config = get_config_element::<crate::config::User>().unwrap();
 
     ctx.login(UserCredentials {
@@ -987,7 +947,7 @@ where
 
 /// Loads a pretrained mock model from disk
 pub async fn load_mock_model_from_disk() -> Result<String, std::io::Error> {
-    let path = test_data!("pro/ml/")
+    let path = test_data!("ml/")
         .join("b764bf81-e21d-4eb8-bf01-fac9af13faee")
         .join("mock_model.json");
 
