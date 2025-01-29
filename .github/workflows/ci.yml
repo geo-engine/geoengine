@@ -98,6 +98,7 @@ jobs:
         run: sqlfluff lint
       - name: Verify for expression dependencies workspace
         run: |
+          rustup toolchain install nightly
           chmod +x ./.scripts/check-expression-deps.rs
           ./.scripts/check-expression-deps.rs
       - name: Run tests
