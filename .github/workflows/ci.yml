@@ -96,6 +96,10 @@ jobs:
         run: cargo clippy --all-targets --locked ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
       - name: Check with SQLFluff
         run: sqlfluff lint
+      - name: Verify for expression dependencies workspace
+        run: |
+          chmod +x ./.scripts/check-expression-deps.rs
+          ./.scripts/check-expression-deps.rs
       - name: Run tests
         run: cargo test --locked ${{ matrix.features }} ${{ matrix.build }} --verbose
 
