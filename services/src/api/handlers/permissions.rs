@@ -2,17 +2,22 @@ use crate::api::model::datatypes::LayerId;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::storage::DatasetDb;
 use crate::datasets::DatasetName;
-use crate::error::{self, Result};
+use crate::error::{self, Error, Result};
 use crate::layers::listing::LayerCollectionId;
 use crate::machine_learning::MlModelDb;
-use crate::permissions::{Permission, PermissionDb, PermissionListing, ResourceId, RoleId};
+use crate::permissions::{
+    Permission, PermissionDb, PermissionListing as DbPermissionListing, ResourceId, Role, RoleId,
+};
 use crate::pro::contexts::{ProApplicationContext, ProGeoEngineDb};
 use crate::projects::ProjectId;
 use actix_web::{web, FromRequest, HttpResponse};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::machine_learning::MlModelName;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
+use std::str::FromStr;
 use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
 
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -43,8 +48,29 @@ pub struct PermissionRequest {
     permission: Permission,
 }
 
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionListing {
+    resource: Resource,
+    role: Role,
+    permission: Permission,
+}
+
+impl PermissionListing {
+    fn wrap_permission_listing_and_resource(
+        resource: Resource,
+        db_permission_listing: DbPermissionListing,
+    ) -> PermissionListing {
+        Self {
+            resource,
+            role: db_permission_listing.role,
+            permission: db_permission_listing.permission,
+        }
+    }
+}
+
 /// A resource that is affected by a permission.
-#[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
 #[serde(rename_all = "camelCase", tag = "type", content = "id")]
 pub enum Resource {
     #[schema(title = "LayerResource")]
@@ -60,15 +86,18 @@ pub enum Resource {
 }
 
 impl Resource {
-    pub async fn resolve_resource_id<D: DatasetDb + MlModelDb>(self, db: &D) -> Result<ResourceId> {
+    pub async fn resolve_resource_id<D: DatasetDb + MlModelDb>(
+        &self,
+        db: &D,
+    ) -> Result<ResourceId> {
         match self {
-            Resource::Layer(layer) => Ok(ResourceId::Layer(layer.into())),
+            Resource::Layer(layer) => Ok(ResourceId::Layer(layer.clone().into())),
             Resource::LayerCollection(layer_collection) => {
-                Ok(ResourceId::LayerCollection(layer_collection))
+                Ok(ResourceId::LayerCollection(layer_collection.clone()))
             }
-            Resource::Project(project_id) => Ok(ResourceId::Project(project_id)),
+            Resource::Project(project_id) => Ok(ResourceId::Project(*project_id)),
             Resource::Dataset(dataset_name) => {
-                let dataset_id_option = db.resolve_dataset_name_to_id(&dataset_name).await?;
+                let dataset_id_option = db.resolve_dataset_name_to_id(dataset_name).await?;
                 dataset_id_option
                     .ok_or(error::Error::UnknownResource {
                         kind: "Dataset".to_owned(),
@@ -77,7 +106,7 @@ impl Resource {
                     .map(ResourceId::DatasetId)
             }
             Resource::MlModel(model_name) => {
-                let actual_name = model_name.into();
+                let actual_name = model_name.clone().into();
                 let model_id_option =
                     db.resolve_model_name_to_id(&actual_name)
                         .await
@@ -92,6 +121,29 @@ impl Resource {
                     .map(ResourceId::MlModel)
             }
         }
+    }
+}
+
+impl TryFrom<(String, String)> for Resource {
+    type Error = Error;
+
+    /// Transform a tuple of `String` into a `Resource`. The first element is used as type and the second element as the id / name.
+    fn try_from(value: (String, String)) -> Result<Self> {
+        Ok(match value.0.as_str() {
+            "layer" => Resource::Layer(LayerId(value.1)),
+            "layerCollection" => Resource::LayerCollection(LayerCollectionId(value.1)),
+            "project" => {
+                Resource::Project(ProjectId(Uuid::from_str(&value.1).context(error::Uuid)?))
+            }
+            "dataset" => Resource::Dataset(DatasetName::from_str(&value.1)?),
+            "mlModel" => Resource::MlModel(MlModelName::from_str(&value.1)?),
+            _ => {
+                return Err(Error::InvalidResourceId {
+                    resource_type: value.0,
+                    resource_id: value.1,
+                })
+            }
+        })
     }
 }
 
@@ -127,14 +179,20 @@ async fn get_resource_permissions_handler<C: ProApplicationContext>(
 where
     <<C as ApplicationContext>::SessionContext as SessionContext>::GeoEngineDB: ProGeoEngineDb,
 {
-    let resource_id = ResourceId::try_from(resource_id.into_inner())?;
+    let resource = Resource::try_from(resource_id.into_inner())?;
+    let db = app_ctx.session_context(session).db();
+    let resource_id = resource.resolve_resource_id(&db).await?;
     let options = options.into_inner();
 
-    let db = app_ctx.session_context(session).db();
     let permissions = db
         .list_permissions(resource_id, options.offset, options.limit)
         .await
         .boxed_context(crate::error::PermissionDb)?;
+
+    let permissions = permissions
+        .into_iter()
+        .map(|p| PermissionListing::wrap_permission_listing_and_resource(resource.clone(), p))
+        .collect();
 
     Ok(web::Json(permissions))
 }
@@ -346,11 +404,11 @@ mod tests {
     async fn it_lists_permissions(app_ctx: PostgresContext<NoTls>) {
         let admin_session = admin_login(&app_ctx).await;
 
-        let (dataset_id, _) = add_ndvi_to_datasets2(&app_ctx, true, true).await;
+        let (_dataset_id, dataset_name) = add_ndvi_to_datasets2(&app_ctx, true, true).await;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
-                "/permissions/resources/dataset/{dataset_id}?offset=0&limit=10",
+                "/permissions/resources/dataset/{dataset_name}?offset=0&limit=10",
             ))
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((
@@ -367,9 +425,9 @@ mod tests {
             res_body,
             json!([{
                    "permission":"Owner",
-                   "resourceId":  {
-                       "id": dataset_id.to_string(),
-                       "type": "DatasetId"
+                   "resource":  {
+                       "id": dataset_name.to_string(),
+                       "type": "dataset"
                    },
                    "role": {
                        "id": "d5328854-6190-4af9-ad69-4e74b0961ac9",
@@ -378,9 +436,9 @@ mod tests {
                    }
                }, {
                    "permission": "Read",
-                   "resourceId": {
-                       "id": dataset_id.to_string(),
-                       "type": "DatasetId"
+                   "resource": {
+                       "id": dataset_name.to_string(),
+                       "type": "dataset"
                    },
                    "role": {
                        "id": "fd8e87bf-515c-4f36-8da6-1a53702ff102",
@@ -388,14 +446,13 @@ mod tests {
                    }
                }, {
                    "permission": "Read",
-                   "resourceId": {
-                       "id": dataset_id.to_string(),
-                       "type": "DatasetId"
+                   "resource": {
+                       "id": dataset_name.to_string(),
+                       "type": "dataset",
                    },
                    "role": {
                        "id": "4e8081b6-8aa6-4275-af0c-2fa2da557d28",
-                       "name":
-                       "user"
+                       "name": "user"
                    }
                }]
             )

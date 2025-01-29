@@ -1,4 +1,4 @@
-use crate::error::{self, Error, Result};
+use crate::error::Result;
 use crate::identifier;
 use crate::layers::listing::LayerCollectionId;
 use crate::machine_learning::MlModelId;
@@ -8,11 +8,9 @@ use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DatasetId, LayerId};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 use snafu::Snafu;
 use std::str::FromStr;
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 mod postgres_permissiondb;
 
@@ -139,29 +137,6 @@ impl From<ProjectId> for ResourceId {
 impl From<DatasetId> for ResourceId {
     fn from(dataset_id: DatasetId) -> Self {
         ResourceId::DatasetId(dataset_id)
-    }
-}
-
-impl TryFrom<(String, String)> for ResourceId {
-    type Error = Error;
-
-    fn try_from(value: (String, String)) -> Result<Self> {
-        Ok(match value.0.as_str() {
-            "layer" => ResourceId::Layer(LayerId(value.1)),
-            "layerCollection" => ResourceId::LayerCollection(LayerCollectionId(value.1)),
-            "project" => {
-                ResourceId::Project(ProjectId(Uuid::from_str(&value.1).context(error::Uuid)?))
-            }
-            "dataset" => {
-                ResourceId::DatasetId(DatasetId(Uuid::from_str(&value.1).context(error::Uuid)?))
-            }
-            _ => {
-                return Err(Error::InvalidResourceId {
-                    resource_type: value.0,
-                    resource_id: value.1,
-                })
-            }
-        })
     }
 }
 

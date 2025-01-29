@@ -522,6 +522,14 @@ pub enum Error {
         // TODO: make `source: MachineLearningError`, once pro features is removed
         source: Box<dyn ErrorSource>,
     },
+
+    DatasetName {
+        source: crate::datasets::DatasetNameError,
+    },
+
+    MlModelName {
+        source: geoengine_datatypes::machine_learning::MlModelNameError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -620,5 +628,17 @@ impl From<tokio::task::JoinError> for Error {
 impl From<ordered_float::FloatIsNan> for Error {
     fn from(source: FloatIsNan) -> Self {
         Error::InvalidNotNanFloatKey { source }
+    }
+}
+
+impl From<crate::datasets::DatasetNameError> for Error {
+    fn from(source: crate::datasets::DatasetNameError) -> Self {
+        Error::DatasetName { source }
+    }
+}
+
+impl From<geoengine_datatypes::machine_learning::MlModelNameError> for Error {
+    fn from(source: geoengine_datatypes::machine_learning::MlModelNameError) -> Self {
+        Error::MlModelName { source }
     }
 }
