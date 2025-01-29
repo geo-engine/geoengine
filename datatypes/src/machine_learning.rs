@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn ml_model_name_from_str() {
-        const ML_MODEL_NAME: &'static str = "myModelName";
+        const ML_MODEL_NAME: &str = "myModelName";
         let mln = MlModelName::from_str(ML_MODEL_NAME).unwrap();
         assert_eq!(mln.name, ML_MODEL_NAME);
         assert!(mln.namespace.is_none());
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn ml_model_name_from_str_prefixed() {
-        const ML_MODEL_NAME: &'static str = "d5328854-6190-4af9-ad69-4e74b0961ac9:myModelName";
+        const ML_MODEL_NAME: &str = "d5328854-6190-4af9-ad69-4e74b0961ac9:myModelName";
         let mln = MlModelName::from_str(ML_MODEL_NAME).unwrap();
         assert_eq!(mln.name, "myModelName".to_string());
         assert_eq!(
@@ -171,9 +171,9 @@ mod tests {
 
     #[test]
     fn ml_model_name_from_str_system() {
-        const ML_MODEL_NAME: &'static str = "_:myModelName";
+        const ML_MODEL_NAME: &str = "_:myModelName";
         let mln = MlModelName::from_str(ML_MODEL_NAME).unwrap();
         assert_eq!(mln.name, "myModelName".to_string());
-        assert!(mln.namespace.is_none())
+        assert!(mln.namespace.is_none());
     }
 }

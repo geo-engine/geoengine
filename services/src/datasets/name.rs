@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn dataset_name_from_str() {
-        const DATASET_NAME: &'static str = "myDatasetName";
+        const DATASET_NAME: &str = "myDatasetName";
         let mln = DatasetName::from_str(DATASET_NAME).unwrap();
         assert_eq!(mln.name, DATASET_NAME);
         assert!(mln.namespace.is_none());
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn dataset_name_from_str_prefixed() {
-        const DATASET_NAME: &'static str = "d5328854-6190-4af9-ad69-4e74b0961ac9:myDatasetName";
+        const DATASET_NAME: &str = "d5328854-6190-4af9-ad69-4e74b0961ac9:myDatasetName";
         let mln = DatasetName::from_str(DATASET_NAME).unwrap();
         assert_eq!(mln.name, "myDatasetName".to_string());
         assert_eq!(
@@ -242,9 +242,9 @@ mod tests {
 
     #[test]
     fn dataset_name_from_str_system() {
-        const DATASET_NAME: &'static str = "_:myDatasetName";
+        const DATASET_NAME: &str = "_:myDatasetName";
         let mln = DatasetName::from_str(DATASET_NAME).unwrap();
         assert_eq!(mln.name, "myDatasetName".to_string());
-        assert!(mln.namespace.is_none())
+        assert!(mln.namespace.is_none());
     }
 }
