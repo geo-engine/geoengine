@@ -145,3 +145,35 @@ pub struct MlModelMetadata {
     pub output_type: RasterDataType, // TODO: support multiple outputs, e.g. one band for the probability of prediction
                                      // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ml_model_name_from_str() {
+        const ML_MODEL_NAME: &'static str = "myModelName";
+        let mln = MlModelName::from_str(ML_MODEL_NAME).unwrap();
+        assert_eq!(mln.name, ML_MODEL_NAME);
+        assert!(mln.namespace.is_none());
+    }
+
+    #[test]
+    fn ml_model_name_from_str_prefixed() {
+        const ML_MODEL_NAME: &'static str = "d5328854-6190-4af9-ad69-4e74b0961ac9:myModelName";
+        let mln = MlModelName::from_str(ML_MODEL_NAME).unwrap();
+        assert_eq!(mln.name, "myModelName".to_string());
+        assert_eq!(
+            mln.namespace,
+            Some("d5328854-6190-4af9-ad69-4e74b0961ac9".to_string())
+        );
+    }
+
+    #[test]
+    fn ml_model_name_from_str_system() {
+        const ML_MODEL_NAME: &'static str = "_:myModelName";
+        let mln = MlModelName::from_str(ML_MODEL_NAME).unwrap();
+        assert_eq!(mln.name, "myModelName".to_string());
+        assert!(mln.namespace.is_none())
+    }
+}

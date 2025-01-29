@@ -216,3 +216,35 @@ pub struct DatasetIdAndName {
     pub id: DatasetId,
     pub name: DatasetName,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dataset_name_from_str() {
+        const DATASET_NAME: &'static str = "myDatasetName";
+        let mln = DatasetName::from_str(DATASET_NAME).unwrap();
+        assert_eq!(mln.name, DATASET_NAME);
+        assert!(mln.namespace.is_none());
+    }
+
+    #[test]
+    fn dataset_name_from_str_prefixed() {
+        const DATASET_NAME: &'static str = "d5328854-6190-4af9-ad69-4e74b0961ac9:myDatasetName";
+        let mln = DatasetName::from_str(DATASET_NAME).unwrap();
+        assert_eq!(mln.name, "myDatasetName".to_string());
+        assert_eq!(
+            mln.namespace,
+            Some("d5328854-6190-4af9-ad69-4e74b0961ac9".to_string())
+        );
+    }
+
+    #[test]
+    fn dataset_name_from_str_system() {
+        const DATASET_NAME: &'static str = "_:myDatasetName";
+        let mln = DatasetName::from_str(DATASET_NAME).unwrap();
+        assert_eq!(mln.name, "myDatasetName".to_string());
+        assert!(mln.namespace.is_none())
+    }
+}
