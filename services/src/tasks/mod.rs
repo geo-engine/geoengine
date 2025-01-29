@@ -17,7 +17,7 @@ use geoengine_datatypes::{error::ErrorSource, util::AsAnyArc};
 use serde::{Deserialize, Serialize, Serializer};
 use std::borrow::Cow;
 use std::{fmt, sync::Arc};
-use utoipa::{IntoParams, ToSchema};
+use utoipa::{IntoParams, PartialSchema, ToSchema};
 use validator::{Validate, ValidationError};
 
 /// A database that allows scheduling and retrieving tasks.
@@ -124,83 +124,107 @@ impl TaskStatus {
     }
 }
 
+impl ToSchema for TaskStatus {}
+
 // TODO: replace TaskStatus with a more API friendly type
-impl<'a> ToSchema<'a> for TaskStatus {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "TaskStatus",
-            OneOfBuilder::new()
-                .item(
-                    ObjectBuilder::new()
-                        .property(
-                            "status",
-                            ObjectBuilder::new()
-                                .schema_type(SchemaType::String)
-                                .enum_values::<[&str; 1], &str>(Some(["running"])),
-                        )
-                        .required("status")
-                        .property("taskType", Object::with_type(SchemaType::String))
-                        .required("taskType")
-                        .property("description", Object::with_type(SchemaType::String))
-                        .property("info", Object::with_type(SchemaType::Value))
-                        .property("pctComplete", Object::with_type(SchemaType::String))
-                        .required("pctComplete")
-                        .property(
-                            "estimatedTimeRemaining",
-                            Object::with_type(SchemaType::String),
-                        )
-                        .required("estimatedTimeRemaining")
-                        .property("timeStarted", Object::with_type(SchemaType::String))
-                        .required("timeStarted"),
-                )
-                .item(
-                    ObjectBuilder::new()
-                        .property(
-                            "status",
-                            ObjectBuilder::new()
-                                .schema_type(SchemaType::String)
-                                .enum_values::<[&str; 1], &str>(Some(["completed"])),
-                        )
-                        .required("status")
-                        .property("taskType", Object::with_type(SchemaType::String))
-                        .required("taskType")
-                        .property("description", Object::with_type(SchemaType::String))
-                        .property("info", Object::with_type(SchemaType::Value))
-                        .property("timeTotal", Object::with_type(SchemaType::String))
-                        .required("timeTotal")
-                        .property("timeStarted", Object::with_type(SchemaType::String))
-                        .required("timeStarted"),
-                )
-                .item(
-                    ObjectBuilder::new()
-                        .property(
-                            "status",
-                            ObjectBuilder::new()
-                                .schema_type(SchemaType::String)
-                                .enum_values::<[&str; 1], &str>(Some(["aborted"])),
-                        )
-                        .required("status")
-                        .property("cleanUp", Object::with_type(SchemaType::Value))
-                        .required("cleanUp"),
-                )
-                .item(
-                    ObjectBuilder::new()
-                        .property(
-                            "status",
-                            ObjectBuilder::new()
-                                .schema_type(SchemaType::String)
-                                .enum_values::<[&str; 1], &str>(Some(["failed"])),
-                        )
-                        .required("status")
-                        .property("error", Object::with_type(SchemaType::Value))
-                        .required("error")
-                        .property("cleanUp", Object::with_type(SchemaType::Value))
-                        .required("cleanUp"),
-                )
-                .discriminator(Some(Discriminator::new("status")))
-                .into(),
-        )
+impl PartialSchema for TaskStatus {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{SchemaType, Type};
+        use utoipa::openapi::{Discriminator, Object, ObjectBuilder, OneOfBuilder};
+        OneOfBuilder::new()
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "status",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::Type(Type::String))
+                            .enum_values::<[&str; 1], &str>(Some(["running"])),
+                    )
+                    .required("status")
+                    .property(
+                        "taskType",
+                        Object::with_type(SchemaType::Type(Type::String)),
+                    )
+                    .required("taskType")
+                    .property(
+                        "description",
+                        Object::with_type(SchemaType::Type(Type::String)),
+                    )
+                    .property("info", Object::with_type(SchemaType::AnyValue))
+                    .property(
+                        "pctComplete",
+                        Object::with_type(SchemaType::Type(Type::String)),
+                    )
+                    .required("pctComplete")
+                    .property(
+                        "estimatedTimeRemaining",
+                        Object::with_type(SchemaType::Type(Type::String)),
+                    )
+                    .required("estimatedTimeRemaining")
+                    .property(
+                        "timeStarted",
+                        Object::with_type(SchemaType::Type(Type::String)),
+                    )
+                    .required("timeStarted"),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "status",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::Type(Type::String))
+                            .enum_values::<[&str; 1], &str>(Some(["completed"])),
+                    )
+                    .required("status")
+                    .property(
+                        "taskType",
+                        Object::with_type(SchemaType::Type(Type::String)),
+                    )
+                    .required("taskType")
+                    .property(
+                        "description",
+                        Object::with_type(SchemaType::Type(Type::String)),
+                    )
+                    .property("info", Object::with_type(SchemaType::AnyValue))
+                    .property(
+                        "timeTotal",
+                        Object::with_type(SchemaType::Type(Type::String)),
+                    )
+                    .required("timeTotal")
+                    .property(
+                        "timeStarted",
+                        Object::with_type(SchemaType::Type(Type::String)),
+                    )
+                    .required("timeStarted"),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "status",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::Type(Type::String))
+                            .enum_values::<[&str; 1], &str>(Some(["aborted"])),
+                    )
+                    .required("status")
+                    .property("cleanUp", Object::with_type(SchemaType::AnyValue))
+                    .required("cleanUp"),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "status",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::Type(Type::String))
+                            .enum_values::<[&str; 1], &str>(Some(["failed"])),
+                    )
+                    .required("status")
+                    .property("error", Object::with_type(SchemaType::AnyValue))
+                    .required("error")
+                    .property("cleanUp", Object::with_type(SchemaType::AnyValue))
+                    .required("cleanUp"),
+            )
+            .discriminator(Some(Discriminator::new("status")))
+            .into()
     }
 }
 

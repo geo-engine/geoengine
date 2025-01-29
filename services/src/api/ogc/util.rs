@@ -26,7 +26,7 @@ impl<'a> ToSchema<'a> for OgcBoundingBox {
     fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         (
             "OgcBoundingBox",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).into(),
         )
     }
 }

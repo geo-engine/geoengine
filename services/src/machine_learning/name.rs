@@ -1,6 +1,6 @@
 use postgres_types::{FromSql, ToSql};
 use serde::{de::Visitor, Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{PartialSchema, ToSchema};
 
 const NAME_DELIMITER: char = ':';
 
@@ -143,12 +143,13 @@ impl Visitor<'_> for MlModelNameDeserializeVisitor {
     }
 }
 
-impl<'a> ToSchema<'a> for MlModelName {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "MlModelName",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
-        )
+impl ToSchema for MlModelName {}
+
+impl PartialSchema for MlModelName {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .into()
     }
 }

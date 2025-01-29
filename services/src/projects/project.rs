@@ -20,6 +20,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::{convert::TryInto, fmt::Debug};
+use utoipa::PartialSchema;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
@@ -524,42 +525,44 @@ string_token!(Delete, "delete");
 
 // use common schema for `Delete` and `NoUpdate`
 // TODO: maybe revert when https://github.com/OpenAPITools/openapi-generator/issues/14831 is fixed
-impl<'a> ToSchema<'a> for Delete {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "ProjectUpdateToken",
-            ObjectBuilder::new()
-                .schema_type(SchemaType::String)
-                .enum_values::<[&str; 2], &str>(Some(["none", "delete"]))
-                .into(),
-        )
+impl ToSchema for Delete {
+    fn name() -> Cow<'static, str> {
+        "ProjectUpdateToken".into()
     }
 }
 
-impl<'a> ToSchema<'a> for LayerUpdate {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "LayerUpdate",
-            OneOfBuilder::new()
-                .item(Ref::from_schema_name("ProjectUpdateToken"))
-                .item(Ref::from_schema_name("ProjectLayer"))
-                .into(),
-        )
+impl PartialSchema for Delete {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{SchemaType, Type};
+        use utoipa::openapi::ObjectBuilder;
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .enum_values::<[&str; 2], &str>(Some(["none", "delete"]))
+            .into()
     }
 }
 
-impl<'a> ToSchema<'a> for PlotUpdate {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+impl ToSchema for LayerUpdate {}
+
+impl PartialSchema for LayerUpdate {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
         use utoipa::openapi::*;
-        (
-            "PlotUpdate",
-            OneOfBuilder::new()
-                .item(Ref::from_schema_name("ProjectUpdateToken"))
-                .item(Ref::from_schema_name("Plot"))
-                .into(),
-        )
+        OneOfBuilder::new()
+            .item(Ref::from_schema_name("ProjectUpdateToken"))
+            .item(Ref::from_schema_name("ProjectLayer"))
+            .into()
+    }
+}
+
+impl ToSchema for PlotUpdate {}
+
+impl PartialSchema for PlotUpdate {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::*;
+        OneOfBuilder::new()
+            .item(Ref::from_schema_name("ProjectUpdateToken"))
+            .item(Ref::from_schema_name("Plot"))
+            .into()
     }
 }
 

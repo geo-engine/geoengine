@@ -218,7 +218,7 @@ impl<'a> ToSchema<'a> for NamedData {
         use utoipa::openapi::*;
         (
             "NamedData",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).into(),
         )
     }
 }
@@ -1859,7 +1859,7 @@ impl<'a> ToSchema<'a> for DateTimeParseFormat {
         use utoipa::openapi::*;
         (
             "DateTimeParseFormat",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).into(),
         )
     }
 }
@@ -2021,7 +2021,7 @@ impl<'a> ToSchema<'a> for StringPair {
         (
             "StringPair",
             ArrayBuilder::new()
-                .items(Object::with_type(SchemaType::String))
+                .items(Object::with_type(SchemaType::Type(Type::String)))
                 .min_items(Some(2))
                 .max_items(Some(2))
                 .into(),

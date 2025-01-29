@@ -5,8 +5,8 @@ use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use utoipa::openapi::{ArrayBuilder, ObjectBuilder, SchemaType};
-use utoipa::{IntoParams, ToSchema};
+use utoipa::openapi::ArrayBuilder;
+use utoipa::{IntoParams, PartialSchema, ToSchema};
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
@@ -142,16 +142,16 @@ impl From<&Property> for [String; 2] {
 }
 
 // manual implementation because utoipa doesn't support tuples for now
-impl<'a> ToSchema<'a> for Property {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        (
-            "Property",
-            ArrayBuilder::new()
-                .items(ObjectBuilder::new().schema_type(SchemaType::String))
-                .min_items(Some(2))
-                .max_items(Some(2))
-                .into(),
-        )
+impl ToSchema for Property {}
+
+impl PartialSchema for Property {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
+        ArrayBuilder::new()
+            .items(ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)))
+            .min_items(Some(2))
+            .max_items(Some(2))
+            .into()
     }
 }
 

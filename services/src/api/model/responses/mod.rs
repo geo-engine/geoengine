@@ -38,7 +38,7 @@ impl<'a, T> ToResponse<'a> for IdResponse<T> {
                                 .property(
                                     "id",
                                     ObjectBuilder::new()
-                                        .schema_type(SchemaType::String)
+                                        .schema_type(SchemaType::Type(Type::String))
                                         .format(Some(SchemaFormat::KnownFormat(KnownFormat::Uuid))),
                                 )
                                 .required("id"),

@@ -54,7 +54,7 @@ where
     fn get_default_parameter_value(schema: &Schema) -> String {
         match schema {
             Schema::Object(obj) => match obj.schema_type {
-                SchemaType::String => match &obj.format {
+                SchemaType::Type(Type::String) => match &obj.format {
                     Some(SchemaFormat::KnownFormat(format)) => match format {
                         KnownFormat::Uuid => Uuid::new_v4().to_string(),
                         _ => unimplemented!(),
@@ -358,7 +358,8 @@ mod tests {
                                             .name("x")
                                             .parameter_in(ParameterIn::Query)
                                             .schema(Some(RefOr::T(
-                                                Object::with_type(SchemaType::String).into(),
+                                                Object::with_type(SchemaType::Type(Type::String))
+                                                    .into(),
                                             ))),
                                     )
                                     .request_body(Some(

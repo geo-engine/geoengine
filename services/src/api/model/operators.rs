@@ -150,7 +150,7 @@ impl<'a> ToSchema<'a> for TypedOperator {
             .property(
                 "type",
                 ObjectBuilder::new()
-                    .schema_type(SchemaType::String)
+                    .schema_type(SchemaType::Type(Type::String))
                     .enum_values(Some(vec!["Vector", "Raster", "Plot"]))
             )
             .required("type")
@@ -159,7 +159,7 @@ impl<'a> ToSchema<'a> for TypedOperator {
                 ObjectBuilder::new()
                     .property(
                         "type",
-                        Object::with_type(SchemaType::String)
+                        Object::with_type(SchemaType::Type(Type::String))
                     )
                     .required("type")
                     .property(

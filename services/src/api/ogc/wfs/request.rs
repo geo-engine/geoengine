@@ -46,7 +46,7 @@ impl<'a> ToSchema<'a> for TypeNames {
     fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         (
             "TypeNames",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).into(),
         )
     }
 }
@@ -92,7 +92,7 @@ impl<'a> ToSchema<'a> for WfsResolution {
     fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
         (
             "WfsResolution",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
+            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).into(),
         )
     }
 }
