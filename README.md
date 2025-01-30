@@ -132,6 +132,14 @@ If you plan on optimizing a feature of Geo Engine, please confirm it this way.
 We use the [`expression/deps-workspace`](expression/deps-workspace) crate to manage dependencies for compiling expressions at runtime.
 This ensures that it is compatible with Geo Engine when linking against it.
 
+It is important to keep the dependencies in sync with the Geo Engine dependencies.
+You can verify this by running the [`check-expression-deps.rs`](.scripts/check-expression-deps.rs) script located in the [`.scripts`](.scripts) directory.
+
+```bash
+chmod +x .scripts/check-expression-deps.rs
+./.scripts/check-expression-deps.rs
+```
+
 To update the expression dependencies, you can use the [`update-expression-deps.rs`](.scripts/update-expression-deps.rs) script located in the [`.scripts`](.scripts) directory.
 This script helps to keep the dependencies in sync and up to date.
 Run it with:
