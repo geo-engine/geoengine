@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
 use tracing::debug;
 
-use crate::error;
 use crate::util::Result;
+use crate::{error, optimization::OptimizationError};
 use async_trait::async_trait;
-use geoengine_datatypes::{dataset::NamedData, util::ByteSize};
+use geoengine_datatypes::{dataset::NamedData, primitives::SpatialResolution, util::ByteSize};
 
 use super::{
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
@@ -132,6 +133,7 @@ pub trait PlotOperator:
     fn span(&self) -> CreateSpan;
 }
 
+#[async_trait]
 pub trait InitializedRasterOperator: Send + Sync {
     /// Get the result descriptor of the `Operator`
     fn result_descriptor(&self) -> &RasterResultDescriptor;
@@ -149,6 +151,27 @@ pub trait InitializedRasterOperator: Send + Sync {
 
     /// Get a canonic representation of the operator and its sources
     fn canonic_name(&self) -> CanonicOperatorName;
+
+    fn optimize(
+        &self,
+        _resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        // TODO: remove default implementation once all operators implement this trait
+        Err(OptimizationError::OptimizationNotYetImplementedForOperator)
+    }
+
+    async fn optimize_and_reinitialize(
+        &self,
+        resolution: SpatialResolution,
+        exe_ctx: &dyn ExecutionContext,
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let optimized = self
+            .optimize(resolution)
+            .context(crate::error::Optimization)?;
+        optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+            .await
+    }
 }
 
 pub trait InitializedVectorOperator: Send + Sync {
@@ -243,6 +266,13 @@ impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.as_ref().canonic_name()
+    }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.as_ref().optimize(resolution)
     }
 }
 

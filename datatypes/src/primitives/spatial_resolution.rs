@@ -37,6 +37,16 @@ impl SpatialResolution {
     pub fn one() -> Self {
         SpatialResolution { x: 1., y: 1. }
     }
+
+    pub fn with_native_resolution_and_zoom_level(
+        native_resolution: SpatialResolution,
+        zoom_level: u32,
+    ) -> SpatialResolution {
+        SpatialResolution::new_unchecked(
+            native_resolution.x * f64::from(2_u32.pow(zoom_level)),
+            native_resolution.y * f64::from(2_u32.pow(zoom_level)),
+        )
+    }
 }
 
 impl TryFrom<(f64, f64)> for SpatialResolution {
@@ -97,6 +107,20 @@ impl ApproxEq for SpatialResolution {
     fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
         let m = margin.into();
         approx_eq!(f64, self.x, other.x, m) && approx_eq!(f64, self.y, other.y, m)
+    }
+}
+
+impl PartialOrd for SpatialResolution {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self.x < other.x && self.y < other.y {
+            Some(std::cmp::Ordering::Less)
+        } else if self.x > other.x && self.y > other.y {
+            Some(std::cmp::Ordering::Greater)
+        } else if self.x == other.x && self.y == other.y {
+            Some(std::cmp::Ordering::Equal)
+        } else {
+            None
+        }
     }
 }
 

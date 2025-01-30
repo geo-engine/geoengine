@@ -390,6 +390,31 @@ impl RasterResultDescriptor {
             bands: RasterBandDescriptors::new_multiple_bands(num_bands),
         }
     }
+
+    pub fn replace_resolution(&mut self, resolution: SpatialResolution) {
+        self.spatial_grid = match self.spatial_grid {
+            SpatialGridDescriptor::Source(spatial_grid_definition) => {
+                SpatialGridDescriptor::Source(SpatialGridDefinition {
+                    geo_transform: GeoTransform::new(
+                        spatial_grid_definition.geo_transform.origin_coordinate,
+                        resolution.x,
+                        resolution.y,
+                    ),
+                    grid_bounds: spatial_grid_definition.grid_bounds,
+                })
+            }
+            SpatialGridDescriptor::Derived(spatial_grid_definition) => {
+                SpatialGridDescriptor::Derived(SpatialGridDefinition {
+                    geo_transform: GeoTransform::new(
+                        spatial_grid_definition.geo_transform.origin_coordinate,
+                        resolution.x,
+                        resolution.y,
+                    ),
+                    grid_bounds: spatial_grid_definition.grid_bounds,
+                })
+            }
+        };
+    }
 }
 
 /// A `ResultDescriptor` for vector queries

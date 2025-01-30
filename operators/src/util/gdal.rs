@@ -27,8 +27,6 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use itertools::Itertools;
-use log::Level::Debug;
-use log::{debug, log_enabled};
 use snafu::ResultExt;
 use std::{
     collections::HashSet,

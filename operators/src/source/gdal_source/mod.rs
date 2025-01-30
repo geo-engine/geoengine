@@ -2,8 +2,12 @@ use crate::adapters::{
     FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
 };
 use crate::engine::{
-    CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor,
+    CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor, SingleRasterSource,
     SpatialGridDescriptor, WorkflowOperatorPath,
+};
+use crate::optimization::{OptimizationError, TargetResolutionMustBeHigherThanSourceResolution};
+use crate::processing::{
+    Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
 };
 use crate::source::gdal_source::reader::ReaderState;
 use crate::util::gdal::gdal_open_dataset_ex;
@@ -31,11 +35,11 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::RasterSpatialQueryRectangle;
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{
     Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, TimeInstance,
 };
+use geoengine_datatypes::primitives::{RasterSpatialQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::TileInformation;
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid, GeoTransform, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
@@ -857,6 +861,7 @@ impl RasterOperator for GdalSource {
             name: CanonicOperatorName::from(&self),
             result_descriptor: res,
             meta_data,
+            data_name: self.params.data,
             overview_level: self.params.overview_level.unwrap_or(0),
             tiling_specification: context.tiling_specification(),
         };
@@ -867,11 +872,13 @@ impl RasterOperator for GdalSource {
     span_fn!(GdalSource);
 }
 
+#[derive(Clone)]
 pub struct InitializedGdalSourceOperator {
-    name: CanonicOperatorName,
+    pub name: CanonicOperatorName,
     pub meta_data: GdalMetaData,
     pub result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
+    pub data_name: NamedData,
     // the overview level to use. 0 means the highest resolution
     pub overview_level: u32,
 }
@@ -973,6 +980,70 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        let original_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
+
+        // TODO: handle special case where the output resolution is smaller than the current resolution
+        //       when does this happen? what should we do in this case?
+        ensure!(
+            target_resolution > self.result_descriptor.spatial_grid.spatial_resolution(),
+            TargetResolutionMustBeHigherThanSourceResolution {
+                target_resolution,
+                source_resolution: self.result_descriptor.spatial_grid.spatial_resolution()
+            }
+        );
+
+        // TODO: get max overview level for dataset (based on available pyramids)
+        let max_overview_level = 999;
+
+        let mut current_zoom_level = self.overview_level;
+
+        let mut current_resolution = SpatialResolution::with_native_resolution_and_zoom_level(
+            original_resolution,
+            current_zoom_level,
+        );
+        let mut next_resolution = SpatialResolution::with_native_resolution_and_zoom_level(
+            original_resolution,
+            current_zoom_level + 1,
+        );
+
+        while next_resolution < target_resolution && current_zoom_level < max_overview_level {
+            current_zoom_level += 1;
+            current_resolution = next_resolution;
+            next_resolution = SpatialResolution::with_native_resolution_and_zoom_level(
+                original_resolution,
+                current_zoom_level + 1,
+            );
+        }
+
+        let gdal_optimized = GdalSource {
+            params: GdalSourceParameters {
+                data: self.data_name.clone(),
+                overview_level: Some(current_zoom_level),
+            },
+        }
+        .boxed();
+
+        if current_resolution == target_resolution {
+            return Ok(gdal_optimized);
+        }
+
+        Ok(Downsampling {
+            params: DownsamplingParams {
+                sampling_method: DownsamplingMethod::NearestNeighbor,
+                output_resolution: DownsamplingResolution::Resolution(target_resolution),
+                output_origin_reference: None,
+            },
+            sources: SingleRasterSource {
+                raster: gdal_optimized,
+            },
+        }
+        .boxed())
     }
 }
 
