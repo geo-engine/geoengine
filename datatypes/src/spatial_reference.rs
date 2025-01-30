@@ -86,10 +86,7 @@ impl SpatialReference {
 
     /// Return the area of use in EPSG:4326 projection
     pub fn area_of_use<A: AxisAlignedRectangle>(self) -> Result<A> {
-        let proj_string = match self.proj_string() {
-            Ok(s) => s,
-            Err(e) => return Err(e),
-        };
+        let proj_string = self.proj_string()?;
 
         let proj = Proj::new(&proj_string).ok_or(error::Error::InvalidProjDefinition {
             proj_definition: proj_string.clone(),

@@ -860,10 +860,10 @@ CREATE TABLE ebv_provider_entities (
 CREATE TABLE ebv_provider_timestamps (
     provider_id uuid NOT NULL,
     file_name text NOT NULL,
-    "time" bigint NOT NULL,
+    time bigint NOT NULL,
 
     -- TODO: check if we need it
-    PRIMARY KEY (provider_id, file_name, "time") DEFERRABLE,
+    PRIMARY KEY (provider_id, file_name, time) DEFERRABLE,
 
     FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (
         provider_id,
@@ -898,7 +898,7 @@ CREATE TYPE "MlModelName" AS (namespace text, name text);
 
 CREATE TABLE ml_models ( -- noqa: 
     id uuid PRIMARY KEY,
-    "name" "MlModelName" UNIQUE NOT NULL,
+    name "MlModelName" UNIQUE NOT NULL,
     display_name text NOT NULL,
     description text NOT NULL,
     upload uuid REFERENCES uploads (id) ON DELETE CASCADE NOT NULL,

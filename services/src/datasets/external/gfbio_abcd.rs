@@ -127,10 +127,10 @@ impl GfbioAbcdDataProvider {
     ) -> Result<(HashMap<String, String>, HashMap<String, String>)> {
         let stmt = conn
             .prepare(&format!(
-                r#"
+                "
             SELECT hash, name
             FROM {schema}.abcd_datasets_translation
-            WHERE hash <> $1 AND hash <> $2;"#
+            WHERE hash <> $1 AND hash <> $2;"
             ))
             .await?;
 
@@ -156,9 +156,9 @@ impl GfbioAbcdDataProvider {
 
         let stmt = conn
             .prepare(&format!(
-                r#"
+                r"
             SELECT surrogate_key
-            FROM {schema}.abcd_datasets WHERE dataset_id = $1;"#,
+            FROM {schema}.abcd_datasets WHERE dataset_id = $1;",
                 schema = self.db_config.schema,
             ))
             .await?;

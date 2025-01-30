@@ -289,7 +289,7 @@ impl GbifDataProvider {
         let filters = GbifDataProvider::get_filters(path);
         let conn = self.pool.get().await?;
         let query = &format!(
-            r#"
+            "
             SELECT name, count
             FROM {schema}.{taxonrank}_stats
             WHERE name IN
@@ -301,7 +301,7 @@ impl GbifDataProvider {
             ORDER BY name
             LIMIT $1
             OFFSET $2;
-            "#,
+            ",
             schema = self.db_config.schema,
             filter = filters.iter().enumerate().fold(
                 String::new(),
@@ -355,7 +355,7 @@ impl GbifDataProvider {
             .enumerate()
             .map(|(index, rank)| {
                 format!(
-                    r#"
+                    r"
                     {union}
                     (
                         SELECT count, name, '{rank}' AS rank
@@ -363,7 +363,7 @@ impl GbifDataProvider {
                         WHERE name IN (SELECT name FROM names)
                         ORDER BY name
                     )
-                "#,
+                ",
                     schema = self.db_config.schema,
                     union = if index > 0 {
                         "UNION ALL".to_string()
@@ -376,7 +376,7 @@ impl GbifDataProvider {
             .unwrap_or_default();
         let conn = self.pool.get().await?;
         let query = &format!(
-            r#"
+            r"
             WITH names AS (
                 SELECT canonicalname AS name
                 FROM {schema}.species
@@ -389,7 +389,7 @@ impl GbifDataProvider {
             ORDER BY name, rank
             LIMIT $1
             OFFSET $2;
-            "#,
+            ",
             schema = self.db_config.schema,
             filter = filters.iter().enumerate().fold(
                 String::new(),
@@ -444,14 +444,14 @@ impl GbifDataProvider {
         let taxonrank_filter = Self::create_taxonrank_filter(&taxonranks);
         let conn = self.pool.get().await?;
         let query = &format!(
-            r#"
+            r"
             SELECT DISTINCT canonicalname
             FROM {schema}.species
             WHERE {taxonrank_filter}{filter} AND canonicalname ILIKE $3
             ORDER BY canonicalname
             LIMIT $1
             OFFSET $2;
-            "#,
+            ",
             schema = self.db_config.schema,
             filter = filters.iter().enumerate().fold(
                 String::new(),
@@ -979,7 +979,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         let stats = conn
             .query_one(
                 &format!(
-                    r#"
+                    r"
                 SELECT
                     lower(time) AS tmin,
                     upper(time) AS tmax,
@@ -988,7 +988,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                     public.ST_YMIN(extent) AS ymin,
                     public.ST_YMAX(extent) AS ymax
                 FROM {schema}.{taxonrank}_stats
-                WHERE name = '{canonicalname}'"#,
+                WHERE name = '{canonicalname}'",
                     schema = self.db_config.schema
                 ),
                 &[],

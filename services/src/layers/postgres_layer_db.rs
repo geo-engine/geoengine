@@ -406,11 +406,11 @@ where
         }
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "Postgres Layer Collection Provider (Pro)"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Layer collection provider for Postgres (Pro)"
     }
 

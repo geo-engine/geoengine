@@ -57,7 +57,7 @@ jobs:
           curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL "https://sh.rustup.rs" | sh -s -- --profile minimal --default-toolchain none -y
           echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
       - name: Install SQLFluff
-        run: pip install sqlfluff==2.3.5
+        run: pip install sqlfluff==3.3.0
       - name: Init rustup toolchain
         run: rustup show # enough to initialize the toolchain
       - name: setup rust build cache

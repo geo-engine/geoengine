@@ -14,8 +14,8 @@ VALUES (
             'Element 84 AWS STAC',
             '409add03-2bfa-43da-86d1-6de18cbd1e50',
             '/v0/collections/sentinel-s2-l2a-cogs/items',
-            ARRAY[]::"StacBand"[], -- noqa: PRS
-            ARRAY[]::"StacZone"[],
+            ARRAY[]::"StacBand" [], -- noqa: PRS
+            ARRAY[]::"StacZone" [],
             (1, 100, 2.0)::"StacApiRetries",
             '(999)'::"GdalRetries",
             0,
@@ -42,7 +42,7 @@ VALUES (
             'XYZ',
             'Access to Copernicus Dataspace Data',
             10,
-            ARRAY[ARRAY['key', 'VALUE']::"StringPair"]::"StringPair"[]
+            ARRAY[ARRAY['key', 'VALUE']::"StringPair"]::"StringPair" []
         )::"CopernicusDataspaceDataProviderDefinition"
     )::"ProDataProviderDefinition",
     10
