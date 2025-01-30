@@ -164,7 +164,7 @@ stream-cancel = "0.8"
 strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
-tempfile = "3.15"
+tempfile = "3.16"
 time = "0.3"
 tokio = { version = "1.43", features = [
     "fs",
