@@ -6,7 +6,7 @@ use crate::{
             MachineLearningError,
         },
         name::MlModelName,
-        MlModel, MlModelDb, MlModelId, MlModelListOptions, MlModelMetadata,
+        MlModel, MlModelDb, MlModelId, MlModelIdAndName, MlModelListOptions, MlModelMetadata,
     },
     permissions::Permission,
     util::postgres::PostgresErrorExt,
@@ -146,7 +146,7 @@ where
         Ok(row.get(1))
     }
 
-    async fn add_model(&self, model: MlModel) -> Result<(), MachineLearningError> {
+    async fn add_model(&self, model: MlModel) -> Result<MlModelIdAndName, MachineLearningError> {
         self.check_ml_model_namespace(&model.name)?;
 
         let mut conn = self
@@ -201,6 +201,32 @@ where
 
         tx.commit().await.context(PostgresMachineLearningError)?;
 
-        Ok(())
+        Ok(MlModelIdAndName {
+            id,
+            name: model.name,
+        })
+    }
+
+    async fn resolve_model_name_to_id(
+        &self,
+        model_name: &MlModelName,
+    ) -> Result<Option<MlModelId>, MachineLearningError> {
+        let conn = self
+            .conn_pool
+            .get()
+            .await
+            .context(Bb8MachineLearningError)?;
+
+        let stmt = conn
+            .prepare(
+                "SELECT id
+        FROM ml_models
+        WHERE name = $1::\"MlModelName\"",
+            )
+            .await?;
+
+        let row_option = conn.query_opt(&stmt, &[&model_name]).await?;
+
+        Ok(row_option.map(|row| row.get(0)))
     }
 }

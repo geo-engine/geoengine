@@ -1,6 +1,8 @@
 use crate::api::handlers;
 use crate::api::handlers::datasets::VolumeFileLayersResponse;
-use crate::api::handlers::permissions::{PermissionListOptions, PermissionRequest, Resource};
+use crate::api::handlers::permissions::{
+    PermissionListOptions, PermissionListing, PermissionRequest, Resource,
+};
 use crate::api::handlers::plots::WrappedPlotOutput;
 use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use crate::api::handlers::tasks::{TaskAbortOptions, TaskResponse};
@@ -31,6 +33,7 @@ use crate::api::model::operators::{
     UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
 };
 use crate::api::model::responses::datasets::DatasetNameResponse;
+use crate::api::model::responses::ml_models::MlModelNameResponse;
 use crate::api::model::responses::{
     BadRequestQueryResponse, ErrorResponse, IdResponse, PayloadTooLargeResponse, PngResponse,
     UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
@@ -56,9 +59,7 @@ use crate::layers::listing::{
 };
 use crate::machine_learning::name::MlModelName;
 use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
-use crate::permissions::{
-    Permission, PermissionListing, ResourceId, Role, RoleDescription, RoleId,
-};
+use crate::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
@@ -423,7 +424,8 @@ use utoipa::{Modify, OpenApi};
             MlModel,
             MlModelId,
             MlModelName,
-            MlModelMetadata
+            MlModelMetadata,
+            MlModelNameResponse
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
