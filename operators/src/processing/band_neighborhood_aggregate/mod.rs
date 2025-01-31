@@ -672,7 +672,7 @@ impl Accu for MovingAverageAccu {
         debug_assert!(
             self.input_band_tiles
                 .front()
-                .map_or(false, |t| t.0 == first_band),
+                .is_some_and(|t| t.0 == first_band),
             "unexpected first band in queue"
         );
 

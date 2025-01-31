@@ -229,7 +229,7 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_p
         match entry {
             Ok(entry)
                 if entry.path().is_file()
-                    && entry.path().extension().map_or(false, |ext| ext == "json") =>
+                    && entry.path().extension().is_some_and(|ext| ext == "json") =>
             {
                 match add_provider_definition_from_dir_entry(db, &entry).await {
                     Ok(()) => info!("Added provider from file `{:?}`", entry.path()),

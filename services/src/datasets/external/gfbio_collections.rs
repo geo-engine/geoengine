@@ -429,10 +429,10 @@ impl GfbioCollectionsDataProvider {
 
         let stmt = conn
             .prepare(&format!(
-                r#"
+                "
             SELECT surrogate_key
             FROM {}.abcd_datasets
-            WHERE dataset_id = $1;"#,
+            WHERE dataset_id = $1;",
                 self.abcd_db_config.schema
             ))
             .await?;
