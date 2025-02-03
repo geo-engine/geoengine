@@ -1,7 +1,10 @@
 use crate::{
     api::model::{
         operators::{GdalLoadingInfoTemporalSlice, GdalMetaDataList},
-        responses::datasets::{errors::*, DatasetNameResponse},
+        responses::{
+            datasets::{errors::*, DatasetNameResponse},
+            ErrorResponse,
+        },
         services::{
             AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
             MetaDataSuggestion, Provenances, UpdateDataset,
@@ -10,7 +13,7 @@ use crate::{
     config::{get_config_element, Data},
     contexts::{ApplicationContext, SessionContext},
     datasets::{
-        listing::{DatasetListOptions, DatasetProvider},
+        listing::{DatasetListOptions, DatasetListing, DatasetProvider},
         storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
         upload::{
             AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName, Volumes,

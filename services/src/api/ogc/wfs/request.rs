@@ -6,8 +6,9 @@ use crate::util::from_str_option;
 use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
-use utoipa::openapi::{ObjectBuilder, SchemaType};
-use utoipa::{IntoParams, ToSchema};
+use utoipa::openapi::schema::{ObjectBuilder, SchemaType};
+use utoipa::openapi::Type;
+use utoipa::{IntoParams, PartialSchema, ToSchema};
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum WfsService {
@@ -42,14 +43,15 @@ pub struct TypeNames {
     pub feature_type: String,
 }
 
-impl<'a> ToSchema<'a> for TypeNames {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        (
-            "TypeNames",
-            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).into(),
-        )
+impl PartialSchema for TypeNames {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .into()
     }
 }
+
+impl ToSchema for TypeNames {}
 
 #[derive(PartialEq, Debug, Deserialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
@@ -88,14 +90,15 @@ pub struct GetFeature {
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct WfsResolution(pub SpatialResolution);
 
-impl<'a> ToSchema<'a> for WfsResolution {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        (
-            "WfsResolution",
-            ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)).into(),
-        )
+impl PartialSchema for WfsResolution {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .into()
     }
 }
+
+impl ToSchema for WfsResolution {}
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum GetFeatureRequest {

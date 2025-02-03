@@ -1,5 +1,7 @@
 use crate::api::handlers::tasks::TaskResponse;
-use crate::api::model::datatypes::{BandSelection, DataId, TimeInterval};
+use crate::api::model::datatypes::{
+    BandSelection, BoundingBox2D, DataId, SpatialPartition2D, SpatialResolution, TimeInterval,
+};
 use crate::api::model::responses::IdResponse;
 use crate::api::ogc::util::{parse_bbox, parse_time};
 use crate::config::get_config_element;
@@ -19,8 +21,7 @@ use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-    VectorQueryRectangle,
+    ColumnSelection, RasterQueryRectangle, VectorQueryRectangle,
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
@@ -524,9 +525,9 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         .boxed_context(error::WorkflowMustBeOfTypeRaster)?;
 
     let query_rectangle = RasterQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
+        spatial_bounds: query.spatial_bounds.into(),
         time_interval: query.time_interval.into(),
-        spatial_resolution: query.spatial_resolution,
+        spatial_resolution: query.spatial_resolution.into(),
         attributes: query.attributes.clone().try_into()?,
     };
 

@@ -362,7 +362,7 @@ struct CreateOverviewParams {
 
 #[derive(Debug, Deserialize, IntoParams)]
 #[into_params(names("path"))]
-struct EbvPath(PathBuf);
+struct EbvPath(#[param(value_type = String)] PathBuf);
 
 /// Creates overview for a single NetCDF file
 #[utoipa::path(

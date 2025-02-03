@@ -21,7 +21,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::path::PathBuf;
-use utoipa::ToSchema;
+use utoipa::{PartialSchema, ToSchema};
 
 /// A `ResultDescriptor` for raster queries
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -141,12 +141,10 @@ pub enum TypedOperator {
     Plot(Box<dyn geoengine_operators::engine::PlotOperator>),
 }
 
-impl<'a> ToSchema<'a> for TypedOperator {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "TypedOperator",
-            ObjectBuilder::new()
+impl PartialSchema for TypedOperator {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{Object, ObjectBuilder, SchemaType, Type};
+        ObjectBuilder::new()
             .property(
                 "type",
                 ObjectBuilder::new()
@@ -164,22 +162,23 @@ impl<'a> ToSchema<'a> for TypedOperator {
                     .required("type")
                     .property(
                         "params",
-                        Object::with_type(SchemaType::Object)
+                        Object::with_type(SchemaType::Type(Type::Object))
                     )
                     .property(
                         "sources",
-                        Object::with_type(SchemaType::Object)
+                        Object::with_type(SchemaType::Type(Type::Object))
                     )
             )
             .required("operator")
-            .example(Some(serde_json::json!(
+            .examples(vec![serde_json::json!(
                 {"type": "MockPointSource", "params": {"points": [{"x": 0.0, "y": 0.1}, {"x": 1.0, "y": 1.1}]}
-            })))
+            })])
             .description(Some("An enum to differentiate between `Operator` variants"))
             .into()
-        )
     }
 }
+
+impl ToSchema for TypedOperator {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -362,10 +361,10 @@ impl From<MockDatasetDataSourceLoadingInfo>
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, ToSchema)]
-#[aliases(
-    MockMetaData = StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>,
-    OgrMetaData = StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-)]
+// #[aliases( // TODO: add aliases
+//     MockMetaData = StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>,
+//     OgrMetaData = StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+// )]
 #[serde(rename_all = "camelCase")]
 pub struct StaticMetaData<L, R, Q> {
     pub loading_info: L,
@@ -373,6 +372,11 @@ pub struct StaticMetaData<L, R, Q> {
     #[serde(skip)]
     pub phantom: PhantomData<Q>,
 }
+
+pub type MockMetaData =
+    StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>;
+pub type OgrMetaData =
+    StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>;
 
 impl
     From<

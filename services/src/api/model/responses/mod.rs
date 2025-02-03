@@ -5,7 +5,7 @@ use actix_web::{dev::ServiceResponse, HttpResponse};
 use convert_case::{Converter, Pattern};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use utoipa::{ToResponse, ToSchema};
+use utoipa::{openapi::schema::SchemaType, ToResponse, ToSchema};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct IdResponse<T> {
@@ -33,7 +33,7 @@ impl<'a, T> ToResponse<'a> for IdResponse<T> {
                 .content(
                     "application/json",
                     ContentBuilder::new()
-                        .schema(
+                        .schema(Some(
                             ObjectBuilder::new()
                                 .property(
                                     "id",
@@ -42,7 +42,7 @@ impl<'a, T> ToResponse<'a> for IdResponse<T> {
                                         .format(Some(SchemaFormat::KnownFormat(KnownFormat::Uuid))),
                                 )
                                 .required("id"),
-                        )
+                        ))
                         .example(Some(serde_json::json!({
                             "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
                         })))
