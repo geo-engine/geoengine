@@ -37,6 +37,7 @@ pub struct Project {
     pub layers: Vec<ProjectLayer>,
     pub plots: Vec<Plot>,
     pub bounds: STRectangle,
+    #[schema(value_type = crate::api::model::datatypes::TimeStep)]
     pub time_step: TimeStep,
 }
 
@@ -148,7 +149,9 @@ impl Project {
 pub struct STRectangle {
     #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
+    #[schema(value_type = crate::api::model::datatypes::BoundingBox2D)]
     pub bounding_box: BoundingBox2D,
+    #[schema(value_type = crate::api::model::datatypes::TimeInterval)]
     pub time_interval: TimeInterval,
 }
 
@@ -259,6 +262,7 @@ pub enum Symbology {
 #[serde(rename_all = "camelCase")]
 pub struct RasterSymbology {
     pub opacity: f64,
+    #[schema(value_type = crate::api::model::datatypes::RasterColorizer)]
     pub raster_colorizer: RasterColorizer,
 }
 
@@ -357,13 +361,17 @@ impl Eq for DerivedNumber {}
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum ColorParam {
-    Static { color: RgbaColor },
+    Static {
+        #[schema(value_type = crate::api::model::datatypes::RgbaColor)]
+        color: RgbaColor,
+    },
     Derived(DerivedColor),
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
 pub struct DerivedColor {
     pub attribute: String,
+    #[schema(value_type = crate::api::model::datatypes::Colorizer)]
     pub colorizer: Colorizer,
 }
 
@@ -388,7 +396,7 @@ pub struct Plot {
     pub name: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 pub enum OrderBy {
     DateAsc,
     DateDesc,
@@ -458,6 +466,7 @@ pub struct CreateProject {
     #[validate(length(min = 1))]
     pub description: String,
     pub bounds: STRectangle,
+    #[schema(value_type = Option<crate::api::model::datatypes::TimeStep>)]
     pub time_step: Option<TimeStep>,
 }
 
@@ -506,6 +515,7 @@ pub struct UpdateProject {
     pub layers: Option<Vec<LayerUpdate>>,
     pub plots: Option<Vec<PlotUpdate>>,
     pub bounds: Option<STRectangle>,
+    #[schema(value_type = Option<crate::api::model::datatypes::TimeStep>)]
     pub time_step: Option<TimeStep>,
 }
 

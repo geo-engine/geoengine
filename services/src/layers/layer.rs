@@ -12,13 +12,16 @@ use validator::{Validate, ValidationError};
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderLayerId {
+    #[schema(value_type = crate::api::model::datatypes::DataProviderId)]
     pub provider_id: DataProviderId,
+    #[schema(value_type = crate::api::model::datatypes::LayerId)]
     pub layer_id: LayerId,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderLayerCollectionId {
+    #[schema(value_type = crate::api::model::datatypes::DataProviderId)]
     pub provider_id: DataProviderId,
     pub collection_id: LayerCollectionId,
 }

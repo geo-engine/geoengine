@@ -27,10 +27,12 @@ pub const DATASET_DB_ROOT_COLLECTION_ID: Uuid =
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct Dataset {
+    #[schema(value_type = crate::api::model::datatypes::DatasetId)]
     pub id: DatasetId,
     pub name: DatasetName,
     pub display_name: String,
     pub description: String,
+    #[schema(value_type = crate::api::model::operators::TypedResultDescriptor)]
     pub result_descriptor: TypedResultDescriptor,
     pub source_operator: String,
     pub symbology: Option<Symbology>,
@@ -131,6 +133,7 @@ pub struct MetaDataSuggestion {
 #[derive(PartialEq, Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(tag = "type")]
 pub enum MetaDataDefinition {
+    #[schema(value_type = crate::api::model::operators::MockMetaData)]
     MockMetaData(
         StaticMetaData<
             MockDatasetDataSourceLoadingInfo,
@@ -138,10 +141,16 @@ pub enum MetaDataDefinition {
             VectorQueryRectangle,
         >,
     ),
+    #[schema(value_type = crate::api::model::operators::OgrMetaData)]
     OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>),
+    #[schema(value_type = crate::api::model::operators::GdalMetaDataRegular)]
     GdalMetaDataRegular(GdalMetaDataRegular),
+    #[schema(value_type = crate::api::model::operators::GdalMetaDataStatic)]
     GdalStatic(GdalMetaDataStatic),
+
+    #[schema(value_type = crate::api::model::operators::GdalMetadataNetCdfCf)]
     GdalMetadataNetCdfCf(GdalMetadataNetCdfCf),
+    #[schema(value_type = crate::api::model::operators::GdalMetaDataList)]
     GdalMetaDataList(GdalMetaDataList),
 }
 

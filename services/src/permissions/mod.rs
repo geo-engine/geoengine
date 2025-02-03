@@ -97,9 +97,11 @@ impl Permission {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, ToSchema)]
 #[serde(tag = "type", content = "id")]
 pub enum ResourceId {
-    Layer(LayerId),                     // TODO: UUID?
+    #[schema(value_type = crate::api::model::datatypes::LayerId)]
+    Layer(LayerId), // TODO: UUID?
     LayerCollection(LayerCollectionId), // TODO: UUID?
     Project(ProjectId),
+    #[schema(value_type = crate::api::model::datatypes::DatasetId)]
     DatasetId(DatasetId),
     MlModel(MlModelId),
 }

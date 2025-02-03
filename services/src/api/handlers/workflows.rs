@@ -1,7 +1,5 @@
 use crate::api::handlers::tasks::TaskResponse;
-use crate::api::model::datatypes::{
-    BandSelection, BoundingBox2D, DataId, SpatialPartition2D, SpatialResolution, TimeInterval,
-};
+use crate::api::model::datatypes::{BandSelection, DataId, TimeInterval};
 use crate::api::model::responses::IdResponse;
 use crate::api::ogc::util::{parse_bbox, parse_time};
 use crate::config::get_config_element;
@@ -21,7 +19,8 @@ use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    ColumnSelection, RasterQueryRectangle, VectorQueryRectangle,
+    BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+    VectorQueryRectangle,
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
@@ -170,7 +169,7 @@ async fn load_workflow_handler<C: ApplicationContext>(
     get,
     path = "/workflow/{id}/metadata",
     responses(
-        (status = 200, description = "Metadata of loaded workflow", body = TypedResultDescriptor,
+        (status = 200, description = "Metadata of loaded workflow", body = crate::api::model::operators::TypedResultDescriptor,
             example = json!({"type": "vector", "dataType": "MultiPoint", "spatialReference": "EPSG:4326", "columns": {}})
         )
     ),
@@ -462,11 +461,13 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
 #[serde(rename_all = "camelCase")]
 pub struct RasterStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_spatial_partition")]
+    #[param(value_type = crate::api::model::datatypes::SpatialPartition2D)]
     pub spatial_bounds: SpatialPartition2D,
     #[serde(deserialize_with = "parse_time")]
     #[param(value_type = String)]
     pub time_interval: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
+    #[param(value_type = crate::api::model::datatypes::SpatialResolution)]
     pub spatial_resolution: SpatialResolution,
     #[serde(deserialize_with = "parse_band_selection")]
     #[param(value_type = String)]
@@ -556,11 +557,13 @@ async fn raster_stream_websocket<C: ApplicationContext>(
 #[serde(rename_all = "camelCase")]
 pub struct VectorStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_bbox")]
+    #[param(value_type = crate::api::model::datatypes::BoundingBox2D)]
     pub spatial_bounds: BoundingBox2D,
     #[serde(deserialize_with = "parse_time")]
     #[param(value_type = String)]
     pub time_interval: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
+    #[param(value_type = crate::api::model::datatypes::SpatialResolution)]
     pub spatial_resolution: SpatialResolution,
     pub result_type: RasterStreamWebsocketResultType,
 }
@@ -609,7 +612,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         .boxed_context(error::WorkflowMustBeOfTypeVector)?;
 
     let query_rectangle = VectorQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
+        spatial_bounds: query.spatial_bounds.into(),
         time_interval: query.time_interval.into(),
         spatial_resolution: query.spatial_resolution,
         attributes: ColumnSelection::all(),
