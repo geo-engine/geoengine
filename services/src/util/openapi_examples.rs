@@ -10,10 +10,14 @@ use std::collections::HashMap;
 use std::future::Future;
 use tokio_postgres::NoTls;
 use utoipa::openapi::path::{Parameter, ParameterIn};
+use utoipa::openapi::schema::SchemaType;
 use utoipa::openapi::{
-    Components, KnownFormat, OpenApi, PathItemType, RefOr, Schema, SchemaFormat, SchemaType,
+    Components, HttpMethod, KnownFormat, OpenApi, RefOr, Schema, SchemaFormat, Type,
 };
+use utoipa::PartialSchema;
 use uuid::Uuid;
+
+use super::openapi_visitor::operations_from_path;
 
 pub struct RunnableExample<'a, C, F, Fut>
 where
@@ -21,7 +25,7 @@ where
     Fut: Future<Output = ServiceResponse>,
 {
     pub(crate) components: &'a Components,
-    pub(crate) http_method: &'a PathItemType,
+    pub(crate) http_method: &'a HttpMethod,
     pub(crate) uri: &'a str,
     pub(crate) parameters: &'a Option<Vec<Parameter>>,
     pub(crate) body: serde_json::Value,
@@ -38,15 +42,14 @@ where
 {
     fn get_actix_http_method(&self) -> Method {
         match self.http_method {
-            PathItemType::Get => Method::GET,
-            PathItemType::Post => Method::POST,
-            PathItemType::Put => Method::PUT,
-            PathItemType::Delete => Method::DELETE,
-            PathItemType::Options => Method::OPTIONS,
-            PathItemType::Head => Method::HEAD,
-            PathItemType::Patch => Method::PATCH,
-            PathItemType::Trace => Method::TRACE,
-            PathItemType::Connect => Method::CONNECT,
+            HttpMethod::Get => Method::GET,
+            HttpMethod::Post => Method::POST,
+            HttpMethod::Put => Method::PUT,
+            HttpMethod::Delete => Method::DELETE,
+            HttpMethod::Options => Method::OPTIONS,
+            HttpMethod::Head => Method::HEAD,
+            HttpMethod::Patch => Method::PATCH,
+            HttpMethod::Trace => Method::TRACE,
         }
     }
 
@@ -62,8 +65,8 @@ where
                     None => "asdf".to_string(),
                     _ => unimplemented!(),
                 },
-                SchemaType::Integer | SchemaType::Number => "42".to_string(),
-                SchemaType::Boolean => "false".to_string(),
+                SchemaType::Type(Type::Integer | Type::Number) => "42".to_string(),
+                SchemaType::Type(Type::Boolean) => "false".to_string(),
                 _ => unimplemented!(),
             },
             _ => unimplemented!(),
@@ -209,15 +212,15 @@ pub async fn can_run_examples<F, Fut>(
     let components = api.components.expect("api has at least one component");
 
     for (uri, path_item) in api.paths.paths {
-        for (http_method, operation) in path_item.operations {
-            if let Some(request_body) = operation.request_body {
+        for (http_method, operation) in operations_from_path(&path_item) {
+            if let Some(request_body) = &operation.request_body {
                 let with_auth = operation.security.is_some();
 
-                for content in request_body.content.into_values() {
+                for content in request_body.content.clone().into_values() {
                     if let Some(example) = content.example {
                         RunnableExample {
                             components: &components,
-                            http_method: &http_method,
+                            http_method,
                             uri: uri.as_str(),
                             parameters: &operation.parameters,
                             body: example,
@@ -244,7 +247,7 @@ pub async fn can_run_examples<F, Fut>(
                                     if let Some(body) = concrete.value {
                                         RunnableExample {
                                             components: &components,
-                                            http_method: &http_method,
+                                            http_method,
                                             uri: uri.as_str(),
                                             parameters: &operation.parameters,
                                             body,
@@ -284,10 +287,9 @@ mod tests {
     use utoipa::openapi::path::{OperationBuilder, ParameterBuilder, PathItemBuilder};
     use utoipa::openapi::request_body::RequestBodyBuilder;
     use utoipa::openapi::{
-        ComponentsBuilder, ContentBuilder, Object, ObjectBuilder, OpenApiBuilder, PathItemType,
+        ComponentsBuilder, ContentBuilder, HttpMethod, Object, ObjectBuilder, OpenApiBuilder,
         PathsBuilder,
     };
-    use utoipa::ToSchema;
 
     #[derive(Deserialize)]
     struct DummyQueryParams {
@@ -330,7 +332,7 @@ mod tests {
     }
 
     async fn run_dummy_example(app_ctx: PostgresContext<NoTls>, example: serde_json::Value) {
-        can_run_examples(
+        Box::pin(can_run_examples(
             app_ctx,
             OpenApiBuilder::new()
                 .paths(
@@ -338,7 +340,7 @@ mod tests {
                         "/test/{id}",
                         PathItemBuilder::new()
                             .operation(
-                                PathItemType::Post,
+                                HttpMethod::Post,
                                 OperationBuilder::new()
                                     .parameter(
                                         ParameterBuilder::new()
@@ -346,7 +348,7 @@ mod tests {
                                             .parameter_in(ParameterIn::Path)
                                             .schema(Some(RefOr::T(
                                                 ObjectBuilder::new()
-                                                    .schema_type(SchemaType::Integer)
+                                                    .schema_type(SchemaType::Type(Type::Integer))
                                                     .format(Some(SchemaFormat::KnownFormat(
                                                         KnownFormat::Int32,
                                                     )))
@@ -367,7 +369,7 @@ mod tests {
                                             .content(
                                                 "application/json",
                                                 ContentBuilder::new()
-                                                    .schema(Volume::schema().1)
+                                                    .schema(Some(Volume::schema()))
                                                     .example(Some(example))
                                                     .into(),
                                             )
@@ -388,7 +390,7 @@ mod tests {
                 ))
                 .into(),
             dummy_send_test_request,
-        )
+        ))
         .await;
     }
 

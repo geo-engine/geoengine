@@ -526,9 +526,9 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         .boxed_context(error::WorkflowMustBeOfTypeRaster)?;
 
     let query_rectangle = RasterQueryRectangle {
-        spatial_bounds: query.spatial_bounds.into(),
+        spatial_bounds: query.spatial_bounds,
         time_interval: query.time_interval.into(),
-        spatial_resolution: query.spatial_resolution.into(),
+        spatial_resolution: query.spatial_resolution,
         attributes: query.attributes.clone().try_into()?,
     };
 
@@ -612,7 +612,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         .boxed_context(error::WorkflowMustBeOfTypeVector)?;
 
     let query_rectangle = VectorQueryRectangle {
-        spatial_bounds: query.spatial_bounds.into(),
+        spatial_bounds: query.spatial_bounds,
         time_interval: query.time_interval.into(),
         spatial_resolution: query.spatial_resolution,
         attributes: ColumnSelection::all(),
