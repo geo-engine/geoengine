@@ -200,6 +200,89 @@ pub fn add_ndvi_dataset_cropped_to_valid_webmercator_bounds(
 }
 
 #[allow(clippy::missing_panics_doc)]
+pub fn create_ndvi_downscaled_3x_meta_data_with_cache_ttl(
+    cache_ttl: CacheTtlSeconds,
+) -> GdalMetaDataRegular {
+    let no_data_value = Some(0.);
+    GdalMetaDataRegular {
+        data_time: TimeInterval::new_unchecked(
+            TimeInstance::from_str("2014-01-01T00:00:00.000Z")
+                .expect("it should only be used in tests"),
+            TimeInstance::from_str("2014-01-01T00:00:00.000Z")
+                .expect("it should only be used in tests"),
+        ),
+        step: TimeStep {
+            granularity: TimeGranularity::Months,
+            step: 1,
+        },
+        time_placeholders: hashmap! {
+            "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
+                format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
+                reference: TimeReference::Start,
+            },
+        },
+        params: GdalDatasetParameters {
+            file_path: test_data!(
+                "raster/modis_ndvi/downscaled_3x/MOD13A2_M_NDVI_%_START_TIME_%.TIFF"
+            )
+            .into(),
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (-180., 90.).into(),
+                x_pixel_size: 0.3,
+                y_pixel_size: -0.3,
+            },
+            width: 1200,
+            height: 600,
+            file_not_found_handling: FileNotFoundHandling::NoData,
+            no_data_value,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        },
+        result_descriptor: RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: Some(TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00.000Z")
+                    .expect("it should only be used in tests"),
+                TimeInstance::from_str("2014-07-01T00:00:00.000Z")
+                    .expect("it should only be used in tests"),
+            )),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new((-180., 90.).into(), 0.3, -0.3),
+                GridBoundingBox2D::new([0, 0], [599, 1199]).expect("should only be used in tests"),
+            ),
+            bands: vec![RasterBandDescriptor {
+                name: "ndvi".to_string(),
+                measurement: Measurement::Continuous(ContinuousMeasurement {
+                    measurement: "vegetation".to_string(),
+                    unit: None,
+                }),
+            }]
+            .try_into()
+            .expect("it should only be used in tests"),
+        },
+        cache_ttl,
+    }
+}
+
+pub fn add_ndvi_downscaled_3x_dataset(ctx: &mut MockExecutionContext) -> NamedData {
+    let id: DataId = DatasetId::new().into();
+    let name = NamedData::with_system_name("ndvi_downscaled_3x");
+    ctx.add_meta_data(
+        id,
+        name.clone(),
+        Box::new(create_ndvi_downscaled_3x_meta_data_with_cache_ttl(
+            CacheTtlSeconds::default(),
+        )),
+    );
+    name
+}
+
+#[allow(clippy::missing_panics_doc)]
 pub fn create_ports_meta_data(
 ) -> StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle> {
     StaticMetaData {
