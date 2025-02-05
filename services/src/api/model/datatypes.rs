@@ -735,12 +735,28 @@ impl From<BoundingBox2D> for geoengine_datatypes::primitives::BoundingBox2D {
 }
 
 /// An object that composes the date and a timestamp with time zone.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ToSchema)]
-pub struct DateTime {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DateTimeString {
     datetime: chrono::DateTime<chrono::Utc>,
 }
 
-impl FromStr for DateTime {
+// TODO: use derive ToSchema when OpenAPI derive does not break
+impl PartialSchema for DateTimeString {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .into()
+    }
+}
+
+impl ToSchema for DateTimeString {
+    // fn name() -> Cow<'static, str> {
+    //     "DateTime2".into()
+    // }
+}
+
+impl FromStr for DateTimeString {
     type Err = geoengine_datatypes::primitives::DateTimeError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
@@ -754,7 +770,7 @@ impl FromStr for DateTime {
     }
 }
 
-impl From<chrono::DateTime<chrono::FixedOffset>> for DateTime {
+impl From<chrono::DateTime<chrono::FixedOffset>> for DateTimeString {
     fn from(datetime: chrono::DateTime<chrono::FixedOffset>) -> Self {
         Self {
             datetime: datetime.into(),
@@ -762,7 +778,7 @@ impl From<chrono::DateTime<chrono::FixedOffset>> for DateTime {
     }
 }
 
-impl From<geoengine_datatypes::primitives::DateTime> for DateTime {
+impl From<geoengine_datatypes::primitives::DateTime> for DateTimeString {
     fn from(datetime: geoengine_datatypes::primitives::DateTime) -> Self {
         Self {
             datetime: datetime.into(),
@@ -1068,7 +1084,7 @@ impl FromStr for TimeInstance {
     type Err = geoengine_datatypes::primitives::DateTimeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let date_time = DateTime::from_str(s)?;
+        let date_time = DateTimeString::from_str(s)?;
         Ok(date_time.into())
     }
 }
@@ -1085,14 +1101,14 @@ impl From<TimeInstance> for geoengine_datatypes::primitives::TimeInstance {
     }
 }
 
-impl From<DateTime> for TimeInstance {
-    fn from(datetime: DateTime) -> Self {
+impl From<DateTimeString> for TimeInstance {
+    fn from(datetime: DateTimeString) -> Self {
         Self::from(&datetime)
     }
 }
 
-impl From<&DateTime> for TimeInstance {
-    fn from(datetime: &DateTime) -> Self {
+impl From<&DateTimeString> for TimeInstance {
+    fn from(datetime: &DateTimeString) -> Self {
         geoengine_datatypes::primitives::TimeInstance::from_millis_unchecked(
             datetime.datetime.timestamp_millis(),
         )

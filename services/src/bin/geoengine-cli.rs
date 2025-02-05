@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use geoengine_services::cli::{
-    check_heartbeat, check_successful_startup, CheckSuccessfulStartup, Heartbeat,
+    check_heartbeat, check_successful_startup, output_openapi_json, CheckSuccessfulStartup,
+    Heartbeat, OpenAPIGenerate,
 };
 
 /// CLI for Geo Engine Utilities
@@ -18,6 +19,10 @@ enum Commands {
 
     /// Checks if the Geo Engine server is alive
     Heartbeat(Heartbeat),
+
+    /// Outputs OpenAPI JSON
+    #[command(name = "openapi")]
+    OpenAPI(OpenAPIGenerate),
 }
 
 impl Commands {
@@ -25,6 +30,7 @@ impl Commands {
         match self {
             Commands::CheckSuccessfulStartup(params) => check_successful_startup(params).await,
             Commands::Heartbeat(params) => check_heartbeat(params).await,
+            Commands::OpenAPI(params) => output_openapi_json(params).await,
         }
     }
 }

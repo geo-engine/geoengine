@@ -12,13 +12,13 @@ use crate::api::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResu
 use crate::api::model::datatypes::{
     AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
     ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
-    DataProviderId, DatasetId, DateTime, DateTimeParseFormat, ExternalDataId, FeatureDataType,
-    GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement, MultiLineString,
-    MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle,
-    RasterColorizer, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
-    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReferenceAuthority,
-    SpatialResolution, StringPair, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
-    VectorDataType, VectorQueryRectangle,
+    DataProviderId, DatasetId, DateTimeParseFormat, DateTimeString, ExternalDataId,
+    FeatureDataType, GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement,
+    MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat,
+    PlotQueryRectangle, RasterColorizer, RasterDataType, RasterPropertiesEntryType,
+    RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D,
+    SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
+    TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -195,7 +195,7 @@ use utoipa::{Modify, OpenApi};
             UserSession,
             UserCredentials,
             UserRegistration,
-            DateTime,
+            DateTimeString,
             UserInfo,
             Quota,
             UpdateQuota,
@@ -491,6 +491,11 @@ mod tests {
 
     #[ge_context::test]
     async fn it_can_run_examples(app_ctx: PostgresContext<NoTls>) {
-        can_run_examples(app_ctx, ApiDoc::openapi(), send_test_request).await;
+        Box::pin(can_run_examples(
+            app_ctx,
+            ApiDoc::openapi(),
+            send_test_request,
+        ))
+        .await;
     }
 }
