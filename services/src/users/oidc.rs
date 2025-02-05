@@ -22,8 +22,8 @@ use openidconnect::core::{
 use openidconnect::{
     AccessTokenHash, AuthorizationCode, Client, ClientId, ClientSecret, CsrfToken, DiscoveryError,
     EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, IssuerUrl, Nonce, OAuth2TokenResponse,
-    PkceCodeChallenge, PkceCodeVerifier, ProviderMetadata, RedirectUrl, ResponseTypes,
-    StandardErrorResponse, SubjectIdentifier, TokenResponse,
+    PkceCodeChallenge, PkceCodeVerifier, ProviderMetadata, ResponseTypes, StandardErrorResponse,
+    SubjectIdentifier, TokenResponse,
 };
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
@@ -138,7 +138,6 @@ impl OidcManager {
             issuer: value.issuer.to_string(),
             client_id: value.client_id.to_string(),
             client_secret: value.client_secret.clone(),
-            redirect_uri: value.redirect_uri.to_string(),
             scopes: value.scopes,
             users: Arc::new(Default::default()),
             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
@@ -191,7 +190,6 @@ struct OidcRequestDb {
     issuer: String,
     client_id: String,
     client_secret: Option<String>,
-    redirect_uri: String,
     scopes: Vec<String>,
     users: Db<HashMap<String, PendingRequest>>,
     state_function: fn() -> CsrfToken,
@@ -574,7 +572,6 @@ impl TryFrom<Oidc> for OidcRequestDb {
                 issuer: value.issuer.to_string(),
                 client_id: value.client_id.to_string(),
                 client_secret: value.client_secret.clone(),
-                redirect_uri: value.redirect_uri.to_string(),
                 scopes: value.scopes,
                 users: Arc::new(Default::default()),
                 state_function: CsrfToken::new_random,
@@ -648,14 +645,12 @@ mod tests {
 
     const ALTERNATIVE_ACCESS_TOKEN: &str = "DUMMY_ACCESS_TOKEN_2";
     const ISSUER_URL: &str = "https://dummy-issuer.com/";
-    const REDIRECT_URI: &str = "https://dummy-redirect.com/";
 
     fn single_state_nonce_request_db() -> OidcRequestDb {
         OidcRequestDb {
             issuer: ISSUER_URL.to_string(),
             client_id: "DummyClient".to_string(),
             client_secret: Some("DummySecret".to_string()),
-            redirect_uri: REDIRECT_URI.to_string(),
             scopes: vec!["profile".to_string(), "email".to_string()],
             users: Arc::new(Default::default()),
             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
@@ -669,7 +664,6 @@ mod tests {
             issuer: server_url,
             client_id: String::new(),
             client_secret: None,
-            redirect_uri: REDIRECT_URI.to_string(),
             scopes: vec!["profile".to_string(), "email".to_string()],
             users: Arc::new(Default::default()),
             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
@@ -872,7 +866,6 @@ mod tests {
             issuer: ISSUER_URL.to_owned() + "oidc/test",
             client_id: "DummyClient".to_string(),
             client_secret: Some("DummySecret".to_string()),
-            redirect_uri: REDIRECT_URI.to_string(),
             scopes: vec!["profile".to_string(), "email".to_string()],
             users: Arc::new(Default::default()),
             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
