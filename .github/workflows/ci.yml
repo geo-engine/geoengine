@@ -163,4 +163,9 @@ jobs:
           # Default: "false"
           #cache-on-failure: ""
       - name: Build
-        run: cargo build --locked ${{ matrix.features }} ${{ matrix.build }} --verbose
+        run: cargo build --bins --locked ${{ matrix.features }} ${{ matrix.build }} --verbose
+      - name: Check OpenAPI spec is up-to-date
+        run: |
+          cargo run --bin geoengine-cli -- openapi > openapi_compare.json
+          diff -u openapi.json openapi_compare.json
+          rm openapi_compare.json
