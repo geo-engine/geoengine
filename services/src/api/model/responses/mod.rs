@@ -1,4 +1,5 @@
 pub mod datasets;
+pub mod ml_models;
 
 use actix_http::StatusCode;
 use actix_web::{dev::ServiceResponse, HttpResponse};

@@ -23,6 +23,13 @@ identifier!(MlModelId);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
+pub struct MlModelIdAndName {
+    pub id: MlModelId,
+    pub name: MlModelName,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema, FromSql, ToSql)]
+#[serde(rename_all = "camelCase")]
 pub struct MlModel {
     pub name: MlModelName,
     pub display_name: String,
@@ -98,5 +105,10 @@ pub trait MlModelDb {
         name: &MlModelName,
     ) -> Result<MlModelMetadata, MachineLearningError>;
 
-    async fn add_model(&self, model: MlModel) -> Result<(), MachineLearningError>;
+    async fn add_model(&self, model: MlModel) -> Result<MlModelIdAndName, MachineLearningError>;
+
+    async fn resolve_model_name_to_id(
+        &self,
+        name: &MlModelName,
+    ) -> Result<Option<MlModelId>, MachineLearningError>;
 }

@@ -462,6 +462,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::model::datatypes::RasterDataType as ApiRasterDataType;
     use crate::config::QuotaTrackingMode;
     use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -483,6 +484,7 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
+    use crate::machine_learning::{MlModel, MlModelDb, MlModelIdAndName, MlModelMetadata};
     use crate::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
     use crate::projects::{
         CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
@@ -4881,5 +4883,45 @@ mod tests {
     #[ge_context::test(oidc_db = "oidc_only_refresh_with_encryption")]
     async fn it_handles_oidc_tokens_with_encryption(app_ctx: PostgresContext<NoTls>) {
         it_handles_oidc_tokens(app_ctx).await;
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_resolves_ml_model_names_to_ids(app_ctx: PostgresContext<NoTls>) {
+        let admin_session = UserSession::admin_session();
+        let db = app_ctx.session_context(admin_session.clone()).db();
+
+        let upload_id = UploadId::new();
+        let upload = Upload {
+            id: upload_id,
+            files: vec![],
+        };
+        db.create_upload(upload).await.unwrap();
+
+        let model = MlModel {
+            description: "No real model here".to_owned(),
+            display_name: "my unreal model".to_owned(),
+            metadata: MlModelMetadata {
+                file_name: "myUnrealmodel.onnx".to_owned(),
+                input_type: ApiRasterDataType::F32,
+                num_input_bands: 17,
+                output_type: ApiRasterDataType::F64,
+            },
+            name: MlModelName::new(None, "myUnrealModel"),
+            upload: upload_id,
+        };
+
+        let MlModelIdAndName {
+            id: model_id,
+            name: model_name,
+        } = db.add_model(model).await.unwrap();
+
+        assert_eq!(
+            db.resolve_model_name_to_id(&model_name)
+                .await
+                .unwrap()
+                .unwrap(),
+            model_id
+        );
     }
 }

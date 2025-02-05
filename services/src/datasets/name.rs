@@ -1,6 +1,9 @@
 use geoengine_datatypes::dataset::{DatasetId, NamedData};
 use postgres_types::{FromSql, ToSql};
 use serde::{de::Visitor, Deserialize, Serialize};
+use snafu::Snafu;
+use std::str::FromStr;
+use strum::IntoStaticStr;
 use utoipa::{IntoParams, PartialSchema, ToSchema};
 
 /// A (optionally namespaced) name for a `Dataset`.
@@ -9,6 +12,18 @@ use utoipa::{IntoParams, PartialSchema, ToSchema};
 pub struct DatasetName {
     pub namespace: Option<String>,
     pub name: String,
+}
+
+#[derive(Snafu, IntoStaticStr, Debug)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
+pub enum DatasetNameError {
+    #[snafu(display("DatasetName is empty"))]
+    IsEmpty,
+    #[snafu(display("invalid character '{invalid_char}' in named data"))]
+    InvalidCharacter { invalid_char: String },
+    #[snafu(display("named data must consist of at most two parts"))]
+    TooManyParts,
 }
 
 impl DatasetName {
@@ -40,6 +55,51 @@ impl std::fmt::Display for DatasetName {
             (Some(namespace), name) => {
                 write!(f, "{namespace}{d}{name}")
             }
+        }
+    }
+}
+
+impl FromStr for DatasetName {
+    type Err = DatasetNameError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut strings = [None, None];
+        let mut split = s.split(geoengine_datatypes::dataset::NAME_DELIMITER);
+
+        for (buffer, part) in strings.iter_mut().zip(&mut split) {
+            if part.is_empty() {
+                return Err(DatasetNameError::IsEmpty);
+            }
+
+            if let Some(c) = part
+                .matches(geoengine_datatypes::dataset::is_invalid_name_char)
+                .next()
+            {
+                return Err(DatasetNameError::InvalidCharacter {
+                    invalid_char: c.to_string(),
+                });
+            }
+
+            *buffer = Some(part.to_string());
+        }
+
+        if split.next().is_some() {
+            return Err(DatasetNameError::TooManyParts);
+        }
+
+        match strings {
+            [Some(namespace), Some(name)] => Ok(DatasetName {
+                namespace: DatasetName::canonicalize(
+                    namespace,
+                    geoengine_datatypes::dataset::SYSTEM_NAMESPACE,
+                ),
+                name,
+            }),
+            [Some(name), None] => Ok(DatasetName {
+                namespace: None,
+                name,
+            }),
+            _ => Err(DatasetNameError::IsEmpty),
         }
     }
 }
@@ -87,42 +147,7 @@ impl Visitor<'_> for DatasetNameDeserializeVisitor {
     where
         E: serde::de::Error,
     {
-        let mut strings = [None, None];
-        let mut split = s.split(geoengine_datatypes::dataset::NAME_DELIMITER);
-
-        for (buffer, part) in strings.iter_mut().zip(&mut split) {
-            if part.is_empty() {
-                return Err(E::custom("empty part in named data"));
-            }
-
-            if let Some(c) = part
-                .matches(geoengine_datatypes::dataset::is_invalid_name_char)
-                .next()
-            {
-                return Err(E::custom(format!("invalid character '{c}' in named data")));
-            }
-
-            *buffer = Some(part.to_string());
-        }
-
-        if split.next().is_some() {
-            return Err(E::custom("named data must consist of at most two parts"));
-        }
-
-        match strings {
-            [Some(namespace), Some(name)] => Ok(DatasetName {
-                namespace: DatasetName::canonicalize(
-                    namespace,
-                    geoengine_datatypes::dataset::SYSTEM_NAMESPACE,
-                ),
-                name,
-            }),
-            [Some(name), None] => Ok(DatasetName {
-                namespace: None,
-                name,
-            }),
-            _ => Err(E::custom("empty named data")),
-        }
+        DatasetName::from_str(s).map_err(|e| E::custom(e.to_string()))
     }
 }
 
@@ -191,4 +216,36 @@ impl PartialSchema for DatasetName {
 pub struct DatasetIdAndName {
     pub id: DatasetId,
     pub name: DatasetName,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dataset_name_from_str() {
+        const DATASET_NAME: &str = "myDatasetName";
+        let mln = DatasetName::from_str(DATASET_NAME).unwrap();
+        assert_eq!(mln.name, DATASET_NAME);
+        assert!(mln.namespace.is_none());
+    }
+
+    #[test]
+    fn dataset_name_from_str_prefixed() {
+        const DATASET_NAME: &str = "d5328854-6190-4af9-ad69-4e74b0961ac9:myDatasetName";
+        let mln = DatasetName::from_str(DATASET_NAME).unwrap();
+        assert_eq!(mln.name, "myDatasetName".to_string());
+        assert_eq!(
+            mln.namespace,
+            Some("d5328854-6190-4af9-ad69-4e74b0961ac9".to_string())
+        );
+    }
+
+    #[test]
+    fn dataset_name_from_str_system() {
+        const DATASET_NAME: &str = "_:myDatasetName";
+        let mln = DatasetName::from_str(DATASET_NAME).unwrap();
+        assert_eq!(mln.name, "myDatasetName".to_string());
+        assert!(mln.namespace.is_none());
+    }
 }

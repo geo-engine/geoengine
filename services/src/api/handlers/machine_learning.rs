@@ -1,7 +1,7 @@
 use actix_web::{web, FromRequest, HttpResponse, ResponseError};
 
 use crate::{
-    api::model::responses::ErrorResponse,
+    api::model::responses::{ml_models::MlModelNameResponse, ErrorResponse},
     contexts::{ApplicationContext, SessionContext},
     machine_learning::{
         error::MachineLearningError, name::MlModelName, MlModel, MlModelDb, MlModelListOptions,
@@ -48,7 +48,7 @@ impl ResponseError for MachineLearningError {
     path = "/ml/models",
     request_body = MlModel,
     responses(
-        (status = 200)
+        (status = 200, body = MlModelNameResponse)
     ),
     security(
         ("session_token" = [])
@@ -59,14 +59,14 @@ pub(crate) async fn add_ml_model<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     model: web::Json<MlModel>,
-) -> Result<HttpResponse, MachineLearningError> {
+) -> Result<web::Json<MlModelNameResponse>, MachineLearningError> {
     let model = model.into_inner();
-    app_ctx
+    let id_and_name = app_ctx
         .session_context(session)
         .db()
         .add_model(model)
         .await?;
-    Ok(HttpResponse::Ok().finish())
+    Ok(web::Json(id_and_name.name.into()))
 }
 
 /// List ml models.
