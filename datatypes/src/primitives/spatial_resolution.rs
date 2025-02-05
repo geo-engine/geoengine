@@ -38,13 +38,13 @@ impl SpatialResolution {
         SpatialResolution { x: 1., y: 1. }
     }
 
-    pub fn with_native_resolution_and_zoom_level(
+    pub fn with_native_resolution_and_gdal_overview_level(
         native_resolution: SpatialResolution,
-        zoom_level: u32,
+        gdal_overview_level: u32,
     ) -> SpatialResolution {
         SpatialResolution::new_unchecked(
-            native_resolution.x * f64::from(2_u32.pow(zoom_level)),
-            native_resolution.y * f64::from(2_u32.pow(zoom_level)),
+            native_resolution.x * f64::from(gdal_overview_level),
+            native_resolution.y * f64::from(gdal_overview_level),
         )
     }
 }
@@ -124,6 +124,27 @@ impl PartialOrd for SpatialResolution {
     }
 }
 
+/// finds the coarsest overview level that is still at least as fine as the required resolution
+// TODO: add option to only use available overview levels.
+pub fn find_next_best_overview_level(
+    native_resolution: SpatialResolution,
+    target_resolution: SpatialResolution,
+) -> u32 {
+    let mut current_overview_level = 0;
+    let mut next_overview_level = 2;
+
+    while SpatialResolution::with_native_resolution_and_gdal_overview_level(
+        native_resolution,
+        next_overview_level,
+    ) <= target_resolution
+    {
+        current_overview_level = next_overview_level;
+        next_overview_level *= 2;
+    }
+
+    current_overview_level
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -160,5 +181,40 @@ mod test {
     fn div_scalar() {
         let res = SpatialResolution { x: 4., y: 8. } / 2.;
         assert_eq!(res, SpatialResolution { x: 2., y: 4. });
+    }
+
+    #[test]
+    fn it_finds_next_best_overview_level() {
+        assert_eq!(
+            find_next_best_overview_level(
+                SpatialResolution::new_unchecked(0.1, 0.1),
+                SpatialResolution::new_unchecked(0.1, 0.1)
+            ),
+            0
+        );
+
+        assert_eq!(
+            find_next_best_overview_level(
+                SpatialResolution::new_unchecked(0.1, 0.1),
+                SpatialResolution::new_unchecked(0.2, 0.2)
+            ),
+            2
+        );
+
+        assert_eq!(
+            find_next_best_overview_level(
+                SpatialResolution::new_unchecked(0.1, 0.1),
+                SpatialResolution::new_unchecked(0.3, 0.3)
+            ),
+            2
+        );
+
+        assert_eq!(
+            find_next_best_overview_level(
+                SpatialResolution::new_unchecked(0.1, 0.1),
+                SpatialResolution::new_unchecked(0.4, 0.4)
+            ),
+            4
+        );
     }
 }

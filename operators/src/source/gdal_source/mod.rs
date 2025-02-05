@@ -2,13 +2,10 @@ use crate::adapters::{
     FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
 };
 use crate::engine::{
-    CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor, SingleRasterSource,
+    CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor,
     SpatialGridDescriptor, WorkflowOperatorPath,
 };
-use crate::optimization::{OptimizationError, TargetResolutionMustBeHigherThanSourceResolution};
-use crate::processing::{
-    Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
-};
+use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::gdal_source::reader::ReaderState;
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
@@ -35,7 +32,7 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use geoengine_datatypes::primitives::{find_next_best_overview_level, BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{
     Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, TimeInstance,
 };
@@ -986,61 +983,31 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
         &self,
         target_resolution: SpatialResolution,
     ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
-        let original_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
+        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
 
-        // TODO: handle special case where the output resolution is smaller than the current resolution
-        //       when does this happen? what should we do in this case?
+        // TODO: handle cases where the original workflow explicitly loads overviews in the source
         ensure!(
-            target_resolution > self.result_descriptor.spatial_grid.spatial_resolution(),
-            TargetResolutionMustBeHigherThanSourceResolution {
-                target_resolution,
-                source_resolution: self.result_descriptor.spatial_grid.spatial_resolution()
+            self.overview_level == 0,
+            SourcesMustNotUseOverviews {
+                data: self.data_name.to_string(),
+                oveview_level: self.overview_level
             }
         );
 
-        // TODO: get max overview level for dataset (based on available pyramids)
-        let max_overview_level = 999;
+        // as overview level is always 0 for now, the result descriptor contains the native resolution
+        // TODO: when allowing to optimize upon overview levels, compute the native resolution first
+        let native_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
 
-        let mut current_zoom_level = self.overview_level;
+        // TODO: get available overviews levels from the dataset metadata (not available yet) and only load these.
+        //       Then, we might have to prepend a Resampling operator to match the target resolution.
+        //       For now, we just load the overview level regardless and let gdal handle the resamṕling.
+        let next_best_overview_level =
+            find_next_best_overview_level(native_resolution, target_resolution);
 
-        let mut current_resolution = SpatialResolution::with_native_resolution_and_zoom_level(
-            original_resolution,
-            current_zoom_level,
-        );
-        let mut next_resolution = SpatialResolution::with_native_resolution_and_zoom_level(
-            original_resolution,
-            current_zoom_level + 1,
-        );
-
-        while next_resolution < target_resolution && current_zoom_level < max_overview_level {
-            current_zoom_level += 1;
-            current_resolution = next_resolution;
-            next_resolution = SpatialResolution::with_native_resolution_and_zoom_level(
-                original_resolution,
-                current_zoom_level + 1,
-            );
-        }
-
-        let gdal_optimized = GdalSource {
+        Ok(GdalSource {
             params: GdalSourceParameters {
                 data: self.data_name.clone(),
-                overview_level: Some(current_zoom_level),
-            },
-        }
-        .boxed();
-
-        if current_resolution == target_resolution {
-            return Ok(gdal_optimized);
-        }
-
-        Ok(Downsampling {
-            params: DownsamplingParams {
-                sampling_method: DownsamplingMethod::NearestNeighbor,
-                output_resolution: DownsamplingResolution::Resolution(target_resolution),
-                output_origin_reference: None,
-            },
-            sources: SingleRasterSource {
-                raster: gdal_optimized,
+                overview_level: Some(next_best_overview_level),
             },
         }
         .boxed())

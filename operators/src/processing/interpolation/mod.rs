@@ -9,6 +9,10 @@ use crate::engine::{
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
+use crate::optimization::{OptimizableOperator, OptimizationError};
+use crate::processing::{
+    Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
+};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
@@ -199,6 +203,94 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedInte
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+
+        let out_descriptor = self.result_descriptor();
+        let in_descriptor = self.raster_source.result_descriptor();
+
+        let input_resolution = in_descriptor.spatial_grid.spatial_resolution();
+
+        let new_origin = if in_descriptor.spatial_grid.geo_transform().origin_coordinate
+            != out_descriptor
+                .spatial_grid
+                .geo_transform()
+                .origin_coordinate
+        {
+            Some(
+                out_descriptor
+                    .spatial_grid
+                    .geo_transform()
+                    .origin_coordinate,
+            )
+        } else {
+            None
+        };
+
+        if input_resolution == target_resolution {
+            // special case where interpolation becomes redundant, unless it also regrids
+
+            // TODO: source does not need to be optimized, but we need it as an `RasterOperator` and not `InitializedRasterOperator`
+            let optimzed_source = self.raster_source.optimize(target_resolution)?;
+
+            if new_origin.is_some() {
+                return Ok(Interpolation {
+                    params: InterpolationParams {
+                        interpolation: self.interpolation_method,
+                        output_resolution: InterpolationResolution::Resolution(target_resolution),
+                        output_origin_reference: new_origin,
+                    },
+                    sources: SingleRasterSource {
+                        raster: optimzed_source,
+                    },
+                }
+                .boxed());
+            } else {
+                return Ok(optimzed_source);
+            }
+        }
+
+        // snap the input resolution to an overview level
+        let mut snapped_input_resolution = input_resolution;
+
+        while snapped_input_resolution * 2.0 < target_resolution {
+            snapped_input_resolution = snapped_input_resolution * 2.0;
+        }
+
+        let optimzed_source = self.raster_source.optimize(snapped_input_resolution)?;
+
+        if snapped_input_resolution < target_resolution {
+            // result must be coarser than the source, so we need to convert to Downsampling
+            return Ok(Downsampling {
+                params: DownsamplingParams {
+                    sampling_method: DownsamplingMethod::NearestNeighbor,
+                    output_resolution: DownsamplingResolution::Resolution(target_resolution),
+                    output_origin_reference: new_origin,
+                },
+                sources: SingleRasterSource {
+                    raster: optimzed_source,
+                },
+            }
+            .boxed());
+        }
+
+        // target resolution is still finer than what the source produces
+        Ok(Interpolation {
+            params: InterpolationParams {
+                interpolation: self.interpolation_method,
+                output_resolution: InterpolationResolution::Resolution(target_resolution),
+                output_origin_reference: new_origin,
+            },
+            sources: SingleRasterSource {
+                raster: optimzed_source,
+            },
+        }
+        .boxed())
     }
 }
 

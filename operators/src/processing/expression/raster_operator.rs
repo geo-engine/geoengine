@@ -11,7 +11,7 @@ use crate::{
         WorkflowOperatorPath,
     },
     error::InvalidNumberOfExpressionInputBands,
-    optimization::OptimizationError,
+    optimization::{OptimizableOperator, OptimizationError},
     processing::expression::canonicalize_name,
     util::Result,
 };
@@ -211,6 +211,8 @@ impl InitializedRasterOperator for InitializedExpression {
         &self,
         resolution: SpatialResolution,
     ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.ensure_resolution_is_compatible_for_optimization(resolution)?;
+
         Ok(Expression {
             params: ExpressionParams {
                 expression: self.expression_string.clone(),

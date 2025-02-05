@@ -197,6 +197,13 @@ impl SpatialGridDescriptor {
         grid_def.spatial_partition()
     }
 
+    pub fn geo_transform(&self) -> GeoTransform {
+        match self {
+            SpatialGridDescriptor::Source(s) => s.geo_transform(),
+            SpatialGridDescriptor::Derived(m) => m.geo_transform(),
+        }
+    }
+
     pub fn spatial_resolution(&self) -> SpatialResolution {
         match self {
             SpatialGridDescriptor::Source(s) => s.geo_transform().spatial_resolution(),
