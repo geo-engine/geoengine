@@ -134,12 +134,14 @@ impl Modify for TransformSchemasWithTag {
             let Schema::OneOf(one_of) = schema else {
                 continue;
             };
-            let Some(Discriminator {
-                property_name: discriminator,
-                ..
-            }) = &one_of.discriminator
-            else {
-                continue;
+            let discriminator = match &one_of.discriminator {
+                Some(Discriminator { property_name, .. }) => property_name,
+                _ =>
+                // Guess that the discriminator is `type`.
+                // TODO: Properly solve this: https://github.com/juhaku/utoipa/pull/1059#issuecomment-2636803282
+                {
+                    &"type".to_string()
+                }
             };
             let mut items: Vec<&Schema> = Vec::new();
 
@@ -382,6 +384,11 @@ mod tests {
             .build();
         let transformer = TransformSchemasWithTag;
         transformer.modify(&mut openapi);
+
+        eprintln!(
+            "{}",
+            serde_json::to_string_pretty(&openapi.components.clone().unwrap().schemas).unwrap()
+        );
 
         assert_json_eq!(
             serde_json::to_value(openapi.components.unwrap().schemas).unwrap(),
