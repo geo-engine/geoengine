@@ -382,8 +382,7 @@ impl OidcRequestDb {
             self.client_secret
                 .as_ref()
                 .map(|s| ClientSecret::new(s.clone())),
-        )
-        .set_redirect_uri(RedirectUrl::new(self.redirect_uri.to_string())?);
+        );
 
         Ok(client)
     }
@@ -682,7 +681,6 @@ mod tests {
     fn mock_client(request_db: &OidcRequestDb) -> Result<DefaultClient> {
         let client_id = request_db.client_id.clone();
         let client_secret = request_db.client_secret.clone();
-        let redirect_uri = request_db.redirect_uri.clone();
 
         let provider_metadata =
             mock_provider_metadata(request_db.issuer.as_str()).set_jwks(mock_jwks());
@@ -691,8 +689,7 @@ mod tests {
             provider_metadata,
             ClientId::new(client_id),
             client_secret.map(ClientSecret::new),
-        )
-        .set_redirect_uri(RedirectUrl::new(redirect_uri)?);
+        );
 
         // let reuslt = Client::new(ClientId::new(client_id), issuer, jwks);
 
@@ -891,7 +888,7 @@ mod tests {
         assert_eq!(url.host_str(), Some("dummy-issuer.com"));
         assert_eq!(url.port(), None);
         assert_eq!(url.path(), "/oidc/test/authorize");
-        assert_eq!(url.query_pairs().count(), 8);
+        assert_eq!(url.query_pairs().count(), 7);
 
         let query_map: HashMap<_, _> = url
             .query_pairs()
@@ -904,10 +901,6 @@ mod tests {
         assert!(query_map.contains_key("code_challenge"));
 
         assert_eq!(query_map.get("client_id"), Some(&"DummyClient".to_string()));
-        assert_eq!(
-            query_map.get("redirect_uri"),
-            Some(&REDIRECT_URI.to_string())
-        );
         assert_eq!(query_map.get("response_type"), Some(&"code".to_string()));
         assert_eq!(
             query_map.get("scope"),
