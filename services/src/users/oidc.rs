@@ -616,7 +616,6 @@ impl OidcRequestClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::Result;
     use crate::users::oidc::OidcError::{
         IllegalProvider, LoginFailed, ProviderDiscovery, ResponseFieldError, TokenExchangeError,
     };
@@ -634,7 +633,7 @@ mod tests {
     use httptest::{Expectation, Server};
     use oauth2::basic::BasicTokenType;
     use oauth2::{
-        AccessToken, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields, RedirectUrl,
+        AccessToken, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields,
         StandardTokenResponse, TokenResponse,
     };
     use openidconnect::core::{CoreIdTokenFields, CoreTokenResponse, CoreTokenType};
@@ -672,22 +671,18 @@ mod tests {
         }
     }
 
-    fn mock_client(request_db: &OidcRequestDb) -> Result<DefaultClient> {
+    fn mock_client(request_db: &OidcRequestDb) -> DefaultClient {
         let client_id = request_db.client_id.clone();
         let client_secret = request_db.client_secret.clone();
 
         let provider_metadata =
             mock_provider_metadata(request_db.issuer.as_str()).set_jwks(mock_jwks());
 
-        let result = Client::from_provider_metadata(
+        Client::from_provider_metadata(
             provider_metadata,
             ClientId::new(client_id),
             client_secret.map(ClientSecret::new),
-        );
-
-        // let reuslt = Client::new(ClientId::new(client_id), issuer, jwks);
-
-        Ok(result)
+        )
     }
 
     fn mock_provider_discovery(
@@ -873,7 +868,7 @@ mod tests {
             http_client: create_async_http_client().unwrap(),
         };
 
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         let url = request_db.generate_request(&client).await.unwrap().url;
 
@@ -908,7 +903,7 @@ mod tests {
     #[tokio::test]
     async fn generate_request_duplicate_state() {
         let request_db = single_state_nonce_request_db();
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         let first_request = request_db.generate_request(&client).await;
 
@@ -926,7 +921,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -948,7 +943,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_failed_empty_db() {
         let request_db = single_state_nonce_request_db();
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         let auth_code_response = AuthCodeResponse {
             session_state: String::new(),
@@ -965,7 +960,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_failed_not_found() {
         let request_db = single_state_nonce_request_db();
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         let request = request_db.generate_request(&client).await;
 
@@ -1001,7 +996,7 @@ mod tests {
         token_response.set_expires_in(mock_token_config.duration.as_ref());
         mock_valid_request(&server, &token_response);
 
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         let request = request_db.generate_request(&client).await;
 
@@ -1022,7 +1017,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1049,7 +1044,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1076,7 +1071,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1103,7 +1098,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1130,7 +1125,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1157,7 +1152,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1186,7 +1181,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1217,7 +1212,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let mut request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         //TODO: Not sure how to do multiple requests deterministically in a good way.
         let state_functions = [
@@ -1284,7 +1279,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1318,7 +1313,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1360,7 +1355,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1385,7 +1380,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 

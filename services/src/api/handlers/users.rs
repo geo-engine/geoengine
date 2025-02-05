@@ -1381,7 +1381,6 @@ mod tests {
             issuer,
             client_id: MOCK_CLIENT_ID.to_string(),
             client_secret: None,
-            redirect_uri: "https://dummy-redirect.com/".into(),
             scopes: vec!["profile".to_string(), "email".to_string()],
             token_encryption_password: None,
         };
