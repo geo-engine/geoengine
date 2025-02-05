@@ -280,6 +280,8 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedInte
         }
 
         // target resolution is still finer than what the source produces
+        debug_assert!(snapped_input_resolution > target_resolution);
+
         Ok(Interpolation {
             params: InterpolationParams {
                 interpolation: self.interpolation_method,
