@@ -1,0 +1,804 @@
+use geoengine_datatypes::{error::ErrorSource, primitives::SpatialResolution};
+use snafu::{ensure, Snafu};
+
+use crate::engine::InitializedRasterOperator;
+
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
+pub enum OptimizationError {
+    TargetResolutionMustNotBeSmallerThanSourceResolution {
+        source_resolution: SpatialResolution,
+        target_resolution: SpatialResolution,
+    },
+    TargetResolutionMustBeDivisibleBySourceResolution {
+        source_resolution: SpatialResolution,
+        target_resolution: SpatialResolution,
+    },
+    SourcesMustNotUseOverviews {
+        data: String,
+        oveview_level: u32,
+    },
+    OptimizationNotYetImplementedForOperator,
+    ProjectionOptimizationFailed {
+        source: Box<dyn ErrorSource>,
+    },
+}
+
+// TODO: move `optimize` method from `RasterOperator` to `OptimizableOperator`
+pub trait OptimizableOperator: InitializedRasterOperator {
+    // TODO: automatically call before `optimize` or make it part of the `optimize` method
+    fn ensure_resolution_is_compatible_for_optimization(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<(), OptimizationError> {
+        let original_resolution = self.result_descriptor().spatial_grid.spatial_resolution();
+        ensure!(
+            target_resolution >= original_resolution,
+            TargetResolutionMustNotBeSmallerThanSourceResolution {
+                source_resolution: original_resolution,
+                target_resolution,
+            }
+        );
+
+        ensure!(
+            target_resolution.x % original_resolution.x == 0.
+                && target_resolution.y % original_resolution.y == 0.,
+            TargetResolutionMustBeDivisibleBySourceResolution {
+                source_resolution: original_resolution,
+                target_resolution,
+            }
+        );
+
+        Ok(())
+    }
+}
+
+impl<T> OptimizableOperator for T where T: InitializedRasterOperator {}
+
+#[cfg(test)]
+mod tests {
+    use geoengine_datatypes::{
+        raster::{RasterDataType, RenameBands},
+        spatial_reference::{SpatialReference, SpatialReferenceAuthority},
+        util::test::TestDefault,
+    };
+
+    use crate::{
+        engine::{
+            MockExecutionContext, MultipleRasterSources, RasterOperator,
+            SingleRasterOrVectorSource, SingleRasterSource, WorkflowOperatorPath,
+        },
+        processing::{
+            DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
+            DownsamplingResolution, Expression, ExpressionParams, Interpolation,
+            InterpolationMethod, InterpolationParams, InterpolationResolution, RasterStacker,
+            RasterStackerParams, Reprojection, ReprojectionParams,
+        },
+        source::{GdalSource, GdalSourceParameters},
+        util::{
+            gdal::{add_ndvi_dataset, add_ndvi_downscaled_3x_dataset},
+            input::RasterOrVectorOperator,
+        },
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn it_optimizes_gdal_source() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+
+        let gdal = GdalSource {
+            params: GdalSourceParameters {
+                data: ndvi_id.clone(),
+                overview_level: None,
+            },
+        }
+        .boxed();
+
+        let gdal_initialized = gdal
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            gdal_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.1, 0.1).unwrap()
+        );
+
+        let gdal_optimized = gdal_initialized
+            .optimize(SpatialResolution::new(0.8, 0.8).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&gdal_optimized).unwrap();
+
+        // TODO: add test where downsampling is injected because there are is no overview available with required level
+
+        // assert_eq!(
+        //     json,
+        //     serde_json::json!({
+        //         "params": {
+        //             "outputOriginReference": null,
+        //             "outputResolution": {
+        //                 "type": "resolution",
+        //                 "x":0.8,
+        //                 "y": 0.8
+        //             },
+        //             "samplingMethod": "nearestNeighbor"
+        //         },
+        //         "sources": {
+        //             "raster": {
+        //                 "params": {
+        //                     "data": "ndvi",
+        //                     "overviewLevel": 3
+        //                 },
+        //                 "type": "GdalSource"
+        //             }
+        //         },
+        //         "type": "Downsampling"
+        //     })
+        // );
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                    "params": {
+                        "data": "ndvi",
+                        "overviewLevel": 8
+                    },
+                    "type": "GdalSource"
+                }
+            )
+        );
+
+        let gdal_optimized_initialized = gdal_optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            gdal_optimized_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.8, 0.8).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn it_optimizes_expression() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+
+        let gdal = GdalSource {
+            params: GdalSourceParameters {
+                data: ndvi_id.clone(),
+                overview_level: None,
+            },
+        }
+        .boxed();
+
+        let expression = Expression {
+            params: ExpressionParams {
+                expression: "A + 1".to_string(),
+                output_type: RasterDataType::U8,
+                output_band: None,
+                map_no_data: false,
+            },
+            sources: SingleRasterSource { raster: gdal },
+        }
+        .boxed();
+
+        let expression_initialized = expression
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            expression_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.1, 0.1).unwrap()
+        );
+
+        let expression_optimized = expression_initialized
+            .optimize(SpatialResolution::new(0.8, 0.8).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&expression_optimized).unwrap();
+
+        // assert_eq!(
+        //     json,
+        //     serde_json::json!({
+        //         "params": {
+        //             "expression": "A + 1",
+        //             "mapNoData": false,
+        //             "outputBand": {
+        //                 "measurement": {
+        //                     "type": "unitless"
+        //                 },
+        //                 "name": "expression"
+        //             },
+        //             "outputType": "U8"
+        //         },
+        //         "sources": {
+        //             "raster": {
+        //                 "params": {
+        //                     "outputOriginReference": null,
+        //                     "outputResolution": {
+        //                         "type": "resolution",
+        //                         "x": 0.8,
+        //                         "y": 0.8
+        //                     },
+        //                     "samplingMethod": "nearestNeighbor"
+        //                 },
+        //                 "sources": {
+        //                     "raster": {
+        //                         "params": {
+        //                             "data": "ndvi",
+        //                             "overviewLevel": 3
+        //                         },
+        //                         "type": "GdalSource"
+        //                     }
+        //                 },
+        //                 "type": "Downsampling"
+        //             }
+        //         },
+        //         "type": "Expression"
+        //     })
+        // );
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "params": {
+                    "expression": "A + 1",
+                    "mapNoData": false,
+                    "outputBand": {
+                        "measurement": {
+                            "type": "unitless"
+                        },
+                        "name": "expression"
+                    },
+                    "outputType": "U8"
+                },
+                "sources": {
+                    "raster": {
+                        "params": {
+                            "data": "ndvi",
+                            "overviewLevel": 8
+                        },
+                        "type": "GdalSource"
+                    }
+                },
+                "type": "Expression"
+            })
+        );
+
+        let expression_optimized_initialized = expression_optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            expression_optimized_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.8, 0.8).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn it_removes_upsampling() {
+        todo!("need a workflow, dataset and target resolution that makes upsampling obsolete")
+    }
+
+    #[tokio::test]
+    async fn it_reduces_interpolation_resolution() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+        let ndvi_downscaled_3x_id = add_ndvi_downscaled_3x_dataset(&mut exe_ctx);
+
+        let workflow = RasterStacker {
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
+            sources: MultipleRasterSources {
+                rasters: vec![
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: ndvi_id.clone(),
+                            overview_level: None,
+                        },
+                    }
+                    .boxed(),
+                    Interpolation {
+                        params: InterpolationParams {
+                            interpolation: InterpolationMethod::NearestNeighbor,
+                            output_resolution: InterpolationResolution::Resolution(
+                                SpatialResolution::new_unchecked(0.1, 0.1),
+                            ),
+                            output_origin_reference: None,
+                        },
+                        sources: SingleRasterSource {
+                            raster: GdalSource {
+                                params: GdalSourceParameters {
+                                    data: ndvi_downscaled_3x_id.clone(),
+                                    overview_level: None,
+                                },
+                            }
+                            .boxed(),
+                        },
+                    }
+                    .boxed(),
+                ],
+            },
+        }
+        .boxed();
+
+        let workflow_initialized = workflow
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            workflow_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.1, 0.1).unwrap()
+        );
+
+        let workflow_optimized = workflow_initialized
+            .optimize(SpatialResolution::new(0.2, 0.2).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&workflow_optimized).unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "params": {
+                    "renameBands": {
+                        "type": "default"
+                    }
+                },
+                "sources": {
+                    "rasters": [
+                        {
+                            "params": {
+                                "data": "ndvi",
+                                "overviewLevel": 2
+                            },
+                            "type": "GdalSource"
+                        },
+                        {
+                            "params": {
+                                "interpolation": "nearestNeighbor",
+                                "outputOriginReference": null,
+                                "outputResolution": {
+                                    "type": "resolution",
+                                    "x": 0.2,
+                                    "y": 0.2
+                                }
+                            },
+                            "sources": {
+                                "raster": {
+                                    "params": {
+                                        "data": "ndvi_downscaled_3x",
+                                        "overviewLevel": 0
+                                    },
+                                    "type": "GdalSource"
+                                }
+                            },
+                            "type": "Interpolation"
+                        }
+                    ]
+                },
+                "type": "RasterStacker"
+            })
+        );
+
+        let gdal_optimized_initialized = workflow_optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            gdal_optimized_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.2, 0.2).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn it_replaces_upsampling_with_downsampling() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+        let ndvi_downscaled_3x_id = add_ndvi_downscaled_3x_dataset(&mut exe_ctx);
+
+        let workflow = RasterStacker {
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
+            sources: MultipleRasterSources {
+                rasters: vec![
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: ndvi_id.clone(),
+                            overview_level: None,
+                        },
+                    }
+                    .boxed(),
+                    Interpolation {
+                        params: InterpolationParams {
+                            interpolation: InterpolationMethod::NearestNeighbor,
+                            output_resolution: InterpolationResolution::Resolution(
+                                SpatialResolution::new_unchecked(0.1, 0.1),
+                            ),
+                            output_origin_reference: None,
+                        },
+                        sources: SingleRasterSource {
+                            raster: GdalSource {
+                                params: GdalSourceParameters {
+                                    data: ndvi_downscaled_3x_id.clone(),
+                                    overview_level: None,
+                                },
+                            }
+                            .boxed(),
+                        },
+                    }
+                    .boxed(),
+                ],
+            },
+        }
+        .boxed();
+
+        let workflow_initialized = workflow
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            workflow_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.1, 0.1).unwrap()
+        );
+
+        let workflow_optimized = workflow_initialized
+            .optimize(SpatialResolution::new(0.8, 0.8).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&workflow_optimized).unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "params": {
+                    "renameBands": {
+                        "type": "default"
+                    }
+                },
+                "sources": {
+                    "rasters": [
+                        {
+                            "params": {
+                                "data": "ndvi",
+                                "overviewLevel": 8
+                            },
+                            "type": "GdalSource"
+                        },
+                        {
+                            "params": {
+                                "outputOriginReference": null,
+                                "outputResolution": {
+                                    "type": "resolution",
+                                    "x": 0.8,
+                                    "y": 0.8
+                                },
+                                "samplingMethod": "nearestNeighbor"
+                            },
+                            "sources": {
+                                "raster": {
+                                    "params": {
+                                        "data": "ndvi_downscaled_3x",
+                                        "overviewLevel": 2
+                                    },
+                                    "type": "GdalSource"
+                                }
+                            },
+                            "type": "Downsampling"
+                        }
+                    ]
+                },
+                "type": "RasterStacker"
+            })
+        );
+
+        let gdal_optimized_initialized = workflow_optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            gdal_optimized_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.8, 0.8).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn it_optimizes_downsampling() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+        let ndvi_downscaled_3x_id = add_ndvi_downscaled_3x_dataset(&mut exe_ctx);
+
+        let workflow = RasterStacker {
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
+            sources: MultipleRasterSources {
+                rasters: vec![
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: ndvi_downscaled_3x_id.clone(),
+                            overview_level: None,
+                        },
+                    }
+                    .boxed(),
+                    Downsampling {
+                        params: DownsamplingParams {
+                            sampling_method: DownsamplingMethod::NearestNeighbor,
+                            output_resolution: DownsamplingResolution::Resolution(
+                                SpatialResolution::new_unchecked(0.3, 0.3),
+                            ),
+                            output_origin_reference: None,
+                        },
+                        sources: SingleRasterSource {
+                            raster: GdalSource {
+                                params: GdalSourceParameters {
+                                    data: ndvi_id.clone(),
+                                    overview_level: None,
+                                },
+                            }
+                            .boxed(),
+                        },
+                    }
+                    .boxed(),
+                ],
+            },
+        }
+        .boxed();
+
+        let workflow_initialized = workflow
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            workflow_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.3, 0.3).unwrap()
+        );
+
+        let workflow_optimized = workflow_initialized
+            .optimize(SpatialResolution::new(0.6, 0.6).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&workflow_optimized).unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "params": {
+                    "renameBands": {
+                        "type": "default"
+                    }
+                },
+                "sources": {
+                    "rasters": [
+                        {
+                            "params": {
+                                "data": "ndvi_downscaled_3x",
+                                "overviewLevel": 2
+                            },
+                            "type": "GdalSource"
+                        },
+                        {
+                            "params": {
+                                "outputOriginReference": null,
+                                "outputResolution": {
+                                    "type": "resolution",
+                                    "x": 0.6,
+                                    "y": 0.6
+                                },
+                                "samplingMethod": "nearestNeighbor"
+                            },
+                            "sources": {
+                                "raster": {
+                                    "params": {
+                                        "data": "ndvi",
+                                        "overviewLevel": 4
+                                    },
+                                    "type": "GdalSource"
+                                }
+                            },
+                            "type": "Downsampling"
+                        }
+                    ]
+                },
+                "type": "RasterStacker"
+            })
+        );
+
+        let gdal_optimized_initialized = workflow_optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            gdal_optimized_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.6, 0.6).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn it_optimizes_reprojection() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+
+        let workflow = Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::new(
+                    SpatialReferenceAuthority::Epsg,
+                    3857,
+                ),
+                derive_out_spec: DeriveOutRasterSpecsSource::default(),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: ndvi_id.clone(),
+                            overview_level: None,
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+        }
+        .boxed();
+
+        let workflow_initialized = workflow
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let expected_resolution = 14255.015508816849;
+
+        assert_eq!(
+            workflow_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(expected_resolution, expected_resolution).unwrap()
+        );
+
+        let optimize_resolution = expected_resolution * 2.0;
+
+        let workflow_optimized = workflow_initialized
+            .optimize(SpatialResolution::new(optimize_resolution, optimize_resolution).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&workflow_optimized).unwrap();
+
+        // require an interpolation in addition to the reprojection
+        // TODO: should we instead load the source in higher resolution and downsample?
+        //       or: we could make an exception that the reprojection may not have to produce the exact resolution, but how would we choose the correct resolution for the top level operator then?
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "params": {
+                    "interpolation": "nearestNeighbor",
+                    "outputOriginReference": null,
+                    "outputResolution": {
+                        "type": "resolution",
+                        "x": 28510.031017633697,
+                        "y": 28510.031017633697
+                    }
+                },
+                "sources": {
+                    "raster": {
+                        "params": {
+                            "deriveOutSpec": "projectionBounds",
+                            "targetSpatialReference": "EPSG:3857"
+                        },
+                        "sources": {
+                            "source": {
+                                "params": {
+                                    "data": "ndvi",
+                                    "overviewLevel": 2
+                                },
+                                "type": "GdalSource"
+                            }
+                        },
+                        "type": "Reprojection"
+                    }
+                },
+                "type": "Interpolation"
+            })
+        );
+
+        let gdal_optimized_initialized = workflow_optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            gdal_optimized_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(optimize_resolution, optimize_resolution).unwrap()
+        );
+
+        // check that the reprojection was necessary
+        let workflow = Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::new(
+                    SpatialReferenceAuthority::Epsg,
+                    3857,
+                ),
+                derive_out_spec: DeriveOutRasterSpecsSource::default(),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: ndvi_id.clone(),
+                            overview_level: Some(2),
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+        }
+        .boxed();
+
+        let workflow_initialized = workflow
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert!(
+            workflow_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution()
+                > SpatialResolution::new(optimize_resolution, optimize_resolution).unwrap()
+        );
+    }
+}

@@ -418,7 +418,7 @@ pub fn reproject_spatial_grid_bounds<P: CoordinateProjection, A: AxisAlignedRect
     }
 
     // Second, create a grid of coordinates project that and use the valid bounds.
-    
+
     // TODO: test if we can also use a "Haus vom Nikolaus" and get the same results.
     let coord_grid = spatial_grid.generate_coord_grid_upper_left_edge(); // TODO: need to add one pixel at lower right.
 

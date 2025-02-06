@@ -310,9 +310,7 @@ pub struct SpatialGridQueryRectangle {
 impl SpatialGridQueryRectangle {
     /// Creates a new `SpatialGridQueryRectangle` from a geo transform and a grid bounds.
     pub fn new(grid_bounds: GridBoundingBox2D) -> Self {
-        Self {
-            grid_bounds,
-        }
+        Self { grid_bounds }
     }
 
     pub fn grid_bounds(&self) -> GridBoundingBox2D {
