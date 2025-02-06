@@ -1344,7 +1344,6 @@ pub(crate) mod mock_oidc {
                 issuer: server_url.clone(),
                 client_id: client_id.into(),
                 client_secret: None,
-                redirect_uri: "https://dummy-redirect.com/".into(),
                 scopes: vec!["profile".to_string(), "email".to_string()],
                 token_encryption_password: config.client_side_password,
             },

@@ -22,8 +22,8 @@ use openidconnect::core::{
 use openidconnect::{
     AccessTokenHash, AuthorizationCode, Client, ClientId, ClientSecret, CsrfToken, DiscoveryError,
     EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, IssuerUrl, Nonce, OAuth2TokenResponse,
-    PkceCodeChallenge, PkceCodeVerifier, ProviderMetadata, RedirectUrl, ResponseTypes,
-    StandardErrorResponse, SubjectIdentifier, TokenResponse,
+    PkceCodeChallenge, PkceCodeVerifier, ProviderMetadata, ResponseTypes, StandardErrorResponse,
+    SubjectIdentifier, TokenResponse,
 };
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
@@ -138,7 +138,6 @@ impl OidcManager {
             issuer: value.issuer.to_string(),
             client_id: value.client_id.to_string(),
             client_secret: value.client_secret.clone(),
-            redirect_uri: value.redirect_uri.to_string(),
             scopes: value.scopes,
             users: Arc::new(Default::default()),
             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
@@ -191,7 +190,6 @@ struct OidcRequestDb {
     issuer: String,
     client_id: String,
     client_secret: Option<String>,
-    redirect_uri: String,
     scopes: Vec<String>,
     users: Db<HashMap<String, PendingRequest>>,
     state_function: fn() -> CsrfToken,
@@ -382,8 +380,7 @@ impl OidcRequestDb {
             self.client_secret
                 .as_ref()
                 .map(|s| ClientSecret::new(s.clone())),
-        )
-        .set_redirect_uri(RedirectUrl::new(self.redirect_uri.to_string())?);
+        );
 
         Ok(client)
     }
@@ -575,7 +572,6 @@ impl TryFrom<Oidc> for OidcRequestDb {
                 issuer: value.issuer.to_string(),
                 client_id: value.client_id.to_string(),
                 client_secret: value.client_secret.clone(),
-                redirect_uri: value.redirect_uri.to_string(),
                 scopes: value.scopes,
                 users: Arc::new(Default::default()),
                 state_function: CsrfToken::new_random,
@@ -620,7 +616,6 @@ impl OidcRequestClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::Result;
     use crate::users::oidc::OidcError::{
         IllegalProvider, LoginFailed, ProviderDiscovery, ResponseFieldError, TokenExchangeError,
     };
@@ -638,7 +633,7 @@ mod tests {
     use httptest::{Expectation, Server};
     use oauth2::basic::BasicTokenType;
     use oauth2::{
-        AccessToken, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields, RedirectUrl,
+        AccessToken, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields,
         StandardTokenResponse, TokenResponse,
     };
     use openidconnect::core::{CoreIdTokenFields, CoreTokenResponse, CoreTokenType};
@@ -649,14 +644,12 @@ mod tests {
 
     const ALTERNATIVE_ACCESS_TOKEN: &str = "DUMMY_ACCESS_TOKEN_2";
     const ISSUER_URL: &str = "https://dummy-issuer.com/";
-    const REDIRECT_URI: &str = "https://dummy-redirect.com/";
 
     fn single_state_nonce_request_db() -> OidcRequestDb {
         OidcRequestDb {
             issuer: ISSUER_URL.to_string(),
             client_id: "DummyClient".to_string(),
             client_secret: Some("DummySecret".to_string()),
-            redirect_uri: REDIRECT_URI.to_string(),
             scopes: vec!["profile".to_string(), "email".to_string()],
             users: Arc::new(Default::default()),
             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
@@ -670,7 +663,6 @@ mod tests {
             issuer: server_url,
             client_id: String::new(),
             client_secret: None,
-            redirect_uri: REDIRECT_URI.to_string(),
             scopes: vec!["profile".to_string(), "email".to_string()],
             users: Arc::new(Default::default()),
             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
@@ -679,24 +671,18 @@ mod tests {
         }
     }
 
-    fn mock_client(request_db: &OidcRequestDb) -> Result<DefaultClient> {
+    fn mock_client(request_db: &OidcRequestDb) -> DefaultClient {
         let client_id = request_db.client_id.clone();
         let client_secret = request_db.client_secret.clone();
-        let redirect_uri = request_db.redirect_uri.clone();
 
         let provider_metadata =
             mock_provider_metadata(request_db.issuer.as_str()).set_jwks(mock_jwks());
 
-        let result = Client::from_provider_metadata(
+        Client::from_provider_metadata(
             provider_metadata,
             ClientId::new(client_id),
             client_secret.map(ClientSecret::new),
         )
-        .set_redirect_uri(RedirectUrl::new(redirect_uri)?);
-
-        // let reuslt = Client::new(ClientId::new(client_id), issuer, jwks);
-
-        Ok(result)
     }
 
     fn mock_provider_discovery(
@@ -875,7 +861,6 @@ mod tests {
             issuer: ISSUER_URL.to_owned() + "oidc/test",
             client_id: "DummyClient".to_string(),
             client_secret: Some("DummySecret".to_string()),
-            redirect_uri: REDIRECT_URI.to_string(),
             scopes: vec!["profile".to_string(), "email".to_string()],
             users: Arc::new(Default::default()),
             state_function: || CsrfToken::new(SINGLE_STATE.to_string()),
@@ -883,7 +868,7 @@ mod tests {
             http_client: create_async_http_client().unwrap(),
         };
 
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         let url = request_db.generate_request(&client).await.unwrap().url;
 
@@ -891,7 +876,7 @@ mod tests {
         assert_eq!(url.host_str(), Some("dummy-issuer.com"));
         assert_eq!(url.port(), None);
         assert_eq!(url.path(), "/oidc/test/authorize");
-        assert_eq!(url.query_pairs().count(), 8);
+        assert_eq!(url.query_pairs().count(), 7);
 
         let query_map: HashMap<_, _> = url
             .query_pairs()
@@ -904,10 +889,6 @@ mod tests {
         assert!(query_map.contains_key("code_challenge"));
 
         assert_eq!(query_map.get("client_id"), Some(&"DummyClient".to_string()));
-        assert_eq!(
-            query_map.get("redirect_uri"),
-            Some(&REDIRECT_URI.to_string())
-        );
         assert_eq!(query_map.get("response_type"), Some(&"code".to_string()));
         assert_eq!(
             query_map.get("scope"),
@@ -922,7 +903,7 @@ mod tests {
     #[tokio::test]
     async fn generate_request_duplicate_state() {
         let request_db = single_state_nonce_request_db();
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         let first_request = request_db.generate_request(&client).await;
 
@@ -940,7 +921,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -962,7 +943,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_failed_empty_db() {
         let request_db = single_state_nonce_request_db();
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         let auth_code_response = AuthCodeResponse {
             session_state: String::new(),
@@ -979,7 +960,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_failed_not_found() {
         let request_db = single_state_nonce_request_db();
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         let request = request_db.generate_request(&client).await;
 
@@ -1015,7 +996,7 @@ mod tests {
         token_response.set_expires_in(mock_token_config.duration.as_ref());
         mock_valid_request(&server, &token_response);
 
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         let request = request_db.generate_request(&client).await;
 
@@ -1036,7 +1017,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1063,7 +1044,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1090,7 +1071,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1117,7 +1098,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1144,7 +1125,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1171,7 +1152,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1200,7 +1181,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1231,7 +1212,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let mut request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         //TODO: Not sure how to do multiple requests deterministically in a good way.
         let state_functions = [
@@ -1298,7 +1279,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1332,7 +1313,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1374,7 +1355,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
@@ -1399,7 +1380,7 @@ mod tests {
         let server = Server::run();
         let server_url = format!("http://{}", server.addr());
         let request_db = single_state_nonce_mocked_request_db(server_url);
-        let client = mock_client(&request_db).unwrap();
+        let client = mock_client(&request_db);
 
         request_db.generate_request(&client).await.unwrap();
 
