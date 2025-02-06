@@ -80,7 +80,7 @@ pub enum Resource {
     Project(ProjectId),
     #[schema(title = "DatasetResource")]
     Dataset(DatasetName), // TODO: add a DatasetName to model!
-    #[schema(title = "MlModelResource")]
+    #[schema(title = "MlModelResource", value_type = String)]
     MlModel(MlModelName),
 }
 
