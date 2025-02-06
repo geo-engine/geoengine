@@ -562,6 +562,12 @@ pub(crate) async fn update_user_quota_handler<C: ApplicationContext>(
     Ok(actix_web::HttpResponse::Ok().finish())
 }
 
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct RedirectUri {
+    pub redirect_uri: String,
+}
+
 /// Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.
 ///
 /// # Errors
@@ -577,9 +583,13 @@ pub(crate) async fn update_user_quota_handler<C: ApplicationContext>(
         example = json!({
             "url": "http://someissuer.com/authorize?client_id=someclient&redirect_uri=someuri&response_type=code&scope=somescope&state=somestate&nonce=somenonce&codechallenge=somechallenge&code_challenge_method=S256"
         })
-    ))
+    )),
+    params(
+        RedirectUri
+    )
 )]
 pub(crate) async fn oidc_init<C: ApplicationContext>(
+    params: web::Query<RedirectUri>,
     app_ctx: web::Data<C>,
 ) -> Result<web::Json<AuthCodeRequestURL>> {
     ensure!(
@@ -588,7 +598,7 @@ pub(crate) async fn oidc_init<C: ApplicationContext>(
     );
     let auth_code_request_url = app_ctx
         .oidc_manager()
-        .get_client()
+        .get_client_with_redirect_uri(params.into_inner().redirect_uri)
         .await?
         .generate_request()
         .await?;
@@ -625,10 +635,14 @@ pub(crate) async fn oidc_init<C: ApplicationContext>(
            "project": null,
            "view": null
         })
-    ))
+    )),
+    params(
+        RedirectUri
+    )
 )]
 pub(crate) async fn oidc_login<C: ApplicationContext + UserAuth>(
     response: web::Json<AuthCodeResponse>,
+    params: web::Query<RedirectUri>,
     app_ctx: web::Data<C>,
 ) -> Result<web::Json<UserSession>> {
     ensure!(
@@ -637,7 +651,7 @@ pub(crate) async fn oidc_login<C: ApplicationContext + UserAuth>(
     );
     let authentication_response = app_ctx
         .oidc_manager()
-        .get_client()
+        .get_client_with_redirect_uri(params.into_inner().redirect_uri)
         .await?
         .resolve_request(response.into_inner())
         .await?;
