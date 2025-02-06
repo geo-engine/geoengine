@@ -385,11 +385,6 @@ mod tests {
         let transformer = TransformSchemasWithTag;
         transformer.modify(&mut openapi);
 
-        eprintln!(
-            "{}",
-            serde_json::to_string_pretty(&openapi.components.clone().unwrap().schemas).unwrap()
-        );
-
         assert_json_eq!(
             serde_json::to_value(openapi.components.unwrap().schemas).unwrap(),
             json!({
